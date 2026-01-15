@@ -1,5 +1,7 @@
 package com.nurseli.nrsfinanceportal.common.dto;
 
+import com.nurseli.nrsfinanceportal.domain.user.User;
+
 public class UserResponse {
 
     private Long id;
@@ -10,6 +12,15 @@ public class UserResponse {
         this.id = id;
         this.username = username;
         this.role = role;
+    }
+
+    // ✅ STATIC FACTORY METHOD
+    public static UserResponse from(User user) {
+        return new UserResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getRole().name()
+        );
     }
 
     public Long getId() {

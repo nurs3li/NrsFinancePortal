@@ -1,12 +1,9 @@
 package com.nurseli.nrsfinanceportal.controller;
 
-import com.nurseli.nrsfinanceportal.common.dto.CreateUserRequest;
 import com.nurseli.nrsfinanceportal.common.dto.UserResponse;
 import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
+import com.nurseli.nrsfinanceportal.service.CurrentUserResolver;
 import com.nurseli.nrsfinanceportal.service.UserService;
-
-import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,9 +14,12 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final CurrentUserResolver currentUserResolver;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService,
+                          CurrentUserResolver currentUserResolver) {
         this.userService = userService;
+        this.currentUserResolver = currentUserResolver;
     }
 
     // GET /api/users
@@ -30,13 +30,15 @@ public class UserController {
         );
     }
 
-    // POST /api/users
-    @PostMapping
-    public ResponseEntity<ApiResponse<UserResponse>> createUser(
-            @Valid @RequestBody CreateUserRequest request
-    ) {
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(ApiResponse.success(userService.createUser(request)));
+    // GET /api/users/me
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<UserResponse>> getMe() {
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        UserResponse.from(
+                                currentUserResolver.getOrCreateCurrentUser()
+                        )
+                )
+        );
     }
 }
