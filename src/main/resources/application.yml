@@ -1,1 +1,21 @@
-spring.application.name=NrsFinancePortal
+spring:
+  application:
+    name: NrsFinancePortal
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/nrs_finance
+    username: nrs
+    password: nrs123
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8081/realms/nrs-finance
+
