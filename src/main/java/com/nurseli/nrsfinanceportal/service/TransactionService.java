@@ -16,9 +16,21 @@ public class TransactionService {
         this.transactionRepository = transactionRepository;
     }
 
+    /**
+     * Bakiye artışı için audit kaydı
+     */
     public void recordDeposit(Account account, BigDecimal amount) {
         transactionRepository.save(
                 Transaction.deposit(account, amount)
+        );
+    }
+
+    /**
+     * Bakiye düşüşü için audit kaydı
+     */
+    public void recordWithdraw(Account account, BigDecimal amount) {
+        transactionRepository.save(
+                Transaction.withdraw(account, amount)
         );
     }
 }
