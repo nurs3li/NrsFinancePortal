@@ -5,7 +5,7 @@ import com.nurseli.nrsfinanceportal.common.dto.BalanceAdjustmentRequest;
 import com.nurseli.nrsfinanceportal.common.dto.FundsWithdrawalRequest;
 import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.account.Account;
-import com.nurseli.nrsfinanceportal.domain.balance.Balance;
+
 import com.nurseli.nrsfinanceportal.repository.AccountRepository;
 import com.nurseli.nrsfinanceportal.service.BalanceService;
 import com.nurseli.nrsfinanceportal.service.CurrentUserResolver;
@@ -36,69 +36,45 @@ public class BalanceController {
         this.accountRepository = accountRepository;
     }
 
-    /**
-     * USER → kendi bakiyesini görür
-     * GET /api/balance/me
-     */
     @GetMapping("/me")
     public ApiResponse<AccountBalanceView> myBalance() {
-
         Account account = accountRepository
                 .findByUser(currentUserResolver.getOrCreateCurrentUser())
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("Account not found"));
 
-        Balance balance = balanceService.getOf(account);
-
         return ApiResponse.success(
-                AccountBalanceView.from(balance)
+                AccountBalanceView.from(balanceService.getOf(account))
         );
     }
 
-    /**
-     * FINANCE_MANAGER → bakiye artırır
-     * POST /api/balance/adjust
-     */
     @PreAuthorize("hasRole('FINANCE_MANAGER')")
     @PostMapping("/adjust")
-    public ApiResponse<AccountBalanceView> adjustBalance(
+    public ApiResponse<AccountBalanceView> adjust(
             @Valid @RequestBody BalanceAdjustmentRequest request
     ) {
-
         Account account = accountRepository.findById(request.getAccountId())
                 .orElseThrow(() -> new IllegalArgumentException("Account not found"));
 
-        Balance balance = balanceService.increase(
-                account,
-                request.getAmount()
-        );
-
         return ApiResponse.success(
-                AccountBalanceView.from(balance)
+                AccountBalanceView.from(
+                        balanceService.increase(account, request.getAmount())
+                )
         );
     }
 
-    /**
-     * FINANCE_MANAGER → bakiye düşer (withdraw)
-     * POST /api/balance/withdraw
-     */
-    @PreAuthorize("hasRole('FINANCE_MANAGER')")
     @PostMapping("/withdraw")
     public ApiResponse<AccountBalanceView> withdraw(
             @Valid @RequestBody FundsWithdrawalRequest request
     ) {
-
         Account account = accountRepository.findById(request.getAccountId())
                 .orElseThrow(() -> new IllegalArgumentException("Account not found"));
 
-        Balance balance = fundsWithdrawalService.withdraw(
-                account,
-                request.getAmount()
-        );
-
         return ApiResponse.success(
-                AccountBalanceView.from(balance)
+                AccountBalanceView.from(
+                        fundsWithdrawalService.withdraw(account, request.getAmount())
+                )
         );
     }
 }

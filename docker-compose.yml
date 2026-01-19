@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: nrs-postgres
+    environment:
+      POSTGRES_DB: nrs_finance
+      POSTGRES_USER: nrs
+      POSTGRES_PASSWORD: nrs123
+    ports:
+      - "5432:5432"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.1
+    container_name: nrs-keycloak
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8081:8080"

@@ -34,12 +34,22 @@ public class Balance {
     }
 
     public void increase(BigDecimal value) {
+        if (value.signum() <= 0) {
+            throw new IllegalArgumentException("Increase amount must be positive");
+        }
         this.amount = this.amount.add(value);
     }
 
     public void decrease(BigDecimal value) {
+        if (value.signum() <= 0) {
+            throw new IllegalArgumentException("Withdraw amount must be positive");
+        }
+        if (this.amount.compareTo(value) < 0) {
+            throw new IllegalStateException("Insufficient balance");
+        }
         this.amount = this.amount.subtract(value);
     }
+
 
     public Long getId() {
         return id;

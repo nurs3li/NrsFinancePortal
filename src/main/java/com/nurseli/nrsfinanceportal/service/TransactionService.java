@@ -6,6 +6,7 @@ import com.nurseli.nrsfinanceportal.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Service
 public class TransactionService {
@@ -17,20 +18,51 @@ public class TransactionService {
     }
 
     /**
-     * Bakiye artışı için audit kaydı
+     * 💰 Deposit audit kaydı
      */
     public void recordDeposit(Account account, BigDecimal amount) {
-        transactionRepository.save(
-                Transaction.deposit(account, amount)
-        );
+
+        System.out.println(">>> [TX] recordDeposit START");
+        System.out.println(">>> accountId = " + account.getId());
+        System.out.println(">>> amount = " + amount);
+
+        Transaction tx = Transaction.deposit(account, amount);
+
+        System.out.println(">>> transaction entity created");
+        System.out.println(">>> type = " + tx.getType());
+        System.out.println(">>> createdAt = " + tx.getCreatedAt());
+
+        transactionRepository.save(tx);
+
+        System.out.println(">>> transaction SAVED (DEPOSIT)");
     }
 
     /**
-     * Bakiye düşüşü için audit kaydı
+     * 💸 Withdraw audit kaydı
      */
     public void recordWithdraw(Account account, BigDecimal amount) {
-        transactionRepository.save(
-                Transaction.withdraw(account, amount)
-        );
+
+        System.out.println(">>> [TX] recordWithdraw START");
+        System.out.println(">>> accountId = " + account.getId());
+        System.out.println(">>> amount = " + amount);
+
+        Transaction tx = Transaction.withdraw(account, amount);
+
+        System.out.println(">>> transaction entity created");
+        System.out.println(">>> type = " + tx.getType());
+        System.out.println(">>> createdAt = " + tx.getCreatedAt());
+
+        transactionRepository.save(tx);
+
+        System.out.println(">>> transaction SAVED (WITHDRAW)");
+    }
+
+    /**
+     * 📜 USER → kendi transaction geçmişini görür
+     */
+    public List<Transaction> getTransactionsOfAccounts(List<Account> accounts) {
+        System.out.println(">>> [TX] fetching transactions for accounts: " + accounts.size());
+        return transactionRepository.findByAccountInOrderByCreatedAtDesc(accounts);
     }
 }
+

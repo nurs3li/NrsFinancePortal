@@ -4,6 +4,7 @@ import com.nurseli.nrsfinanceportal.domain.account.Account;
 import com.nurseli.nrsfinanceportal.domain.balance.Balance;
 import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
@@ -23,32 +24,52 @@ public class BalanceService {
      * Account oluşturulurken otomatik Balance açılır
      */
     public Balance createForAccount(Account account) {
+
+        System.out.println(">>> [BALANCE] createForAccount");
+        System.out.println(">>> accountId = " + account.getId());
+
         Balance balance = Balance.createFor(account);
-        return balanceRepository.save(balance);
+        Balance saved = balanceRepository.save(balance);
+
+        System.out.println(">>> balance CREATED with amount = " + saved.getAmount());
+
+        return saved;
     }
 
     /**
      * FINANCE_MANAGER → bakiye artırır
-     * Audit (Transaction) otomatik yazılır
+     * 🔒 PESSIMISTIC LOCK + 🧾 AUDIT
      */
+    @Transactional
     public Balance increase(Account account, BigDecimal amount) {
 
-        Balance balance = balanceRepository.findByAccount(account)
-                .orElseThrow(() -> new IllegalStateException("Balance not found"));
+        Balance balance = balanceRepository
+                .findByAccountForUpdate(account)
+                .orElseGet(() -> {
+                    Balance created = Balance.createFor(account);
+                    return balanceRepository.save(created);
+                });
 
         balance.increase(amount);
 
-        // 🔥 AUDIT KAYDI
         transactionService.recordDeposit(account, amount);
 
-        return balanceRepository.save(balance);
+        return balance;
     }
 
     /**
      * USER → bakiye görüntüler
      */
+    @Transactional(readOnly = true)
     public Balance getOf(Account account) {
+
+        System.out.println(">>> [BALANCE] getOf");
+        System.out.println(">>> accountId = " + account.getId());
+
         return balanceRepository.findByAccount(account)
-                .orElseThrow(() -> new IllegalStateException("Balance not found"));
+                .orElseGet(() -> {
+                    System.out.println(">>> balance NOT FOUND → creating");
+                    return createForAccount(account);
+                });
     }
 }
