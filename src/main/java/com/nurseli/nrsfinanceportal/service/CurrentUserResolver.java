@@ -39,4 +39,7 @@ public class CurrentUserResolver {
                     return userRepository.save(newUser);
                 });
     }
+    public Long getUserId() {
+        return getOrCreateCurrentUser().getId();
+    }
 }
