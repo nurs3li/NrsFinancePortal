@@ -1,68 +1,61 @@
 package com.nurseli.nrsfinanceportal.service;
 
 import com.nurseli.nrsfinanceportal.domain.account.Account;
+import com.nurseli.nrsfinanceportal.domain.balance.Balance;
 import com.nurseli.nrsfinanceportal.domain.transaction.Transaction;
+import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
 import com.nurseli.nrsfinanceportal.repository.TransactionRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class TransactionService {
 
     private final TransactionRepository transactionRepository;
-
-    public TransactionService(TransactionRepository transactionRepository) {
-        this.transactionRepository = transactionRepository;
-    }
+    private final BalanceRepository balanceRepository;
+    private final CurrentUserResolver currentUserResolver;
 
     /**
      * 💰 Deposit audit kaydı
      */
+    @Transactional
     public void recordDeposit(Account account, BigDecimal amount) {
 
-        System.out.println(">>> [TX] recordDeposit START");
-        System.out.println(">>> accountId = " + account.getId());
-        System.out.println(">>> amount = " + amount);
+        Balance balance = balanceRepository
+                .findByAccount(account)
+                .orElseThrow(() -> new IllegalStateException("Balance not found"));
 
-        Transaction tx = Transaction.deposit(account, amount);
-
-        System.out.println(">>> transaction entity created");
-        System.out.println(">>> type = " + tx.getType());
-        System.out.println(">>> createdAt = " + tx.getCreatedAt());
+        Transaction tx = Transaction.deposit(
+                account,
+                currentUserResolver.getOrCreateCurrentUser(),
+                amount,
+                balance.getAmount()
+        );
 
         transactionRepository.save(tx);
-
-        System.out.println(">>> transaction SAVED (DEPOSIT)");
     }
 
     /**
      * 💸 Withdraw audit kaydı
      */
+    @Transactional
     public void recordWithdraw(Account account, BigDecimal amount) {
 
-        System.out.println(">>> [TX] recordWithdraw START");
-        System.out.println(">>> accountId = " + account.getId());
-        System.out.println(">>> amount = " + amount);
+        Balance balance = balanceRepository
+                .findByAccount(account)
+                .orElseThrow(() -> new IllegalStateException("Balance not found"));
 
-        Transaction tx = Transaction.withdraw(account, amount);
-
-        System.out.println(">>> transaction entity created");
-        System.out.println(">>> type = " + tx.getType());
-        System.out.println(">>> createdAt = " + tx.getCreatedAt());
+        Transaction tx = Transaction.withdraw(
+                account,
+                currentUserResolver.getOrCreateCurrentUser(),
+                amount,
+                balance.getAmount()
+        );
 
         transactionRepository.save(tx);
-
-        System.out.println(">>> transaction SAVED (WITHDRAW)");
-    }
-
-    /**
-     * 📜 USER → kendi transaction geçmişini görür
-     */
-    public List<Transaction> getTransactionsOfAccounts(List<Account> accounts) {
-        System.out.println(">>> [TX] fetching transactions for accounts: " + accounts.size());
-        return transactionRepository.findByAccountInOrderByCreatedAtDesc(accounts);
     }
 }
-
