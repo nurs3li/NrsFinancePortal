@@ -3,6 +3,7 @@ package com.nurseli.nrsfinanceportal.service;
 import com.nurseli.nrsfinanceportal.domain.account.Account;
 import com.nurseli.nrsfinanceportal.domain.balance.Balance;
 import com.nurseli.nrsfinanceportal.domain.transaction.Transaction;
+import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
 import com.nurseli.nrsfinanceportal.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,43 +20,41 @@ public class TransactionService {
     private final BalanceRepository balanceRepository;
     private final CurrentUserResolver currentUserResolver;
 
-    /**
-     * 💰 Deposit audit kaydı
-     */
     @Transactional
-    public void recordDeposit(Account account, BigDecimal amount) {
+    public Transaction recordDeposit(Account account, BigDecimal amount) {
 
-        Balance balance = balanceRepository
-                .findByAccount(account)
+        Balance balance = balanceRepository.findByAccount(account)
                 .orElseThrow(() -> new IllegalStateException("Balance not found"));
+
+        BigDecimal newBalance = balance.increase(amount);
 
         Transaction tx = Transaction.deposit(
                 account,
                 currentUserResolver.getOrCreateCurrentUser(),
                 amount,
-                balance.getAmount()
+                newBalance
         );
 
-        transactionRepository.save(tx);
+        balanceRepository.save(balance);
+        return transactionRepository.save(tx);
     }
 
-    /**
-     * 💸 Withdraw audit kaydı
-     */
     @Transactional
-    public void recordWithdraw(Account account, BigDecimal amount) {
+    public Transaction recordWithdraw(Account account, BigDecimal amount) {
 
-        Balance balance = balanceRepository
-                .findByAccount(account)
+        Balance balance = balanceRepository.findByAccount(account)
                 .orElseThrow(() -> new IllegalStateException("Balance not found"));
+
+        BigDecimal newBalance = balance.decrease(amount);
 
         Transaction tx = Transaction.withdraw(
                 account,
                 currentUserResolver.getOrCreateCurrentUser(),
                 amount,
-                balance.getAmount()
+                newBalance
         );
 
-        transactionRepository.save(tx);
+        balanceRepository.save(balance);
+        return transactionRepository.save(tx);
     }
 }

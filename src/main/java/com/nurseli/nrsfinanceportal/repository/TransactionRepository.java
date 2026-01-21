@@ -7,11 +7,28 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-
+@Repository
 public interface TransactionRepository extends JpaRepository<Transaction, Long> {
+
+
+
+    boolean existsByReversedTransaction(Transaction original);
+
+    @Query("""
+        select t
+        from Transaction t
+        join fetch t.account
+        join fetch t.user
+        where t.id = :id
+    """)
+    Optional<Transaction> findByIdWithAccountAndUser(@Param("id") Long id);
+
+    Optional<Transaction> findById(Long id);
 
     // 🔹 USER → kendi transaction
     Page<Transaction> findByUserIdOrderByCreatedAtDesc(
@@ -32,6 +49,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
             Long accountId,
             Pageable pageable
     );
+
 
     // 🔹 SUMMARY — DEPOSIT
     @Query("""

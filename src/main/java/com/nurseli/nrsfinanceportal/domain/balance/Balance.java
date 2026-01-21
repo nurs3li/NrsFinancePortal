@@ -14,52 +14,45 @@ public class Balance {
     private Long id;
 
     @OneToOne(optional = false)
-    @JoinColumn(name = "account_id", nullable = false, unique = true)
     private Account account;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 38, scale = 2)
     private BigDecimal amount;
 
-    protected Balance() {
-        // JPA
-    }
+    protected Balance() {}
 
-    private Balance(Account account) {
+    public Balance(Account account) {
         this.account = account;
         this.amount = BigDecimal.ZERO;
     }
 
-    public static Balance createFor(Account account) {
-        return new Balance(account);
-    }
+    /* ================= DOMAIN LOGIC ================= */
 
-    public void increase(BigDecimal value) {
-        if (value.signum() <= 0) {
-            throw new IllegalArgumentException("Increase amount must be positive");
-        }
+    public BigDecimal increase(BigDecimal value) {
         this.amount = this.amount.add(value);
+        return this.amount;
     }
 
-    public void decrease(BigDecimal value) {
-        if (value.signum() <= 0) {
-            throw new IllegalArgumentException("Withdraw amount must be positive");
-        }
-        if (this.amount.compareTo(value) < 0) {
+    public BigDecimal decrease(BigDecimal value) {
+        BigDecimal newAmount = this.amount.subtract(value);
+        if (newAmount.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalStateException("Insufficient balance");
         }
-        this.amount = this.amount.subtract(value);
+        this.amount = newAmount;
+        return this.amount;
     }
 
+    /* ================= GETTERS ================= */
 
     public Long getId() {
         return id;
     }
 
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
     public Account getAccount() {
         return account;
+    }
+
+    public BigDecimal getAmount() {
+        return amount;
     }
 }

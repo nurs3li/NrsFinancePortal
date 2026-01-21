@@ -49,20 +49,25 @@ public class BalanceController {
         );
     }
 
-    @PreAuthorize("hasRole('FINANCE_MANAGER')")
     @PostMapping("/adjust")
+    @PreAuthorize("hasAnyRole('ADMIN','FINANCE_MANAGER')")
     public ApiResponse<AccountBalanceView> adjust(
             @Valid @RequestBody BalanceAdjustmentRequest request
     ) {
         Account account = accountRepository.findById(request.getAccountId())
                 .orElseThrow(() -> new IllegalArgumentException("Account not found"));
 
+        // 1️⃣ side-effect (void)
+        balanceService.increase(account, request.getAmount());
+
+        // 2️⃣ updated balance
         return ApiResponse.success(
                 AccountBalanceView.from(
-                        balanceService.increase(account, request.getAmount())
+                        balanceService.getOf(account)
                 )
         );
     }
+
 
     @PostMapping("/withdraw")
     public ApiResponse<AccountBalanceView> withdraw(
