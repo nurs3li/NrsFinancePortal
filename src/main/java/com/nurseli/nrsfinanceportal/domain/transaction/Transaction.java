@@ -31,11 +31,18 @@ public class Transaction {
     @Column(nullable = false, precision = 38, scale = 2)
     private BigDecimal balanceAfter;
 
+    /**
+     * Bu transaction bir reversal ise,
+     * hangi transaction'ı reverse ettiğini tutar.
+     *
+     * ❗ UNIQUE YOK
+     * ❗ OneToOne YOK
+     */
     @ManyToOne
     @JoinColumn(name = "reversed_transaction_id")
     private Transaction reversedTransaction;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     protected Transaction() {}
