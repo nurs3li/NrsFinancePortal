@@ -11,10 +11,22 @@ import java.util.Optional;
 
 public interface BalanceRepository extends JpaRepository<Balance, Long> {
 
+    /**
+     * Normal read (no lock)
+     * Used for balance operations
+     */
+    Optional<Balance> findByAccount(Account account);
+
+    /**
+     * Concurrency-safe read for update operations
+     * Used in deposit / withdraw / adjust flows
+     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select b from Balance b where b.account = :account")
     Optional<Balance> findByAccountForUpdate(Account account);
 
-    Optional<Balance> findByAccount(Account account);
-
+    /**
+     * Used during account initialization
+     */
+    boolean existsByAccount(Account account);
 }

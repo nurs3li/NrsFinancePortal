@@ -5,7 +5,7 @@ import com.nurseli.nrsfinanceportal.common.dto.BalanceAdjustmentRequest;
 import com.nurseli.nrsfinanceportal.common.dto.FundsWithdrawalRequest;
 import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.account.Account;
-
+import com.nurseli.nrsfinanceportal.domain.transaction.Transaction;
 import com.nurseli.nrsfinanceportal.repository.AccountRepository;
 import com.nurseli.nrsfinanceportal.service.BalanceService;
 import com.nurseli.nrsfinanceportal.service.CurrentUserResolver;
@@ -36,7 +36,11 @@ public class BalanceController {
         this.accountRepository = accountRepository;
     }
 
+    /* ================= QUERY ================= */
+
     @GetMapping("/me")
+    @PreAuthorize("hasRole('USER')")
+
     public ApiResponse<AccountBalanceView> myBalance() {
         Account account = accountRepository
                 .findByUser(currentUserResolver.getOrCreateCurrentUser())
@@ -45,41 +49,49 @@ public class BalanceController {
                 .orElseThrow(() -> new IllegalStateException("Account not found"));
 
         return ApiResponse.success(
-                AccountBalanceView.from(balanceService.getOf(account))
+                new AccountBalanceView(
+                        account.getId(),
+                        balanceService.getOf(account).getAmount()
+                )
         );
     }
 
+    /* ================= ADMIN ADJUST ================= */
+
     @PostMapping("/adjust")
-    @PreAuthorize("hasAnyRole('ADMIN','FINANCE_MANAGER')")
+    @PreAuthorize("hasAnyRole('FINANCE_MANAGER')")
     public ApiResponse<AccountBalanceView> adjust(
             @Valid @RequestBody BalanceAdjustmentRequest request
     ) {
         Account account = accountRepository.findById(request.getAccountId())
                 .orElseThrow(() -> new IllegalArgumentException("Account not found"));
 
-        // 1️⃣ side-effect (void)
         balanceService.increase(account, request.getAmount());
 
-        // 2️⃣ updated balance
         return ApiResponse.success(
-                AccountBalanceView.from(
-                        balanceService.getOf(account)
+                new AccountBalanceView(
+                        account.getId(),
+                        balanceService.getOf(account).getAmount()
                 )
         );
     }
 
+    /* ================= COMMAND ================= */
 
     @PostMapping("/withdraw")
+    @PreAuthorize("hasRole('USER')")
+
     public ApiResponse<AccountBalanceView> withdraw(
             @Valid @RequestBody FundsWithdrawalRequest request
     ) {
         Account account = accountRepository.findById(request.getAccountId())
                 .orElseThrow(() -> new IllegalArgumentException("Account not found"));
 
+        Transaction tx =
+                fundsWithdrawalService.withdraw(account, request.getAmount());
+
         return ApiResponse.success(
-                AccountBalanceView.from(
-                        fundsWithdrawalService.withdraw(account, request.getAmount())
-                )
+                AccountBalanceView.from(tx)
         );
     }
 }

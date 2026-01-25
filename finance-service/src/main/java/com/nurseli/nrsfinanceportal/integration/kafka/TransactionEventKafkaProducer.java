@@ -4,9 +4,10 @@ import com.nurseli.nrsfinanceportal.domain.event.TransactionCreatedEvent;
 import com.nurseli.nrsfinanceportal.domain.event.TransactionReversedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.event.TransactionPhase;
 
 @Slf4j
 @Component
@@ -17,8 +18,10 @@ public class TransactionEventKafkaProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    @EventListener
+    // ✅ DB commit OLDUKTAN SONRA çalışır
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleCreated(TransactionCreatedEvent event) {
+
         kafkaTemplate.send(
                 TOPIC,
                 event.transactionId().toString(),
@@ -28,8 +31,10 @@ public class TransactionEventKafkaProducer {
         log.info("[KAFKA] TransactionCreatedEvent sent → {}", event.transactionId());
     }
 
-    @EventListener
+    // ✅ DB commit OLDUKTAN SONRA çalışır
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleReversed(TransactionReversedEvent event) {
+
         kafkaTemplate.send(
                 TOPIC,
                 event.reversalTransactionId().toString(),
@@ -39,3 +44,4 @@ public class TransactionEventKafkaProducer {
         log.info("[KAFKA] TransactionReversedEvent sent → {}", event.reversalTransactionId());
     }
 }
+

@@ -5,6 +5,7 @@ import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.service.CurrentUserResolver;
 import com.nurseli.nrsfinanceportal.service.UserService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,6 +25,8 @@ public class UserController {
 
     // GET /api/users
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+
     public ResponseEntity<ApiResponse<List<UserResponse>>> getUsers() {
         return ResponseEntity.ok(
                 ApiResponse.success(userService.getAllUsers())
@@ -32,6 +35,7 @@ public class UserController {
 
     // GET /api/users/me
     @GetMapping("/me")
+
     public ResponseEntity<ApiResponse<UserResponse>> getMe() {
         return ResponseEntity.ok(
                 ApiResponse.success(

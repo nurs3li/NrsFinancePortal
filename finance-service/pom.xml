@@ -62,17 +62,20 @@
         </dependency>
 
     </dependencies>
-
     <build>
         <plugins>
-
-            <!-- Spring Boot -->
             <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <release>25</release>
+                    <parameters>true</parameters>
+                    <encoding>UTF-8</encoding>
+                </configuration>
             </plugin>
-
         </plugins>
     </build>
+
 
 </project>

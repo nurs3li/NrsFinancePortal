@@ -1,6 +1,7 @@
 package com.nurseli.nrsfinanceportal.common.dto;
 
-import com.nurseli.nrsfinanceportal.domain.balance.Balance;
+import com.nurseli.nrsfinanceportal.domain.transaction.Transaction;
+
 import java.math.BigDecimal;
 
 public class AccountBalanceView {
@@ -13,10 +14,13 @@ public class AccountBalanceView {
         this.currentAmount = currentAmount;
     }
 
-    public static AccountBalanceView from(Balance balance) {
+    /**
+     * Transaction sonrası bakiye view
+     */
+    public static AccountBalanceView from(Transaction tx) {
         return new AccountBalanceView(
-                balance.getAccount().getId(), // ✅ ARTIK ÇALIŞIR
-                balance.getAmount()
+                tx.getAccount().getId(),
+                tx.getBalanceAfter()
         );
     }
 

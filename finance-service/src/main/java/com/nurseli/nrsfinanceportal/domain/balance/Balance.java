@@ -26,7 +26,10 @@ public class Balance {
         this.amount = BigDecimal.ZERO;
     }
 
-    /* ================= DOMAIN LOGIC ================= */
+    // ✅ BUNU EKLE
+    public static Balance zero(Account account) {
+        return new Balance(account);
+    }
 
     public BigDecimal increase(BigDecimal value) {
         this.amount = this.amount.add(value);
@@ -42,17 +45,7 @@ public class Balance {
         return this.amount;
     }
 
-    /* ================= GETTERS ================= */
-
-    public Long getId() {
-        return id;
-    }
-
-    public Account getAccount() {
-        return account;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
+    public Long getId() { return id; }
+    public Account getAccount() { return account; }
+    public BigDecimal getAmount() { return amount; }
 }
