@@ -19,13 +19,6 @@ import java.util.Map;
 public class KafkaProducerConfig {
 
     @Bean
-    public ObjectMapper objectMapper() {
-        return JsonMapper.builder()
-                .addModule(new JavaTimeModule())
-                .build();
-    }
-
-    @Bean
     public ProducerFactory<String, Object> producerFactory(ObjectMapper objectMapper) {
 
         Map<String, Object> config = new HashMap<>();
@@ -33,10 +26,13 @@ public class KafkaProducerConfig {
         config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
 
+        JsonSerializer<Object> jsonSerializer = new JsonSerializer<>(objectMapper);
+        jsonSerializer.setAddTypeInfo(false); // 🔥 KRİTİK
+
         return new DefaultKafkaProducerFactory<>(
                 config,
                 new StringSerializer(),
-                new JsonSerializer<>(objectMapper)
+                jsonSerializer
         );
     }
 

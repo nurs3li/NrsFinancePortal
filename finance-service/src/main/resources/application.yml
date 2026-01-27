@@ -21,3 +21,15 @@ spring:
 
   kafka:
     bootstrap-servers: localhost:9092
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+      properties:
+        spring.json.add.type.headers: false
+        spring.json.use.type.headers: false
+
+        # 🔥 EN KRİTİK KISIM (Instant problemi çözülür)
+        spring.json.value.default.type: java.lang.Object
+

@@ -9,39 +9,52 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.transaction.event.TransactionPhase;
 
+import static com.nurseli.nrsfinanceportal.integration.kafka.KafkaTopics.*;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class TransactionEventKafkaProducer {
-
-    private static final String TOPIC = "transaction-events";
+public class TransactionEventKafkaPublisher {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    // ✅ DB commit OLDUKTAN SONRA çalışır
+    /* ================= CREATED ================= */
+
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void handleCreated(TransactionCreatedEvent event) {
+    public void handleTransactionCreated(TransactionCreatedEvent event) {
 
         kafkaTemplate.send(
-                TOPIC,
+                TRANSACTION_CREATED,
                 event.transactionId().toString(),
                 event
         );
 
-        log.info("[KAFKA] TransactionCreatedEvent sent → {}", event.transactionId());
+        log.info(
+                "[KAFKA][CREATED] topic={} txId={} accountId={} amount={}",
+                TRANSACTION_CREATED,
+                event.transactionId(),
+                event.accountId(),
+                event.amount()
+        );
     }
 
-    // ✅ DB commit OLDUKTAN SONRA çalışır
+    /* ================= REVERSED ================= */
+
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void handleReversed(TransactionReversedEvent event) {
+    public void handleTransactionReversed(TransactionReversedEvent event) {
 
         kafkaTemplate.send(
-                TOPIC,
+                TRANSACTION_REVERSED,
                 event.reversalTransactionId().toString(),
                 event
         );
 
-        log.info("[KAFKA] TransactionReversedEvent sent → {}", event.reversalTransactionId());
+        log.info(
+                "[KAFKA][REVERSED] topic={} reversalTxId={} originalTxId={} amount={}",
+                TRANSACTION_REVERSED,
+                event.reversalTransactionId(),
+                event.originalTransactionId(),
+                event.amount()
+        );
     }
 }
-

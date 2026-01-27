@@ -15,7 +15,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Slf4j
 @Service
@@ -26,8 +26,6 @@ public class TransactionService {
     private final BalanceRepository balanceRepository;
     private final CurrentUserResolver currentUserResolver;
     private final ApplicationEventPublisher eventPublisher;
-
-    /* ================= DEPOSIT ================= */
 
     @Transactional
     public Transaction recordDeposit(Account account, BigDecimal amount) {
@@ -52,8 +50,6 @@ public class TransactionService {
         publishEventAfterCommit(saved);
         return saved;
     }
-
-    /* ================= WITHDRAW ================= */
 
     @Transactional
     public Transaction recordWithdraw(Account account, BigDecimal amount) {
@@ -83,8 +79,6 @@ public class TransactionService {
         return saved;
     }
 
-    /* ================= EVENT (AFTER COMMIT) ================= */
-
     private void publishEventAfterCommit(Transaction transaction) {
 
         TransactionSynchronizationManager.registerSynchronization(
@@ -97,14 +91,13 @@ public class TransactionService {
                                             transaction.getId(),
                                             transaction.getAccount().getId(),
                                             transaction.getUser().getId(),
-                                            transaction.getType(),
+                                            transaction.getType().name(),
                                             transaction.getAmount(),
                                             transaction.getBalanceAfter(),
-                                            LocalDateTime.now()
+                                            Instant.now() // ✅ TEK DOĞRU
                                     )
                             );
                         } catch (Exception ex) {
-                            // ❗ Event failure = LOG ONLY
                             log.error(
                                     "Transaction event publish failed. transactionId={}",
                                     transaction.getId(),
@@ -115,8 +108,6 @@ public class TransactionService {
                 }
         );
     }
-
-    /* ================= VALIDATION ================= */
 
     private void validateAmount(BigDecimal amount) {
         if (amount == null || amount.signum() <= 0) {
