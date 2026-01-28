@@ -1,0 +1,38 @@
+spring:
+ kafka:
+    bootstrap-servers: nrs-kafka:9093
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
+
+application:
+    name: finance-service
+
+datasource:
+    url: jdbc:postgresql://nrs-postgres:5432/nrs_finance
+    username: nrs
+    password: nrs123
+    driver-class-name: org.postgresql.Driver
+
+jpa:
+  database-platform: org.hibernate.dialect.PostgreSQLDialect
+  hibernate:
+  ddl-auto: update
+  open-in-view: false
+
+kafka:
+    bootstrap-servers: nrs-kafka:9093
+
+security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://nrs-keycloak:8080/realms/nrs-finance
+
+data:
+    redis:
+      host: nrs-redis
+      port: 6379

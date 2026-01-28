@@ -7,6 +7,8 @@ public record TransactionReversedEvent(
         Long reversalTransactionId,
         Long originalTransactionId,
         Long accountId,
+        Long adminUserId,
         BigDecimal amount,
+        BigDecimal balanceAfter,
         Instant occurredAt
 ) {}
