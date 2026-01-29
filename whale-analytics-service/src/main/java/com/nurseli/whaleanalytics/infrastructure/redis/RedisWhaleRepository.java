@@ -1,4 +1,4 @@
-package com.nurseli.logconsumer.whale;
+package com.nurseli.whaleanalytics.infrastructure.redis;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;

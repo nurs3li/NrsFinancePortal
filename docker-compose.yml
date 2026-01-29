@@ -58,6 +58,17 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
 
+  whale-analytics-service:
+    build: ./whale-analytics-service
+    container_name: nrs-whale-analytics
+    depends_on:
+      - kafka
+      - redis
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+
 volumes:
   postgres_data:
   keycloak_data:

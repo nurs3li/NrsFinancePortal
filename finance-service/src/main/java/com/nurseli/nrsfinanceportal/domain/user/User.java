@@ -1,5 +1,6 @@
 package com.nurseli.nrsfinanceportal.domain.user;
 
+import com.nurseli.nrsfinanceportal.domain.whale.WhaleLevel;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -39,6 +40,20 @@ public class User {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    // ===================== 🐋 WHALE FIELDS =====================
+
+    @Column(name = "is_whale", nullable = false)
+    private boolean whale;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "whale_level")
+    private WhaleLevel whaleLevel;
+
+    @Column(name = "whale_since")
+    private Instant whaleSince;
+
+    // ===================== JPA =====================
+
     protected User() {
         // JPA only
     }
@@ -53,6 +68,10 @@ public class User {
         this.email = email;
         this.role = role;
         this.createdAt = Instant.now();
+
+        // defaults
+        this.whale = false;
+        this.whaleLevel = WhaleLevel.NONE;
     }
 
     /**
@@ -70,7 +89,25 @@ public class User {
         );
     }
 
-    // ===== Getters only (immutable design) =====
+    // ===================== 🧠 DOMAIN BEHAVIOR =====================
+
+    /**
+     * Whale status updater (called from WhaleAlert consumer)
+     */
+    public void markAsWhale(WhaleLevel level, Instant triggeredAt) {
+        this.whale = true;
+        this.whaleLevel = level;
+        this.whaleSince = triggeredAt;
+    }
+
+
+    public void clearWhaleStatus() {
+        this.whale = false;
+        this.whaleLevel = WhaleLevel.NONE;
+        this.whaleSince = null;
+    }
+
+    // ===================== GETTERS =====================
 
     public Long getId() {
         return id;
@@ -94,5 +131,17 @@ public class User {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isWhale() {
+        return whale;
+    }
+
+    public WhaleLevel getWhaleLevel() {
+        return whaleLevel;
+    }
+
+    public Instant getWhaleSince() {
+        return whaleSince;
     }
 }

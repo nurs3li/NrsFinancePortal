@@ -1,0 +1,33 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: whale-analytics-service
+
+  kafka:
+    bootstrap-servers: kafka:9092
+    consumer:
+      group-id: whale-detector
+      auto-offset-reset: latest
+      enable-auto-commit: false
+
+  data:
+    redis:
+      host: redis
+      port: 6379
+
+whale:
+  thresholds:
+    l1:
+      single-tx: 250000
+      daily-volume: 1000000
+      hourly-count: 10
+    l2:
+      single-tx: 500000
+      daily-volume: 5000000
+      hourly-count: 20
+    l3:
+      single-tx: 1000000
+      daily-volume: 20000000
+      hourly-count: 50

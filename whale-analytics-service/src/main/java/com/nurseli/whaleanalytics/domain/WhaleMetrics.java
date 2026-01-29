@@ -1,10 +1,10 @@
-package com.nurseli.logconsumer.whale;
+package com.nurseli.whaleanalytics.domain;
 
 import java.math.BigDecimal;
 
 public record WhaleMetrics(
-        int hourlyTransactionCount,
         BigDecimal dailyVolume,
+        int hourlyTransactionCount,
         BigDecimal maxSingleTransaction
 ) {
 }

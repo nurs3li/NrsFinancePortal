@@ -19,3 +19,15 @@ spring:
     redis:
       host: nrs-redis
       port: 6379
+whale:
+  thresholds:
+    l1:
+      single-tx: 250000
+      hourly-count: 10
+    l2:
+      daily-volume: 1000000
+      hourly-count: 5
+    l3:
+      daily-volume: 5000000
+      single-tx: 1000000
+      hourly-count: 10
