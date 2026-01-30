@@ -1,0 +1,226 @@
+databaseChangeLog:
+  - changeSet:
+      id: v1-init
+      author: nurseli
+      changes:
+
+        # ==============================
+        # USERS TABLE
+        # ==============================
+        - createTable:
+            tableName: users
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+
+              - column:
+                  name: keycloak_user_id
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+                    unique: true
+
+              - column:
+                  name: username
+                  type: VARCHAR(255)
+
+              - column:
+                  name: email
+                  type: VARCHAR(255)
+
+              - column:
+                  name: role
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: is_whale
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: whale_level
+                  type: VARCHAR(20)
+
+              - column:
+                  name: whale_since
+                  type: TIMESTAMPTZ
+
+        # ==============================
+        # ACCOUNTS TABLE
+        # ==============================
+        - createTable:
+            tableName: accounts
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+
+              - column:
+                  name: type
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: accounts
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_accounts_user
+
+        - createIndex:
+            tableName: accounts
+            indexName: idx_accounts_user_id
+            columns:
+              - column:
+                  name: user_id
+
+        # ==============================
+        # BALANCES TABLE
+        # ==============================
+        - createTable:
+            tableName: balances
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+
+              - column:
+                  name: account_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: true
+
+              - column:
+                  name: amount
+                  type: NUMERIC(38,2)
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: balances
+            baseColumnNames: account_id
+            referencedTableName: accounts
+            referencedColumnNames: id
+            constraintName: fk_balances_account
+
+        # ==============================
+        # TRANSACTIONS TABLE
+        # ==============================
+        - createTable:
+            tableName: transactions
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+
+              - column:
+                  name: account_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: type
+                  type: VARCHAR(30)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: amount
+                  type: NUMERIC(38,2)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: balance_after
+                  type: NUMERIC(38,2)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: reversed_transaction_id
+                  type: BIGINT
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: transactions
+            baseColumnNames: account_id
+            referencedTableName: accounts
+            referencedColumnNames: id
+            constraintName: fk_transactions_account
+
+        - addForeignKeyConstraint:
+            baseTableName: transactions
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_transactions_user
+
+        - addForeignKeyConstraint:
+            baseTableName: transactions
+            baseColumnNames: reversed_transaction_id
+            referencedTableName: transactions
+            referencedColumnNames: id
+            constraintName: fk_transactions_reversal
+
+        - createIndex:
+            tableName: transactions
+            indexName: idx_transactions_account_created
+            columns:
+              - column:
+                  name: account_id
+              - column:
+                  name: created_at
+                  descending: true
+
+        - createIndex:
+            tableName: transactions
+            indexName: idx_transactions_user_created
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: created_at
+                  descending: true

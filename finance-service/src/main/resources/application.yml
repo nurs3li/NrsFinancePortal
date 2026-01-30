@@ -8,11 +8,15 @@ spring:
     password: nrs123
     driver-class-name: org.postgresql.Driver
 
+
+
   jpa:
     hibernate:
-      ddl-auto: update   # dev için OK, prod'da migration
-    show-sql: true
+      ddl-auto: none
 
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
   security:
     oauth2:
       resourceserver:
@@ -22,7 +26,6 @@ spring:
   kafka:
     bootstrap-servers: localhost:9092
 
-    # 🔹 PRODUCER (TransactionCreatedEvent vs.)
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -30,7 +33,6 @@ spring:
         spring.json.add.type.headers: false
         spring.json.use.type.headers: false
 
-    # 🔹 CONSUMER (WhaleAlertTriggeredEvent)
     consumer:
       group-id: finance-whale-consumer
       auto-offset-reset: earliest

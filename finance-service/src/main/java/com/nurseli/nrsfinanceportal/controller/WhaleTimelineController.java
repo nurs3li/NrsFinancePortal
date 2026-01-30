@@ -1,5 +1,6 @@
 package com.nurseli.nrsfinanceportal.controller;
 
+import com.nurseli.nrsfinanceportal.common.dto.WhaleTimelineResponse;
 import com.nurseli.nrsfinanceportal.domain.whale.WhaleHistory;
 import com.nurseli.nrsfinanceportal.service.WhaleTimelineService;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +16,8 @@ public class WhaleTimelineController {
     private final WhaleTimelineService service;
 
     @GetMapping("/{userId}/timeline")
-    public List<WhaleHistory> timeline(@PathVariable Long userId) {
+    public List<WhaleTimelineResponse> timeline(@PathVariable Long userId) {
         return service.getTimeline(userId);
     }
+
 }

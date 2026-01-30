@@ -1,9 +1,10 @@
 package com.nurseli.nrsfinanceportal.domain.whale;
 
 import jakarta.persistence.*;
+import lombok.Getter;
 
 import java.time.Instant;
-
+@Getter
 @Entity
 @Table(name = "whale_history")
 public class WhaleHistory {
