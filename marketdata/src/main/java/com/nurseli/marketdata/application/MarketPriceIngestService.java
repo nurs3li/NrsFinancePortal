@@ -1,11 +1,12 @@
 package com.nurseli.marketdata.application;
 
-import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.infrastructure.tcmb.TcmbClient;
+import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
@@ -16,8 +17,18 @@ public class MarketPriceIngestService {
     private final TcmbClient tcmbClient;
     private final MarketPriceHistoryRepository repository;
 
+    /**
+     * Yeni FX verisi geldiğinde:
+     * - DB yazılır
+     * - latest-price cache temizlenir
+     */
     @Transactional
+    @CacheEvict(
+            value = "latest-price",
+            allEntries = true
+    )
     public void fetchAndSaveTcmbRates() {
+
         tcmbClient.fetchRates().forEach(rate -> {
 
             MarketPriceHistory entity = new MarketPriceHistory();
