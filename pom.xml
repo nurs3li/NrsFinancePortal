@@ -22,6 +22,7 @@
         <module>finance-service</module>
         <module>log-consumer-service</module>
         <module>whale-analytics-service</module>
+        <module>marketdata</module>
     </modules>
 
     <properties>
