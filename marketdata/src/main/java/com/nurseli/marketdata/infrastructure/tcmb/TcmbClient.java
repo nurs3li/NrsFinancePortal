@@ -21,6 +21,7 @@ public class TcmbClient {
     private static final String TCMB_URL =
             "https://www.tcmb.gov.tr/kurlar/today.xml";
 
+    // 🔵 SADECE DÖVİZLER
     private static final List<String> SUPPORTED =
             List.of("USD", "EUR", "GBP");
 
@@ -30,6 +31,10 @@ public class TcmbClient {
         String xml = restTemplate.getForObject(TCMB_URL, String.class);
 
         List<TcmbRate> result = new ArrayList<>();
+
+        if (xml == null || xml.isBlank()) {
+            return result;
+        }
 
         try {
             Document document = DocumentBuilderFactory
@@ -61,14 +66,14 @@ public class TcmbClient {
                     continue;
                 }
 
-                BigDecimal buy = new BigDecimal(buyText);
-                BigDecimal sell = new BigDecimal(sellText);
+                BigDecimal buy = new BigDecimal(buyText.replace(",", "."));
+                BigDecimal sell = new BigDecimal(sellText.replace(",", "."));
 
                 result.add(new TcmbRate(code, buy, sell));
             }
 
         } catch (Exception e) {
-            throw new RuntimeException("TCMB XML parse error", e);
+            throw new RuntimeException("TCMB FX XML parse error", e);
         }
 
         return result;

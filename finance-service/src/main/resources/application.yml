@@ -8,8 +8,6 @@ spring:
     password: nrs123
     driver-class-name: org.postgresql.Driver
 
-
-
   jpa:
     hibernate:
       ddl-auto: none
@@ -17,6 +15,7 @@ spring:
   liquibase:
     enabled: true
     change-log: classpath:db/changelog/db.changelog-master.yaml
+
   security:
     oauth2:
       resourceserver:
@@ -25,14 +24,12 @@ spring:
 
   kafka:
     bootstrap-servers: localhost:9092
-
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
         spring.json.add.type.headers: false
         spring.json.use.type.headers: false
-
     consumer:
       group-id: finance-whale-consumer
       auto-offset-reset: earliest
@@ -43,3 +40,7 @@ spring:
         spring.json.trusted.packages: com.nurseli.nrsfinanceportal.integration.kafka.event
         spring.json.use.type.headers: false
         spring.json.value.default.type: com.nurseli.nrsfinanceportal.integration.kafka.event.WhaleAlertTriggeredEvent
+
+# 🔥 BURASI KRİTİK – spring DIŞINDA
+market-data:
+  base-url: http://localhost:8083

@@ -20,7 +20,8 @@ datasource:
   liquibase:
     enabled: true
     change-log: classpath:db/changelog/db.changelog-master.yaml
-
+market-data:
+   base-url: http://market-data-service:8080
 kafka:
     bootstrap-servers: nrs-kafka:9093
 
