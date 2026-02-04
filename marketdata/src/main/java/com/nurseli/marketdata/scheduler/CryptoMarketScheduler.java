@@ -19,7 +19,7 @@ public class CryptoMarketScheduler {
      */
     @Scheduled(fixedDelay = 120_000)
     public void fetchCryptoPrices() {
-        log.info("[SCHEDULER] Fetching crypto prices from Binance");
+        log.info("[SCHEDULER] Fetching crypto prices from CoinGecko");
         ingestService.fetchAndSaveCryptoPrices();
     }
 }

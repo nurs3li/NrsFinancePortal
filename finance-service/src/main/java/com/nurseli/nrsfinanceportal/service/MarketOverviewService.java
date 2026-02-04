@@ -18,6 +18,9 @@ public class MarketOverviewService {
 
     public MarketOverviewResponse getOverview() {
 
+        // =====================
+        // FX (DÖVİZ)
+        // =====================
         var doviz = marketDataClient.getLatestDoviz()
                 .entrySet()
                 .stream()
@@ -27,9 +30,14 @@ public class MarketOverviewService {
                                 e.getValue().buyPrice(),
                                 e.getValue().sellPrice(),
                                 e.getValue().source()
-                        )
+                        ),
+                        (a, b) -> a,
+                        LinkedHashMap::new
                 ));
 
+        // =====================
+        // METALS
+        // =====================
         var metals = marketDataClient.getLatestMetals()
                 .entrySet()
                 .stream()
@@ -37,11 +45,15 @@ public class MarketOverviewService {
                         Map.Entry::getKey,
                         e -> new MetalOverviewDto(
                                 e.getValue().buyPrice(),
-                                // gram altın
                                 e.getValue().source()
-                        )
+                        ),
+                        (a, b) -> a,
+                        LinkedHashMap::new
                 ));
 
+        // =====================
+        // CRYPTO
+        // =====================
         var crypto = marketDataClient.getLatestCrypto()
                 .entrySet()
                 .stream()
@@ -50,14 +62,30 @@ public class MarketOverviewService {
                         e -> new CryptoOverviewDto(
                                 e.getValue().buyPrice(),
                                 e.getValue().source()
-                        )
+                        ),
+                        (a, b) -> a,
+                        LinkedHashMap::new
                 ));
-// 🔒 FONLAR ŞİMDİLİK SAHTE / PLACEHOLDER
-        Map<String, FundOverviewDto> funds = new LinkedHashMap<>();
-        funds.put("TCD", new FundOverviewDto(null, "TEFAS"));
-        funds.put("AES", new FundOverviewDto(null, "TEFAS"));
-        funds.put("TI2", new FundOverviewDto(null, "TEFAS"));
 
+        // =====================
+        // 🔥 TEFAS FONLARI (GERÇEK VERİ)
+        // =====================
+        var funds = marketDataClient.getLatestFunds()
+                .entrySet()
+                .stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey, // AES, AFT, TCD...
+                        e -> new FundOverviewDto(
+                                e.getValue().buyPrice(), // fon fiyatı
+                                e.getValue().source()    // TEFAS
+                        ),
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+
+        // =====================
+        // OVERVIEW RESPONSE
+        // =====================
         return new MarketOverviewResponse(
                 doviz,
                 metals,

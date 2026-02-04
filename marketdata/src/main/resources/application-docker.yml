@@ -24,3 +24,6 @@ spring:
     redis:
       host: nrs-redis
       port: 6379
+  networks:
+    default:
+      driver: bridge

@@ -17,7 +17,12 @@ public class CryptoSymbolMapping {
                     Map.entry("DOTUSDT", "polkadot"),
                     Map.entry("ATOMUSDT", "cosmos"),
                     Map.entry("LINKUSDT", "chainlink"),
-                    Map.entry("MATICUSDT", "matic-network")
+                    Map.entry("TRXUSDT", "tron"),
+                    Map.entry("LTCUSDT", "litecoin"),
+                    Map.entry("XLMUSDT", "stellar"),
+                    Map.entry("NEARUSDT", "near"),
+                    Map.entry("ARBUSDT", "arbitrum"),
+                    Map.entry("OPUSDT", "optimism")
             );
 
     public static Set<String> supportedSymbols() {

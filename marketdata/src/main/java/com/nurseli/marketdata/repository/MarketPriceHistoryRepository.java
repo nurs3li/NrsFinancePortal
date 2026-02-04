@@ -12,11 +12,33 @@ import java.util.Optional;
 public interface MarketPriceHistoryRepository
         extends JpaRepository<MarketPriceHistory, Long> {
 
-    // 🔹 LATEST
+    // =====================================================
+    // 🔹 LATEST – SINGLE SYMBOL
+    // =====================================================
     Optional<MarketPriceHistory>
     findTopBySymbolOrderByTimestampDesc(String symbol);
 
-    // 🔹 TIME BUCKET (1 dakika)
+    // =====================================================
+    // 🔹 LATEST – ALL SYMBOLS BY SOURCE (CRYPTO / FX / FUND)
+    // =====================================================
+    @Query("""
+        SELECT m
+        FROM MarketPriceHistory m
+        WHERE m.source = :source
+          AND m.timestamp = (
+              SELECT MAX(m2.timestamp)
+              FROM MarketPriceHistory m2
+              WHERE m2.symbol = m.symbol
+          )
+        ORDER BY m.symbol
+    """)
+    List<MarketPriceHistory> findLatestBySource(
+            @Param("source") String source
+    );
+
+    // =====================================================
+    // 🔹 HISTORY – TIME BUCKET (1 MINUTE)
+    // =====================================================
     @Query(value = """
         SELECT
             date_trunc('minute', timestamp) AS timestamp,

@@ -6,7 +6,7 @@ spring:
     name: whale-analytics-service
 
   kafka:
-    bootstrap-servers: kafka:9092
+    bootstrap-servers: nrs-kafka:9093   # 🔥 BURASI
     consumer:
       group-id: whale-detector
       auto-offset-reset: latest
@@ -14,7 +14,7 @@ spring:
 
   data:
     redis:
-      host: redis
+      host: nrs-redis
       port: 6379
 
 whale:

@@ -26,3 +26,14 @@ spring:
       port: 6379
 
 
+tefas:
+   funds:
+    - AES   # Hisse
+    - AFT   # Hisse
+    - TCD   # Hisse
+    - GAF   # Borçlanma
+    - DBH   # Borçlanma
+    - GLDTR # Altın
+    - KTN   # Katılım
+    - KZL   # Katılım
+    - YAC   # Değişken
