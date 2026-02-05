@@ -1,5 +1,6 @@
 package com.nurseli.nrsfinanceportal.infrastructure.client.market;
 
+import com.nurseli.nrsfinanceportal.infrastructure.client.market.dto.FxPriceDto;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.dto.MarketPriceLatestDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.ParameterizedTypeReference;
@@ -14,12 +15,12 @@ public class MarketDataClient {
 
     private final WebClient marketDataWebClient;
 
-    public Map<String, MarketPriceLatestDto> getLatestDoviz() {
+    public Map<String, FxPriceDto> getLatestDoviz() {
         return marketDataWebClient.get()
                 .uri("/api/market/doviz/latest")
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<
-                        Map<String, MarketPriceLatestDto>>() {})
+                        Map<String, FxPriceDto>>() {})
                 .block();
     }
 

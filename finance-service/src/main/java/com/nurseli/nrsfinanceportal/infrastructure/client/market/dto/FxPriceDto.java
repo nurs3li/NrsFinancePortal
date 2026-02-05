@@ -4,8 +4,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record FxPriceDto(
-        BigDecimal buy,
-        BigDecimal sell,
+        String symbol,
+        BigDecimal buyPrice,
+        BigDecimal sellPrice,
         String source,
         LocalDateTime timestamp
 ) {}

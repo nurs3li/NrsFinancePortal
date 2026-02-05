@@ -1,10 +1,9 @@
 package com.nurseli.nrsfinanceportal.service;
 
 import com.nurseli.nrsfinanceportal.domain.account.Account;
-import com.nurseli.nrsfinanceportal.domain.balance.Balance;
 import com.nurseli.nrsfinanceportal.domain.event.TransactionCreatedEvent;
 import com.nurseli.nrsfinanceportal.domain.transaction.Transaction;
-import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
+import com.nurseli.nrsfinanceportal.domain.transaction.TransactionType;
 import com.nurseli.nrsfinanceportal.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,61 +22,41 @@ import java.time.Instant;
 public class TransactionService {
 
     private final TransactionRepository transactionRepository;
-    private final BalanceRepository balanceRepository;
     private final CurrentUserResolver currentUserResolver;
     private final ApplicationEventPublisher eventPublisher;
 
+    /**
+     * 🔑 TEK GERÇEK KAYIT NOKTASI
+     *
+     * ❗ Balance mutation YOK
+     * ❗ BalanceAfter DIŞARIDAN gelir (TradeService)
+     */
     @Transactional
-    public Transaction recordDeposit(Account account, BigDecimal amount) {
+    public Transaction record(
+            Account account,
+            BigDecimal amount,
+            TransactionType type,
+            BigDecimal balanceAfter
+    ) {
 
         validateAmount(amount);
 
-        Balance balance = balanceRepository.findByAccount(account)
-                .orElseThrow(() -> new IllegalStateException("Balance not found"));
-
-        BigDecimal newBalance = balance.increase(amount);
-
-        Transaction transaction = Transaction.deposit(
+        Transaction transaction = Transaction.record(
                 account,
                 currentUserResolver.getOrCreateCurrentUser(),
                 amount,
-                newBalance
+                balanceAfter,
+                type
         );
 
-        balanceRepository.save(balance);
         Transaction saved = transactionRepository.save(transaction);
 
         publishEventAfterCommit(saved);
+
         return saved;
     }
 
-    @Transactional
-    public Transaction recordWithdraw(Account account, BigDecimal amount) {
-
-        validateAmount(amount);
-
-        Balance balance = balanceRepository.findByAccount(account)
-                .orElseThrow(() -> new IllegalStateException("Balance not found"));
-
-        if (balance.getAmount().compareTo(amount) < 0) {
-            throw new IllegalStateException("Insufficient balance");
-        }
-
-        BigDecimal newBalance = balance.decrease(amount);
-
-        Transaction transaction = Transaction.withdraw(
-                account,
-                currentUserResolver.getOrCreateCurrentUser(),
-                amount,
-                newBalance
-        );
-
-        balanceRepository.save(balance);
-        Transaction saved = transactionRepository.save(transaction);
-
-        publishEventAfterCommit(saved);
-        return saved;
-    }
+    /* ================= EVENT PUBLISH ================= */
 
     private void publishEventAfterCommit(Transaction transaction) {
 
@@ -94,7 +73,7 @@ public class TransactionService {
                                             transaction.getType().name(),
                                             transaction.getAmount(),
                                             transaction.getBalanceAfter(),
-                                            Instant.now() // ✅ TEK DOĞRU
+                                            Instant.now()
                                     )
                             );
                         } catch (Exception ex) {

@@ -18,7 +18,7 @@ public class WhaleAlertListener {
 
     @KafkaListener(
             topics = "whale.alert.triggered",
-            groupId = "finance-whale-consumer"
+            groupId = "finance-whale-consumer-v2"
     )
     public void onWhaleAlert(WhaleAlertTriggeredEvent event) {
 

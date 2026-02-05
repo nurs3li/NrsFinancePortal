@@ -26,9 +26,16 @@ public class Balance {
         this.amount = BigDecimal.ZERO;
     }
 
-    // ✅ BUNU EKLE
+    // ✅ MEVCUT AKIŞ – HİÇ BOZULMADI
     public static Balance zero(Account account) {
         return new Balance(account);
+    }
+
+    // ✅ YENİ – KONTROLLÜ INITIAL BALANCE
+    public static Balance of(Account account, BigDecimal amount) {
+        Balance balance = new Balance(account);
+        balance.amount = amount;
+        return balance;
     }
 
     public BigDecimal increase(BigDecimal value) {

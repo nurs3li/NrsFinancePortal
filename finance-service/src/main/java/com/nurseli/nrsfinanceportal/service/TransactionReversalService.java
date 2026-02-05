@@ -1,10 +1,8 @@
 package com.nurseli.nrsfinanceportal.service;
 
-import com.nurseli.nrsfinanceportal.domain.balance.Balance;
 import com.nurseli.nrsfinanceportal.domain.event.TransactionReversedEvent;
 import com.nurseli.nrsfinanceportal.domain.transaction.Transaction;
 import com.nurseli.nrsfinanceportal.domain.transaction.TransactionType;
-import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
 import com.nurseli.nrsfinanceportal.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,12 +19,18 @@ import java.time.Instant;
 public class TransactionReversalService {
 
     private final TransactionRepository transactionRepository;
-    private final BalanceRepository balanceRepository;
     private final CurrentUserResolver currentUserResolver;
     private final ApplicationEventPublisher eventPublisher;
 
+    /**
+     * ⚠️ Balance mutation YOK
+     * Balance TradeService tarafından hesaplanmış olmalı
+     */
     @Transactional
-    public Transaction reverse(Long transactionId) {
+    public Transaction reverse(
+            Long transactionId,
+            BigDecimal balanceAfter
+    ) {
 
         // 1️⃣ Orijinal transaction
         Transaction original = transactionRepository
@@ -41,29 +45,17 @@ public class TransactionReversalService {
             throw new IllegalStateException("Transaction already reversed");
         }
 
-        // 2️⃣ Balance
-        Balance balance = balanceRepository
-                .findByAccount(original.getAccount())
-                .orElseThrow(() -> new IllegalStateException("Balance not found"));
-
-        // 3️⃣ Balance hesapla
-        BigDecimal newBalance =
-                original.getType() == TransactionType.DEPOSIT
-                        ? balance.decrease(original.getAmount())
-                        : balance.increase(original.getAmount());
-
-        // 4️⃣ Reversal transaction
+        // 2️⃣ Reversal transaction (SADECE KAYIT)
         Transaction reversal = Transaction.reversal(
                 original,
                 currentUserResolver.getOrCreateCurrentUser(),
-                newBalance
+                balanceAfter
         );
 
-        balanceRepository.save(balance);
         Transaction saved = transactionRepository.save(reversal);
 
-        // 5️⃣ Event publish
-        publishTransactionReversedEvent(saved, original, balance);
+        // 3️⃣ Event publish
+        publishTransactionReversedEvent(saved, original);
 
         return saved;
     }
@@ -72,8 +64,7 @@ public class TransactionReversalService {
 
     private void publishTransactionReversedEvent(
             Transaction reversal,
-            Transaction original,
-            Balance balance
+            Transaction original
     ) {
 
         eventPublisher.publishEvent(
@@ -81,10 +72,10 @@ public class TransactionReversalService {
                         reversal.getId(),
                         original.getId(),
                         original.getAccount().getId(),
-                        reversal.getUser().getId(),   // admin / operator
+                        reversal.getUser().getId(),
                         reversal.getAmount(),
-                        balance.getAmount(),
-                        Instant.now()                 // ✅ SADECE Instant
+                        reversal.getBalanceAfter(),
+                        Instant.now()
                 )
         );
     }

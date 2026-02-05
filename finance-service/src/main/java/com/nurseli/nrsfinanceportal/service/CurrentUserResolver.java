@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+
 @RequiredArgsConstructor
 @Service
 public class CurrentUserResolver {
@@ -44,15 +46,22 @@ public class CurrentUserResolver {
                             )
                     );
 
-                    // 2️⃣ DEFAULT ACCOUNT
-                    Account account = accountRepository.save(
+                    // 2️⃣ CASH ACCOUNT
+                    Account cash = accountRepository.save(
                             Account.create(AccountType.CASH, user)
                     );
+                    balanceRepository.save(Balance.zero(cash));
 
-                    // 3️⃣ DEFAULT BALANCE
-                    balanceRepository.save(
-                            Balance.zero(account)
+// 3️⃣ DEMO ACCOUNT (🔥)
+                    Account demo = accountRepository.save(
+                            Account.create(AccountType.DEMO, user)
                     );
+
+// 🔥 DEMO'ya 1.000.000 TRY
+                    balanceRepository.save(
+                            Balance.of(demo, new BigDecimal("1000000"))
+                    );
+
 
                     return user;
                 });

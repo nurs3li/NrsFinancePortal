@@ -1,0 +1,50 @@
+databaseChangeLog:
+  - changeSet:
+      id: create-portfolio-assets
+      author: nurseli
+      changes:
+        - createTable:
+            tableName: portfolio_assets
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: type
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: symbol
+                  type: VARCHAR(30)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: quantity
+                  type: NUMERIC(38,8)
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: portfolio_assets
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_portfolio_asset_user
+
+        - addUniqueConstraint:
+            tableName: portfolio_assets
+            columnNames: user_id, symbol
+            constraintName: uk_user_asset_symbol

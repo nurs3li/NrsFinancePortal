@@ -32,11 +32,9 @@ public class Transaction {
     private BigDecimal balanceAfter;
 
     /**
-     * Bu transaction bir reversal ise,
-     * hangi transaction'ı reverse ettiğini tutar.
-     *
-     * ❗ UNIQUE YOK
+     * Reversal ise, hangi transaction'ı reverse ettiğini tutar.
      * ❗ OneToOne YOK
+     * ❗ UNIQUE YOK
      */
     @ManyToOne
     @JoinColumn(name = "reversed_transaction_id")
@@ -47,7 +45,21 @@ public class Transaction {
 
     protected Transaction() {}
 
-    /* ================= FACTORY METHODS ================= */
+    /* ==================================================
+       PUBLIC FACTORY — SERVICE KATMANI İÇİN TEK GİRİŞ
+       ================================================== */
+
+    public static Transaction record(
+            Account account,
+            User user,
+            BigDecimal amount,
+            BigDecimal balanceAfter,
+            TransactionType type
+    ) {
+        return create(account, user, amount, balanceAfter, type, null);
+    }
+
+    /* ================= LEGACY / DOMAIN FACTORIES ================= */
 
     public static Transaction deposit(
             Account account,
@@ -82,7 +94,9 @@ public class Transaction {
         );
     }
 
-    private static Transaction create(
+    /* ================= CORE CREATOR ================= */
+
+    static Transaction create(
             Account account,
             User user,
             BigDecimal amount,

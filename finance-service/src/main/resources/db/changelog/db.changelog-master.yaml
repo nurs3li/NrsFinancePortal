@@ -3,3 +3,7 @@ databaseChangeLog:
       file: db/changelog/v1-init.yaml
   - include:
       file: db/changelog/v2-whale-history.yaml
+  - include:
+      file: db/changelog/v3-create-portfolio-assets.yaml
+  - include:
+      file: db/changelog/v4-trade.yaml

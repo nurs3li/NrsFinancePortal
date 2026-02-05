@@ -6,7 +6,6 @@ import java.time.LocalDateTime;
 public record MarketPriceLatestDto(
         String symbol,
         BigDecimal buyPrice,
-        BigDecimal sellPrice,
         String source,
         LocalDateTime timestamp
 ) {}

@@ -2,56 +2,43 @@ package com.nurseli.nrsfinanceportal.controller;
 
 import com.nurseli.nrsfinanceportal.common.dto.AccountBalanceView;
 import com.nurseli.nrsfinanceportal.common.dto.BalanceAdjustmentRequest;
-import com.nurseli.nrsfinanceportal.common.dto.FundsWithdrawalRequest;
 import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.account.Account;
-import com.nurseli.nrsfinanceportal.domain.transaction.Transaction;
+import com.nurseli.nrsfinanceportal.domain.account.AccountType;
 import com.nurseli.nrsfinanceportal.repository.AccountRepository;
 import com.nurseli.nrsfinanceportal.service.BalanceService;
 import com.nurseli.nrsfinanceportal.service.CurrentUserResolver;
-import com.nurseli.nrsfinanceportal.service.FundsWithdrawalService;
-
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/balance")
+@RequiredArgsConstructor
 public class BalanceController {
 
     private final BalanceService balanceService;
-    private final FundsWithdrawalService fundsWithdrawalService;
     private final CurrentUserResolver currentUserResolver;
     private final AccountRepository accountRepository;
-
-    public BalanceController(
-            BalanceService balanceService,
-            FundsWithdrawalService fundsWithdrawalService,
-            CurrentUserResolver currentUserResolver,
-            AccountRepository accountRepository
-    ) {
-        this.balanceService = balanceService;
-        this.fundsWithdrawalService = fundsWithdrawalService;
-        this.currentUserResolver = currentUserResolver;
-        this.accountRepository = accountRepository;
-    }
 
     /* ================= QUERY ================= */
 
     @GetMapping("/me")
     @PreAuthorize("hasRole('USER')")
-
     public ApiResponse<AccountBalanceView> myBalance() {
-        Account account = accountRepository
-                .findByUser(currentUserResolver.getOrCreateCurrentUser())
-                .stream()
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Account not found"));
+
+        Account demoAccount = accountRepository
+                .findByUserAndType(
+                        currentUserResolver.getOrCreateCurrentUser(),
+                        AccountType.DEMO
+                )
+                .orElseThrow(() -> new IllegalStateException("Demo account not found"));
 
         return ApiResponse.success(
                 new AccountBalanceView(
-                        account.getId(),
-                        balanceService.getOf(account).getAmount()
+                        demoAccount.getId(),
+                        balanceService.getOf(demoAccount).getAmount()
                 )
         );
     }
@@ -63,6 +50,7 @@ public class BalanceController {
     public ApiResponse<AccountBalanceView> adjust(
             @Valid @RequestBody BalanceAdjustmentRequest request
     ) {
+
         Account account = accountRepository.findById(request.getAccountId())
                 .orElseThrow(() -> new IllegalArgumentException("Account not found"));
 
@@ -73,25 +61,6 @@ public class BalanceController {
                         account.getId(),
                         balanceService.getOf(account).getAmount()
                 )
-        );
-    }
-
-    /* ================= COMMAND ================= */
-
-    @PostMapping("/withdraw")
-    @PreAuthorize("hasRole('USER')")
-
-    public ApiResponse<AccountBalanceView> withdraw(
-            @Valid @RequestBody FundsWithdrawalRequest request
-    ) {
-        Account account = accountRepository.findById(request.getAccountId())
-                .orElseThrow(() -> new IllegalArgumentException("Account not found"));
-
-        Transaction tx =
-                fundsWithdrawalService.withdraw(account, request.getAmount());
-
-        return ApiResponse.success(
-                AccountBalanceView.from(tx)
         );
     }
 }

@@ -1,0 +1,202 @@
+package com.nurseli.nrsfinanceportal.service.trade;
+
+import com.nurseli.nrsfinanceportal.domain.account.Account;
+import com.nurseli.nrsfinanceportal.domain.account.AccountType;
+import com.nurseli.nrsfinanceportal.domain.balance.Balance;
+import com.nurseli.nrsfinanceportal.domain.portfolio.PortfolioAsset;
+import com.nurseli.nrsfinanceportal.domain.trade.Trade;
+import com.nurseli.nrsfinanceportal.domain.trade.TradeType;
+import com.nurseli.nrsfinanceportal.domain.transaction.Transaction;
+import com.nurseli.nrsfinanceportal.domain.transaction.TransactionType;
+import com.nurseli.nrsfinanceportal.domain.pricing.PriceLookupService;
+import com.nurseli.nrsfinanceportal.domain.user.User;
+import com.nurseli.nrsfinanceportal.repository.AccountRepository;
+import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
+import com.nurseli.nrsfinanceportal.repository.PortfolioAssetRepository;
+import com.nurseli.nrsfinanceportal.repository.TradeRepository; // 🔥 EKLENDİ
+import com.nurseli.nrsfinanceportal.service.CurrentUserResolver;
+import com.nurseli.nrsfinanceportal.service.TransactionService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+@Service
+@RequiredArgsConstructor
+public class TradeService {
+
+    private static final BigDecimal DEMO_INITIAL_BALANCE =
+            new BigDecimal("1000000");
+
+    private final CurrentUserResolver currentUserResolver;
+    private final AccountRepository accountRepository;
+    private final BalanceRepository balanceRepository;
+    private final PortfolioAssetRepository portfolioAssetRepository;
+    private final TradeRepository tradeRepository; // 🔥 EKLENDİ
+    private final PriceLookupService priceLookupService;
+    private final TransactionService transactionService;
+
+    /**
+     * 🔥 TEK GERÇEK MUTATION NOKTASI
+     * - Balance burada değişir
+     * - TransactionService SADECE kayıt + event
+     */
+    @Transactional
+    public TradeResponse execute(TradeRequest request) {
+
+        // 1️⃣ Current User
+        User user = currentUserResolver.getOrCreateCurrentUser();
+
+        // 2️⃣ DEMO Account (YOKSA OLUŞTUR)
+        Account demoAccount = ensureDemoAccount(user);
+
+        // 3️⃣ Balance (FOR UPDATE)
+        Balance balance = balanceRepository
+                .findByAccountForUpdate(demoAccount)
+                .orElseThrow(() -> new IllegalStateException("Balance not found"));
+
+        // 4️⃣ TRY fiyat
+        BigDecimal tryPrice = priceLookupService.getTryPrice(
+                request.assetType(),
+                request.symbol()
+        );
+
+        BigDecimal totalTry = tryPrice.multiply(request.quantity());
+
+        // 5️⃣ Portfolio Asset
+        PortfolioAsset asset = portfolioAssetRepository
+                .findByUserAndTypeAndSymbol(
+                        user,
+                        request.assetType(),
+                        request.symbol()
+                )
+                .orElse(null);
+
+        /* ======================
+           BUY
+           ====================== */
+        if (request.tradeType() == TradeType.BUY) {
+
+            // 💸 Balance düş (TEK YER)
+            BigDecimal balanceAfter = balance.decrease(totalTry);
+
+            // 🧾 Transaction kaydı (mutation YOK)
+            Transaction tx = transactionService.record(
+                    demoAccount,
+                    totalTry,
+                    TransactionType.WITHDRAW,
+                    balanceAfter
+            );
+
+            // 🧠 Trade kaydı (NIYET DEFTERI)
+            Trade trade = Trade.create(
+                    user,
+                    request.tradeType(),
+                    request.assetType(),
+                    request.symbol(),
+                    request.quantity(),
+                    tx.getId()
+            );
+            tradeRepository.save(trade);
+
+            // 📦 Portfolio
+            if (asset == null) {
+                asset = PortfolioAsset.create(
+                        user,
+                        request.assetType(),
+                        request.symbol(),
+                        request.quantity()
+                );
+            } else {
+                asset.increase(request.quantity());
+            }
+
+            portfolioAssetRepository.save(asset);
+
+            return response(request, tryPrice, totalTry, balanceAfter);
+        }
+
+        /* ======================
+           SELL
+           ====================== */
+        if (asset == null || asset.getQuantity().compareTo(request.quantity()) < 0) {
+            throw new IllegalStateException("Insufficient asset quantity");
+        }
+
+        asset.decrease(request.quantity());
+
+        // 💰 Balance artır (TEK YER)
+        BigDecimal balanceAfter = balance.increase(totalTry);
+
+        // 🧾 Transaction kaydı (mutation YOK)
+        Transaction tx = transactionService.record(
+                demoAccount,
+                totalTry,
+                TransactionType.DEPOSIT,
+                balanceAfter
+        );
+
+        // 🧠 Trade kaydı (NIYET DEFTERI)
+        Trade trade = Trade.create(
+                user,
+                request.tradeType(),
+                request.assetType(),
+                request.symbol(),
+                request.quantity(),
+                tx.getId()
+        );
+        tradeRepository.save(trade);
+
+        if (asset.getQuantity().signum() == 0) {
+            portfolioAssetRepository.delete(asset);
+        } else {
+            portfolioAssetRepository.save(asset);
+        }
+
+        return response(request, tryPrice, totalTry, balanceAfter);
+    }
+
+    /* ======================
+       DEMO ACCOUNT GUARANTEE
+       ====================== */
+    private Account ensureDemoAccount(User user) {
+
+        return accountRepository
+                .findByUserAndType(user, AccountType.DEMO)
+                .orElseGet(() -> {
+
+                    // Account
+                    Account demo = accountRepository.save(
+                            Account.create(AccountType.DEMO, user)
+                    );
+
+                    // Balance + 1.000.000 TRY
+                    Balance balance = new Balance(demo);
+                    balance.increase(DEMO_INITIAL_BALANCE);
+                    balanceRepository.save(balance);
+
+                    return demo;
+                });
+    }
+
+    /* ======================
+       RESPONSE
+       ====================== */
+    private TradeResponse response(
+            TradeRequest request,
+            BigDecimal tryPrice,
+            BigDecimal totalTry,
+            BigDecimal balanceAfter
+    ) {
+        return new TradeResponse(
+                request.symbol(),
+                request.quantity(),
+                tryPrice,
+                totalTry,
+                balanceAfter,
+                LocalDateTime.now()
+        );
+    }
+}
