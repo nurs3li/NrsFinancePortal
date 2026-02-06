@@ -20,12 +20,14 @@ public class WhaleQueryService {
         var metrics = readRepository.getMetrics(String.valueOf(userId));
         var level = decisionEngine.evaluate(metrics);
 
+        int impactScore = -1; // SNAPSHOT / QUERY MODE
+
         return new WhaleResult(
                 String.valueOf(userId),
                 level,
                 metrics,
+                impactScore,
                 Instant.now()
         );
-
     }
 }

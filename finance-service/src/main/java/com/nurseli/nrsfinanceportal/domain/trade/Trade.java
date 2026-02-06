@@ -1,12 +1,12 @@
 package com.nurseli.nrsfinanceportal.domain.trade;
 
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
+import com.nurseli.nrsfinanceportal.domain.transaction.Transaction;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-
 @Entity
 @Table(name = "trade")
 public class Trade {
@@ -18,7 +18,7 @@ public class Trade {
     /* ======================
        OWNER
        ====================== */
-    @ManyToOne(optional = false, fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
@@ -40,19 +40,27 @@ public class Trade {
     private BigDecimal quantity;
 
     /* ======================
-       PARASAL SONUÇ REFERANSI
+       FK (SOURCE OF TRUTH)
        ====================== */
     @Column(name = "transaction_id", nullable = false, updatable = false)
     private Long transactionId;
 
+    /* ======================
+       READ-ONLY RELATION
+       ====================== */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "transaction_id",
+            referencedColumnName = "id",
+            insertable = false,
+            updatable = false
+    )
+    private Transaction transaction;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
-    /* ======================
-       JPA
-       ====================== */
-    protected Trade() {
-    }
+    protected Trade() {}
 
     private Trade(
             User user,
@@ -71,9 +79,6 @@ public class Trade {
         this.createdAt = Instant.now();
     }
 
-    /* ======================
-       FACTORY
-       ====================== */
     public static Trade create(
             User user,
             TradeType tradeType,
@@ -95,35 +100,17 @@ public class Trade {
     /* ======================
        GETTERS
        ====================== */
-    public Long getId() {
-        return id;
-    }
 
-    public User getUser() {
-        return user;
-    }
-
-    public TradeType getTradeType() {
-        return tradeType;
-    }
-
-    public AssetType getAssetType() {
-        return assetType;
-    }
-
-    public String getSymbol() {
-        return symbol;
-    }
-
-    public BigDecimal getQuantity() {
-        return quantity;
-    }
-
-    public Long getTransactionId() {
-        return transactionId;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
+    public Long getId() { return id; }
+    public User getUser() { return user; }
+    public TradeType getTradeType() { return tradeType; }
+    public AssetType getAssetType() { return assetType; }
+    public String getSymbol() { return symbol; }
+    public BigDecimal getQuantity() { return quantity; }
+    public Long getTransactionId() { return transactionId; }
+    public Transaction getTransaction() { return transaction; }
+    public Instant getCreatedAt() { return createdAt; }
 }
+
+
+

@@ -5,11 +5,13 @@ import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.domain.trade.Trade;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
-public interface TradeHistoryQueryRepository extends Repository<Trade, Long> {
+@Repository
+public interface TradeHistoryQueryRepository extends JpaRepository<Trade, Long> {
 
     @Query("""
         select new com.nurseli.nrsfinanceportal.common.dto.TradeHistoryDto(
@@ -23,9 +25,10 @@ public interface TradeHistoryQueryRepository extends Repository<Trade, Long> {
             t.createdAt
         )
         from Trade t
-        join Transaction tx on tx.id = t.transactionId
+        join Transaction tx on tx.id = t.transactionId 
         where t.user.id = :userId
           and (:assetType is null or t.assetType = :assetType)
+        order by t.createdAt desc
     """)
     Page<TradeHistoryDto> findTradeHistory(
             @Param("userId") Long userId,

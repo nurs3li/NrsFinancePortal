@@ -7,9 +7,11 @@ import java.time.Instant;
 
 public record WhaleAlertDetectedEvent(
         Long userId,
-        WhaleLevel level,
+        WhaleLevel whaleLevel,
+        int impactScore,
         BigDecimal dailyVolume,
-        int hourlyCount,
-        BigDecimal maxSingleTx,
+        int hourlyTransactionCount,
+        BigDecimal maxSingleTransaction,
         Instant triggeredAt
-) {}
+) {
+}

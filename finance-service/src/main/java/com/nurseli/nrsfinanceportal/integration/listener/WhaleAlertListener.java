@@ -18,10 +18,13 @@ public class WhaleAlertListener {
 
     @KafkaListener(
             topics = "whale.alert.triggered",
-            groupId = "finance-whale-consumer-v2"
+            groupId = "finance-whale-consumer-v5"
     )
     public void onWhaleAlert(WhaleAlertTriggeredEvent event) {
-
+        if (event.whaleLevel() == null) {
+            log.error("❌ Legacy whale event ignored (null level): {}", event);
+            return; // ⬅️ EXCEPTION YOK → OFFSET COMMIT
+        }
         log.warn("""
                         🐋 WHALE ALERT RECEIVED
                         userId : {}
@@ -29,7 +32,7 @@ public class WhaleAlertListener {
                         reason : AUTO_ALERT
                         """,
                 event.userId(),
-                event.level()
+                event.whaleLevel()
         );
 
         // ✅ String → Long dönüşüm (KRİTİK SATIR)
@@ -42,7 +45,7 @@ public class WhaleAlertListener {
 
         // 1️⃣ User flag
         user.markAsWhale(
-                event.level(),
+                event.whaleLevel(),
                 event.triggeredAt()
         );
         userRepository.save(user);
@@ -51,10 +54,12 @@ public class WhaleAlertListener {
         whaleHistoryRepository.save(
                 WhaleHistory.of(
                         user.getId(),
-                        event.level(),
-                        "AUTO_ALERT",
+                        event.whaleLevel(),
+                        event.impactScore(),
+                        "AUTO_ALERT",   // ✅ impactScore
                         event.triggeredAt()
                 )
         );
+
     }
 }

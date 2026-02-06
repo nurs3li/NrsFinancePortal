@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: v5-whale-history-add-impact-score
+      author: nurseli
+      changes:
+        - addColumn:
+            tableName: whale_history
+            columns:
+              - column:
+                  name: impact_score
+                  type: INT
+                  constraints:
+                    nullable: true
