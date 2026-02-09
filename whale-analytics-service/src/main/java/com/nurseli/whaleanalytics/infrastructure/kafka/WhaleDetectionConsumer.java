@@ -26,7 +26,7 @@ public class WhaleDetectionConsumer {
 
     @KafkaListener(
             topics = "finance.transaction.created",
-            groupId = "whale-detector-5",
+            groupId = "whale-detector-8",
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void consume(byte[] payload) {

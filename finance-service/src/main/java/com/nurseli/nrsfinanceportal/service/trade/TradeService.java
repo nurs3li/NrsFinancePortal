@@ -13,9 +13,10 @@ import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.repository.AccountRepository;
 import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
 import com.nurseli.nrsfinanceportal.repository.PortfolioAssetRepository;
-import com.nurseli.nrsfinanceportal.repository.TradeRepository; // 🔥 EKLENDİ
+import com.nurseli.nrsfinanceportal.repository.TradeRepository;
 import com.nurseli.nrsfinanceportal.service.CurrentUserResolver;
 import com.nurseli.nrsfinanceportal.service.TransactionService;
+import com.nurseli.nrsfinanceportal.service.TimelineCacheInvalidationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,14 +35,15 @@ public class TradeService {
     private final AccountRepository accountRepository;
     private final BalanceRepository balanceRepository;
     private final PortfolioAssetRepository portfolioAssetRepository;
-    private final TradeRepository tradeRepository; // 🔥 EKLENDİ
+    private final TradeRepository tradeRepository;
     private final PriceLookupService priceLookupService;
     private final TransactionService transactionService;
 
+    // 🔥 EKLENEN SERVIS
+    private final TimelineCacheInvalidationService timelineCacheInvalidationService;
+
     /**
      * 🔥 TEK GERÇEK MUTATION NOKTASI
-     * - Balance burada değişir
-     * - TransactionService SADECE kayıt + event
      */
     @Transactional
     public TradeResponse execute(TradeRequest request) {
@@ -49,7 +51,7 @@ public class TradeService {
         // 1️⃣ Current User
         User user = currentUserResolver.getOrCreateCurrentUser();
 
-        // 2️⃣ DEMO Account (YOKSA OLUŞTUR)
+        // 2️⃣ DEMO Account
         Account demoAccount = ensureDemoAccount(user);
 
         // 3️⃣ Balance (FOR UPDATE)
@@ -79,10 +81,8 @@ public class TradeService {
            ====================== */
         if (request.tradeType() == TradeType.BUY) {
 
-            // 💸 Balance düş (TEK YER)
             BigDecimal balanceAfter = balance.decrease(totalTry);
 
-            // 🧾 Transaction kaydı (mutation YOK)
             Transaction tx = transactionService.record(
                     demoAccount,
                     totalTry,
@@ -90,7 +90,6 @@ public class TradeService {
                     balanceAfter
             );
 
-            // 🧠 Trade kaydı (NIYET DEFTERI)
             Trade trade = Trade.create(
                     user,
                     request.tradeType(),
@@ -101,7 +100,6 @@ public class TradeService {
             );
             tradeRepository.save(trade);
 
-            // 📦 Portfolio
             if (asset == null) {
                 asset = PortfolioAsset.create(
                         user,
@@ -115,6 +113,9 @@ public class TradeService {
 
             portfolioAssetRepository.save(asset);
 
+            // 🔥 TIMELINE CACHE INVALIDATE
+            timelineCacheInvalidationService.invalidateUserTimeline(user.getId());
+
             return response(request, tryPrice, totalTry, balanceAfter);
         }
 
@@ -127,10 +128,8 @@ public class TradeService {
 
         asset.decrease(request.quantity());
 
-        // 💰 Balance artır (TEK YER)
         BigDecimal balanceAfter = balance.increase(totalTry);
 
-        // 🧾 Transaction kaydı (mutation YOK)
         Transaction tx = transactionService.record(
                 demoAccount,
                 totalTry,
@@ -138,7 +137,6 @@ public class TradeService {
                 balanceAfter
         );
 
-        // 🧠 Trade kaydı (NIYET DEFTERI)
         Trade trade = Trade.create(
                 user,
                 request.tradeType(),
@@ -155,11 +153,14 @@ public class TradeService {
             portfolioAssetRepository.save(asset);
         }
 
+        // 🔥 TIMELINE CACHE INVALIDATE
+        timelineCacheInvalidationService.invalidateUserTimeline(user.getId());
+
         return response(request, tryPrice, totalTry, balanceAfter);
     }
 
     /* ======================
-       DEMO ACCOUNT GUARANTEE
+       DEMO ACCOUNT
        ====================== */
     private Account ensureDemoAccount(User user) {
 
@@ -167,12 +168,10 @@ public class TradeService {
                 .findByUserAndType(user, AccountType.DEMO)
                 .orElseGet(() -> {
 
-                    // Account
                     Account demo = accountRepository.save(
                             Account.create(AccountType.DEMO, user)
                     );
 
-                    // Balance + 1.000.000 TRY
                     Balance balance = new Balance(demo);
                     balance.increase(DEMO_INITIAL_BALANCE);
                     balanceRepository.save(balance);
