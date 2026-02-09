@@ -1,28 +1,37 @@
 package com.nurseli.nrsfinanceportal.controller;
 
-import com.nurseli.nrsfinanceportal.common.dto.UnifiedTimelineDto;
+import com.nurseli.nrsfinanceportal.common.dto.TimelinePageResponse;
 import com.nurseli.nrsfinanceportal.service.CurrentUserResolver;
-import com.nurseli.nrsfinanceportal.service.UnifiedTimelineQueryService;
+import com.nurseli.nrsfinanceportal.service.TimelineReadModelService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import java.time.Instant;
 
 @RestController
 @RequestMapping("/api/timeline")
 @RequiredArgsConstructor
 public class UnifiedTimelineController {
 
-    private final UnifiedTimelineQueryService service;
+    private final TimelineReadModelService timelineReadModelService;
     private final CurrentUserResolver currentUserResolver;
 
     @GetMapping
-    public List<UnifiedTimelineDto> timeline() {
+    public TimelinePageResponse timeline(
+            @RequestParam(required = false) Instant cursorAt,
+            @RequestParam(required = false) Long cursorId,
+            @RequestParam(defaultValue = "20") int size
+    ) {
 
         Long userId = currentUserResolver
                 .getOrCreateCurrentUser()
                 .getId();
 
-        return service.getTimeline(userId);
+        return timelineReadModelService.getTimeline(
+                userId,
+                cursorAt,
+                cursorId,
+                size
+        );
     }
 }

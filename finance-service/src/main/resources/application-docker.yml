@@ -35,7 +35,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://nrs-keycloak:8080/realms/nrs-finance
+          issuer-uri: http://nrs-keycloak:8081/realms/nrs-finance
 
 # Spring dışındaki özel tanımların
 market-data:
