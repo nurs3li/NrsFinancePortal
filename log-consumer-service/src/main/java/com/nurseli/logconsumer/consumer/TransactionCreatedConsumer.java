@@ -11,7 +11,7 @@ public class TransactionCreatedConsumer {
 
     @KafkaListener(
             topics = "finance.transaction.created",
-            groupId = "log-consumer-created",
+            groupId = "log-consumer-created-1",
             containerFactory = "createdKafkaListenerContainerFactory"
     )
     public void consume(TransactionCreatedEvent event) {

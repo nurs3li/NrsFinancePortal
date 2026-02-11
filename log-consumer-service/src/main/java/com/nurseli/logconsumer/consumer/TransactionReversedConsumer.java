@@ -11,7 +11,7 @@ public class TransactionReversedConsumer {
 
     @KafkaListener(
             topics = "finance.transaction.reversed",
-            groupId = "log-consumer-reversed",
+            groupId = "log-consumer-reversed-1",
             containerFactory = "reversedKafkaListenerContainerFactory"
     )
     public void consume(TransactionReversedEvent event) {
