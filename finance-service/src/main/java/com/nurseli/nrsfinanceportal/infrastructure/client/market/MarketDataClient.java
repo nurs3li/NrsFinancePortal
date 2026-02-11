@@ -1,5 +1,6 @@
 package com.nurseli.nrsfinanceportal.infrastructure.client.market;
 
+import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.dto.FxPriceDto;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.dto.MarketPriceLatestDto;
 import lombok.RequiredArgsConstructor;
@@ -7,6 +8,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 @Component
@@ -50,5 +52,34 @@ public class MarketDataClient {
                 .bodyToMono(new ParameterizedTypeReference<
                         Map<String, MarketPriceLatestDto>>() {})
                 .block();
+    }
+
+    // 🔥 TEKİL FİYAT (DASHBOARD / PORTFOLIO İÇİN)
+    public BigDecimal getPriceTry(AssetType type, String symbol) {
+
+        return switch (type) {
+
+            case FX -> {
+                FxPriceDto fx = getLatestDoviz().get(symbol);
+                yield fx != null ? fx.buyPrice() : BigDecimal.ZERO;
+            }
+
+            case CRYPTO -> {
+                MarketPriceLatestDto crypto = getLatestCrypto().get(symbol);
+                yield crypto != null ? crypto.buyPrice() : BigDecimal.ZERO;
+            }
+
+            case METAL -> {
+                MarketPriceLatestDto metal = getLatestMetals().get(symbol);
+                yield metal != null ? metal.buyPrice() : BigDecimal.ZERO;
+            }
+
+            case FUND -> {
+                MarketPriceLatestDto fund = getLatestFunds().get(symbol);
+                yield fund != null ? fund.buyPrice() : BigDecimal.ZERO;
+            }
+
+            default -> BigDecimal.ZERO;
+        };
     }
 }

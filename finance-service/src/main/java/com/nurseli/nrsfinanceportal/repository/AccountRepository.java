@@ -7,12 +7,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 import java.util.Optional;
-
 public interface AccountRepository extends JpaRepository<Account, Long> {
 
-    // ✅ MEVCUT İŞLEV – HİÇ DOKUNMADIK
+    // MEVCUT
     List<Account> findByUser(User user);
 
-    // ✅ YENİ – TradeService için (DEMO / CASH / INVESTMENT)
     Optional<Account> findByUserAndType(User user, AccountType type);
+
+    // ✅ YENİ – Dashboard / Read model için
+    Optional<Account> findByUserIdAndType(Long userId, AccountType type);
 }
