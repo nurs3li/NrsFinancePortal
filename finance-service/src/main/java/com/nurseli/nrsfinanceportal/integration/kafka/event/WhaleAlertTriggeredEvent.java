@@ -12,5 +12,11 @@ public record WhaleAlertTriggeredEvent(
         BigDecimal dailyVolume,
         int hourlyTransactionCount,
         BigDecimal maxSingleTransaction,
+        String trendDirection,
+        BigDecimal trendVelocity,
+        BigDecimal trendVolatility,
+        String pattern,
+        String behavior,
+        String risk,
         Instant triggeredAt
 ) {}

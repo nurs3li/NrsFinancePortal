@@ -1,5 +1,6 @@
 package com.nurseli.nrsfinanceportal.integration.listener;
 
+import com.nurseli.nrsfinanceportal.integration.kafka.KafkaTopics;
 import com.nurseli.nrsfinanceportal.integration.kafka.event.WhaleAlertTriggeredEvent;
 import com.nurseli.nrsfinanceportal.repository.UserRepository;
 import com.nurseli.nrsfinanceportal.repository.WhaleHistoryRepository;
@@ -26,9 +27,11 @@ public class WhaleAlertListener {
     private final RedisTemplate<String, Object> redisTemplate;
 
     @KafkaListener(
-            topics = "whale.alert.triggered",
-            groupId = "finance-whale-consumer-v8"
+            topics = KafkaTopics.WHALE_ALERT_TRIGGERED,
+            groupId = "finance-whale-consumer-v12",
+            containerFactory = "whaleAlertKafkaListenerContainerFactory"  // 🔥 EKLENEN
     )
+
     public void onWhaleAlert(WhaleAlertTriggeredEvent event) {
 
         if (event.whaleLevel() == null) {
