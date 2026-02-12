@@ -3,10 +3,16 @@ package com.nurseli.whaleanalytics.infrastructure.redis;
 import com.nurseli.whaleanalytics.domain.WhaleMetrics;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Repository;
+import com.nurseli.whaleanalytics.domain.TransactionSnapshot;
 
-import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.math.BigDecimal;
+import java.util.Set;
+
 
 @Repository
 @RequiredArgsConstructor
@@ -60,6 +66,43 @@ public class RedisWhaleReadRepository {
                 hourlyCount,
                 maxTx
         );
+    }
+    public List<TransactionSnapshot> getRecentTransactions(String userId, Duration lookback) {
+
+        String key = "whale:tx:" + userId;
+
+        Instant now = Instant.now();
+        long nowMillis = now.toEpochMilli();
+        long fromMillis = now.minus(lookback).toEpochMilli();
+
+        // DÖNÜŞ TİPİNİ Object DEĞİL String OLARAK BEKLE
+        Set<ZSetOperations.TypedTuple<String>> raw =
+                redisTemplate.opsForZSet().rangeByScoreWithScores(
+                        key,
+                        (double) fromMillis,
+                        (double) nowMillis
+                );
+
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+
+        return raw.stream()
+                .map(tuple -> {
+                    String value = tuple.getValue();      // amount as string
+                    Double score = tuple.getScore();      // epoch millis (Double)
+
+                    if (value == null || score == null) {
+                        return null;
+                    }
+
+                    BigDecimal amount = new BigDecimal(value);
+                    Instant occurredAt = Instant.ofEpochMilli(score.longValue());
+
+                    return new TransactionSnapshot(amount, occurredAt);
+                })
+                .filter(s -> s != null)
+                .toList();
     }
 
 }
