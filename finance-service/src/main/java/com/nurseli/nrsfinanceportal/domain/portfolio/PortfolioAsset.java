@@ -46,12 +46,18 @@ public class PortfolioAsset {
     @Column(nullable = false, precision = 38, scale = 8)
     private BigDecimal quantity;
 
+    @Column(name = "avg_buy_price", precision = 38, scale = 8)
+    private BigDecimal avgBuyPrice; // TRY
+
     // ✅ Factory Method: Domain güvenliğini burada sağlıyoruz
     private PortfolioAsset(User user, AssetType type, String symbol, BigDecimal quantity) {
         this.user = user;
         this.type = type;
         this.symbol = symbol;
         this.quantity = quantity;
+    }
+    public void setAvgBuyPrice(BigDecimal avgBuyPrice) {
+        this.avgBuyPrice = avgBuyPrice;
     }
 
     public static PortfolioAsset create(User user, AssetType type, String symbol, BigDecimal quantity) {

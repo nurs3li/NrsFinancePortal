@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: v6-add-avg-buy-price
+      author: nurseli
+      changes:
+        - addColumn:
+            tableName: portfolio_assets
+            columns:
+              - column:
+                  name: avg_buy_price
+                  type: NUMERIC(38,8)

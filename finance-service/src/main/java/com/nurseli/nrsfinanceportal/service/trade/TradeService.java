@@ -10,6 +10,7 @@ import com.nurseli.nrsfinanceportal.domain.transaction.Transaction;
 import com.nurseli.nrsfinanceportal.domain.transaction.TransactionType;
 import com.nurseli.nrsfinanceportal.domain.pricing.PriceLookupService;
 import com.nurseli.nrsfinanceportal.domain.user.User;
+import com.nurseli.nrsfinanceportal.integration.kafka.event.TradeCreatedEvent;
 import com.nurseli.nrsfinanceportal.repository.AccountRepository;
 import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
 import com.nurseli.nrsfinanceportal.repository.PortfolioAssetRepository;
@@ -18,10 +19,12 @@ import com.nurseli.nrsfinanceportal.service.CurrentUserResolver;
 import com.nurseli.nrsfinanceportal.service.TransactionService;
 import com.nurseli.nrsfinanceportal.service.TimelineCacheInvalidationService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Service
@@ -38,6 +41,7 @@ public class TradeService {
     private final TradeRepository tradeRepository;
     private final PriceLookupService priceLookupService;
     private final TransactionService transactionService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 🔥 EKLENEN SERVIS
     private final TimelineCacheInvalidationService timelineCacheInvalidationService;
@@ -113,10 +117,27 @@ public class TradeService {
 
             portfolioAssetRepository.save(asset);
 
-            // 🔥 TIMELINE CACHE INVALIDATE
+// 🔥 TIMELINE CACHE INVALIDATE
             timelineCacheInvalidationService.invalidateUserTimeline(user.getId());
 
+// ✅ BURAYA KOYUYORUZ (RETURN'DAN HEMEN ÖNCE)
+            eventPublisher.publishEvent(
+                    new TradeCreatedEvent(
+                            trade.getId(),
+                            user.getId(),
+                            request.tradeType(),
+                            request.assetType(),
+                            request.symbol(),
+                            request.quantity(),
+                            tryPrice,
+                            totalTry,
+                            Instant.now()
+                    )
+            );
+
             return response(request, tryPrice, totalTry, balanceAfter);
+
+
         }
 
         /* ======================
