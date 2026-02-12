@@ -1,5 +1,5 @@
 package com.nurseli.logconsumer.config;
-
+import com.nurseli.logconsumer.event.SuspiciousActivityDetectedEvent;
 import com.nurseli.logconsumer.event.TransactionCreatedEvent;
 import com.nurseli.logconsumer.event.TransactionReversedEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -80,7 +80,35 @@ public class KafkaConsumerConfig {
         factory.setConsumerFactory(reversedConsumerFactory());
         return factory;
     }
+    /* ================= SUSPICIOUS ================= */
 
+    @Bean
+    public ConsumerFactory<String, SuspiciousActivityDetectedEvent>
+    suspiciousConsumerFactory() {
+
+        JsonDeserializer<com.nurseli.logconsumer.event.SuspiciousActivityDetectedEvent> deserializer =
+                new JsonDeserializer<>(com.nurseli.logconsumer.event.SuspiciousActivityDetectedEvent.class);
+        deserializer.addTrustedPackages("*");
+
+        Map<String, Object> props = baseProps("log-consumer-suspicious");
+
+        return new DefaultKafkaConsumerFactory<>(
+                props,
+                new StringDeserializer(),
+                deserializer
+        );
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, com.nurseli.logconsumer.event.SuspiciousActivityDetectedEvent>
+    suspiciousKafkaListenerContainerFactory() {
+
+        ConcurrentKafkaListenerContainerFactory<String, com.nurseli.logconsumer.event.SuspiciousActivityDetectedEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+
+        factory.setConsumerFactory(suspiciousConsumerFactory());
+        return factory;
+    }
     /* ================= COMMON ================= */
 
     private Map<String, Object> baseProps(String groupId) {

@@ -4,12 +4,12 @@ spring:
 
   # 🔥 Tüm altyapı ayarları 'spring' altında toplanmalı
   kafka:
-    bootstrap-servers: nrs-kafka:9093
+    bootstrap-servers: nrs-kafka:9093  # 🔥 Docker'da internal port
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
-        spring.json.add.type.headers: false
+          spring.json.add.type.headers: false
     consumer:
       group-id: finance-whale-consumer
       auto-offset-reset: earliest
@@ -40,3 +40,13 @@ spring:
 # Spring dışındaki özel tanımların
 market-data:
   base-url: http://nrs-market-data:8083
+
+app:
+  rate-limit:
+    enabled: true
+    max-requests-per-minute: 20
+    window-sec: 60
+  suspicious:
+    enabled: true
+    max-transactions-per-minute: 1
+    high-amount-threshold: 100

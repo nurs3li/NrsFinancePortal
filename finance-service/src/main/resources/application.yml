@@ -41,6 +41,16 @@ spring:
         spring.json.use.type.headers: false
         spring.json.value.default.type: com.nurseli.nrsfinanceportal.integration.kafka.event.WhaleAlertTriggeredEvent
 
-# 🔥 BURASI KRİTİK – spring DIŞINDA
 market-data:
   base-url: http://localhost:8083
+
+
+app:
+  rate-limit:
+    enabled: true
+    max-requests-per-minute: 20
+    window-sec: 60
+  suspicious:
+    enabled: true
+    max-transactions-per-minute: 1
+    high-amount-threshold: 100

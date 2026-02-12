@@ -1,15 +1,16 @@
 package com.nurseli.whaleanalytics.infrastructure.kafka;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nurseli.whaleanalytics.application.WhaleAnalysisService;
 import com.nurseli.whaleanalytics.domain.WhaleLevel;
 import com.nurseli.whaleanalytics.event.TransactionCreatedEvent;
 import com.nurseli.whaleanalytics.event.WhaleAlertDetectedEvent;
-import com.nurseli.whaleanalytics.infrastructure.kafka.WhaleAlertProducer;
 import com.nurseli.whaleanalytics.infrastructure.redis.RedisWhaleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -21,31 +22,35 @@ public class WhaleDetectionConsumer {
 
     private final RedisWhaleRepository whaleRepository;
     private final WhaleAnalysisService analysisService;
-    private final ObjectMapper objectMapper;
     private final WhaleAlertProducer whaleAlertProducer;
 
     @KafkaListener(
             topics = "finance.transaction.created",
-            groupId = "whale-detector-8",
+            groupId = "whale-detector-13",
             containerFactory = "kafkaListenerContainerFactory"
     )
-    public void consume(byte[] payload) {
+    public void consume(
+            @Header(value = "X-Correlation-Id", required = false) String correlationId,
+            TransactionCreatedEvent event
+    ) {
 
         try {
-            TransactionCreatedEvent event =
-                    objectMapper.readValue(payload, TransactionCreatedEvent.class);
+            if (correlationId != null && !correlationId.isBlank()) {
+                MDC.put("correlationId", correlationId);
+            }
 
             Long userId = event.userId();
 
-            // 1️⃣ METRICS GÜNCELLEME (AYNI)
+            // 1️⃣ METRICS GÜNCELLEME
             whaleRepository.incrementHourlyCount(userId);
             whaleRepository.addDailyVolume(userId, event.amount());
             whaleRepository.updateMaxTransaction(userId, event.amount());
+            whaleRepository.addTransactionSnapshot(userId, event.amount(), event.occurredAt());
 
-            // 2️⃣ ANALYSIS (AYNI)
+            // 2️⃣ ANALYSIS
             var result = analysisService.analyze(userId.toString());
 
-            // 3️⃣ KANIT LOG (AYNI)
+            // 3️⃣ Özet log
             log.warn("""
                     🐋 WHALE ANALYSIS
                     userId        : {}
@@ -63,7 +68,7 @@ public class WhaleDetectionConsumer {
                     result.impactScore()
             );
 
-            // 4️⃣ EVENT FIRLAT (UYUMLU)
+            // 4️⃣ EVENT PUBLISH (tek nokta)
             if (result.level() != WhaleLevel.NONE) {
 
                 log.warn("""
@@ -77,22 +82,30 @@ public class WhaleDetectionConsumer {
                         result.impactScore()
                 );
 
+                var decision = analysisService.analyze(userId.toString());
+
                 whaleAlertProducer.publish(
                         new WhaleAlertDetectedEvent(
-                                Long.valueOf(result.userId()),                 // Long
-                                result.level(),                                // WhaleLevel
-                                result.impactScore(),                          // ✅ int
-                                result.metrics().dailyVolume(),                // BigDecimal
-                                result.metrics().hourlyTransactionCount(),     // int
-                                result.metrics().maxSingleTransaction(),       // BigDecimal
-                                Instant.now()                                  // Instant
+                                userId,
+                                decision.level(),
+                                decision.impactScore(),
+                                decision.metrics().dailyVolume(),
+                                decision.metrics().hourlyTransactionCount(),
+                                decision.metrics().maxSingleTransaction(),
+                                decision.trend().direction().name(),
+                                decision.trend().velocity(),
+                                decision.trend().volatility(),
+                                decision.pattern().dominantPattern().name(),
+                                decision.behavior().name(),
+                                decision.risk().name(),
+                                decision.evaluatedAt()
                         )
                 );
-
             }
 
         } catch (Exception e) {
             log.error("Kafka message parse error", e);
+        } finally {
+            MDC.remove("correlationId");
         }
-    }
-}
+    }}
