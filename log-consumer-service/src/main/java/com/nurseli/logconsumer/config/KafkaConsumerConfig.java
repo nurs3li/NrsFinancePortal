@@ -109,6 +109,24 @@ public class KafkaConsumerConfig {
         factory.setConsumerFactory(suspiciousConsumerFactory());
         return factory;
     }
+    /* ================= APPLICATION LOGS (String - JSON payload) ================= */
+
+    @Bean
+    public ConsumerFactory<String, String> applicationLogsConsumerFactory() {
+        Map<String, Object> props = baseProps("log-consumer-application-logs");
+        return new DefaultKafkaConsumerFactory<>(
+                props,
+                new StringDeserializer(),
+                new StringDeserializer()
+        );
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, String> applicationLogsKafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(applicationLogsConsumerFactory());
+        return factory;
+    }
     /* ================= COMMON ================= */
 
     private Map<String, Object> baseProps(String groupId) {
