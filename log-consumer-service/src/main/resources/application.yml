@@ -1,3 +1,5 @@
+server:
+  port: 8090
 spring:
   application:
     name: log-consumer-service
@@ -23,3 +25,12 @@ spring:
     redis:
       host: localhost
       port: 6379
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+opensearch:
+  host: localhost
+  port: 9200

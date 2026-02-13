@@ -23,6 +23,7 @@
         <module>log-consumer-service</module>
         <module>whale-analytics-service</module>
         <module>marketdata</module>
+        <module>metrics-service</module>
     </modules>
 
     <properties>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="30" packages="com.nurseli.logconsumer.logging">
+    <Properties>
+        <Property name="LOG_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</Property>
+        <Property name="SERVICE_NAME">log-consumer-service</Property>
+        <Property name="KAFKA_BOOTSTRAP">${env:KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}</Property>
+    </Properties>
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT"><PatternLayout pattern="${LOG_PATTERN}"/></Console>
+        <KafkaLog name="KafkaLog" topic="application-logs" bootstrapServers="${KAFKA_BOOTSTRAP}" serviceName="${SERVICE_NAME}"/>
+    </Appenders>
+    <Loggers>
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="KafkaLog"/>
+        </Root>
+    </Loggers>
+</Configuration>

@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: metrics-service
+
+  kafka:
+    bootstrap-servers: nrs-kafka:9093
+    consumer:
+      group-id: metrics-consumer
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+  data:
+    redis:
+      host: nrs-redis
+      port: 6379
+
+server:
+  port: 8088
+
+opensearch:
+  host: nrs-opensearch
+  port: 9200
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+
