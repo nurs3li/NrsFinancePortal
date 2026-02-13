@@ -28,7 +28,7 @@ public class WhaleAlertListener {
 
     @KafkaListener(
             topics = KafkaTopics.WHALE_ALERT_TRIGGERED,
-            groupId = "finance-whale-consumer-v12",
+            groupId = "finance-whale-consumer-v15",
             containerFactory = "whaleAlertKafkaListenerContainerFactory"  // 🔥 EKLENEN
     )
 

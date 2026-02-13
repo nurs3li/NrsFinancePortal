@@ -16,3 +16,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v6-add-avg-buy-price.yaml
+
+  - include:
+      file: db/changelog/v7-suspicious-events.yaml
