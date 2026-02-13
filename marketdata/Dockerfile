@@ -18,7 +18,7 @@ RUN ./mvnw clean package -DskipTests
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-COPY --from=build /app/target/market-data-service-*.jar app.jar
+COPY --from=build /app/target/marketdata-*.jar app.jar
 
 EXPOSE 8083
 

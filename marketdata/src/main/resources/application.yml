@@ -1,5 +1,5 @@
 server:
-  port: 8083
+  port: 8086
 
 spring:
   application:
@@ -25,7 +25,11 @@ spring:
       host: localhost
       port: 6379
 
-
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
 tefas:
    funds:
     - AES   # Hisse

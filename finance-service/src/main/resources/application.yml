@@ -44,7 +44,14 @@ spring:
 market-data:
   base-url: http://localhost:8083
 
-
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
 app:
   rate-limit:
     enabled: true
