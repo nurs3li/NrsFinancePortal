@@ -10,7 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
+import org.apache.logging.log4j.ThreadContext;
 import java.io.IOException;
 import java.util.UUID;
 
@@ -47,6 +47,7 @@ public class CorrelationIdFilter implements Filter {
 
                 // MDC'ye koy
                 MDC.put(CORRELATION_ID_MDC_KEY, correlationId);
+                ThreadContext.put(CORRELATION_ID_MDC_KEY, correlationId);
             }
 
             chain.doFilter(request, response);
@@ -54,6 +55,7 @@ public class CorrelationIdFilter implements Filter {
         } finally {
             // Thread reuse nedeniyle sonunda temizlemek önemli
             MDC.remove(CORRELATION_ID_MDC_KEY);
+            ThreadContext.remove(CORRELATION_ID_MDC_KEY);
         }
     }
 }
