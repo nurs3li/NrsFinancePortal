@@ -6,7 +6,7 @@ spring:
     name: market-data-service
 
   datasource:
-    url: jdbc:postgresql://nrs-market-postgres:5432/nrs_market
+    url: jdbc:postgresql://nrs-postgres:5432/nrs_market
     username: nrs
     password: nrs123
     driver-class-name: org.postgresql.Driver
@@ -24,6 +24,26 @@ spring:
     redis:
       host: nrs-redis
       port: 6379
-  networks:
-    default:
-      driver: bridge
+
+# Veri kaynağı yapılandırması (FAZ 3.2)
+app:
+  data-sources:
+    tcmb:
+      url: https://www.tcmb.gov.tr/kurlar/today.xml
+    coingecko:
+      url: https://api.coingecko.com/api/v3
+    finhub:
+      url: https://finnhub.io/api/v1
+      api-key: ${FINHUB_API_KEY:your-api-key-here}
+
+tefas:
+  funds:
+    - AES
+    - AFT
+    - TCD
+    - GAF
+    - DBH
+    - GLDTR
+    - KTN
+    - KZL
+    - YAC
