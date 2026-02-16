@@ -95,10 +95,11 @@ services:
         condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:postgresql://nrs-postgres:5432/nrs_finance
+      SPRING_DATASOURCE_URL: jdbc:postgresql://nrs-postgres:5432/nrs_market
       SPRING_KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
       SPRING_DATA_REDIS_HOST: nrs-redis
       KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
+      FINHUB_API_KEY: "d69m8shr01qhe6mo0t1gd69m8shr01qhe6mo0t20"
     logging:
       driver: "json-file"
       options:

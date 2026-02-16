@@ -1,5 +1,7 @@
 package com.nurseli.marketdata.infrastructure.tcmb;
 
+import com.nurseli.marketdata.config.DataSourcesProperties;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.w3c.dom.Document;
@@ -16,10 +18,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class TcmbClient {
 
-    private static final String TCMB_URL =
-            "https://www.tcmb.gov.tr/kurlar/today.xml";
+    private final DataSourcesProperties dataSourcesProperties;
 
     // 🔵 SADECE DÖVİZLER
     private static final List<String> SUPPORTED =
@@ -28,7 +30,8 @@ public class TcmbClient {
     public List<TcmbRate> fetchRates() {
 
         RestTemplate restTemplate = new RestTemplate();
-        String xml = restTemplate.getForObject(TCMB_URL, String.class);
+        String url = dataSourcesProperties.getTcmb().getUrl();
+        String xml = restTemplate.getForObject(url, String.class);
 
         List<TcmbRate> result = new ArrayList<>();
 

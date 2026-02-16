@@ -1,6 +1,8 @@
 package com.nurseli.marketdata.infrastructure.coingecko;
 
+import com.nurseli.marketdata.config.DataSourcesProperties;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -11,13 +13,12 @@ import java.util.Map;
 @Slf4j
 public class CoinGeckoClient {
 
-    private static final String BASE_URL = "https://api.coingecko.com/api/v3";
-
     private final WebClient webClient;
 
-    public CoinGeckoClient() {
+    public CoinGeckoClient(DataSourcesProperties dataSourcesProperties) {
+        String baseUrl = dataSourcesProperties.getCoingecko().getUrl();
         this.webClient = WebClient.builder()
-                .baseUrl(BASE_URL)
+                .baseUrl(baseUrl)
                 .defaultHeader("Accept", MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                 .build();
@@ -39,7 +40,7 @@ public class CoinGeckoClient {
                             .build()
                     )
                     .retrieve()
-                    .bodyToMono(Map.class)
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Map<String, Double>>>() {})
                     .block();
 
         } catch (Exception ex) {

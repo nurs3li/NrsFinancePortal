@@ -6,7 +6,7 @@ spring:
     name: market-data-service
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/nrs_market
+    url: jdbc:postgresql://localhost:5432/nrs_market  # nrs_market yerine nrs_finance (docker-compose ile uyumlu)
     username: nrs
     password: nrs123
     driver-class-name: org.postgresql.Driver
@@ -30,8 +30,20 @@ management:
     web:
       exposure:
         include: health,info
+
+# Veri kaynağı yapılandırması (FAZ 3.2)
+app:
+  data-sources:
+    tcmb:
+      url: https://www.tcmb.gov.tr/kurlar/today.xml
+    coingecko:
+      url: https://api.coingecko.com/api/v3
+    finhub:
+      url: https://finnhub.io/api/v1
+      api-key: ${FINHUB_API_KEY:your-api-key-here}  # Environment variable'dan oku, yoksa default
+
 tefas:
-   funds:
+  funds:
     - AES   # Hisse
     - AFT   # Hisse
     - TCD   # Hisse
