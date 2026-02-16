@@ -1,0 +1,43 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-market-price-history
+      author: nurseli
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: market_price_history
+      changes:
+        - createTable:
+            tableName: market_price_history
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: symbol
+                  type: VARCHAR(10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: buy_price
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sell_price
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: timestamp
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false

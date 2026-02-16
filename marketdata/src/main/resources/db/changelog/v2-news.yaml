@@ -1,0 +1,65 @@
+databaseChangeLog:
+  - changeSet:
+      id: v2-create-news-table
+      author: nurseli
+      changes:
+        - createTable:
+            tableName: news
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: external_id
+                  type: VARCHAR(100)
+              - column:
+                  name: title
+                  type: VARCHAR(500)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: summary
+                  type: TEXT
+              - column:
+                  name: source
+                  type: VARCHAR(100)
+              - column:
+                  name: url
+                  type: VARCHAR(1000)
+              - column:
+                  name: category
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: published_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+
+        - createIndex:
+            tableName: news
+            indexName: idx_news_category_published
+            columns:
+              - column:
+                  name: category
+              - column:
+                  name: published_at
+                  descending: true
+
+  - changeSet:
+      id: v2-news-unique-external-id
+      author: nurseli
+      changes:
+        - addUniqueConstraint:
+            tableName: news
+            columnNames: external_id
+            constraintName: uk_news_external_id
