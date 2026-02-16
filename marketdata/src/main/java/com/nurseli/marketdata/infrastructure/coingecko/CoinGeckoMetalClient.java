@@ -1,5 +1,7 @@
 package com.nurseli.marketdata.infrastructure.coingecko;
 
+import com.nurseli.marketdata.config.DataSourcesProperties;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -9,28 +11,31 @@ import java.util.Map;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class CoinGeckoMetalClient {
 
+    private final DataSourcesProperties dataSourcesProperties;
+
     // PAX GOLD = 1 token = 1 ONS ALTIN
-    private static final String URL =
-            "https://api.coingecko.com/api/v3/simple/price" +
-                    "?ids=pax-gold&vs_currencies=try";
+    private static final String PAX_GOLD_ENDPOINT = "/simple/price";
 
     /**
      * @return TRY / ONS
      */
     public BigDecimal fetchGoldTryPerOunce() {
+        String baseUrl = dataSourcesProperties.getCoingecko().getUrl();
+        String url = baseUrl + PAX_GOLD_ENDPOINT + "?ids=pax-gold&vs_currencies=try";
 
         RestTemplate restTemplate = new RestTemplate();
-        Map<String, Object> response =
-                restTemplate.getForObject(URL, Map.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> response = restTemplate.getForObject(url, Map.class);
 
         if (response == null || !response.containsKey("pax-gold")) {
             throw new IllegalStateException("CoinGecko PAXG response invalid");
         }
 
-        Map<String, Object> paxGold =
-                (Map<String, Object>) response.get("pax-gold");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> paxGold = (Map<String, Object>) response.get("pax-gold");
 
         Object tryValue = paxGold.get("try");
         if (tryValue == null) {
