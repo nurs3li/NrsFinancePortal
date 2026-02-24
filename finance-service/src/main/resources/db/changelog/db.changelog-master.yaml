@@ -19,3 +19,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v7-suspicious-events.yaml
+
+  - include:
+      file: db/changelog/v8-review-tasks-and-accounts-status.yaml
