@@ -1,0 +1,96 @@
+databaseChangeLog:
+  - changeSet:
+      id: v8-review-tasks-table
+      author: nurseli
+      changes:
+        - createTable:
+            tableName: review_tasks
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: type
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: reference_id
+                  type: BIGINT
+              - column:
+                  name: assignee_role
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: priority
+                  type: VARCHAR(20)
+                  defaultValue: NORMAL
+              - column:
+                  name: due_at
+                  type: TIMESTAMPTZ
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+              - column:
+                  name: completed_at
+                  type: TIMESTAMPTZ
+              - column:
+                  name: outcome
+                  type: VARCHAR(100)
+              - column:
+                  name: created_by_user_id
+                  type: BIGINT
+              - column:
+                  name: account_id
+                  type: BIGINT
+              - column:
+                  name: sla_escalated_at
+                  type: TIMESTAMPTZ
+        - addForeignKeyConstraint:
+            baseTableName: review_tasks
+            baseColumnNames: account_id
+            referencedTableName: accounts
+            referencedColumnNames: id
+            constraintName: fk_review_tasks_account
+        - createIndex:
+            tableName: review_tasks
+            indexName: idx_review_tasks_assignee_status
+            columns:
+              - column: { name: assignee_role }
+              - column: { name: status }
+        - createIndex:
+            tableName: review_tasks
+            indexName: idx_review_tasks_due_at
+            columns:
+              - column: { name: due_at }
+
+  - changeSet:
+      id: v8-accounts-status-columns
+      author: nurseli
+      changes:
+        - addColumn:
+            tableName: accounts
+            columns:
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  defaultValue: ACTIVE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: frozen_at
+                  type: TIMESTAMPTZ
+              - column:
+                  name: frozen_reason
+                  type: VARCHAR(500)

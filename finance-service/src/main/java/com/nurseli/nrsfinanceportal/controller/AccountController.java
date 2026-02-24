@@ -24,6 +24,7 @@ public class AccountController {
      * USER → kendi adına account oluşturur
      * POST /api/accounts
      */
+    @PreAuthorize("hasRole('USER')")
     @PostMapping
     public ApiResponse<Account> createMyAccount(
             @RequestParam AccountType type
@@ -39,6 +40,7 @@ public class AccountController {
      * USER → kendi account’larını listeler
      * GET /api/accounts/me
      */
+    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
     @GetMapping("/me")
     public ApiResponse<List<Account>> myAccounts() {
         return ApiResponse.success(
