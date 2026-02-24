@@ -1,19 +1,20 @@
+server:
+  port: 8080
 spring:
   application:
     name: finance-service
 
-  # 🔥 Tüm altyapı ayarları 'spring' altında toplanmalı
   kafka:
-    bootstrap-servers: nrs-kafka:9093  # 🔥 Docker'da internal port
+    bootstrap-servers: nrs-kafka:9093
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
-          spring.json.add.type.headers: false
+        spring.json.add.type.headers: false
     consumer:
       group-id: finance-whale-consumer
       auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      key-deserializer: org.apache.kafka.common.serialization.StringSerializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
 
   datasource:
@@ -35,9 +36,9 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://nrs-keycloak:8081/realms/nrs-finance
+          # Docker'da custom JwtDecoder kullanıyoruz, auto-config'i disable et
+          issuer-uri: null
 
-# Spring dışındaki özel tanımların
 market-data:
   base-url: http://nrs-market-data:8083
 
