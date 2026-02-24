@@ -34,6 +34,7 @@ public class UserController {
     }
 
     // GET /api/users/me
+    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
     @GetMapping("/me")
 
     public ResponseEntity<ApiResponse<UserResponse>> getMe() {

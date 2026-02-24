@@ -73,19 +73,27 @@ public class User {
         this.whale = false;
         this.whaleLevel = WhaleLevel.NONE;
     }
-
     /**
-     * Factory method for first-login user creation
+     * Factory for first-login (varsayılan USER).
      */
     public static User createFromIdentity(String keycloakUserId,
                                           String email,
                                           String username) {
+        return createFromIdentity(keycloakUserId, email, username, Role.USER);
+    }
 
+    /**
+     * Factory for first-login with role from Keycloak JWT.
+     */
+    public static User createFromIdentity(String keycloakUserId,
+                                          String email,
+                                          String username,
+                                          Role role) {
         return new User(
                 keycloakUserId,
                 username,
                 email,
-                Role.USER
+                role != null ? role : Role.USER
         );
     }
 
@@ -106,7 +114,11 @@ public class User {
         this.whaleLevel = WhaleLevel.NONE;
         this.whaleSince = null;
     }
-
+    public void setRole(Role role) {
+        if (role != null) {
+            this.role = role;
+        }
+    }
     // ===================== GETTERS =====================
 
     public Long getId() {

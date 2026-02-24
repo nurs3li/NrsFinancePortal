@@ -4,6 +4,7 @@ import com.nurseli.nrsfinanceportal.common.identity.JwtIdentityReader;
 import com.nurseli.nrsfinanceportal.domain.account.Account;
 import com.nurseli.nrsfinanceportal.domain.account.AccountType;
 import com.nurseli.nrsfinanceportal.domain.balance.Balance;
+import com.nurseli.nrsfinanceportal.domain.user.Role;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.repository.AccountRepository;
 import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
@@ -25,7 +26,8 @@ public class CurrentUserResolver {
 
     /**
      * Returns the current authenticated User.
-     * If the user does not exist in DB, creates it (first login sync).
+     * If the user does not exist in DB, creates it (first login) with role from JWT.
+     * If the user exists, syncs role from JWT so DB stays correct.
      */
     @Transactional
     public User getOrCreateCurrentUser() {
@@ -33,38 +35,39 @@ public class CurrentUserResolver {
         String keycloakUserId = jwtIdentityReader.getRequiredSubject();
         String email = jwtIdentityReader.getEmail();
         String username = jwtIdentityReader.getUsername();
+        Role jwtRole = jwtIdentityReader.getRealmRole();
 
-        return userRepository.findByKeycloakUserId(keycloakUserId)
-                .orElseGet(() -> {
+        User user = userRepository.findByKeycloakUserId(keycloakUserId)
+                .orElseGet(() -> createNewUser(keycloakUserId, email, username, jwtRole));
 
-                    // 1️⃣ USER
-                    User user = userRepository.save(
-                            User.createFromIdentity(
-                                    keycloakUserId,
-                                    email,
-                                    username
-                            )
-                    );
+        // Her girişte JWT'deki rol ile DB'yi senkron tut
+        if (user.getRole() != jwtRole) {
+            user.setRole(jwtRole);
+            userRepository.save(user);
+        }
 
-                    // 2️⃣ CASH ACCOUNT
-                    Account cash = accountRepository.save(
-                            Account.create(AccountType.CASH, user)
-                    );
-                    balanceRepository.save(Balance.zero(cash));
+        return user;
+    }
 
-// 3️⃣ DEMO ACCOUNT (🔥)
-                    Account demo = accountRepository.save(
-                            Account.create(AccountType.DEMO, user)
-                    );
+    private User createNewUser(String keycloakUserId, String email, String username, Role role) {
 
-// 🔥 DEMO'ya 1.000.000 TRY
-                    balanceRepository.save(
-                            Balance.of(demo, new BigDecimal("1000000"))
-                    );
+        User user = userRepository.save(
+                User.createFromIdentity(keycloakUserId, email, username, role)
+        );
 
+        Account cash = accountRepository.save(
+                Account.create(AccountType.CASH, user)
+        );
+        balanceRepository.save(Balance.zero(cash));
 
-                    return user;
-                });
+        Account demo = accountRepository.save(
+                Account.create(AccountType.DEMO, user)
+        );
+        balanceRepository.save(
+                Balance.of(demo, new BigDecimal("1000000"))
+        );
+
+        return user;
     }
 
     public Long getCurrentUserId() {
