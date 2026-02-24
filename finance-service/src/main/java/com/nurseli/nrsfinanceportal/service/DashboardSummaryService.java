@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +30,21 @@ public class DashboardSummaryService {
     public DashboardSummaryResponse getSummary(Long userId) {
 
         /* ======================
+           2️⃣ Demo account & balance – yoksa boş özet (ADMIN/FINANCE_MANAGER vb.)
+           ====================== */
+        var demoAccountOpt = accountRepository.findByUserIdAndType(userId, AccountType.DEMO);
+        if (demoAccountOpt.isEmpty()) {
+            return emptySummary();
+        }
+        Account demoAccount = demoAccountOpt.get();
+
+        var balanceOpt = balanceRepository.findByAccount(demoAccount);
+        if (balanceOpt.isEmpty()) {
+            return emptySummary();
+        }
+        BigDecimal cashTry = balanceOpt.get().getAmount();
+
+        /* ======================
            1️⃣ Whale (Redis)
            ====================== */
         var whaleState = whaleStateCacheService.getLastWhaleState(userId);
@@ -41,20 +57,6 @@ public class DashboardSummaryService {
                         whaleState.impactScore(),
                         whaleState.triggeredAt()
                 );
-
-        /* ======================
-           2️⃣ Cash (TRY Balance)
-           ====================== */
-        Account demoAccount =
-                accountRepository.findByUserIdAndType(userId, AccountType.DEMO)
-                        .orElseThrow(() ->
-                                new IllegalStateException("Demo account not found"));
-
-        BigDecimal cashTry =
-                balanceRepository.findByAccount(demoAccount)
-                        .orElseThrow(() ->
-                                new IllegalStateException("Balance not found"))
-                        .getAmount();
 
         var cash =
                 new DashboardSummaryResponse.CashSummary(cashTry);
@@ -103,6 +105,19 @@ public class DashboardSummaryService {
                 portfolio,
                 activity,
                 netWorthTry
+        );
+    }
+
+    /**
+     * Demo hesabı veya balance olmayan kullanıcılar için (ADMIN, FINANCE_MANAGER vb.).
+     */
+    private static DashboardSummaryResponse emptySummary() {
+        return new DashboardSummaryResponse(
+                null,
+                new DashboardSummaryResponse.CashSummary(BigDecimal.ZERO),
+                new DashboardSummaryResponse.PortfolioSummary(BigDecimal.ZERO, Map.of()),
+                new DashboardSummaryResponse.ActivitySummary(null, 0),
+                BigDecimal.ZERO
         );
     }
 }
