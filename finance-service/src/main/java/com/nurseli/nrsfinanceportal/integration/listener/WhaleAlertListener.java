@@ -1,10 +1,12 @@
 package com.nurseli.nrsfinanceportal.integration.listener;
 
+import com.nurseli.nrsfinanceportal.domain.whale.WhaleLevel;
+import com.nurseli.nrsfinanceportal.domain.whale.WhaleHistory;
 import com.nurseli.nrsfinanceportal.integration.kafka.KafkaTopics;
 import com.nurseli.nrsfinanceportal.integration.kafka.event.WhaleAlertTriggeredEvent;
 import com.nurseli.nrsfinanceportal.repository.UserRepository;
 import com.nurseli.nrsfinanceportal.repository.WhaleHistoryRepository;
-import com.nurseli.nrsfinanceportal.domain.whale.WhaleHistory;
+import com.nurseli.nrsfinanceportal.service.ReviewTaskService;
 import com.nurseli.nrsfinanceportal.service.TimelineCacheInvalidationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,16 +24,14 @@ public class WhaleAlertListener {
     private final UserRepository userRepository;
     private final WhaleHistoryRepository whaleHistoryRepository;
     private final TimelineCacheInvalidationService timelineCacheInvalidationService;
-
-    // 🔥 EKLENEN TEK ŞEY
     private final RedisTemplate<String, Object> redisTemplate;
+    private final ReviewTaskService reviewTaskService;
 
     @KafkaListener(
             topics = KafkaTopics.WHALE_ALERT_TRIGGERED,
             groupId = "finance-whale-consumer-v15",
-            containerFactory = "whaleAlertKafkaListenerContainerFactory"  // 🔥 EKLENEN
+            containerFactory = "whaleAlertKafkaListenerContainerFactory"
     )
-
     public void onWhaleAlert(WhaleAlertTriggeredEvent event) {
 
         if (event.whaleLevel() == null) {
@@ -74,7 +74,7 @@ public class WhaleAlertListener {
                 )
         );
 
-        // 🔥 3️⃣ REDIS → SON WHALE STATE (YENİ, AYNI YERDE)
+        // 3️⃣ REDIS → SON WHALE STATE
         String redisKey = "whale:last:" + user.getId();
 
         redisTemplate.opsForValue().set(
@@ -92,5 +92,11 @@ public class WhaleAlertListener {
         timelineCacheInvalidationService.invalidateUserTimeline(user.getId());
 
         log.info("🧹 Timeline cache invalidated for user {}", user.getId());
+
+        // 5️⃣ WHALE REVIEW TASK (L2 / L3 için FM görevi)
+        if (event.whaleLevel() == WhaleLevel.L2_WHALE || event.whaleLevel() == WhaleLevel.L3_MEGA_WHALE) {
+            reviewTaskService.createFromWhaleAlert(user.getId());
+            log.info("[TASK] Created WHALE_REVIEW task for user {} level {}", user.getId(), event.whaleLevel());
+        }
     }
 }
