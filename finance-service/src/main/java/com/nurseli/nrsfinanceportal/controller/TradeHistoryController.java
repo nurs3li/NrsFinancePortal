@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.*;
-
+import org.springframework.security.access.prepost.PreAuthorize;
 @RestController
 @RequestMapping("/api/trades")
 @RequiredArgsConstructor
@@ -24,7 +24,8 @@ public class TradeHistoryController {
      * ?assetType=CRYPTO
      * ?sort=tradedAt,desc
      */
-    @GetMapping("/history")
+    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
+    @GetMapping("history")
     public Page<TradeHistoryDto> history(
             @RequestParam(required = false) AssetType assetType,
             Pageable pageable
