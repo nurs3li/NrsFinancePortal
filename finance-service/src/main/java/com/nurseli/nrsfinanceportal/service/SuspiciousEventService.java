@@ -19,6 +19,7 @@ import java.util.List;
 public class SuspiciousEventService {
 
     private final SuspiciousEventRepository repository;
+    private final ReviewTaskService reviewTaskService;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)  // 🔥 KENDİ TRANSACTION'INI AÇ
@@ -37,6 +38,7 @@ public class SuspiciousEventService {
             );
 
             SuspiciousEvent saved = repository.save(e);
+            reviewTaskService.createFromSuspiciousEvent(saved.getId());
 
             log.info("[SUSPICIOUS][DB] persisted id={} userId={} txId={} reason={}",
                     saved.getId(), event.userId(), event.transactionId(), event.reason());

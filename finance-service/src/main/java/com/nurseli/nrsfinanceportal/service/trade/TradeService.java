@@ -1,6 +1,7 @@
 package com.nurseli.nrsfinanceportal.service.trade;
 
 import com.nurseli.nrsfinanceportal.domain.account.Account;
+import com.nurseli.nrsfinanceportal.domain.account.AccountStatus;
 import com.nurseli.nrsfinanceportal.domain.account.AccountType;
 import com.nurseli.nrsfinanceportal.domain.balance.Balance;
 import com.nurseli.nrsfinanceportal.domain.portfolio.PortfolioAsset;
@@ -54,9 +55,14 @@ public class TradeService {
 
         // 1️⃣ Current User
         User user = currentUserResolver.getOrCreateCurrentUser();
-
+        if (accountRepository.existsByUser_IdAndStatus(user.getId(), AccountStatus.FROZEN)) {
+            throw new IllegalStateException("Hesap askıya alınmış. İşlem yapılamaz.");
+        }
         // 2️⃣ DEMO Account
         Account demoAccount = ensureDemoAccount(user);
+        if (demoAccount.isFrozen()) {
+            throw new IllegalStateException("Hesap askıya alınmış. İşlem yapılamaz.");
+        }
 
         // 3️⃣ Balance (FOR UPDATE)
         Balance balance = balanceRepository
