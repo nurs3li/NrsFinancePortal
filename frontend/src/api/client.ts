@@ -35,3 +35,24 @@ marketClient.interceptors.request.use((config) => {
     }
     return config;
 });
+const metricsApiUrl = import.meta.env.VITE_METRICS_URL || 'http://localhost:8088';
+
+export const metricsClient = axios.create({
+    baseURL: metricsApiUrl,
+    headers: { 'Content-Type': 'application/json' },
+});
+
+metricsClient.interceptors.request.use((config) => {
+    if (keycloak.authenticated && keycloak.token) {
+        config.headers.Authorization = `Bearer ${keycloak.token}`;
+    }
+    return config;
+});
+
+metricsClient.interceptors.response.use(
+    (r) => r,
+    (err) => {
+        if (err.response?.status === 401) keycloak.login();
+        return Promise.reject(err);
+    }
+);
