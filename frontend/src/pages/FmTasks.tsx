@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
-
+import { useCallback } from 'react';
+import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
+import { usePolling } from '../hooks/usePolling';
 type ReviewTaskView = {
     id: number;
     type: string;
@@ -24,6 +26,9 @@ type PageResponse<T> = {
     size: number;
 };
 
+/** Tamamlanmış sayılan durumlar – varsayılan listede gizlenir */
+const COMPLETED_STATUSES = ['APPROVED', 'REJECTED'];
+
 const TABS = [
     { key: 'all', label: 'Tümü', status: undefined, type: undefined, filterHighPriority: false },
     { key: 'pending', label: 'Bekleyen', status: 'PENDING', type: undefined, filterHighPriority: false },
@@ -41,15 +46,16 @@ export function FmTasks() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<typeof TABS[number]['key']>('all');
+    /** Varsayılan: tamamlanan (APPROVED/REJECTED) görevler listede görünmesin */
+    const [hideCompleted, setHideCompleted] = useState(true);
 
     const tabConfig = TABS.find((t) => t.key === activeTab) ?? TABS[0];
 
-    useEffect(() => {
+    const fetchTasks = useCallback(() => {
         setLoading(true);
         const params: Record<string, string | number> = { page, size: 20 };
         if (tabConfig.status) params.status = tabConfig.status;
         if (tabConfig.type) params.type = tabConfig.type;
-
         financeClient
             .get('/api/tasks/me', { params })
             .then((res) => {
@@ -59,17 +65,26 @@ export function FmTasks() {
                 if (tabConfig.filterHighPriority) {
                     list = list.filter((t) => t.priority === 'HIGH');
                 }
+                if (hideCompleted) {
+                    list = list.filter((t) => !COMPLETED_STATUSES.includes(t.status));
+                }
                 setTasks(list);
                 setTotalPages(pageData?.totalPages ?? 0);
-                setTotalElements(tabConfig.filterHighPriority ? list.length : (pageData?.totalElements ?? 0));
+                setTotalElements(tabConfig.filterHighPriority || hideCompleted ? list.length : (pageData?.totalElements ?? 0));
             })
             .catch((err) => {
                 const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Liste alınamadı';
                 setError(msg);
             })
             .finally(() => setLoading(false));
-    }, [page, activeTab, tabConfig.status, tabConfig.type, tabConfig.filterHighPriority]);
+    }, [page, activeTab, tabConfig.status, tabConfig.type, tabConfig.filterHighPriority, hideCompleted]);
 
+    useEffect(() => {
+        fetchTasks();
+    }, [fetchTasks]);
+
+    useRefetchOnFocus(fetchTasks);
+    usePolling(fetchTasks, 60_000);
     const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
     const titleStyle: React.CSSProperties = { fontSize: '1.75rem', fontWeight: 700, marginBottom: 4 };
     const mutedStyle: React.CSSProperties = { color: tokens.textMuted, fontSize: '0.875rem' };
@@ -94,7 +109,7 @@ export function FmTasks() {
             <h1 style={titleStyle}>Görevler</h1>
             <p style={mutedStyle}>İnceleme görevleri. Satıra tıklayarak detaya gidin.</p>
 
-            <div style={{ marginTop: 16, marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ marginTop: 16, marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 {TABS.map((t) => (
                     <button
                         key={t.key}
@@ -104,6 +119,14 @@ export function FmTasks() {
                         {t.label}
                     </button>
                 ))}
+                <label style={{ marginLeft: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input
+                        type="checkbox"
+                        checked={hideCompleted}
+                        onChange={(e) => { setHideCompleted(e.target.checked); setPage(0); }}
+                    />
+                    <span style={mutedStyle}>Tamamlananları gizle (Onaylanan / Reddedilen)</span>
+                </label>
             </div>
 
             {loading && <p style={mutedStyle}>Yükleniyor...</p>}

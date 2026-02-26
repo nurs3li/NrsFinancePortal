@@ -1,15 +1,154 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../auth/AuthContext';
+import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
+import { usePolling } from '../hooks/usePolling';
+
+type UserOption = { id: number; username: string; email: string; role: string };
+
+type WhaleTimelineItem = {
+    id: number;
+    userId: number;
+    whaleLevel: string;
+    reason: string | null;
+    triggeredAt: string;
+    createdAt: string;
+};
 
 export function FmRisk() {
     const { tokens } = useTheme();
+    const { user, role } = useAuth();
+    const [users, setUsers] = useState<UserOption[]>([]);
+    const [selectedUserId, setSelectedUserId] = useState<number | ''>('');
+    const [timeline, setTimeline] = useState<WhaleTimelineItem[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const isAdmin = role === 'ADMIN';
+
+    useEffect(() => {
+        if (!isAdmin) return;
+        financeClient
+            .get('/api/users')
+            .then((res) => {
+                const raw = res.data?.data ?? res.data;
+                const list = Array.isArray(raw) ? raw : [];
+                setUsers(list);
+                if (list.length > 0 && selectedUserId === '') {
+                    setSelectedUserId(list[0].id);
+                }
+            })
+            .catch(() => setUsers([]));
+    }, [isAdmin]);
+
+    useEffect(() => {
+        if (!user && !isAdmin) return;
+        if (!isAdmin && user) {
+            setSelectedUserId(user.id);
+        }
+    }, [isAdmin, user]);
+
+    const loadTimeline = useCallback((userId: number) => {
+        setLoading(true);
+        setError(null);
+        financeClient
+            .get<WhaleTimelineItem[]>(`/api/whales/${userId}/timeline`)
+            .then((res) => {
+                const list = Array.isArray(res.data) ? res.data : [];
+                setTimeline(list);
+            })
+            .catch((err) => {
+                setError(err.response?.data?.message ?? err.message ?? 'Timeline yüklenemedi');
+            })
+            .finally(() => setLoading(false));
+    }, []);
+
+    const refetchTimeline = useCallback(() => {
+        if (selectedUserId !== '') {
+            loadTimeline(selectedUserId);
+        }
+    }, [selectedUserId, loadTimeline]);
+
+    useRefetchOnFocus(refetchTimeline);
+    usePolling(refetchTimeline, 60_000);
+
+    useEffect(() => {
+        if (selectedUserId === '') return;
+        loadTimeline(selectedUserId);
+    }, [selectedUserId, loadTimeline]);
+
     const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
     const titleStyle: React.CSSProperties = { fontSize: '1.75rem', fontWeight: 700, marginBottom: 4 };
     const mutedStyle: React.CSSProperties = { color: tokens.textMuted, fontSize: '0.875rem' };
+    const cardStyle: React.CSSProperties = {
+        padding: 16,
+        borderRadius: 12,
+        background: tokens.bgCard,
+        border: `1px solid ${tokens.border}`,
+    };
+
+
+    const showUserSelect = isAdmin && users.length > 0;
 
     return (
         <div style={pageStyle}>
             <h1 style={titleStyle}>Risk Monitör</h1>
-            <p style={mutedStyle}>Yüksek riskli / whale / şüpheli kullanıcılar (Faz 1–2 sonrası veri bağlanacak).</p>
+            <p style={mutedStyle}>Whale timeline ve risk görünümü.</p>
+            {showUserSelect && (
+                <div style={{ ...cardStyle, marginBottom: 16 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={mutedStyle}>Kullanıcı:</span>
+                        <select
+                            value={selectedUserId === '' ? '' : String(selectedUserId)}
+                            onChange={(e) => setSelectedUserId(e.target.value === '' ? '' : Number(e.target.value))}
+                            style={{
+                                padding: '8px 12px',
+                                borderRadius: 8,
+                                border: `1px solid ${tokens.border}`,
+                                background: tokens.bgCard,
+                                color: tokens.text,
+                                minWidth: 200,
+                            }}
+                        >
+                            {users.map((u) => (
+                                <option key={u.id} value={u.id}>{u.username ?? u.email ?? `#${u.id}`}</option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
+            )}
+            {error && <p style={{ ...mutedStyle, color: tokens.error, marginBottom: 8 }}>Hata: {error}</p>}
+            <div style={cardStyle}>
+                {loading ? (
+                    <p style={mutedStyle}>Yükleniyor...</p>
+                ) : timeline.length === 0 ? (
+                    <p style={mutedStyle}>
+                        Bu kullanıcı için whale kaydı bulunmuyor. Whale verisi oluştuğunda burada listelenecektir.
+                        {!isAdmin && ' (Sadece kendi kayıtlarınız gösterilir.)'}
+                    </p>
+                ) : (
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                        {timeline.map((item) => (
+                            <li
+                                key={item.id}
+                                style={{
+                                    borderBottom: `1px solid ${tokens.border}`,
+                                    padding: '12px 0',
+                                }}
+                            >
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                                    <span style={{ fontWeight: 600 }}>{item.whaleLevel}</span>
+                                    <span style={mutedStyle}>
+                                        {new Date(item.triggeredAt).toLocaleString('tr-TR')}
+                                    </span>
+                                    {item.reason && <span style={mutedStyle}>— {item.reason}</span>}
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
         </div>
     );
 }

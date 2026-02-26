@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 
+type UserRow = { id: number; username: string; email: string; role: string };
+
 type AdminAccountView = {
     id: number;
     userId: number;
@@ -21,20 +23,34 @@ type PageResponse<T> = {
     size: number;
 };
 
-export function AdminAccounts() {
+export function AdminUsersAndAccounts() {
     const { tokens } = useTheme();
+    const [users, setUsers] = useState<UserRow[]>([]);
     const [accounts, setAccounts] = useState<AdminAccountView[]>([]);
     const [totalPages, setTotalPages] = useState(0);
     const [page, setPage] = useState(0);
-    const [loading, setLoading] = useState(true);
+    const [loadingUsers, setLoadingUsers] = useState(true);
+    const [loadingAccounts, setLoadingAccounts] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [status, setStatus] = useState<string>('');
     const [actionLoading, setActionLoading] = useState<number | null>(null);
     const [freezeReason, setFreezeReason] = useState('');
     const [freezeModal, setFreezeModal] = useState<number | null>(null);
 
+    useEffect(() => {
+        setLoadingUsers(true);
+        financeClient
+            .get('/api/users')
+            .then((res) => {
+                const raw = res.data?.data ?? res.data;
+                setUsers(Array.isArray(raw) ? raw : []);
+            })
+            .catch((err) => setError(err.response?.data?.message ?? err.message ?? 'Kullanıcılar yüklenemedi'))
+            .finally(() => setLoadingUsers(false));
+    }, []);
+
     const fetchAccounts = () => {
-        setLoading(true);
+        setLoadingAccounts(true);
         const params: Record<string, string | number> = { page, size: 20 };
         if (status) params.status = status;
         financeClient
@@ -46,10 +62,10 @@ export function AdminAccounts() {
                 setTotalPages(pageData?.totalPages ?? 0);
             })
             .catch((err) => {
-                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Liste alınamadı';
+                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Hesaplar yüklenemedi';
                 setError(msg);
             })
-            .finally(() => setLoading(false));
+            .finally(() => setLoadingAccounts(false));
     };
 
     useEffect(() => {
@@ -86,7 +102,9 @@ export function AdminAccounts() {
 
     const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
     const titleStyle: React.CSSProperties = { fontSize: '1.75rem', fontWeight: 700, marginBottom: 4 };
+    const sectionTitleStyle: React.CSSProperties = { fontSize: '1.25rem', fontWeight: 600, marginTop: 24, marginBottom: 12 };
     const mutedStyle: React.CSSProperties = { color: tokens.textMuted, fontSize: '0.875rem' };
+    const cardStyle: React.CSSProperties = { padding: 16, borderRadius: 12, background: tokens.bgCard, border: `1px solid ${tokens.border}` };
     const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' };
     const thStyle: React.CSSProperties = { textAlign: 'left', padding: '10px 12px', borderBottom: `2px solid ${tokens.border}`, background: tokens.bgCard };
     const tdStyle: React.CSSProperties = { padding: '10px 12px', borderBottom: `1px solid ${tokens.border}` };
@@ -96,10 +114,45 @@ export function AdminAccounts() {
 
     return (
         <div style={pageStyle}>
-            <h1 style={titleStyle}>🧊 Hesap Yönetimi</h1>
-            <p style={mutedStyle}>Hesapları freeze / unfreeze edin.</p>
+            <h1 style={titleStyle}>Kullanıcı & Hesap Yönetimi</h1>
+            <p style={mutedStyle}>Kullanıcı listesi ve hesapları freeze / unfreeze.</p>
 
-            <div style={{ marginTop: 16, marginBottom: 16 }}>
+            {error && <p style={{ color: tokens.error, marginBottom: 16 }}>Hata: {error}</p>}
+
+            {/* Bölüm 1: Kullanıcılar */}
+            <h2 style={sectionTitleStyle}>Kullanıcılar</h2>
+            <div style={cardStyle}>
+                {loadingUsers ? (
+                    <p style={mutedStyle}>Yükleniyor...</p>
+                ) : users.length === 0 ? (
+                    <p style={mutedStyle}>Kullanıcı bulunamadı.</p>
+                ) : (
+                    <table style={tableStyle}>
+                        <thead>
+                        <tr>
+                            <th style={thStyle}>ID</th>
+                            <th style={thStyle}>Kullanıcı adı</th>
+                            <th style={thStyle}>E-posta</th>
+                            <th style={thStyle}>Rol</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {users.map((u) => (
+                            <tr key={u.id} style={{ borderBottom: `1px solid ${tokens.border}` }}>
+                                <td style={tdStyle}>{u.id}</td>
+                                <td style={tdStyle}>{u.username ?? '—'}</td>
+                                <td style={tdStyle}>{u.email ?? '—'}</td>
+                                <td style={tdStyle}>{u.role}</td>
+                            </tr>
+                        ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+
+            {/* Bölüm 2: Hesaplar (freeze/unfreeze) */}
+            <h2 style={sectionTitleStyle}>Hesaplar (Freeze / Unfreeze)</h2>
+            <div style={{ marginBottom: 16 }}>
                 <label style={{ marginRight: 8, color: tokens.textMuted }}>Durum: </label>
                 <select
                     style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: tokens.text }}
@@ -111,11 +164,8 @@ export function AdminAccounts() {
                     <option value="FROZEN">FROZEN</option>
                 </select>
             </div>
-
-            {error && <p style={{ color: tokens.error, marginBottom: 16 }}>Hata: {error}</p>}
-            {loading && <p style={mutedStyle}>Yükleniyor...</p>}
-
-            {!loading && (
+            {loadingAccounts && <p style={mutedStyle}>Yükleniyor...</p>}
+            {!loadingAccounts && (
                 <div style={{ overflowX: 'auto', border: `1px solid ${tokens.border}`, borderRadius: 12, background: tokens.bgCard }}>
                     <table style={tableStyle}>
                         <thead>
@@ -144,19 +194,11 @@ export function AdminAccounts() {
                                     </td>
                                     <td style={tdStyle}>
                                         {row.status === 'FROZEN' ? (
-                                            <button
-                                                style={btnStyle}
-                                                disabled={actionLoading === row.id}
-                                                onClick={() => handleUnfreeze(row.id)}
-                                            >
+                                            <button style={btnStyle} disabled={actionLoading === row.id} onClick={() => handleUnfreeze(row.id)}>
                                                 {actionLoading === row.id ? '...' : 'Unfreeze'}
                                             </button>
                                         ) : (
-                                            <button
-                                                style={btnStyle}
-                                                disabled={actionLoading === row.id}
-                                                onClick={() => setFreezeModal(row.id)}
-                                            >
+                                            <button style={btnStyle} disabled={actionLoading === row.id} onClick={() => setFreezeModal(row.id)}>
                                                 {actionLoading === row.id ? '...' : 'Freeze'}
                                             </button>
                                         )}
@@ -168,7 +210,6 @@ export function AdminAccounts() {
                     </table>
                 </div>
             )}
-
             {totalPages > 1 && (
                 <div style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
                     <button style={{ ...btnStyle, opacity: page === 0 ? 0.6 : 1 }} onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>Önceki</button>
@@ -186,7 +227,7 @@ export function AdminAccounts() {
                             value={freezeReason}
                             onChange={(e) => setFreezeReason(e.target.value)}
                             placeholder="Sebep..."
-                            style={{ width: '100%', padding: 8, marginBottom: 16, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.inputBg, color: tokens.text }}
+                            style={{ width: '100%', padding: 8, marginBottom: 16, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.inputBg ?? tokens.bgCard, color: tokens.text }}
                         />
                         <div>
                             <button style={btnStyle} onClick={() => handleFreeze(freezeModal, freezeReason || undefined)}>Freeze</button>

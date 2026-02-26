@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
+import { usePolling } from '../hooks/usePolling';
 
 type AssetType = 'STOCK' | 'CRYPTO' | 'FX' | 'METAL' | 'FUND' | string;
 type DashboardSummary = {
@@ -17,11 +19,12 @@ export function Portfolio() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
+    const fetchPortfolio = useCallback(() => {
+        setLoading(true);
         financeClient
             .get<DashboardSummary>('/api/dashboard/summary')
             .then((res) => {
-                const raw = (res.data as any)?.data ?? res.data;
+                const raw = (res.data as { data?: DashboardSummary })?.data ?? res.data;
                 setSummary(raw);
             })
             .catch((err) => {
@@ -31,8 +34,14 @@ export function Portfolio() {
             .finally(() => setLoading(false));
     }, []);
 
-    const formatMoney = (v: number) => '₺' + v.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+    useEffect(() => {
+        fetchPortfolio();
+    }, [fetchPortfolio]);
 
+    useRefetchOnFocus(fetchPortfolio);
+    usePolling(fetchPortfolio, 60_000);
+
+    const formatMoney = (v: number) => '₺' + v.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
     const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
     const titleStyle: React.CSSProperties = { fontSize: '1.75rem', fontWeight: 700, marginBottom: 4 };
     const mutedStyle: React.CSSProperties = { color: tokens.textMuted, fontSize: '0.875rem', marginTop: 4 };
@@ -80,7 +89,6 @@ export function Portfolio() {
                 <h1 style={titleStyle}>Portföylerim</h1>
                 <p style={mutedStyle}>Toplam portföy değeri, dağılım ve son işlemler.</p>
             </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
                 <div style={{ ...cardStyle, background: tokens.accentGradient, color: '#fff', border: 'none' }}>
                     <div style={{ fontSize: '0.8125rem', opacity: 0.9 }}>Toplam Portföy Değeri</div>
@@ -99,7 +107,6 @@ export function Portfolio() {
                     <div style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 8 }}>{todayTrades}</div>
                 </div>
             </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 2fr)', gap: 16 }}>
                 <div style={cardStyle}>
                     <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>Varlık Dağılımı</h2>
