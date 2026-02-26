@@ -8,16 +8,23 @@ const KEYCLOAK_REALM = import.meta.env.VITE_KEYCLOAK_REALM || 'nrs-finance';
 const KEYCLOAK_CLIENT_ID = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'nrs-finance-backend';
 
 export function Login() {
-    const { isAuthenticated, login, ready } = useAuth();
+    const { isAuthenticated, login, ready, role } = useAuth();
     const { tokens } = useTheme();
     const navigate = useNavigate();
     const location = useLocation();
-    const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
+    const from = (location.state as { from?: { pathname: string } })?.from?.pathname;
+
+    const destination = (() => {
+        if (from && from !== '/' && from !== '/dashboard') return from;
+        if (role === 'ADMIN') return '/admin/metrics';
+        if (role === 'FINANCE_MANAGER') return '/fm/tasks';
+        return '/dashboard';
+    })();
 
     useEffect(() => {
         if (!ready) return;
-        if (isAuthenticated) navigate(from, { replace: true });
-    }, [ready, isAuthenticated, navigate, from]);
+        if (isAuthenticated) navigate(destination, { replace: true });
+    }, [ready, isAuthenticated, navigate, destination]);
 
     const goToRegister = () => {
         const redirectUri = encodeURIComponent(window.location.origin + '/');
