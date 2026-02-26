@@ -9,7 +9,7 @@ const linkStyle = (tokens: { headerText: string }) => ({
 });
 
 export function Layout() {
-    const { isAuthenticated, logout, role } = useAuth();
+    const { isAuthenticated, logout, role, user } = useAuth();
     const { theme, toggleTheme, tokens } = useTheme();
     const navigate = useNavigate();
 
@@ -20,6 +20,12 @@ export function Layout() {
 
     const isFm = role === 'FINANCE_MANAGER';
     const isAdmin = role === 'ADMIN';
+    /** Portföy ve İşlem Geçmişi sadece müşteri (USER); personel (Admin/FM) menüde görmesin */
+    const showCustomerPortfolio = !isFm && !isAdmin;
+    /** Dashboard sadece müşteri (USER); Admin/FM görmez */
+    const showDashboard = !isFm && !isAdmin;
+    /** Görevler (FM) sadece FM görsün; Admin sadece Admin Görevler görsün */
+    const showFmTasks = isFm;
 
     return (
         <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: tokens.bg }}>
@@ -37,38 +43,44 @@ export function Layout() {
                     NRS Finance Portal
                 </Link>
                 <nav style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-                    {/* Kullanıcı tarafı – herkes */}
-                    <Link to="/dashboard" style={linkStyle(tokens)}>Dashboard</Link>
+                    {showDashboard && <Link to="/dashboard" style={linkStyle(tokens)}>Dashboard</Link>}
                     <Link to="/market" style={linkStyle(tokens)}>Piyasa</Link>
-                    <Link to="/portfolio" style={linkStyle(tokens)}>Portföy</Link>
-                    <Link to="/trade" style={linkStyle(tokens)}>Trade</Link>
-                    <Link to="/transactions" style={linkStyle(tokens)}>İşlem Geçmişi</Link>
-                    <Link to="/news" style={linkStyle(tokens)}>Haberler</Link>
-                    <Link to="/profile" style={linkStyle(tokens)}>Profil</Link>
-                    <Link to="/notifications" style={linkStyle(tokens)}>🔔 Bildirimler</Link>
-
-                    {/* Operasyon – FM veya Admin */}
-                    {(isFm || isAdmin) && (
+                    {showCustomerPortfolio && (
                         <>
-                            <Link to="/fm/tasks" style={linkStyle(tokens)}>📋 Görevler</Link>
-                            <Link to="/fm/risk" style={linkStyle(tokens)}>⚠️ Risk Monitor</Link>
-                            <Link to="/operasyon/suspicious" style={linkStyle(tokens)}>🚨 Şüpheli Olaylar</Link>
+                            <Link to="/portfolio" style={linkStyle(tokens)}>Portföy</Link>
+                            <Link to="/trade" style={linkStyle(tokens)}>Trade</Link>
+                            <Link to="/transactions" style={linkStyle(tokens)}>İşlem Geçmişi</Link>
+                        </>
+                    )}
+                    <Link to="/news" style={linkStyle(tokens)}>Haberler</Link>
+                    <Link to="/notifications" style={linkStyle(tokens)}> Bildirimler</Link>
+
+                    {showFmTasks && (
+                        <>
+                            <Link to="/fm/tasks" style={linkStyle(tokens)}> Görevler</Link>
+                            <Link to="/fm/risk" style={linkStyle(tokens)}> Risk Monitor</Link>
+                            <Link to="/operasyon/suspicious" style={linkStyle(tokens)}> Şüpheli Olaylar</Link>
                         </>
                     )}
 
-                    {/* Admin özel */}
                     {isAdmin && (
                         <>
-                            <Link to="/admin" style={linkStyle(tokens)}>📊 Admin Dashboard</Link>
+                            <Link to="/admin" style={linkStyle(tokens)}> Admin Dashboard</Link>
                             <Link to="/admin/tasks" style={linkStyle(tokens)}>Admin Görevler</Link>
                             <Link to="/admin/users" style={linkStyle(tokens)}>Kullanıcı Yönetimi</Link>
-                            <Link to="/admin/accounts" style={linkStyle(tokens)}>Hesap Yönetimi</Link>
                             <Link to="/admin/settings" style={linkStyle(tokens)}>Sistem Ayarları</Link>
                             <Link to="/admin/audit" style={linkStyle(tokens)}>Audit Logs</Link>
+                            <Link to="/admin/metrics" style={linkStyle(tokens)}>Metrikler</Link>
                         </>
                     )}
                 </nav>
-                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    {isAuthenticated && user && (
+                        <span style={{ fontSize: '0.8125rem', color: tokens.headerText, opacity: 0.9 }}>
+                            {user.username ?? user.email ?? '—'} · {user.role}
+                        </span>
+                    )}
                     <button
                         type="button"
                         onClick={toggleTheme}
