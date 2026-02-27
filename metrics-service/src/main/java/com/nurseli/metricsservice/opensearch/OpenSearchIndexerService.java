@@ -32,7 +32,7 @@ public class OpenSearchIndexerService {
         doc.put("userId", event.userId());
         doc.put("tradeType", event.tradeType());
         doc.put("assetType", event.assetType());
-        doc.put("symbol", event.symbol());
+        doc.put("symbol", normalizeSymbol(event.assetType(), event.symbol()));
         doc.put("quantity", event.quantity() != null ? event.quantity().doubleValue() : null);
         doc.put("pricePerUnit", event.pricePerUnit() != null ? event.pricePerUnit().doubleValue() : null);
         doc.put("totalTry", event.totalTry() != null ? event.totalTry().doubleValue() : null);
@@ -76,5 +76,15 @@ public class OpenSearchIndexerService {
         } catch (IOException e) {
             log.error("[OPENSEARCH] index failed index={} id={}", indexName, id, e);
         }
+    }
+    /**
+     * CRYPTO için BTC -> BTCUSDT; diğer tiplerde aynen.
+     */
+    private static String normalizeSymbol(String assetType, String symbol) {
+        if (symbol == null || symbol.isBlank()) return symbol;
+        if ("CRYPTO".equalsIgnoreCase(assetType) && !symbol.toUpperCase().endsWith("USDT")) {
+            return symbol + "USDT";
+        }
+        return symbol;
     }
 }

@@ -76,7 +76,7 @@ public class MetricsQueryService {
     private List<DashboardMetricsDto.TradeCountBySymbol> getTopSymbols(int size) throws IOException {
         SearchRequest request = new SearchRequest(OpenSearchIndexerService.INDEX_TRADES);
         SearchSourceBuilder src = new SearchSourceBuilder().size(0);
-        src.aggregation(AggregationBuilders.terms("by_symbol").field("symbol").size(size));
+        src.aggregation(AggregationBuilders.terms("by_symbol").field("symbol").size(50));
         request.source(src);
 
         SearchResponse response = opensearchClient.search(request, RequestOptions.DEFAULT);
@@ -84,8 +84,20 @@ public class MetricsQueryService {
         Terms terms = response.getAggregations().get("by_symbol");
         if (terms == null) return List.of();
 
-        return terms.getBuckets().stream()
-                .map(b -> new DashboardMetricsDto.TradeCountBySymbol(b.getKeyAsString(), b.getDocCount()))
+        // BTC ve BTCUSDT gibi aynı varlığı birleştir
+        java.util.Map<String, Long> merged = new java.util.HashMap<>();
+        for (Terms.Bucket b : terms.getBuckets()) {
+            String sym = b.getKeyAsString();
+            String normalized = (sym != null && !sym.toUpperCase().endsWith("USDT"))
+                    ? sym + "USDT"
+                    : sym;
+            merged.merge(normalized, b.getDocCount(), Long::sum);
+        }
+
+        return merged.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .limit(size)
+                .map(e -> new DashboardMetricsDto.TradeCountBySymbol(e.getKey(), e.getValue()))
                 .collect(Collectors.toList());
     }
 

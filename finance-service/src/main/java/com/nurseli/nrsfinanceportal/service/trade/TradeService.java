@@ -23,7 +23,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.nurseli.nrsfinanceportal.domain.pricing.SymbolNormalizer;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -126,14 +126,15 @@ public class TradeService {
 // 🔥 TIMELINE CACHE INVALIDATE
             timelineCacheInvalidationService.invalidateUserTimeline(user.getId());
 
-// ✅ BURAYA KOYUYORUZ (RETURN'DAN HEMEN ÖNCE)
+// ✅ Event'te sembol her zaman normalize (BTC -> BTCUSDT) metriklerde tek görünsün
+            String normalizedSymbol = SymbolNormalizer.normalize(request.assetType(), request.symbol());
             eventPublisher.publishEvent(
                     new TradeCreatedEvent(
                             trade.getId(),
                             user.getId(),
                             request.tradeType(),
                             request.assetType(),
-                            request.symbol(),
+                            normalizedSymbol,
                             request.quantity(),
                             tryPrice,
                             totalTry,
