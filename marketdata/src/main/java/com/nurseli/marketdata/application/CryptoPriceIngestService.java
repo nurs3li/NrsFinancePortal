@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.nurseli.marketdata.application.SpreadCalculator;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -53,12 +53,10 @@ public class CryptoPriceIngestService {
             if (symbol == null) return;
 
             MarketPriceHistory entity = new MarketPriceHistory();
-            entity.setSymbol(symbol);
-            entity.setBuyPrice(usdPrice);
-            entity.setSellPrice(usdPrice);
 
-            entity.setBuyPrice(usdPrice);
-            entity.setSellPrice(usdPrice);
+            entity.setSymbol(symbol);
+            entity.setBuyPrice(SpreadCalculator.buyPrice(usdPrice));
+            entity.setSellPrice(SpreadCalculator.sellPrice(usdPrice));
             entity.setSource("COINGECKO");
             entity.setTimestamp(LocalDateTime.now());
 

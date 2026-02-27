@@ -7,7 +7,7 @@ import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
+import com.nurseli.marketdata.application.SpreadCalculator;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -58,8 +58,8 @@ public class FundPriceIngestService {
 
             MarketPriceHistory entity = new MarketPriceHistory();
             entity.setSymbol(dto.fundCode());
-            entity.setBuyPrice(dto.price());
-            entity.setSellPrice(dto.price());
+            entity.setBuyPrice(SpreadCalculator.buyPrice(dto.price()));
+            entity.setSellPrice(SpreadCalculator.sellPrice(dto.price()));
             entity.setSource("TEFAS");
             entity.setTimestamp(LocalDateTime.of(dto.date(), java.time.LocalTime.NOON));
 
