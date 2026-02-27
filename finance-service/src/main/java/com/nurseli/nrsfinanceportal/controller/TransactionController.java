@@ -23,7 +23,7 @@ public class TransactionController {
      * GET /api/transactions/me?page=0&size=10
      */
     @GetMapping("/me")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
     public Page<TransactionView> myTransactions(Pageable pageable) {
         return transactionQueryService.getMyTransactions(pageable);
     }
@@ -33,7 +33,7 @@ public class TransactionController {
      * GET /api/transactions/me/range?start=2026-01-01T00:00:00&end=2026-01-31T23:59:59
      */
     @GetMapping("/me/range")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
     public Page<TransactionView> myTransactionsWithRange(
             @RequestParam
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
