@@ -55,4 +55,9 @@ public interface MarketPriceHistoryRepository
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
     );
+    List<MarketPriceHistory> findBySymbolAndTimestampBetweenOrderByTimestampAsc(
+            String symbol,
+            LocalDateTime start,
+            LocalDateTime end
+    );
 }

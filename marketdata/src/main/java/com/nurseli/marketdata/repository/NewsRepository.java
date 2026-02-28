@@ -14,7 +14,7 @@ import java.util.Optional;
 public interface NewsRepository extends JpaRepository<News, Long> {
 
     Optional<News> findByExternalId(String externalId);
-
+    boolean existsByExternalId(String externalId);
     Page<News> findByCategoryOrderByPublishedAtDesc(
             NewsCategory category,
             Pageable pageable

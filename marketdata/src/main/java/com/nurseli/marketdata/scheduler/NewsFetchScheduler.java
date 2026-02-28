@@ -17,7 +17,7 @@ public class NewsFetchScheduler {
      * Haberleri periyodik olarak çeker (1 saatte bir)
      * FAZ 3.1.4
      */
-    @Scheduled(fixedDelay = 3600_000) // 1 saat = 3600000 ms
+    @Scheduled(initialDelay = 120_000, fixedDelay = 3600_000) // 1 saat = 3600000 ms
     public void fetchNews() {
         log.info("[SCHEDULER] Fetching news from FinHub");
         newsIngestService.fetchAndSaveNews();
