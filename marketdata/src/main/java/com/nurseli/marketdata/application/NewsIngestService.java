@@ -7,8 +7,8 @@ import com.nurseli.marketdata.infrastructure.finhub.FinHubNewsDto;
 import com.nurseli.marketdata.repository.NewsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -31,7 +31,7 @@ public class NewsIngestService {
             "merger", NewsCategory.GENERAL
     );
 
-    @Transactional
+    // NOT: Burada @Transactional yok. Bir item patlarsa tüm session kirlenmesin.
     public void fetchAndSaveNews() {
         List<String> categories = List.of("general", "forex", "crypto");
 
@@ -49,13 +49,20 @@ public class NewsIngestService {
                 int skippedCount = 0;
 
                 for (FinHubNewsDto.NewsItem item : items) {
-                    if (item.getId() != null && newsRepository.findByExternalId(String.valueOf(item.getId())).isPresent()) {
+                    String externalId = item.getId() != null ? String.valueOf(item.getId()) : null;
+                    if (externalId == null || externalId.isBlank()) {
+                        skippedCount++;
+                        continue;
+                    }
+
+                    // Hızlı pre-check (race condition tamamen çözmez ama gereksiz insert'i azaltır)
+                    if (newsRepository.existsByExternalId(externalId)) {
                         skippedCount++;
                         continue;
                     }
 
                     News news = News.builder()
-                            .externalId(item.getId() != null ? String.valueOf(item.getId()) : null)
+                            .externalId(externalId)
                             .title(item.getHeadline() != null ? item.getHeadline() : "No title")
                             .summary(item.getSummary())
                             .source(item.getSource() != null ? item.getSource() : "FinHub")
@@ -64,8 +71,14 @@ public class NewsIngestService {
                             .publishedAt(parseDateTime(item.getDatetime()))
                             .build();
 
-                    newsRepository.save(news);
-                    savedCount++;
+                    try {
+                        newsRepository.saveAndFlush(news);
+                        savedCount++;
+                    } catch (DataIntegrityViolationException duplicateEx) {
+                        // Race condition veya tekrar ingest: duplicate'i yut ve devam et
+                        skippedCount++;
+                        log.debug("[NEWS] Duplicate externalId skipped: {}", externalId);
+                    }
                 }
 
                 log.info("[NEWS] Category: {}, Saved: {}, Skipped: {}", category, savedCount, skippedCount);

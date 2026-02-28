@@ -34,7 +34,7 @@ public class StartupDataLoader implements ApplicationRunner {
         runSafe("TCMB (Döviz)", marketPriceIngestService::fetchAndSaveTcmbRates);
         runSafe("CoinGecko (Kripto)", cryptoPriceIngestService::fetchAndSaveCryptoPrices);
         runSafe("CoinGecko (Altın)", metalPriceIngestService::fetchAndSaveGramGold);
-        runSafe("Haberler", newsIngestService::fetchAndSaveNews);
+
 
         log.info("[STARTUP] Initial market data load finished.");
     }
