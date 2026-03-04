@@ -12,7 +12,9 @@ import com.nurseli.marketdata.repository.MarketPriceBucketView;
 import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-
+import com.nurseli.marketdata.api.dto.IndicatorPointResponse;
+import com.nurseli.marketdata.api.dto.MarketIndicatorsResponse;
+import com.nurseli.marketdata.api.dto.TrendResponse;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -24,7 +26,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MarketPriceQueryService {
 
-    private static final Set<Integer> ALLOWED_DAYS = Set.of(30, 90, 180, 365);
+    private static final Set<Integer> ALLOWED_DAYS = Set.of(7, 14, 30, 90, 180, 365);
     private static final int MAX_SYMBOLS = 8;
     private static final BigDecimal ZERO_VOLUME = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
 
@@ -119,7 +121,7 @@ public class MarketPriceQueryService {
 
     private void validateDays(int days) {
         if (!ALLOWED_DAYS.contains(days)) {
-            throw new InvalidRequestException("days sadece 30, 90, 180, 365 olabilir.");
+            throw new InvalidRequestException("days sadece 7, 14, 30, 90, 180, 365 olabilir.");
         }
     }
 
@@ -209,5 +211,157 @@ public class MarketPriceQueryService {
         return row.getBuyPrice()
                 .add(row.getSellPrice())
                 .divide(BigDecimal.valueOf(2), 6, RoundingMode.HALF_UP);
+    }
+    public MarketIndicatorsResponse getIndicators(String rawType, String rawSymbol, int days, String rawMa) {
+        MarketType type = MarketType.from(rawType);
+        validateDays(days);
+
+        String symbol = normalizeAndValidateSingleSymbol(type, rawSymbol);
+        List<Integer> maWindows = parseMaWindows(rawMa, days);
+
+        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime start = end.minusDays(days);
+
+        List<MarketPriceHistory> rows =
+                repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
+
+        List<CandlePointResponse> candles = toDailyCandles(rows);
+        if (candles.size() < 2) {
+            throw new InvalidRequestException("Trend hesaplamak için en az 2 günlük veri gerekli.");
+        }
+
+        List<IndicatorPointResponse> closeSeries = candles.stream()
+                .map(c -> new IndicatorPointResponse(c.t(), c.c()))
+                .toList();
+
+        Map<Integer, List<IndicatorPointResponse>> maSeries = buildMovingAverages(closeSeries, maWindows);
+        TrendResponse trend = calculateTrend(closeSeries);
+
+        return new MarketIndicatorsResponse(type.name(), symbol, days, closeSeries, maSeries, trend);
+    }
+
+    private String normalizeAndValidateSingleSymbol(MarketType type, String rawSymbol) {
+        if (rawSymbol == null || rawSymbol.isBlank()) {
+            throw new InvalidRequestException("symbol zorunludur.");
+        }
+        String symbol = rawSymbol.trim().toUpperCase();
+        if (!isAllowedSymbol(type, symbol)) {
+            throw new InvalidRequestException("type=" + type + " için geçersiz symbol: " + symbol);
+        }
+        return symbol;
+    }
+
+    private List<Integer> parseMaWindows(String rawMa, int days) {
+        String value = (rawMa == null || rawMa.isBlank()) ? "7,30,90" : rawMa;
+
+        List<Integer> windows = Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .map(s -> {
+                    try {
+                        return Integer.parseInt(s);
+                    } catch (NumberFormatException ex) {
+                        throw new InvalidRequestException("ma parametresi sayı olmalı. Örnek: 7,30,90");
+                    }
+                })
+                .distinct()
+                .sorted()
+                .toList();
+
+        if (windows.isEmpty()) {
+            throw new InvalidRequestException("En az bir MA değeri gönderilmelidir.");
+        }
+
+        for (Integer w : windows) {
+            if (w < 2) {
+                throw new InvalidRequestException("MA değeri 2 veya daha büyük olmalı.");
+            }
+            if (w > days) {
+                throw new InvalidRequestException("MA değeri days parametresinden büyük olamaz. MA=" + w + ", days=" + days);
+            }
+        }
+
+        return windows;
+    }
+
+    private Map<Integer, List<IndicatorPointResponse>> buildMovingAverages(
+            List<IndicatorPointResponse> closeSeries,
+            List<Integer> windows
+    ) {
+        Map<Integer, List<IndicatorPointResponse>> result = new LinkedHashMap<>();
+
+        for (Integer window : windows) {
+            List<IndicatorPointResponse> points = new ArrayList<>();
+
+            for (int i = window - 1; i < closeSeries.size(); i++) {
+                BigDecimal sum = BigDecimal.ZERO;
+                for (int j = i - window + 1; j <= i; j++) {
+                    sum = sum.add(closeSeries.get(j).value());
+                }
+                BigDecimal avg = sum.divide(BigDecimal.valueOf(window), 6, RoundingMode.HALF_UP);
+                points.add(new IndicatorPointResponse(closeSeries.get(i).t(), avg));
+            }
+
+            result.put(window, points);
+        }
+
+        return result;
+    }
+
+    private TrendResponse calculateTrend(List<IndicatorPointResponse> closeSeries) {
+        int n = closeSeries.size();
+
+        double first = closeSeries.get(0).value().doubleValue();
+        double[] y = new double[n]; // base=100 normalize seri
+
+        for (int i = 0; i < n; i++) {
+            double close = closeSeries.get(i).value().doubleValue();
+            y[i] = (close / first) * 100.0;
+        }
+
+        double xMean = (n - 1) / 2.0;
+        double yMean = Arrays.stream(y).average().orElse(100.0);
+
+        double num = 0.0;
+        double den = 0.0;
+        for (int i = 0; i < n; i++) {
+            double dx = i - xMean;
+            num += dx * (y[i] - yMean);
+            den += dx * dx;
+        }
+        double slope = den == 0.0 ? 0.0 : num / den; // base100 puan / gün
+
+        // R^2 (lineer uygunluk)
+        double ssTot = 0.0;
+        double ssRes = 0.0;
+        double intercept = yMean - slope * xMean;
+        for (int i = 0; i < n; i++) {
+            double pred = intercept + slope * i;
+            ssTot += Math.pow(y[i] - yMean, 2);
+            ssRes += Math.pow(y[i] - pred, 2);
+        }
+        double r2 = ssTot == 0.0 ? 0.0 : Math.max(0.0, 1.0 - (ssRes / ssTot));
+
+        double last = closeSeries.get(n - 1).value().doubleValue();
+        double normalizedReturn = (last / first) - 1.0;
+
+        String direction;
+        if (slope > 0.03) {
+            direction = "UP";
+        } else if (slope < -0.03) {
+            direction = "DOWN";
+        } else {
+            direction = "FLAT";
+        }
+
+        double returnScore = Math.min(Math.abs(normalizedReturn) / 0.10, 1.0); // %10 ve üzeri max
+        double strength = Math.max(0.0, Math.min(1.0, returnScore * 0.6 + r2 * 0.4));
+
+        return new TrendResponse(
+                direction,
+                BigDecimal.valueOf(slope).setScale(6, RoundingMode.HALF_UP),
+                BigDecimal.valueOf(normalizedReturn).setScale(6, RoundingMode.HALF_UP),
+                BigDecimal.valueOf(strength).setScale(6, RoundingMode.HALF_UP)
+        );
     }
 }
