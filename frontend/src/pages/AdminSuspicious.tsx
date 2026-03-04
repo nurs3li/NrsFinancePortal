@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
-import { useCallback } from 'react';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
+
 type SuspiciousRow = {
     userId: number;
     username: string | null;
@@ -17,11 +17,19 @@ type SuspiciousRow = {
     occurredAt: string;
 };
 
+type UserGroup = {
+    userId: number;
+    username: string | null;
+    email: string | null;
+    events: SuspiciousRow[];
+};
+
 export function AdminSuspicious() {
     const { tokens } = useTheme();
     const [events, setEvents] = useState<SuspiciousRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [expandedUserIds, setExpandedUserIds] = useState<Set<number>>(new Set());
 
     const fetchEvents = useCallback(() => {
         setLoading(true);
@@ -42,21 +50,53 @@ export function AdminSuspicious() {
     useRefetchOnFocus(fetchEvents);
     usePolling(fetchEvents, 60_000);
 
-    /** Kullanıcıya göre grupla: key = username ?? userId */
-    const eventsByUser = useMemo(() => {
-        const map: Record<string, SuspiciousRow[]> = {};
+    // Kullanıcıya göre grupla
+    const groups: UserGroup[] = useMemo(() => {
+        const map = new Map<number, UserGroup>();
         for (const e of events) {
-            const key = e.username ?? `Kullanıcı #${e.userId}`;
-            if (!map[key]) map[key] = [];
-            map[key].push(e);
+            const existing = map.get(e.userId);
+            if (!existing) {
+                map.set(e.userId, {
+                    userId: e.userId,
+                    username: e.username,
+                    email: e.email,
+                    events: [e],
+                });
+            } else {
+                existing.events.push(e);
+            }
         }
-        return map;
+        // Son olaya göre sırala (en güncel üstte)
+        return Array.from(map.values()).sort((a, b) => {
+            const aLast = a.events[0]?.occurredAt ?? '';
+            const bLast = b.events[0]?.occurredAt ?? '';
+            return bLast.localeCompare(aLast);
+        });
     }, [events]);
 
-    const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
+    const toggleUser = (userId: number) => {
+        setExpandedUserIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(userId)) next.delete(userId);
+            else next.add(userId);
+            return next;
+        });
+    };
+
+    const pageStyle: React.CSSProperties = {
+        padding: 24,
+        background: tokens.bg,
+        color: tokens.text,
+        minHeight: '100%',
+    };
     const titleStyle: React.CSSProperties = { fontSize: '1.75rem', fontWeight: 700, marginBottom: 4 };
     const mutedStyle: React.CSSProperties = { color: tokens.textMuted, fontSize: '0.875rem' };
-    const cardStyle: React.CSSProperties = { padding: 16, borderRadius: 12, background: tokens.bgCard, border: `1px solid ${tokens.border}` };
+    const cardStyle: React.CSSProperties = {
+        padding: 16,
+        borderRadius: 12,
+        background: tokens.bgCard,
+        border: `1px solid ${tokens.border}`,
+    };
 
     if (error) {
         return (
@@ -70,42 +110,83 @@ export function AdminSuspicious() {
     return (
         <div style={pageStyle}>
             <h1 style={titleStyle}>Şüpheli Olaylar</h1>
-            <p style={mutedStyle}>Şüpheli işlem uyarıları, kullanıcıya göre gruplu (Finance Manager / Admin).</p>
+            <p style={mutedStyle}>
+                Şüpheli işlem uyarıları, kullanıcıya göre gruplu. Satıra tıklayınca kullanıcının detaylı olay listesi açılır.
+            </p>
+
             {loading ? (
                 <div style={cardStyle}>
                     <p style={mutedStyle}>Yükleniyor...</p>
                 </div>
-            ) : events.length === 0 ? (
+            ) : groups.length === 0 ? (
                 <div style={cardStyle}>
                     <p style={mutedStyle}>Kayıt yok.</p>
                 </div>
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                    {Object.entries(eventsByUser).map(([userKey, userEvents]) => (
-                        <div key={userKey} style={cardStyle}>
-                            <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: 12, borderBottom: `1px solid ${tokens.border}`, paddingBottom: 8 }}>
-                                {userKey} <span style={mutedStyle}>({userEvents.length} olay)</span>
-                            </h2>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                                <thead>
-                                <tr style={{ borderBottom: `2px solid ${tokens.border}` }}>
-                                    <th style={{ textAlign: 'left', padding: 8 }}>Sebep</th>
-                                    <th style={{ textAlign: 'right', padding: 8 }}>Tutar</th>
-                                    <th style={{ textAlign: 'left', padding: 8 }}>Tarih</th>
-                                </tr>
-                                </thead>
-                                <tbody>
-                                {userEvents.map((e, i) => (
-                                    <tr key={i} style={{ borderBottom: `1px solid ${tokens.border}` }}>
-                                        <td style={{ padding: 8 }}>{e.reason}</td>
-                                        <td style={{ padding: 8, textAlign: 'right' }}>₺{Number(e.amount).toLocaleString('tr-TR')}</td>
-                                        <td style={{ padding: 8 }}>{new Date(e.occurredAt).toLocaleString('tr-TR')}</td>
-                                    </tr>
-                                ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {groups.map((group) => {
+                        const isOpen = expandedUserIds.has(group.userId);
+                        const latest = group.events[0];
+                        const headerLabel =
+                            (group.username ?? `Kullanıcı`) +
+                            ` (ID: ${group.userId}` +
+                            (group.email ? `, ${group.email}` : '') +
+                            ')';
+
+                        return (
+                            <div key={group.userId} style={cardStyle}>
+                                <button
+                                    type="button"
+                                    onClick={() => toggleUser(group.userId)}
+                                    style={{
+                                        all: 'unset',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        width: '100%',
+                                        cursor: 'pointer',
+                                        paddingBottom: 8,
+                                        borderBottom: `1px solid ${tokens.border}`,
+                                    }}
+                                >
+                                    <div>
+                                        <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>{headerLabel}</div>
+                                        <div style={mutedStyle}>
+                                            {group.events.length} olay • Son: {latest && new Date(latest.occurredAt).toLocaleString('tr-TR')}
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize: '1.25rem' }}>{isOpen ? '▾' : '▸'}</div>
+                                </button>
+
+                                {isOpen && (
+                                    <div style={{ marginTop: 12 }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                                            <thead>
+                                            <tr style={{ borderBottom: `2px solid ${tokens.border}` }}>
+                                                <th style={{ textAlign: 'left', padding: 8 }}>Sebep</th>
+                                                <th style={{ textAlign: 'right', padding: 8 }}>Tutar</th>
+                                                <th style={{ textAlign: 'left', padding: 8 }}>Tarih</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            {group.events.map((e, i) => (
+                                                <tr key={i} style={{ borderBottom: `1px solid ${tokens.border}` }}>
+                                                    <td style={{ padding: 8 }}>{e.reason}</td>
+                                                    <td style={{ padding: 8, textAlign: 'right' }}>
+                                                        ₺{Number(e.amount).toLocaleString('tr-TR')}
+                                                    </td>
+                                                    <td style={{ padding: 8 }}>
+                                                        {new Date(e.occurredAt).toLocaleString('tr-TR')}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             )}
         </div>
