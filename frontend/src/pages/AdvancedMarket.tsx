@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createChart } from 'lightweight-charts';
 import type {
     IChartApi,
@@ -69,8 +70,25 @@ function getMarketType(tab: TabId): 'FX' | 'CRYPTO' | 'METALS' | 'FUNDS' {
     }
 }
 
+function getTabFromType(type?: string | null): TabId | null {
+    switch (type) {
+        case 'FX':
+            return 'doviz';
+        case 'CRYPTO':
+            return 'crypto';
+        case 'METALS':
+            return 'metals';
+        case 'FUNDS':
+            return 'funds';
+        default:
+            return null;
+    }
+}
+
 export function AdvancedMarket() {
     const { tokens } = useTheme();
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
 
     const containerRef = useRef<HTMLDivElement | null>(null);
     const chartRef = useRef<IChartApi | null>(null);
@@ -107,6 +125,19 @@ export function AdvancedMarket() {
         fontSize: '1.75rem',
         fontWeight: 700,
         marginBottom: 4,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+    };
+
+    const backButtonStyle: React.CSSProperties = {
+        padding: '4px 10px',
+        borderRadius: 999,
+        border: `1px solid ${tokens.border}`,
+        background: tokens.bgCard,
+        color: tokens.text,
+        fontSize: '0.8rem',
+        cursor: 'pointer',
     };
 
     const mutedStyle: React.CSSProperties = {
@@ -162,18 +193,40 @@ export function AdvancedMarket() {
         [],
     );
 
-    const fetchIndicators = useCallback((tab: TabId, symbol: string, days: number) => {
+    const fetchIndicators = useCallback((tab: TabId, symbol: string, d: number) => {
         const type = getMarketType(tab);
         const allMa = [7, 30, 90];
-        const allowedMa = allMa.filter((w) => w <= days);       // days'ten büyükleri at
-        const maParam = allowedMa.join(',');                    // örn: days=30 → "7,30", days=7 → "7"
+        const allowedMa = allMa.filter((w) => w <= d);
+        const maParam = allowedMa.join(',');
 
         return marketClient
             .get<IndicatorsResponse>('/api/market/indicators', {
-                params: { type, symbol, days, ma: maParam },
+                params: { type, symbol, days: d, ma: maParam },
             })
             .then((res) => res.data);
     }, []);
+
+    // İlk yüklemede query param'larından state ayarla
+    useEffect(() => {
+        const typeParam = searchParams.get('type');
+        const symbolParam = searchParams.get('symbol');
+        const daysParam = searchParams.get('days');
+
+        const tabFromType = getTabFromType(typeParam);
+        if (tabFromType) {
+            setActiveTab(tabFromType);
+        }
+
+        if (symbolParam) {
+            setSelectedSymbol(symbolParam.toUpperCase());
+        }
+
+        const parsedDays = daysParam ? Number(daysParam) : NaN;
+        if (!Number.isNaN(parsedDays) && DAYS_OPTIONS.includes(parsedDays)) {
+            setDays(parsedDays);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // sadece ilk render'da
 
     useEffect(() => {
         loadLatestAll().catch(() => {
@@ -310,7 +363,16 @@ export function AdvancedMarket() {
 
     return (
         <div style={pageStyle}>
-            <h1 style={titleStyle}>Gelişmiş Piyasa Grafiği</h1>
+            <div style={titleStyle}>
+                <button
+                    type="button"
+                    onClick={() => navigate('/market')}
+                    style={backButtonStyle}
+                >
+                    ← Piyasa özeti
+                </button>
+                <span>Gelişmiş Piyasa Grafiği</span>
+            </div>
             <p style={mutedStyle}>
                 Mum grafik, hareketli ortalama (MA) ve gelişmiş görünümler — TradingView benzeri
                 deneyim.
