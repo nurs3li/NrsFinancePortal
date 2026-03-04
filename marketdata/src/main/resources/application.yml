@@ -4,7 +4,8 @@ server:
 spring:
   application:
     name: market-data-service
-
+  jackson:
+    time-zone: Europe/Istanbul
   datasource:
     url: jdbc:postgresql://localhost:5432/nrs_market  # nrs_market yerine nrs_finance (docker-compose ile uyumlu)
     username: nrs

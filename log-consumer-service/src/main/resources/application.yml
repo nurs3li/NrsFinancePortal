@@ -4,6 +4,9 @@ spring:
   application:
     name: log-consumer-service
 
+  jackson:
+    time-zone: Europe/Istanbul
+
   kafka:
     bootstrap-servers: localhost:9092
 

@@ -4,7 +4,8 @@ server:
 spring:
   application:
     name: market-data-service
-
+  jackson:
+    time-zone: Europe/Istanbul
   datasource:
     url: jdbc:postgresql://nrs-postgres:5432/nrs_market
     username: nrs

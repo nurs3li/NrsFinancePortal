@@ -5,6 +5,9 @@ spring:
     activate:
       on-profile: docker
 
+  jackson:
+    time-zone: Europe/Istanbul
+
   kafka:
     bootstrap-servers: nrs-kafka:9093
     consumer:
