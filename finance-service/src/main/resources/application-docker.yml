@@ -4,6 +4,9 @@ spring:
   application:
     name: finance-service
 
+  jackson:
+    time-zone: Europe/Istanbul
+
   kafka:
     bootstrap-servers: nrs-kafka:9093
     producer:
