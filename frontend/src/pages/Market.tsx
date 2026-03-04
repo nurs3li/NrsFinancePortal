@@ -1,7 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { marketClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import {
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    Tooltip,
+    ResponsiveContainer,
+    CartesianGrid,
+    Legend,
+} from 'recharts';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 
@@ -16,57 +25,105 @@ type LatestPrice = {
     message?: string;
 };
 
-type HistoryPoint = {
-    buyPrice: number;
-    sellPrice: number;
-    timestamp: string;
+type TabId = 'doviz' | 'crypto' | 'metals' | 'funds';
+
+type IndicatorPoint = {
+    t: string;
+    value: number;
 };
 
-type TabId = 'doviz' | 'crypto' | 'metals' | 'funds';
+type IndicatorsResponse = {
+    type: string;
+    symbol: string;
+    days: number;
+    close: IndicatorPoint[];
+    ma: Record<string, IndicatorPoint[]>;
+    trend: {
+        direction: string;
+        slope: number;
+        normalizedReturn: number;
+        strength: number;
+    };
+};
+
+type CandlePoint = {
+    t: string;
+    o: number;
+    h: number;
+    l: number;
+    c: number;
+    v: number;
+};
+
+type BatchHistoryResponse = {
+    series: Record<string, CandlePoint[]>;
+};
 
 const DAYS_OPTIONS = [7, 14, 30];
 const COMPARE_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444'];
 
-const tooltipFiyatFormatter = ((value: number) => [value != null ? value.toLocaleString('tr-TR') : '-', 'Fiyat']) as never;
+const tooltipFiyatFormatter = ((value: number) => [
+    value != null ? value.toLocaleString('tr-TR') : '-',
+    'Fiyat',
+]) as never;
 
-function getHistoryUrl(tab: TabId): string {
+function getMarketType(tab: TabId): 'FX' | 'CRYPTO' | 'METALS' | 'FUNDS' {
     switch (tab) {
-        case 'doviz': return '/api/market/doviz/history';
-        case 'crypto': return '/api/market/crypto/history';
-        case 'metals': return '/api/market/metals/history';
-        case 'funds': return '/api/market/funds/history';
-        default: return '/api/market/doviz/history';
+        case 'doviz':
+            return 'FX';
+        case 'crypto':
+            return 'CRYPTO';
+        case 'metals':
+            return 'METALS';
+        case 'funds':
+            return 'FUNDS';
     }
 }
 
 export function Market() {
     const { tokens } = useTheme();
+
     const [activeTab, setActiveTab] = useState<TabId>('doviz');
     const [dovizLatest, setDovizLatest] = useState<Record<string, LatestPrice>>({});
     const [cryptoLatest, setCryptoLatest] = useState<Record<string, LatestPrice>>({});
     const [metalsLatest, setMetalsLatest] = useState<Record<string, LatestPrice>>({});
     const [fundsLatest, setFundsLatest] = useState<Record<string, LatestPrice>>({});
+
+    // Tek sembol grafik state (indicators)
     const [chartSymbol, setChartSymbol] = useState<string>('USDTRY');
     const [chartDays, setChartDays] = useState(7);
-    const [chartData, setChartData] = useState<HistoryPoint[]>([]);
+    const [chartClose, setChartClose] = useState<IndicatorPoint[]>([]);
+    const [chartMa, setChartMa] = useState<Record<string, IndicatorPoint[]>>({});
+    const [selectedMa, setSelectedMa] = useState<string[]>(['7', '30']);
     const [loading, setLoading] = useState(true);
     const [loadingChart, setLoadingChart] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Karşılaştırma state (batch)
     const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
     const [compareDays, setCompareDays] = useState(7);
     const [compareCategory, setCompareCategory] = useState<TabId>('doviz');
-    const [compareData, setCompareData] = useState<{ date: string; [key: string]: number | string }[]>([]);
+    const [compareData, setCompareData] = useState<{ date: string; [key: string]: number | string }[]>(
+        [],
+    );
     const [loadingCompare, setLoadingCompare] = useState(false);
 
     const refetchLatest = useCallback(() => {
         setLoading(true);
         setError(null);
         Promise.all([
-            marketClient.get<Record<string, LatestPrice>>('/api/market/doviz/latest').then((r) => r.data),
-            marketClient.get<Record<string, LatestPrice>>('/api/market/crypto/latest').then((r) => r.data),
-            marketClient.get<Record<string, LatestPrice>>('/api/market/metals/latest').then((r) => r.data),
-            marketClient.get<Record<string, LatestPrice>>('/api/market/funds/latest').then((r) => r.data),
+            marketClient
+                .get<Record<string, LatestPrice>>('/api/market/doviz/latest')
+                .then((r) => r.data),
+            marketClient
+                .get<Record<string, LatestPrice>>('/api/market/crypto/latest')
+                .then((r) => r.data),
+            marketClient
+                .get<Record<string, LatestPrice>>('/api/market/metals/latest')
+                .then((r) => r.data),
+            marketClient
+                .get<Record<string, LatestPrice>>('/api/market/funds/latest')
+                .then((r) => r.data),
         ])
             .then(([doviz, crypto, metals, funds]) => {
                 setDovizLatest(doviz ?? {});
@@ -85,20 +142,48 @@ export function Market() {
     useRefetchOnFocus(refetchLatest);
     usePolling(refetchLatest, 60_000);
 
-    const fetchChart = useCallback((tab: TabId, symbol: string, days: number) => {
+    const fetchIndicators = useCallback((tab: TabId, symbol: string, days: number) => {
+        const type = getMarketType(tab);
+        const allMa = [7, 30, 90];
+        const allowedMa = allMa.filter((w) => w <= days);       // days'ten büyükleri at
+        const maParam = allowedMa.join(',');                    // örn: days=30 → "7,30", days=7 → "7"
+
         return marketClient
-            .get<HistoryPoint[]>(getHistoryUrl(tab), { params: { symbol, days } })
-            .then((res) => Array.isArray(res.data) ? res.data : []);
+            .get<IndicatorsResponse>('/api/market/indicators', {
+                params: { type, symbol, days, ma: maParam },
+            })
+            .then((res) => res.data);
     }, []);
+
+    const fetchBatchHistory = useCallback(
+        (tab: TabId, symbols: string[], days: number) => {
+            const type = getMarketType(tab);
+            if (symbols.length < 2) {
+                return Promise.resolve<BatchHistoryResponse>({ series: {} });
+            }
+            return marketClient
+                .get<BatchHistoryResponse>('/api/market/history/batch', {
+                    params: { type, symbols: symbols.join(','), days },
+                })
+                .then((res) => res.data);
+        },
+        [],
+    );
 
     useEffect(() => {
         if (!chartSymbol) return;
         setLoadingChart(true);
-        fetchChart(activeTab, chartSymbol, chartDays)
-            .then(setChartData)
-            .catch(() => setChartData([]))
+        fetchIndicators(activeTab, chartSymbol, chartDays)
+            .then((data) => {
+                setChartClose(data.close ?? []);
+                setChartMa(data.ma ?? {});
+            })
+            .catch(() => {
+                setChartClose([]);
+                setChartMa({});
+            })
             .finally(() => setLoadingChart(false));
-    }, [activeTab, chartSymbol, chartDays, fetchChart]);
+    }, [activeTab, chartSymbol, chartDays, fetchIndicators]);
 
     const getSymbolsForTab = (tab: TabId): string[] => {
         const map: Record<TabId, Record<string, LatestPrice>> = {
@@ -109,7 +194,9 @@ export function Market() {
         };
         const data = map[tab];
         if (!data) return [];
-        return Object.keys(data).filter((k) => data[k] && typeof data[k] === 'object' && data[k].status !== 'NO_DATA');
+        return Object.keys(data).filter(
+            (k) => data[k] && typeof data[k] === 'object' && data[k].status !== 'NO_DATA',
+        );
     };
 
     const loadCompare = useCallback(() => {
@@ -118,57 +205,74 @@ export function Market() {
             return;
         }
         setLoadingCompare(true);
-        const url = getHistoryUrl(compareCategory);
-        Promise.all(
-            compareSymbols.slice(0, 4).map((sym) =>
-                marketClient.get<HistoryPoint[]>(url, { params: { symbol: sym, days: compareDays } })
-                    .then((r) => ({ symbol: sym, data: Array.isArray(r.data) ? r.data : [] }))
-            )
-        )
-            .then((results) => {
+        const symbols = compareSymbols.slice(0, 4);
+
+        fetchBatchHistory(compareCategory, symbols, compareDays)
+            .then((batch) => {
                 const byDate: Record<string, Record<string, number>> = {};
-                results.forEach(({ symbol, data }) => {
-                    data.forEach((p) => {
-                        const t = new Date(p.timestamp).toISOString().slice(0, 10);
-                        if (!byDate[t]) byDate[t] = {};
-                        byDate[t][symbol] = (Number(p.buyPrice) + Number(p.sellPrice)) / 2;
+
+                Object.entries(batch.series).forEach(([sym, candles]) => {
+                    candles.forEach((c) => {
+                        const d = new Date(c.t).toISOString().slice(0, 10);
+                        if (!byDate[d]) byDate[d] = {};
+                        byDate[d][sym] = Number(c.c);
                     });
                 });
+
                 const dates = Object.keys(byDate).sort();
                 if (dates.length === 0) {
                     setCompareData([]);
                     return;
                 }
+
                 const first: Record<string, number> = {};
-                compareSymbols.forEach((sym) => {
-                    const d = dates.find((d) => byDate[d][sym] != null);
+                symbols.forEach((sym) => {
+                    const d = dates.find((dt) => byDate[dt][sym] != null);
                     if (d != null) first[sym] = byDate[d][sym];
                 });
+
                 const out = dates.map((date) => {
                     const row: { date: string; [key: string]: number | string } = {
-                        date: new Date(date).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }),
+                        date: new Date(date).toLocaleDateString('tr-TR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                        }),
                     };
-                    compareSymbols.forEach((sym) => {
+                    symbols.forEach((sym) => {
                         const v = byDate[date][sym];
                         const base = first[sym];
-                        row[sym] = base && v != null ? Math.round((v / base) * 1000) / 10 : 0;
+                        row[sym] =
+                            base && v != null ? Math.round((v / base) * 1000) / 10 : 0;
                     });
                     return row;
                 });
+
                 setCompareData(out);
             })
             .catch(() => setCompareData([]))
             .finally(() => setLoadingCompare(false));
-    }, [compareSymbols, compareDays, compareCategory]);
+    }, [compareSymbols, compareDays, compareCategory, fetchBatchHistory]);
 
     useEffect(() => {
         if (compareSymbols.length >= 2) loadCompare();
         else setCompareData([]);
     }, [compareSymbols, compareDays, compareCategory, loadCompare]);
 
-    const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
-    const titleStyle: React.CSSProperties = { fontSize: '1.75rem', fontWeight: 700, marginBottom: 4 };
-    const mutedStyle: React.CSSProperties = { color: tokens.textMuted, fontSize: '0.875rem' };
+    const pageStyle: React.CSSProperties = {
+        padding: 24,
+        background: tokens.bg,
+        color: tokens.text,
+        minHeight: '100%',
+    };
+    const titleStyle: React.CSSProperties = {
+        fontSize: '1.75rem',
+        fontWeight: 700,
+        marginBottom: 4,
+    };
+    const mutedStyle: React.CSSProperties = {
+        color: tokens.textMuted,
+        fontSize: '0.875rem',
+    };
     const cardStyle: React.CSSProperties = {
         padding: 16,
         borderRadius: 12,
@@ -186,11 +290,16 @@ export function Market() {
 
     const getTableData = (): Record<string, LatestPrice> => {
         switch (activeTab) {
-            case 'doviz': return dovizLatest;
-            case 'crypto': return cryptoLatest;
-            case 'metals': return metalsLatest;
-            case 'funds': return fundsLatest;
-            default: return {};
+            case 'doviz':
+                return dovizLatest;
+            case 'crypto':
+                return cryptoLatest;
+            case 'metals':
+                return metalsLatest;
+            case 'funds':
+                return fundsLatest;
+            default:
+                return {};
         }
     };
 
@@ -202,9 +311,36 @@ export function Market() {
         return null;
     };
 
-    const tableEntries = Object.entries(getTableData()).filter(([, v]) => v && typeof v === 'object');
+    const tableEntries = Object.entries(getTableData()).filter(
+        ([, v]) => v && typeof v === 'object',
+    );
     const symbolsForTab = getSymbolsForTab(activeTab);
     const symbolsForCompare = getSymbolsForTab(compareCategory);
+
+    const baseChartData = chartClose.map((p) => ({
+        tarih: new Date(p.t).toLocaleDateString('tr-TR', {
+            day: '2-digit',
+            month: '2-digit',
+        }),
+        close: Number(p.value),
+    }));
+
+    const chartDataWithMa = baseChartData.map((row) => {
+        const entry: any = { ...row };
+        Object.entries(chartMa).forEach(([window, points]) => {
+            const point = points.find(
+                (pt) =>
+                    new Date(pt.t).toLocaleDateString('tr-TR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                    }) === row.tarih,
+            );
+            if (point) {
+                entry[`ma_${window}`] = Number(point.value);
+            }
+        });
+        return entry;
+    });
 
     if (error) {
         return (
@@ -218,9 +354,18 @@ export function Market() {
     return (
         <div style={pageStyle}>
             <h1 style={titleStyle}>Piyasa Verileri</h1>
-            <p style={mutedStyle}>Döviz, kripto, altın ve fon fiyatları — tüm veriler için grafik ve karşılaştırma.</p>
+            <p style={mutedStyle}>
+                Döviz, kripto, altın ve fon fiyatları — tüm veriler için grafik ve karşılaştırma.
+            </p>
 
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+            <div
+                style={{
+                    display: 'flex',
+                    gap: 8,
+                    marginBottom: 20,
+                    flexWrap: 'wrap',
+                }}
+            >
                 {tabs.map((t) => (
                     <button
                         key={t.id}
@@ -234,7 +379,8 @@ export function Market() {
                             padding: '8px 16px',
                             fontSize: '0.875rem',
                             fontWeight: activeTab === t.id ? 600 : 500,
-                            background: activeTab === t.id ? tokens.accent : tokens.bgCard,
+                            background:
+                                activeTab === t.id ? tokens.accent : tokens.bgCard,
                             color: activeTab === t.id ? '#fff' : tokens.text,
                             border: `1px solid ${tokens.border}`,
                             borderRadius: 8,
@@ -250,36 +396,138 @@ export function Market() {
                 <p style={mutedStyle}>Yükleniyor...</p>
             ) : (
                 <>
+                    {/* Güncel fiyatlar tablosu */}
                     <div style={cardStyle}>
-                        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Güncel Fiyatlar</h2>
+                        <h2
+                            style={{
+                                fontSize: '1rem',
+                                fontWeight: 600,
+                                marginBottom: 12,
+                            }}
+                        >
+                            Güncel Fiyatlar
+                        </h2>
                         {tableEntries.length === 0 ? (
                             <p style={mutedStyle}>Bu kategoride veri yok.</p>
                         ) : (
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9375rem' }}>
+                            <table
+                                style={{
+                                    width: '100%',
+                                    borderCollapse: 'collapse',
+                                    fontSize: '0.9375rem',
+                                }}
+                            >
                                 <thead>
-                                <tr style={{ borderBottom: `2px solid ${tokens.border}` }}>
-                                    <th style={{ textAlign: 'left', padding: 12 }}>Sembol</th>
-                                    <th style={{ textAlign: 'right', padding: 12 }}>Alış</th>
-                                    <th style={{ textAlign: 'right', padding: 12 }}>Satış</th>
-                                    <th style={{ textAlign: 'left', padding: 12 }}>Kaynak / Tarih</th>
+                                <tr
+                                    style={{
+                                        borderBottom: `2px solid ${tokens.border}`,
+                                    }}
+                                >
+                                    <th
+                                        style={{
+                                            textAlign: 'left',
+                                            padding: 12,
+                                        }}
+                                    >
+                                        Sembol
+                                    </th>
+                                    <th
+                                        style={{
+                                            textAlign: 'right',
+                                            padding: 12,
+                                        }}
+                                    >
+                                        Alış
+                                    </th>
+                                    <th
+                                        style={{
+                                            textAlign: 'right',
+                                            padding: 12,
+                                        }}
+                                    >
+                                        Satış
+                                    </th>
+                                    <th
+                                        style={{
+                                            textAlign: 'left',
+                                            padding: 12,
+                                        }}
+                                    >
+                                        Kaynak / Tarih
+                                    </th>
                                 </tr>
                                 </thead>
                                 <tbody>
                                 {tableEntries.map(([sym, row]) => {
-                                    const buy = row.buyPrice != null ? Number(row.buyPrice) : getPrice(row);
-                                    const sell = row.sellPrice != null ? Number(row.sellPrice) : null;
+                                    const buy =
+                                        row.buyPrice != null
+                                            ? Number(row.buyPrice)
+                                            : getPrice(row);
+                                    const sell =
+                                        row.sellPrice != null
+                                            ? Number(row.sellPrice)
+                                            : null;
                                     const noData = row.status === 'NO_DATA';
                                     return (
-                                        <tr key={sym} style={{ borderBottom: `1px solid ${tokens.border}` }}>
-                                            <td style={{ padding: 12 }}>{row.symbol ?? sym}</td>
-                                            <td style={{ padding: 12, textAlign: 'right' }}>
-                                                {noData ? '-' : (buy != null ? buy.toLocaleString('tr-TR') : '-')}
+                                        <tr
+                                            key={sym}
+                                            style={{
+                                                borderBottom: `1px solid ${tokens.border}`,
+                                            }}
+                                        >
+                                            <td style={{ padding: 12 }}>
+                                                {row.symbol ?? sym}
                                             </td>
-                                            <td style={{ padding: 12, textAlign: 'right' }}>
-                                                {noData ? '-' : (sell != null ? sell.toLocaleString('tr-TR') : buy != null ? buy.toLocaleString('tr-TR') : '-')}
+                                            <td
+                                                style={{
+                                                    padding: 12,
+                                                    textAlign: 'right',
+                                                }}
+                                            >
+                                                {noData
+                                                    ? '-'
+                                                    : buy != null
+                                                        ? buy.toLocaleString(
+                                                            'tr-TR',
+                                                        )
+                                                        : '-'}
                                             </td>
-                                            <td style={{ padding: 12, color: tokens.textMuted, fontSize: '0.8125rem' }}>
-                                                {noData ? (row.message ?? '-') : (row.source ?? '') + (row.timestamp ? ' · ' + new Date(row.timestamp).toLocaleString('tr-TR') : '')}
+                                            <td
+                                                style={{
+                                                    padding: 12,
+                                                    textAlign: 'right',
+                                                }}
+                                            >
+                                                {noData
+                                                    ? '-'
+                                                    : sell != null
+                                                        ? sell.toLocaleString(
+                                                            'tr-TR',
+                                                        )
+                                                        : buy != null
+                                                            ? buy.toLocaleString(
+                                                                'tr-TR',
+                                                            )
+                                                            : '-'}
+                                            </td>
+                                            <td
+                                                style={{
+                                                    padding: 12,
+                                                    color: tokens.textMuted,
+                                                    fontSize: '0.8125rem',
+                                                }}
+                                            >
+                                                {noData
+                                                    ? row.message ?? '-'
+                                                    : (row.source ?? '') +
+                                                    (row.timestamp
+                                                        ? ' · ' +
+                                                        new Date(
+                                                            row.timestamp,
+                                                        ).toLocaleString(
+                                                            'tr-TR',
+                                                        )
+                                                        : '')}
                                             </td>
                                         </tr>
                                     );
@@ -289,23 +537,52 @@ export function Market() {
                         )}
                     </div>
 
+                    {/* Tek sembol grafik (close + MA) */}
                     <div style={cardStyle}>
-                        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>
+                        <h2
+                            style={{
+                                fontSize: '1rem',
+                                fontWeight: 600,
+                                marginBottom: 12,
+                            }}
+                        >
                             {activeTab === 'doviz' && 'Döviz grafiği'}
                             {activeTab === 'crypto' && 'Kripto grafiği'}
                             {activeTab === 'metals' && 'Altın grafiği'}
                             {activeTab === 'funds' && 'Fon grafiği'}
                         </h2>
-                        <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                        <div
+                            style={{
+                                marginBottom: 12,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 16,
+                                flexWrap: 'wrap',
+                            }}
+                        >
                             <label style={{ fontSize: '0.875rem' }}>
                                 Sembol:
                                 <select
                                     value={chartSymbol}
-                                    onChange={(e) => setChartSymbol(e.target.value)}
-                                    style={{ marginLeft: 8, padding: '6px 10px', borderRadius: 8, border: `1px solid ${tokens.border}`, background: (tokens as { inputBg?: string }).inputBg ?? tokens.bgCard, color: tokens.text, fontSize: '0.875rem' }}
+                                    onChange={(e) =>
+                                        setChartSymbol(e.target.value)
+                                    }
+                                    style={{
+                                        marginLeft: 8,
+                                        padding: '6px 10px',
+                                        borderRadius: 8,
+                                        border: `1px solid ${tokens.border}`,
+                                        background:
+                                            (tokens as { inputBg?: string })
+                                                .inputBg ?? tokens.bgCard,
+                                        color: tokens.text,
+                                        fontSize: '0.875rem',
+                                    }}
                                 >
                                     {symbolsForTab.map((s) => (
-                                        <option key={s} value={s}>{s}</option>
+                                        <option key={s} value={s}>
+                                            {s}
+                                        </option>
                                     ))}
                                 </select>
                             </label>
@@ -313,76 +590,285 @@ export function Market() {
                                 Dönem:
                                 <select
                                     value={chartDays}
-                                    onChange={(e) => setChartDays(Number(e.target.value))}
-                                    style={{ marginLeft: 8, padding: '6px 10px', borderRadius: 8, border: `1px solid ${tokens.border}`, background: (tokens as { inputBg?: string }).inputBg ?? tokens.bgCard, color: tokens.text, fontSize: '0.875rem' }}
+                                    onChange={(e) =>
+                                        setChartDays(Number(e.target.value))
+                                    }
+                                    style={{
+                                        marginLeft: 8,
+                                        padding: '6px 10px',
+                                        borderRadius: 8,
+                                        border: `1px solid ${tokens.border}`,
+                                        background:
+                                            (tokens as { inputBg?: string })
+                                                .inputBg ?? tokens.bgCard,
+                                        color: tokens.text,
+                                        fontSize: '0.875rem',
+                                    }}
                                 >
                                     {DAYS_OPTIONS.map((d) => (
-                                        <option key={d} value={d}>Son {d} gün</option>
+                                        <option key={d} value={d}>
+                                            Son {d} gün
+                                        </option>
                                     ))}
                                 </select>
                             </label>
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    flexWrap: 'wrap',
+                                    fontSize: '0.8125rem',
+                                }}
+                            >
+                                <span>MA:</span>
+                                {['7', '30', '90'].map((ma) => (
+                                    <label
+                                        key={ma}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                        }}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedMa.includes(ma)}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedMa((prev) =>
+                                                        prev.includes(ma)
+                                                            ? prev
+                                                            : [...prev, ma],
+                                                    );
+                                                } else {
+                                                    setSelectedMa((prev) =>
+                                                        prev.filter(
+                                                            (m) => m !== ma,
+                                                        ),
+                                                    );
+                                                }
+                                            }}
+                                        />
+                                        {ma}
+                                    </label>
+                                ))}
+                            </div>
                         </div>
                         {loadingChart ? (
                             <p style={mutedStyle}>Grafik yükleniyor...</p>
-                        ) : chartData.length === 0 ? (
-                            <p style={mutedStyle}>Bu sembol için geçmiş veri yok.</p>
+                        ) : chartDataWithMa.length === 0 ? (
+                            <p style={mutedStyle}>
+                                Bu sembol için geçmiş veri yok.
+                            </p>
                         ) : (
                             <div style={{ width: '100%', height: 280 }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart
-                                        data={chartData.map((p) => ({
-                                            tarih: new Date(p.timestamp).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }),
-                                            fiyat: (Number(p.buyPrice) + Number(p.sellPrice)) / 2,
-                                        }))}
-                                        margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                                        data={chartDataWithMa}
+                                        margin={{
+                                            top: 8,
+                                            right: 16,
+                                            left: 8,
+                                            bottom: 8,
+                                        }}
                                     >
-                                        <CartesianGrid strokeDasharray="3 3" stroke={tokens.border} />
-                                        <XAxis dataKey="tarih" tick={{ fill: tokens.textMuted, fontSize: 11 }} />
-                                        <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} tickFormatter={(v) => v.toLocaleString('tr-TR')} />
-                                        <Tooltip contentStyle={{ background: tokens.bgCard, border: `1px solid ${tokens.border}`, borderRadius: 8 }} formatter={tooltipFiyatFormatter} />
-                                        <Line type="monotone" dataKey="fiyat" name="Fiyat" stroke={tokens.accent} strokeWidth={2} dot={{ r: 3 }} />
+                                        <CartesianGrid
+                                            strokeDasharray="3 3"
+                                            stroke={tokens.border}
+                                        />
+                                        <XAxis
+                                            dataKey="tarih"
+                                            tick={{
+                                                fill: tokens.textMuted,
+                                                fontSize: 11,
+                                            }}
+                                        />
+                                        <YAxis
+                                            tick={{
+                                                fill: tokens.textMuted,
+                                                fontSize: 11,
+                                            }}
+                                            tickFormatter={(v) =>
+                                                v.toLocaleString('tr-TR')
+                                            }
+                                        />
+                                        <Tooltip
+                                            contentStyle={{
+                                                background: tokens.bgCard,
+                                                border: `1px solid ${tokens.border}`,
+                                                borderRadius: 8,
+                                            }}
+                                            formatter={tooltipFiyatFormatter}
+                                        />
+                                        <Legend />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="close"
+                                            name="Fiyat"
+                                            stroke={tokens.accent}
+                                            strokeWidth={2}
+                                            dot={{ r: 3 }}
+                                        />
+                                        {selectedMa.includes('7') &&
+                                            chartMa['7'] && (
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="ma_7"
+                                                    name="MA 7"
+                                                    stroke="#22c55e"
+                                                    strokeWidth={1.5}
+                                                    dot={false}
+                                                />
+                                            )}
+                                        {selectedMa.includes('30') &&
+                                            chartMa['30'] &&
+                                            chartMa['30'].length > 0 && (
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="ma_30"
+                                                    name="MA 30"
+                                                    stroke="#eab308"
+                                                    strokeWidth={1.5}
+                                                    dot={false}
+                                                />
+                                            )}
+                                        {selectedMa.includes('90') &&
+                                            chartMa['90'] &&
+                                            chartMa['90'].length > 0 && (
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="ma_90"
+                                                    name="MA 90"
+                                                    stroke="#ef4444"
+                                                    strokeWidth={1.5}
+                                                    dot={false}
+                                                />
+                                            )}
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
                         )}
                     </div>
 
+                    {/* Karşılaştırma grafiği (batch, normalize base=100) */}
                     <div style={cardStyle}>
-                        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>Karşılaştırma (performans, baz 100)</h2>
-                        <p style={{ ...mutedStyle, marginBottom: 12 }}>Aynı kategoriden 2–4 sembol seçin; ilk gün 100 kabul edilir.</p>
-                        <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                        <h2
+                            style={{
+                                fontSize: '1rem',
+                                fontWeight: 600,
+                                marginBottom: 8,
+                            }}
+                        >
+                            Karşılaştırma (performans, baz 100)
+                        </h2>
+                        <p
+                            style={{
+                                ...mutedStyle,
+                                marginBottom: 12,
+                            }}
+                        >
+                            Aynı kategoriden 2–4 sembol seçin; ilk gün 100 kabul edilir.
+                        </p>
+                        <div
+                            style={{
+                                marginBottom: 12,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 16,
+                                flexWrap: 'wrap',
+                            }}
+                        >
                             <label style={{ fontSize: '0.875rem' }}>
                                 Kategori:
                                 <select
                                     value={compareCategory}
-                                    onChange={(e) => { setCompareCategory(e.target.value as TabId); setCompareSymbols([]); }}
-                                    style={{ marginLeft: 8, padding: '6px 10px', borderRadius: 8, border: `1px solid ${tokens.border}`, background: (tokens as { inputBg?: string }).inputBg ?? tokens.bgCard, color: tokens.text }}
+                                    onChange={(e) => {
+                                        setCompareCategory(e.target.value as TabId);
+                                        setCompareSymbols([]);
+                                    }}
+                                    style={{
+                                        marginLeft: 8,
+                                        padding: '6px 10px',
+                                        borderRadius: 8,
+                                        border: `1px solid ${tokens.border}`,
+                                        background:
+                                            (tokens as { inputBg?: string })
+                                                .inputBg ?? tokens.bgCard,
+                                        color: tokens.text,
+                                    }}
                                 >
                                     {tabs.map((t) => (
-                                        <option key={t.id} value={t.id}>{t.label}</option>
+                                        <option key={t.id} value={t.id}>
+                                            {t.label}
+                                        </option>
                                     ))}
                                 </select>
                             </label>
                             <label style={{ fontSize: '0.875rem' }}>
                                 Dönem:
-                                <select value={compareDays} onChange={(e) => setCompareDays(Number(e.target.value))} style={{ marginLeft: 8, padding: '6px 10px', borderRadius: 8, border: `1px solid ${tokens.border}`, background: (tokens as { inputBg?: string }).inputBg ?? tokens.bgCard, color: tokens.text }}>
+                                <select
+                                    value={compareDays}
+                                    onChange={(e) =>
+                                        setCompareDays(Number(e.target.value))
+                                    }
+                                    style={{
+                                        marginLeft: 8,
+                                        padding: '6px 10px',
+                                        borderRadius: 8,
+                                        border: `1px solid ${tokens.border}`,
+                                        background:
+                                            (tokens as { inputBg?: string })
+                                                .inputBg ?? tokens.bgCard,
+                                        color: tokens.text,
+                                    }}
+                                >
                                     {DAYS_OPTIONS.map((d) => (
-                                        <option key={d} value={d}>Son {d} gün</option>
+                                        <option key={d} value={d}>
+                                            Son {d} gün
+                                        </option>
                                     ))}
                                 </select>
                             </label>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: '0.875rem' }}>Semboller:</span>
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    flexWrap: 'wrap',
+                                }}
+                            >
+                                <span style={{ fontSize: '0.875rem' }}>
+                                    Semboller:
+                                </span>
                                 {symbolsForCompare.slice(0, 12).map((sym) => (
-                                    <label key={sym} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.8125rem' }}>
+                                    <label
+                                        key={sym}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                            fontSize: '0.8125rem',
+                                        }}
+                                    >
                                         <input
                                             type="checkbox"
-                                            checked={compareSymbols.includes(sym)}
+                                            checked={compareSymbols.includes(
+                                                sym,
+                                            )}
                                             onChange={(e) => {
                                                 if (e.target.checked) {
-                                                    setCompareSymbols((prev) => (prev.length >= 4 ? prev : [...prev, sym]));
+                                                    setCompareSymbols((prev) =>
+                                                        prev.length >= 4
+                                                            ? prev
+                                                            : [...prev, sym],
+                                                    );
                                                 } else {
-                                                    setCompareSymbols((prev) => prev.filter((s) => s !== sym));
+                                                    setCompareSymbols((prev) =>
+                                                        prev.filter(
+                                                            (s) => s !== sym,
+                                                        ),
+                                                    );
                                                 }
                                             }}
                                         />
@@ -398,15 +884,59 @@ export function Market() {
                         ) : (
                             <div style={{ width: '100%', height: 300 }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={compareData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke={tokens.border} />
-                                        <XAxis dataKey="date" tick={{ fill: tokens.textMuted, fontSize: 11 }} />
-                                        <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} tickFormatter={(v) => String(v)} />
-                                        <Tooltip contentStyle={{ background: tokens.bgCard, border: `1px solid ${tokens.border}`, borderRadius: 8 }} />
+                                    <LineChart
+                                        data={compareData}
+                                        margin={{
+                                            top: 8,
+                                            right: 16,
+                                            left: 8,
+                                            bottom: 8,
+                                        }}
+                                    >
+                                        <CartesianGrid
+                                            strokeDasharray="3 3"
+                                            stroke={tokens.border}
+                                        />
+                                        <XAxis
+                                            dataKey="date"
+                                            tick={{
+                                                fill: tokens.textMuted,
+                                                fontSize: 11,
+                                            }}
+                                        />
+                                        <YAxis
+                                            tick={{
+                                                fill: tokens.textMuted,
+                                                fontSize: 11,
+                                            }}
+                                            tickFormatter={(v) => String(v)}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{
+                                                background: tokens.bgCard,
+                                                border: `1px solid ${tokens.border}`,
+                                                borderRadius: 8,
+                                            }}
+                                        />
                                         <Legend />
-                                        {compareSymbols.slice(0, 4).map((sym, i) => (
-                                            <Line key={sym} type="monotone" dataKey={sym} name={sym} stroke={COMPARE_COLORS[i % COMPARE_COLORS.length]} strokeWidth={2} dot={false} />
-                                        ))}
+                                        {compareSymbols
+                                            .slice(0, 4)
+                                            .map((sym, i) => (
+                                                <Line
+                                                    key={sym}
+                                                    type="monotone"
+                                                    dataKey={sym}
+                                                    name={sym}
+                                                    stroke={
+                                                        COMPARE_COLORS[
+                                                        i %
+                                                        COMPARE_COLORS.length
+                                                            ]
+                                                    }
+                                                    strokeWidth={2}
+                                                    dot={false}
+                                                />
+                                            ))}
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
