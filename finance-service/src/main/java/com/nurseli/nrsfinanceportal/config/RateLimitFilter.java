@@ -46,6 +46,25 @@ public class RateLimitFilter implements Filter {
         }
 
         String path = httpRequest.getRequestURI();
+        String method = httpRequest.getMethod();
+
+        // 1) Dashboard özet endpoint'ini rate-limit dışı bırak
+        if (path.equals("/api/dashboard/summary")) {
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // 2) FM / Admin için sadece "okuma" GET isteklerini rate-limit dışı bırak
+        if ("GET".equals(method)
+                && (path.startsWith("/api/tasks")                 // /api/tasks/me, /api/tasks/{id}
+                || path.startsWith("/api/admin/tasks")        // admin görev listesi/detayı
+                || path.startsWith("/api/admin/suspicious")   // şüpheli olay listeleri
+                || path.startsWith("/api/admin/accounts"))) { // admin hesap listesi
+            chain.doFilter(request, response);
+            return;
+        }
+
+        // 3) /api dışındaki istekleri zaten sınırlamıyoruz
         if (!path.startsWith("/api/")) {
             chain.doFilter(request, response);
             return;

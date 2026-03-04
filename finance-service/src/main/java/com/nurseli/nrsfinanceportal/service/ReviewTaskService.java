@@ -46,16 +46,27 @@ public class ReviewTaskService {
     /**
      * Kullanıcının bir hesabını döner: önce CASH, yoksa herhangi bir hesap.
      */
+    // ReviewTaskService içinde
+    /**
+     * Kullanıcının bir hesabını döner: önce CASH, yoksa herhangi bir hesap.
+     */
     private java.util.Optional<Account> findAccountForUser(Long userId) {
         if (userId == null) return java.util.Optional.empty();
-        return accountRepository.findByUserIdAndType(userId, AccountType.CASH)
-                .or(() -> userRepository.findById(userId)
-                        .flatMap(u -> {
-                            List<Account> accounts = accountRepository.findByUser(u);
-                            return accounts.isEmpty()
-                                    ? java.util.Optional.<Account>empty()
-                                    : java.util.Optional.of(accounts.get(0));
-                        }));
+
+        // Önce CASH hesaplardan birini al (birden fazlaysa ilkini kullan)
+        List<Account> cashAccounts = accountRepository.findByUserIdAndType(userId, AccountType.CASH);
+        if (!cashAccounts.isEmpty()) {
+            return java.util.Optional.of(cashAccounts.get(0));
+        }
+
+        // CASH yoksa, kullanıcının herhangi bir hesabını al (ilkini kullan)
+        return userRepository.findById(userId)
+                .flatMap(u -> {
+                    List<Account> accounts = accountRepository.findByUser(u);
+                    return accounts.isEmpty()
+                            ? java.util.Optional.<Account>empty()
+                            : java.util.Optional.of(accounts.get(0));
+                });
     }
     @Transactional
     public void createFromSuspiciousEvent(Long suspiciousEventId) {
