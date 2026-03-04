@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -32,11 +33,11 @@ public class DashboardSummaryService {
         /* ======================
            2️⃣ Demo account & balance – yoksa boş özet (ADMIN/FINANCE_MANAGER vb.)
            ====================== */
-        var demoAccountOpt = accountRepository.findByUserIdAndType(userId, AccountType.DEMO);
-        if (demoAccountOpt.isEmpty()) {
+        List<Account> demoAccounts = accountRepository.findByUserIdAndType(userId, AccountType.DEMO);
+        if (demoAccounts.isEmpty()) {
             return emptySummary();
         }
-        Account demoAccount = demoAccountOpt.get();
+        Account demoAccount = demoAccounts.get(0);
 
         var balanceOpt = balanceRepository.findByAccount(demoAccount);
         if (balanceOpt.isEmpty()) {
