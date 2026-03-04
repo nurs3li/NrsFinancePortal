@@ -11,10 +11,12 @@ import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.repository.MarketPriceBucketView;
 import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import com.nurseli.marketdata.api.dto.IndicatorPointResponse;
 import com.nurseli.marketdata.api.dto.MarketIndicatorsResponse;
 import com.nurseli.marketdata.api.dto.TrendResponse;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -96,8 +98,13 @@ public class MarketPriceQueryService {
     }
 
     // =========================
-    // NEW: BATCH HISTORY (OHLC)
+    // NEW: BATCH HISTORY (OHLC) + CACHE
     // =========================
+    @Cacheable(
+            cacheNames = "market:batch",
+            key = "T(String).format('%s|%s|%d', #rawType, #rawSymbols != null ? #rawSymbols.toString() : '', #days)",
+            condition = "#days <= 14" // kısa aralık (7/14 gün) için cache
+    )
     public BatchHistoryResponse getBatchHistory(String rawType, List<String> rawSymbols, int days) {
         MarketType type = MarketType.from(rawType);
         validateDays(days);
@@ -127,7 +134,7 @@ public class MarketPriceQueryService {
 
     private List<String> normalizeAndValidateSymbols(MarketType type, List<String> rawSymbols) {
         if (rawSymbols == null || rawSymbols.isEmpty()) {
-            throw new InvalidRequestException("symbols zorunludur. En az 2 sembol gönderin.");
+            throw new InvalidRequestException("symbols zorunludur. En az 1 sembol gönderin.");
         }
 
         List<String> symbols = rawSymbols.stream()
@@ -138,9 +145,11 @@ public class MarketPriceQueryService {
                 .distinct()
                 .toList();
 
-        if (symbols.size() < 2) {
-            throw new InvalidRequestException("Batch compare için en az 2 sembol gerekli.");
-        }
+        // 🔴 ESKİ KURAL: Batch compare için en az 2 sembol
+        // if (symbols.size() < 2) {
+        //     throw new InvalidRequestException("Batch compare için en az 2 sembol gerekli.");
+        // }
+
         if (symbols.size() > MAX_SYMBOLS) {
             throw new InvalidRequestException("En fazla " + MAX_SYMBOLS + " sembol gönderebilirsiniz.");
         }
@@ -212,6 +221,15 @@ public class MarketPriceQueryService {
                 .add(row.getSellPrice())
                 .divide(BigDecimal.valueOf(2), 6, RoundingMode.HALF_UP);
     }
+
+    // =========================
+    // NEW: INDICATORS (MA + trend) + CACHE
+    // =========================
+    @Cacheable(
+            cacheNames = "market:indicators",
+            key = "#rawType + '|' + #rawSymbol + '|' + #days + '|' + (#rawMa != null ? #rawMa : '')",
+            condition = "#days <= 14" // kısa aralık istekleri için cache
+    )
     public MarketIndicatorsResponse getIndicators(String rawType, String rawSymbol, int days, String rawMa) {
         MarketType type = MarketType.from(rawType);
         validateDays(days);
