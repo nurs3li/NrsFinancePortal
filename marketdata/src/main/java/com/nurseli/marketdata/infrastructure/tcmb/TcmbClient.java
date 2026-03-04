@@ -14,6 +14,8 @@ import javax.xml.xpath.XPathFactory;
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,10 +29,31 @@ public class TcmbClient {
     private static final List<String> SUPPORTED =
             List.of("USD", "EUR", "GBP");
 
-    public List<TcmbRate> fetchRates() {
+    private static final DateTimeFormatter YYYYMM = DateTimeFormatter.ofPattern("yyyyMM");
+    private static final DateTimeFormatter DDMMYYYY = DateTimeFormatter.ofPattern("ddMMyyyy");
 
-        RestTemplate restTemplate = new RestTemplate();
+    /**
+     * Güncel TCMB kur XML'inden (config'teki url) oranları çeker.
+     */
+    public List<TcmbRate> fetchRates() {
         String url = dataSourcesProperties.getTcmb().getUrl();
+        return fetchRatesFromUrl(url);
+    }
+
+    /**
+     * Belirli bir tarih için TCMB günlük kur XML'ini okuyup oranları döner.
+     * TCMB'nin standart pattern'i kullanılıyor:
+     * https://www.tcmb.gov.tr/kurlar/{yyyyMM}/{ddMMyyyy}.xml
+     */
+    public List<TcmbRate> fetchRatesForDate(LocalDate date) {
+        String yyyyMM = date.format(YYYYMM);
+        String ddMMyyyy = date.format(DDMMYYYY);
+        String url = "https://www.tcmb.gov.tr/kurlar/" + yyyyMM + "/" + ddMMyyyy + ".xml";
+        return fetchRatesFromUrl(url);
+    }
+
+    private List<TcmbRate> fetchRatesFromUrl(String url) {
+        RestTemplate restTemplate = new RestTemplate();
         String xml = restTemplate.getForObject(url, String.class);
 
         List<TcmbRate> result = new ArrayList<>();

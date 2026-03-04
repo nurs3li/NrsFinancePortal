@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { marketClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import {
@@ -82,6 +83,7 @@ function getMarketType(tab: TabId): 'FX' | 'CRYPTO' | 'METALS' | 'FUNDS' {
 
 export function Market() {
     const { tokens } = useTheme();
+    const navigate = useNavigate();
 
     const [activeTab, setActiveTab] = useState<TabId>('doviz');
     const [dovizLatest, setDovizLatest] = useState<Record<string, LatestPrice>>({});
@@ -145,8 +147,8 @@ export function Market() {
     const fetchIndicators = useCallback((tab: TabId, symbol: string, days: number) => {
         const type = getMarketType(tab);
         const allMa = [7, 30, 90];
-        const allowedMa = allMa.filter((w) => w <= days);       // days'ten büyükleri at
-        const maParam = allowedMa.join(',');                    // örn: days=30 → "7,30", days=7 → "7"
+        const allowedMa = allMa.filter((w) => w <= days); // days'ten büyükleri at
+        const maParam = allowedMa.join(','); // örn: days=30 → "7,30", days=7 → "7"
 
         return marketClient
             .get<IndicatorsResponse>('/api/market/indicators', {
@@ -175,7 +177,7 @@ export function Market() {
         setLoadingChart(true);
         fetchIndicators(activeTab, chartSymbol, chartDays)
             .then((data) => {
-                setChartClose(data.close ?? []);
+                setChartClose(data.close ?? {});
                 setChartMa(data.ma ?? {});
             })
             .catch(() => {
@@ -210,7 +212,6 @@ export function Market() {
         fetchBatchHistory(compareCategory, symbols, compareDays)
             .then((batch) => {
                 const byDate: Record<string, Record<string, number>> = {};
-
                 Object.entries(batch.series).forEach(([sym, candles]) => {
                     candles.forEach((c) => {
                         const d = new Date(c.t).toISOString().slice(0, 10);
@@ -342,6 +343,15 @@ export function Market() {
         return entry;
     });
 
+    const handleGoToAdvanced = () => {
+        if (!chartSymbol) return;
+        const type = getMarketType(activeTab);
+        const url = `/market/advanced?type=${type}&symbol=${encodeURIComponent(
+            chartSymbol,
+        )}&days=${chartDays}`;
+        navigate(url);
+    };
+
     if (error) {
         return (
             <div style={pageStyle}>
@@ -355,7 +365,7 @@ export function Market() {
         <div style={pageStyle}>
             <h1 style={titleStyle}>Piyasa Verileri</h1>
             <p style={mutedStyle}>
-                Döviz, kripto, altın ve fon fiyatları — tüm veriler için grafik ve karşılaştırma.
+                Döviz, kripto, altın ve fon fiyatları — özet tablosu ve basit grafikler.
             </p>
 
             <div
@@ -537,20 +547,43 @@ export function Market() {
                         )}
                     </div>
 
-                    {/* Tek sembol grafik (close + MA) */}
+                    {/* Tek sembol grafik (close + MA) + Detaylı grafik butonu */}
                     <div style={cardStyle}>
-                        <h2
+                        <div
                             style={{
-                                fontSize: '1rem',
-                                fontWeight: 600,
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
                                 marginBottom: 12,
                             }}
                         >
-                            {activeTab === 'doviz' && 'Döviz grafiği'}
-                            {activeTab === 'crypto' && 'Kripto grafiği'}
-                            {activeTab === 'metals' && 'Altın grafiği'}
-                            {activeTab === 'funds' && 'Fon grafiği'}
-                        </h2>
+                            <h2
+                                style={{
+                                    fontSize: '1rem',
+                                    fontWeight: 600,
+                                }}
+                            >
+                                {activeTab === 'doviz' && 'Döviz grafiği'}
+                                {activeTab === 'crypto' && 'Kripto grafiği'}
+                                {activeTab === 'metals' && 'Altın grafiği'}
+                                {activeTab === 'funds' && 'Fon grafiği'}
+                            </h2>
+                            <button
+                                type="button"
+                                onClick={handleGoToAdvanced}
+                                style={{
+                                    padding: '6px 12px',
+                                    fontSize: '0.8rem',
+                                    borderRadius: 999,
+                                    border: `1px solid ${tokens.border}`,
+                                    background: tokens.bgCard,
+                                    color: tokens.accent,
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                Detaylı mum grafik →
+                            </button>
+                        </div>
                         <div
                             style={{
                                 marginBottom: 12,
@@ -768,7 +801,8 @@ export function Market() {
                                 marginBottom: 12,
                             }}
                         >
-                            Aynı kategoriden 2–4 sembol seçin; ilk gün 100 kabul edilir.
+                            Aynı kategoriden 2–4 sembol seçin; ilk gün 100 kabul
+                            edilir.
                         </p>
                         <div
                             style={{
@@ -784,7 +818,9 @@ export function Market() {
                                 <select
                                     value={compareCategory}
                                     onChange={(e) => {
-                                        setCompareCategory(e.target.value as TabId);
+                                        setCompareCategory(
+                                            e.target.value as TabId,
+                                        );
                                         setCompareSymbols([]);
                                     }}
                                     style={{
@@ -810,7 +846,9 @@ export function Market() {
                                 <select
                                     value={compareDays}
                                     onChange={(e) =>
-                                        setCompareDays(Number(e.target.value))
+                                        setCompareDays(
+                                            Number(e.target.value),
+                                        )
                                     }
                                     style={{
                                         marginLeft: 8,
@@ -866,7 +904,8 @@ export function Market() {
                                                 } else {
                                                     setCompareSymbols((prev) =>
                                                         prev.filter(
-                                                            (s) => s !== sym,
+                                                            (s) =>
+                                                                s !== sym,
                                                         ),
                                                     );
                                                 }
@@ -878,7 +917,9 @@ export function Market() {
                             </div>
                         </div>
                         {loadingCompare ? (
-                            <p style={mutedStyle}>Karşılaştırma yükleniyor...</p>
+                            <p style={mutedStyle}>
+                                Karşılaştırma yükleniyor...
+                            </p>
                         ) : compareData.length === 0 ? (
                             <p style={mutedStyle}>En az 2 sembol seçin.</p>
                         ) : (

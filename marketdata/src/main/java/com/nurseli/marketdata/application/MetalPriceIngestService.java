@@ -5,9 +5,10 @@ import com.nurseli.marketdata.infrastructure.coingecko.CoinGeckoMetalClient;
 import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.nurseli.marketdata.application.SpreadCalculator;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
@@ -24,6 +25,10 @@ public class MetalPriceIngestService {
     private final MarketPriceHistoryRepository repository;
 
     @Transactional
+    @CacheEvict(
+            cacheNames = {"market:batch", "market:indicators"},
+            allEntries = true
+    )
     public void fetchAndSaveGramGold() {
 
         BigDecimal ouncePriceTry =

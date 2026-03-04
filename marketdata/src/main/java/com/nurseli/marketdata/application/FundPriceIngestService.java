@@ -6,8 +6,9 @@ import com.nurseli.marketdata.infrastructure.tefas.TefasFundPriceDto;
 import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
-import com.nurseli.marketdata.application.SpreadCalculator;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -24,6 +25,10 @@ public class FundPriceIngestService {
      * Bu method ASLA exception fırlatmaz.
      * External data app’i asla düşürmez.
      */
+    @CacheEvict(
+            cacheNames = {"market:batch", "market:indicators"},
+            allEntries = true
+    )
     public void ingestForDate(String fundCode, LocalDate date) {
 
         try {
