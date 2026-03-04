@@ -55,9 +55,26 @@ public interface MarketPriceHistoryRepository
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
     );
+
     List<MarketPriceHistory> findBySymbolAndTimestampBetweenOrderByTimestampAsc(
             String symbol,
             LocalDateTime start,
             LocalDateTime end
+    );
+
+    // =====================================================
+    // 🔹 BACKFILL – GÜN BAZINDA VAR MI?
+    // =====================================================
+    @Query("""
+        SELECT COUNT(m) > 0
+        FROM MarketPriceHistory m
+        WHERE m.symbol = :symbol
+          AND m.timestamp >= :start
+          AND m.timestamp < :end
+    """)
+    boolean existsForDay(
+            @Param("symbol") String symbol,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
     );
 }
