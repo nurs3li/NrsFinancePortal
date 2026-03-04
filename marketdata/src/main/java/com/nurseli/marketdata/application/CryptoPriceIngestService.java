@@ -2,17 +2,16 @@ package com.nurseli.marketdata.application;
 
 import com.nurseli.marketdata.domain.price.CryptoSymbolMapping;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
-
 import com.nurseli.marketdata.infrastructure.coingecko.CoinGeckoClient;
 import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.nurseli.marketdata.application.SpreadCalculator;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-
 import java.util.Map;
 
 @Service
@@ -24,6 +23,10 @@ public class CryptoPriceIngestService {
     private final MarketPriceHistoryRepository repository;
 
     @Transactional
+    @CacheEvict(
+            cacheNames = {"market:batch", "market:indicators"},
+            allEntries = true
+    )
     public void fetchAndSaveCryptoPrices() {
 
         String ids = CryptoSymbolMapping.idsAsCsv();

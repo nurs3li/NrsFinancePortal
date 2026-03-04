@@ -20,11 +20,11 @@ public class MarketPriceIngestService {
     /**
      * Yeni FX verisi geldiğinde:
      * - DB yazılır
-     * - latest-price cache temizlenir
+     * - latest-price + indicators + batch cache temizlenir
      */
     @Transactional
     @CacheEvict(
-            value = "latest-price",
+            cacheNames = {"latest-price", "market:batch", "market:indicators"},
             allEntries = true
     )
     public void fetchAndSaveTcmbRates() {
