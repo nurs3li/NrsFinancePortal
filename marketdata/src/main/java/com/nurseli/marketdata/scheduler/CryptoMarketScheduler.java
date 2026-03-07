@@ -14,10 +14,9 @@ public class CryptoMarketScheduler {
     private final CryptoPriceIngestService ingestService;
 
     /**
-     * Crypto prices (Binance)
-     * 30 saniyede bir
+     * Crypto prices (CoinGecko free tier rate limit için seyrek)
      */
-    @Scheduled(fixedDelay = 120_000)
+    @Scheduled(fixedDelay = 300_000)
     public void fetchCryptoPrices() {
         log.info("[SCHEDULER] Fetching crypto prices from CoinGecko");
         ingestService.fetchAndSaveCryptoPrices();

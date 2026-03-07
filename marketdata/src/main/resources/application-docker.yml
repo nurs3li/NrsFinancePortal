@@ -36,15 +36,26 @@ app:
     finhub:
       url: https://finnhub.io/api/v1
       api-key: ${FINHUB_API_KEY:your-api-key-here}
-
-tefas:
-  funds:
-    - AES
-    - AFT
-    - TCD
-    - GAF
-    - DBH
-    - GLDTR
-    - KTN
-    - KZL
-    - YAC
+  equity:
+    symbols:  # FinHub free plan: US only
+      - AAPL
+      - MSFT
+      - GOOGL
+      - AMZN
+      - META
+      - NVDA
+      - TSLA
+      - JPM
+      - JNJ
+      - V
+      - WMT
+  etf:
+    symbols:
+      - SPY
+      - QQQ
+      - VOO
+      - VTI
+      - IWM
+      - GLD
+      - VWO
+      - EEM

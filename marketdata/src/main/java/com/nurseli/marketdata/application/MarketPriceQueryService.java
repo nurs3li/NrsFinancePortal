@@ -6,6 +6,8 @@ import com.nurseli.marketdata.api.dto.MarketPriceHistoryResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceLatestResponse;
 import com.nurseli.marketdata.api.dto.MarketType;
 import com.nurseli.marketdata.api.exception.InvalidRequestException;
+import com.nurseli.marketdata.config.EquityProperties;
+import com.nurseli.marketdata.config.EtfProperties;
 import com.nurseli.marketdata.domain.price.CryptoSymbolMapping;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.repository.MarketPriceBucketView;
@@ -33,6 +35,8 @@ public class MarketPriceQueryService {
     private static final BigDecimal ZERO_VOLUME = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
 
     private final MarketPriceHistoryRepository repository;
+    private final EquityProperties equityProperties;
+    private final EtfProperties etfProperties;
 
     public MarketPriceLatestResponse getLatestOrThrow(String symbol) {
         return repository
@@ -79,7 +83,11 @@ public class MarketPriceQueryService {
     }
 
     public Map<String, MarketPriceLatestResponse> getLatestFunds() {
-        return getLatestBySource("TEFAS");
+        return getLatestBySource("ETF");
+    }
+
+    public Map<String, MarketPriceLatestResponse> getLatestEquity() {
+        return getLatestBySource("FINHUB");
     }
 
     public List<MarketPriceHistoryResponse> getHistory(String symbol, int days) {
@@ -98,12 +106,12 @@ public class MarketPriceQueryService {
     }
 
     // =========================
-    // NEW: BATCH HISTORY (OHLC) + CACHE
+    // BATCH HISTORY (OHLC) + CACHE
     // =========================
     @Cacheable(
             cacheNames = "market:batch",
             key = "T(String).format('%s|%s|%d', #rawType, #rawSymbols != null ? #rawSymbols.toString() : '', #days)",
-            condition = "#days <= 14" // kısa aralık (7/14 gün) için cache
+            condition = "#days <= 14"
     )
     public BatchHistoryResponse getBatchHistory(String rawType, List<String> rawSymbols, int days) {
         MarketType type = MarketType.from(rawType);
@@ -145,11 +153,6 @@ public class MarketPriceQueryService {
                 .distinct()
                 .toList();
 
-        // 🔴 ESKİ KURAL: Batch compare için en az 2 sembol
-        // if (symbols.size() < 2) {
-        //     throw new InvalidRequestException("Batch compare için en az 2 sembol gerekli.");
-        // }
-
         if (symbols.size() > MAX_SYMBOLS) {
             throw new InvalidRequestException("En fazla " + MAX_SYMBOLS + " sembol gönderebilirsiniz.");
         }
@@ -170,7 +173,16 @@ public class MarketPriceQueryService {
             case FX -> Set.of("USDTRY", "EURTRY", "GBPTRY").contains(symbol);
             case CRYPTO -> CryptoSymbolMapping.SYMBOL_TO_ID.containsKey(symbol);
             case METALS -> Set.of("XAU_TRY").contains(symbol);
-            case FUNDS -> true; // fon kodları dinamik olabilir (TEFAS)
+            case FUNDS -> etfProperties != null
+                    && etfProperties.getSymbols() != null
+                    && etfProperties.getSymbols().stream()
+                    .map(String::toUpperCase)
+                    .anyMatch(s -> s.equals(symbol));
+            case EQUITY -> equityProperties != null
+                    && equityProperties.getSymbols() != null
+                    && equityProperties.getSymbols().stream()
+                    .map(String::toUpperCase)
+                    .anyMatch(s -> s.equals(symbol));
         };
     }
 
@@ -223,12 +235,12 @@ public class MarketPriceQueryService {
     }
 
     // =========================
-    // NEW: INDICATORS (MA + trend) + CACHE
+    // INDICATORS (MA + trend) + CACHE
     // =========================
     @Cacheable(
             cacheNames = "market:indicators",
             key = "#rawType + '|' + #rawSymbol + '|' + #days + '|' + (#rawMa != null ? #rawMa : '')",
-            condition = "#days <= 14" // kısa aralık istekleri için cache
+            condition = "#days <= 14"
     )
     public MarketIndicatorsResponse getIndicators(String rawType, String rawSymbol, int days, String rawMa) {
         MarketType type = MarketType.from(rawType);
@@ -330,7 +342,7 @@ public class MarketPriceQueryService {
         int n = closeSeries.size();
 
         double first = closeSeries.get(0).value().doubleValue();
-        double[] y = new double[n]; // base=100 normalize seri
+        double[] y = new double[n];
 
         for (int i = 0; i < n; i++) {
             double close = closeSeries.get(i).value().doubleValue();
@@ -347,9 +359,8 @@ public class MarketPriceQueryService {
             num += dx * (y[i] - yMean);
             den += dx * dx;
         }
-        double slope = den == 0.0 ? 0.0 : num / den; // base100 puan / gün
+        double slope = den == 0.0 ? 0.0 : num / den;
 
-        // R^2 (lineer uygunluk)
         double ssTot = 0.0;
         double ssRes = 0.0;
         double intercept = yMean - slope * xMean;
@@ -372,7 +383,7 @@ public class MarketPriceQueryService {
             direction = "FLAT";
         }
 
-        double returnScore = Math.min(Math.abs(normalizedReturn) / 0.10, 1.0); // %10 ve üzeri max
+        double returnScore = Math.min(Math.abs(normalizedReturn) / 0.10, 1.0);
         double strength = Math.max(0.0, Math.min(1.0, returnScore * 0.6 + r2 * 0.4));
 
         return new TrendResponse(

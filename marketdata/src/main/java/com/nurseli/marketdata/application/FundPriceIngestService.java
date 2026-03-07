@@ -1,16 +1,19 @@
 package com.nurseli.marketdata.application;
 
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
-import com.nurseli.marketdata.infrastructure.tefas.TefasClient;
-import com.nurseli.marketdata.infrastructure.tefas.TefasFundPriceDto;
+import com.nurseli.marketdata.infrastructure.finhub.FinHubClient;
+import com.nurseli.marketdata.infrastructure.finhub.FinHubQuoteDto;
 import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 
 @Service
@@ -18,73 +21,46 @@ import java.util.Optional;
 @Slf4j
 public class FundPriceIngestService {
 
-    private final TefasClient tefasClient;
+    private static final String SOURCE_ETF = "ETF";
+
+    private final FinHubClient finHubClient;
     private final MarketPriceHistoryRepository repository;
 
-    /**
-     * Bu method ASLA exception fırlatmaz.
-     * External data app’i asla düşürmez.
-     */
-    @CacheEvict(
-            cacheNames = {"market:batch", "market:indicators"},
-            allEntries = true
-    )
-    public void ingestForDate(String fundCode, LocalDate date) {
-
+    @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
+    public void ingestForDate(String symbol, LocalDate date) {
         try {
-            Optional<TefasFundPriceDto> optional =
-                    tefasClient.fetchLastAvailablePrice(fundCode, date);
-
-            if (optional.isEmpty()) {
-                log.warn(
-                        "[TEFAS] No price found for fund={} referenceDate={}",
-                        fundCode,
-                        date
-                );
+            FinHubQuoteDto quote = finHubClient.fetchQuote(symbol).block();
+            if (quote == null || quote.getC() == null) {
+                log.warn("[ETF] No quote for symbol={} referenceDate={}", symbol, date);
                 return;
             }
 
-            TefasFundPriceDto dto = optional.get();
+            // Bugün için current (c), dün için previous close (pc)
+            double priceValue = date.equals(LocalDate.now()) ? quote.getC() : (quote.getPc() != null ? quote.getPc() : quote.getC());
+            BigDecimal mid = BigDecimal.valueOf(priceValue);
 
-            // Aynı gün varsa tekrar yazma
             boolean exists = repository
-                    .findTopBySymbolOrderByTimestampDesc(dto.fundCode())
-                    .map(e -> e.getTimestamp().toLocalDate().equals(dto.date()))
+                    .findTopBySymbolOrderByTimestampDesc(symbol)
+                    .map(e -> e.getTimestamp().toLocalDate().equals(date))
                     .orElse(false);
 
             if (exists) {
-                log.info(
-                        "[TEFAS] Already exists fund={} date={}",
-                        dto.fundCode(),
-                        dto.date()
-                );
+                log.info("[ETF] Already exists symbol={} date={}", symbol, date);
                 return;
             }
 
             MarketPriceHistory entity = new MarketPriceHistory();
-            entity.setSymbol(dto.fundCode());
-            entity.setBuyPrice(SpreadCalculator.buyPrice(dto.price()));
-            entity.setSellPrice(SpreadCalculator.sellPrice(dto.price()));
-            entity.setSource("TEFAS");
-            entity.setTimestamp(LocalDateTime.of(dto.date(), java.time.LocalTime.NOON));
+            entity.setSymbol(symbol);
+            entity.setBuyPrice(SpreadCalculator.buyPrice(mid));
+            entity.setSellPrice(SpreadCalculator.sellPrice(mid));
+            entity.setSource(SOURCE_ETF);
+            entity.setTimestamp(LocalDateTime.of(date, java.time.LocalTime.NOON));
 
             repository.save(entity);
-
-            log.info(
-                    "[TEFAS] SAVED fund={} price={} date={}",
-                    dto.fundCode(),
-                    dto.price(),
-                    dto.date()
-            );
+            log.info("[ETF] SAVED symbol={} price={} date={}", symbol, mid, date);
 
         } catch (Exception e) {
-            // ❗ BURASI ÇOK ÖNEMLİ
-            log.error(
-                    "[TEFAS] INGEST FAILED fund={} date={}",
-                    fundCode,
-                    date,
-                    e
-            );
+            log.error("[ETF] INGEST FAILED symbol={} date={}", symbol, date, e);
         }
     }
 }

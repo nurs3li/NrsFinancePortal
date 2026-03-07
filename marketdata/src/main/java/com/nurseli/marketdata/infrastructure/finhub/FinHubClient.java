@@ -73,4 +73,25 @@ public class FinHubClient {
                 .doOnError(error -> log.error("[FINHUB] Company news fetch failed: {}", error.getMessage()))
                 .onErrorReturn(List.of());
     }
+    /**
+     * FinHub Quote API – hisse senedi anlık fiyat.
+     * GET /quote?symbol=...&token=...
+     */
+    public Mono<FinHubQuoteDto> fetchQuote(String symbol) {
+        String apiKey = dataSourcesProperties.getFinhub().getApiKey();
+        if (apiKey == null || apiKey.isBlank() || apiKey.equals("your-api-key-here")) {
+            log.warn("[FINHUB] API key not configured, skipping quote fetch");
+            return Mono.empty();
+        }
+        return webClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/quote")
+                        .queryParam("symbol", symbol)
+                        .queryParam("token", apiKey)
+                        .build())
+                .retrieve()
+                .bodyToMono(FinHubQuoteDto.class)
+                .doOnError(error -> log.error("[FINHUB] Quote fetch failed for {}: {}", symbol, error.getMessage()))
+                .onErrorResume(e -> Mono.empty());
+    }
 }
