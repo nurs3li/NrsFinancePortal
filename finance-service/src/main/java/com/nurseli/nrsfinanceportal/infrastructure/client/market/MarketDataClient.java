@@ -44,7 +44,7 @@ public class MarketDataClient {
                 .block();
     }
 
-    // ✅ TEFAS – AYNI DTO
+    //     // ETF (FinHub) – aynı DTO, semboller SPY, QQQ, VOO...
     public Map<String, MarketPriceLatestDto> getLatestFunds() {
         return marketDataWebClient.get()
                 .uri("/api/market/funds/latest")
@@ -53,7 +53,15 @@ public class MarketDataClient {
                         Map<String, MarketPriceLatestDto>>() {})
                 .block();
     }
-
+    // ✅ HİSSE (FINHUB – EQUITY)
+    public Map<String, MarketPriceLatestDto> getLatestEquity() {
+        return marketDataWebClient.get()
+                .uri("/api/market/equity/latest")
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<
+                        Map<String, MarketPriceLatestDto>>() {})
+                .block();
+    }
     // 🔥 TEKİL FİYAT (DASHBOARD / PORTFOLIO İÇİN)
     public BigDecimal getPriceTry(AssetType type, String symbol) {
 
@@ -78,7 +86,14 @@ public class MarketDataClient {
                 MarketPriceLatestDto fund = getLatestFunds().get(symbol);
                 yield fund != null ? fund.buyPrice() : BigDecimal.ZERO;
             }
-
+            case STOCK -> {
+                MarketPriceLatestDto equity = getLatestEquity().get(symbol);
+                if (equity == null) yield BigDecimal.ZERO;
+                BigDecimal usdPrice = equity.buyPrice();
+                var usdTry = getLatestDoviz().get("USDTRY");
+                if (usdTry == null) yield usdPrice;
+                yield usdPrice.multiply(usdTry.buyPrice());
+            }
             default -> BigDecimal.ZERO;
         };
     }

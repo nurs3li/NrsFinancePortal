@@ -20,8 +20,8 @@ public class SymbolNormalizer {
 
             case FX -> symbol;      // USDTRY
             case METAL -> symbol;   // XAU, XAG
-            case FUND -> symbol;    // AES, AFT
-
+            case FUND -> symbol;     // ETF: SPY, QQQ, VOO...
+            case STOCK -> symbol == null ? "" : symbol.toUpperCase();
             default -> symbol;
         };
     }

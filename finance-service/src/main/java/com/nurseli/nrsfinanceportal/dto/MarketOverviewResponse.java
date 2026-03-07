@@ -8,5 +8,6 @@ public record MarketOverviewResponse(
         Map<String, MetalOverviewDto> metals,
         Map<String, CryptoOverviewDto> crypto,
         Map<String, FundOverviewDto> funds,
+        Map<String, StockOverviewDto> stocks,
         LocalDateTime timestamp
 ) {}
