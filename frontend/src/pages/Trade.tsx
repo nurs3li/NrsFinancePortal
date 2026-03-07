@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 
-type AssetType = 'CRYPTO' | 'FX' | 'FUND' | 'METAL' | string;
+type AssetType = 'CRYPTO' | 'FX' | 'FUND' | 'METAL' | 'STOCK';
 type TradeType = 'BUY' | 'SELL';
 
 type TradeRequest = {
@@ -39,15 +39,44 @@ type Page<T> = {
     size: number;
 };
 
-const ASSET_TYPES: AssetType[] = ['CRYPTO', 'FX', 'FUND', 'METAL'];
+type MarketOverview = {
+    doviz?: Record<string, { buyPrice?: number; sellPrice?: number; source?: string }>;
+    metals?: Record<string, { buyPrice?: number; source?: string }>;
+    crypto?: Record<string, { buyPrice?: number; source?: string }>;
+    funds?: Record<string, { buyPrice?: number; source?: string }>;
+    stocks?: Record<string, { buyPrice?: number; source?: string }>;
+    timestamp?: string;
+};
+
+const ASSET_TYPES: { value: AssetType; label: string }[] = [
+    { value: 'CRYPTO', label: 'Kripto' },
+    { value: 'FX', label: 'Döviz' },
+    { value: 'FUND', label: 'Fon (ETF)' },
+    { value: 'METAL', label: 'Altın' },
+    { value: 'STOCK', label: 'Hisse' },
+];
+
+function getOverviewKey(type: AssetType): keyof MarketOverview {
+    switch (type) {
+        case 'CRYPTO': return 'crypto';
+        case 'FX': return 'doviz';
+        case 'METAL': return 'metals';
+        case 'FUND': return 'funds';
+        case 'STOCK': return 'stocks';
+        default: return 'crypto';
+    }
+}
 
 export function Trade() {
     const { tokens } = useTheme();
 
     const [assetType, setAssetType] = useState<AssetType>('CRYPTO');
-    const [symbol, setSymbol] = useState('BTCUSDT');
+    const [symbol, setSymbol] = useState('');
     const [tradeType, setTradeType] = useState<TradeType>('BUY');
     const [quantity, setQuantity] = useState<string>('0.1');
+
+    const [overview, setOverview] = useState<MarketOverview | null>(null);
+    const [overviewLoading, setOverviewLoading] = useState(true);
 
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
@@ -62,6 +91,38 @@ export function Trade() {
 
     const formatMoney = (v: number) =>
         '₺' + v.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+
+    const loadOverview = useCallback(() => {
+        setOverviewLoading(true);
+        financeClient
+            .get<MarketOverview>('/api/market/overview')
+            .then((res) => {
+                const raw = (res.data as { data?: MarketOverview })?.data ?? res.data;
+                setOverview(raw ?? null);
+            })
+            .catch(() => setOverview(null))
+            .finally(() => setOverviewLoading(false));
+    }, []);
+
+    useEffect(() => {
+        loadOverview();
+    }, [loadOverview]);
+
+    const symbolOptions = ((): string[] => {
+        if (!overview) return [];
+        const key = getOverviewKey(assetType);
+        const map = overview[key];
+        if (!map || typeof map !== 'object') return [];
+        return Object.keys(map).filter((k) => map[k] != null);
+    })();
+
+    useEffect(() => {
+        if (symbolOptions.length > 0 && !symbolOptions.includes(symbol)) {
+            setSymbol(symbolOptions[0]);
+        } else if (symbolOptions.length === 0) {
+            setSymbol('');
+        }
+    }, [assetType, symbolOptions.join(',')]);
 
     const loadHistory = () => {
         setHistoryLoading(true);
@@ -89,7 +150,7 @@ export function Trade() {
         e.preventDefault();
         const qty = Number(quantity);
         if (!symbol.trim() || isNaN(qty) || qty <= 0) {
-            setSubmitError('Sembol ve miktar alanlarını kontrol edin.');
+            setSubmitError('Sembol seçin ve miktar girin.');
             return;
         }
         const payload: TradeRequest = {
@@ -139,7 +200,7 @@ export function Trade() {
         padding: 8,
         borderRadius: 8,
         border: `1px solid ${tokens.border}`,
-        background: tokens.inputBg,
+        background: (tokens as { inputBg?: string }).inputBg ?? tokens.bgCard,
         color: tokens.text,
         fontSize: '0.9375rem',
     };
@@ -148,7 +209,7 @@ export function Trade() {
         <div style={pageStyle}>
             <h1 style={titleStyle}>Alım &amp; Satım</h1>
             <p style={mutedStyle}>
-                Demo hesabın üzerinden hızlıca trade yap, işlemlerini aşağıdaki listeden takip et.
+                Varlık türüne göre sembol seçin; miktar girip emri gönderin.
             </p>
 
             <div
@@ -170,18 +231,27 @@ export function Trade() {
                                 style={inputStyle}
                             >
                                 {ASSET_TYPES.map((t) => (
-                                    <option key={t} value={t}>{t}</option>
+                                    <option key={t.value} value={t.value}>{t.label}</option>
                                 ))}
                             </select>
                         </label>
                         <label style={{ fontSize: '0.875rem' }}>
                             Sembol
-                            <input
-                                value={symbol}
-                                onChange={(e) => setSymbol(e.target.value)}
-                                placeholder="Örn: BTCUSDT, USDTRY"
-                                style={inputStyle}
-                            />
+                            {overviewLoading ? (
+                                <div style={{ ...inputStyle, color: tokens.textMuted }}>Yükleniyor...</div>
+                            ) : symbolOptions.length === 0 ? (
+                                <div style={{ ...inputStyle, color: tokens.textMuted }}>Bu tür için sembol yok.</div>
+                            ) : (
+                                <select
+                                    value={symbol}
+                                    onChange={(e) => setSymbol(e.target.value)}
+                                    style={inputStyle}
+                                >
+                                    {symbolOptions.map((s) => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
+                                </select>
+                            )}
                         </label>
                         <label style={{ fontSize: '0.875rem' }}>
                             Yön
@@ -237,7 +307,7 @@ export function Trade() {
                         )}
                         <button
                             type="submit"
-                            disabled={submitting}
+                            disabled={submitting || symbolOptions.length === 0}
                             style={{
                                 marginTop: 8,
                                 padding: '10px 0',
@@ -302,7 +372,7 @@ export function Trade() {
                                 {history.content.map((t) => {
                                     const tryPrice = t.quantity && t.quantity !== 0 ? t.totalTry / t.quantity : 0;
                                     return (
-                                        <tr key={t.tradeId} style={{ borderBottom: `1px solid ${tokens.tableBorder}` }}>
+                                        <tr key={t.tradeId} style={{ borderBottom: `1px solid ${tokens.tableBorder ?? tokens.border}` }}>
                                             <td style={{ padding: 10 }}>{new Date(t.tradedAt).toLocaleString('tr-TR')}</td>
                                             <td style={{ padding: 10 }}>{t.symbol}</td>
                                             <td style={{ padding: 10 }}>{t.tradeType === 'BUY' ? 'AL' : 'SAT'} ({t.assetType})</td>

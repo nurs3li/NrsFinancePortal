@@ -18,17 +18,17 @@ type WhaleTimelineItem = {
 
 export function FmRisk() {
     const { tokens } = useTheme();
-    const { user, role } = useAuth();
+    const { role } = useAuth();
     const [users, setUsers] = useState<UserOption[]>([]);
     const [selectedUserId, setSelectedUserId] = useState<number | ''>('');
     const [timeline, setTimeline] = useState<WhaleTimelineItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const isAdmin = role === 'ADMIN';
+    const canViewAllUsers = role === 'ADMIN' || role === 'FINANCE_MANAGER';
 
     useEffect(() => {
-        if (!isAdmin) return;
+        if (!canViewAllUsers) return;
         financeClient
             .get('/api/users')
             .then((res) => {
@@ -40,14 +40,7 @@ export function FmRisk() {
                 }
             })
             .catch(() => setUsers([]));
-    }, [isAdmin]);
-
-    useEffect(() => {
-        if (!user && !isAdmin) return;
-        if (!isAdmin && user) {
-            setSelectedUserId(user.id);
-        }
-    }, [isAdmin, user]);
+    }, [canViewAllUsers]);
 
     const loadTimeline = useCallback((userId: number) => {
         setLoading(true);
@@ -88,8 +81,7 @@ export function FmRisk() {
         border: `1px solid ${tokens.border}`,
     };
 
-
-    const showUserSelect = isAdmin && users.length > 0;
+    const showUserSelect = canViewAllUsers && users.length > 0;
 
     return (
         <div style={pageStyle}>
@@ -125,7 +117,6 @@ export function FmRisk() {
                 ) : timeline.length === 0 ? (
                     <p style={mutedStyle}>
                         Bu kullanıcı için whale kaydı bulunmuyor. Whale verisi oluştuğunda burada listelenecektir.
-                        {!isAdmin && ' (Sadece kendi kayıtlarınız gösterilir.)'}
                     </p>
                 ) : (
                     <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>

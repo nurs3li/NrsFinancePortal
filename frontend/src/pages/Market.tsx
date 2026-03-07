@@ -26,7 +26,7 @@ type LatestPrice = {
     message?: string;
 };
 
-type TabId = 'doviz' | 'crypto' | 'metals' | 'funds';
+type TabId = 'doviz' | 'crypto' | 'metals' | 'funds' | 'equity';
 
 type IndicatorPoint = {
     t: string;
@@ -68,7 +68,7 @@ const tooltipFiyatFormatter = ((value: number) => [
     'Fiyat',
 ]) as never;
 
-function getMarketType(tab: TabId): 'FX' | 'CRYPTO' | 'METALS' | 'FUNDS' {
+function getMarketType(tab: TabId): 'FX' | 'CRYPTO' | 'METALS' | 'FUNDS' | 'EQUITY' {
     switch (tab) {
         case 'doviz':
             return 'FX';
@@ -78,6 +78,10 @@ function getMarketType(tab: TabId): 'FX' | 'CRYPTO' | 'METALS' | 'FUNDS' {
             return 'METALS';
         case 'funds':
             return 'FUNDS';
+        case 'equity':
+            return 'EQUITY';
+        default:
+            return 'FX';
     }
 }
 
@@ -90,7 +94,7 @@ export function Market() {
     const [cryptoLatest, setCryptoLatest] = useState<Record<string, LatestPrice>>({});
     const [metalsLatest, setMetalsLatest] = useState<Record<string, LatestPrice>>({});
     const [fundsLatest, setFundsLatest] = useState<Record<string, LatestPrice>>({});
-
+    const [equityLatest, setEquityLatest] = useState<Record<string, LatestPrice>>({});
     // Tek sembol grafik state (indicators)
     const [chartSymbol, setChartSymbol] = useState<string>('USDTRY');
     const [chartDays, setChartDays] = useState(7);
@@ -126,12 +130,16 @@ export function Market() {
             marketClient
                 .get<Record<string, LatestPrice>>('/api/market/funds/latest')
                 .then((r) => r.data),
+            marketClient
+                .get<Record<string, LatestPrice>>('/api/market/equity/latest')
+                .then((r) => r.data),
         ])
-            .then(([doviz, crypto, metals, funds]) => {
+            .then(([doviz, crypto, metals, funds, equity]) => {
                 setDovizLatest(doviz ?? {});
                 setCryptoLatest(crypto ?? {});
                 setMetalsLatest(metals ?? {});
                 setFundsLatest(funds ?? {});
+                setEquityLatest(equity ?? {});
             })
             .catch((err) => setError(err.message ?? 'Veri yüklenemedi'))
             .finally(() => setLoading(false));
@@ -193,6 +201,7 @@ export function Market() {
             crypto: cryptoLatest,
             metals: metalsLatest,
             funds: fundsLatest,
+            equity: equityLatest,
         };
         const data = map[tab];
         if (!data) return [];
@@ -287,6 +296,7 @@ export function Market() {
         { id: 'crypto', label: 'Kripto' },
         { id: 'metals', label: 'Altın' },
         { id: 'funds', label: 'Fonlar' },
+        { id: 'equity', label: 'Hisse' },
     ];
 
     const getTableData = (): Record<string, LatestPrice> => {
@@ -299,6 +309,8 @@ export function Market() {
                 return metalsLatest;
             case 'funds':
                 return fundsLatest;
+            case 'equity':
+                return equityLatest;
             default:
                 return {};
         }
@@ -567,6 +579,7 @@ export function Market() {
                                 {activeTab === 'crypto' && 'Kripto grafiği'}
                                 {activeTab === 'metals' && 'Altın grafiği'}
                                 {activeTab === 'funds' && 'Fon grafiği'}
+                                {activeTab === 'equity' && 'Hisse grafiği'}
                             </h2>
                             <button
                                 type="button"
