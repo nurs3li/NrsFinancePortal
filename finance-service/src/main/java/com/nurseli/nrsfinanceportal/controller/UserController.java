@@ -25,7 +25,7 @@ public class UserController {
 
     // GET /api/users
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','FINANCE_MANAGER')")
 
     public ResponseEntity<ApiResponse<List<UserResponse>>> getUsers() {
         return ResponseEntity.ok(

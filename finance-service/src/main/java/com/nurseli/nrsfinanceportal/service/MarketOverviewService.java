@@ -68,7 +68,7 @@ public class MarketOverviewService {
                 ));
 
         // =====================
-        // 🔥 TEFAS FONLARI (GERÇEK VERİ)
+        //   FONLAR (ETF – FinHub: SPY, QQQ, VOO...)
         // =====================
         var funds = marketDataClient.getLatestFunds()
                 .entrySet()
@@ -77,12 +77,26 @@ public class MarketOverviewService {
                         Map.Entry::getKey, // AES, AFT, TCD...
                         e -> new FundOverviewDto(
                                 e.getValue().buyPrice(), // fon fiyatı
-                                e.getValue().source()    // TEFAS
+                                e.getValue().source()    // ETF
                         ),
                         (a, b) -> a,
                         LinkedHashMap::new
                 ));
-
+        // =====================
+        // HİSSELER (FINHUB – EQUITY)
+        // =====================
+        var stocks = marketDataClient.getLatestEquity()
+                .entrySet()
+                .stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> new StockOverviewDto(
+                                e.getValue().buyPrice(),
+                                e.getValue().source()
+                        ),
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
         // =====================
         // OVERVIEW RESPONSE
         // =====================
@@ -91,7 +105,7 @@ public class MarketOverviewService {
                 metals,
                 crypto,
                 funds,
+                stocks,
                 LocalDateTime.now()
-        );
-    }
+        );    }
 }
