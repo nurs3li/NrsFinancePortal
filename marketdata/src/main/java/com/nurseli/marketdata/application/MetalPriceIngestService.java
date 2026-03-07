@@ -31,8 +31,11 @@ public class MetalPriceIngestService {
     )
     public void fetchAndSaveGramGold() {
 
-        BigDecimal ouncePriceTry =
-                client.fetchGoldTryPerOunce();
+        BigDecimal ouncePriceTry = client.fetchGoldTryPerOunce();
+        if (ouncePriceTry == null) {
+            log.warn("[METAL] No price from CoinGecko (rate limit or error), skipping update.");
+            return;
+        }
 
         BigDecimal gramPrice =
                 ouncePriceTry.divide(
