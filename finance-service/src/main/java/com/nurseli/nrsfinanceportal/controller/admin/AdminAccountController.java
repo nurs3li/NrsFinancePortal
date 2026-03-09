@@ -5,13 +5,17 @@ import com.nurseli.nrsfinanceportal.common.dto.FreezeRequest;
 import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.account.Account;
 import com.nurseli.nrsfinanceportal.domain.account.AccountStatus;
+import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.repository.AccountRepository;
+import com.nurseli.nrsfinanceportal.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import com.nurseli.nrsfinanceportal.integration.kafka.NotificationEventKafkaPublisher;
+import com.nurseli.nrsfinanceportal.integration.kafka.event.NotificationRequestedEvent;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.time.Instant;
@@ -23,6 +27,8 @@ import java.time.Instant;
 public class AdminAccountController {
 
     private final AccountRepository accountRepository;
+    private final NotificationEventKafkaPublisher notificationEventKafkaPublisher;
+    private final UserRepository userRepository;
 
     @PostMapping("/{id}/freeze")
     public ResponseEntity<ApiResponse<String>> freeze(
@@ -32,6 +38,17 @@ public class AdminAccountController {
                 .orElseThrow(() -> new IllegalStateException("Account not found: " + id));
         account.freeze(Instant.now(), request != null && request.reason() != null ? request.reason() : "Admin freeze");
         accountRepository.save(account);
+
+        String sub = account.getUser().getKeycloakUserId();
+        notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                sub,
+                "Hesabınız donduruldu",
+                request != null && request.reason() != null ? request.reason() : "Hesabınız yönetici tarafından donduruldu.",
+                "ACCOUNT_FROZEN",
+                "account",
+                account.getId()
+        ));
+
         return ResponseEntity.ok(ApiResponse.success("OK"));
     }
 
@@ -65,6 +82,18 @@ public class AdminAccountController {
             a.freeze(at, reason);
         }
         accountRepository.saveAll(accounts);
+        // saveAll'dan sonra ekle:
+        User user = userRepository.findById(userId).orElse(null);
+        if (user != null) {
+            notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                    user.getKeycloakUserId(),
+                    "Tüm hesaplarınız donduruldu",
+                    reason,
+                    "ACCOUNT_FROZEN",
+                    "user",
+                    userId
+            ));
+        }
         return ResponseEntity.ok(ApiResponse.success(accounts.size()));
     }
 
