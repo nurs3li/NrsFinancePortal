@@ -1,0 +1,83 @@
+databaseChangeLog:
+  - changeSet:
+      id: 1-create-nrs-notification-schema
+      author: nrs
+      changes:
+        - sql:
+            sql: CREATE SCHEMA IF NOT EXISTS nrs_notification
+
+  - changeSet:
+      id: 2-create-notifications-table
+      author: nrs
+      changes:
+        - createTable:
+            schemaName: nrs_notification
+            tableName: notifications
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: user_sub
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: title
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: body
+                  type: TEXT
+              - column:
+                  name: type
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: read_at
+                  type: TIMESTAMP
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: reference_type
+                  type: VARCHAR(64)
+              - column:
+                  name: reference_id
+                  type: BIGINT
+
+  - changeSet:
+      id: 3-notifications-index-user-created
+      author: nrs
+      changes:
+        - createIndex:
+            schemaName: nrs_notification
+            tableName: notifications
+            indexName: idx_notifications_user_sub_created_at
+            columns:
+              - column:
+                  name: user_sub
+              - column:
+                  name: created_at
+                  descending: true
+
+  - changeSet:
+      id: 4-notifications-index-user-read
+      author: nrs
+      changes:
+        - createIndex:
+            schemaName: nrs_notification
+            tableName: notifications
+            indexName: idx_notifications_user_sub_read_at
+            columns:
+              - column:
+                  name: user_sub
+              - column:
+                  name: read_at
