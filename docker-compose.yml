@@ -220,6 +220,34 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+  notification-service:
+    build: ./notification-service
+    container_name: nrs-notification
+    ports:
+      - "8089:8089"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8089/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://nrs-postgres:5432/nrs_finance?currentSchema=public
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
+      KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   frontend:
     build:
       context: ./frontend
@@ -228,6 +256,7 @@ services:
         VITE_API_URL: http://localhost:8085
         VITE_MARKET_API_URL: http://localhost:8083
         VITE_METRICS_URL: http://localhost:8088
+        VITE_NOTIFICATION_API_URL: http://localhost:8089
         VITE_KEYCLOAK_URL: http://localhost:8081
         VITE_KEYCLOAK_REALM: nrs-finance
         VITE_KEYCLOAK_CLIENT_ID: nrs-finance-backend

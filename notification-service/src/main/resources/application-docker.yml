@@ -1,0 +1,54 @@
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+  application:
+    name: notification-service
+
+  jackson:
+    time-zone: Europe/Istanbul
+
+  datasource:
+    url: jdbc:postgresql://nrs-postgres:5432/nrs_finance?currentSchema=public
+    username: nrs
+    password: nrs123
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: null
+
+  kafka:
+    bootstrap-servers: nrs-kafka:9093
+    consumer:
+      group-id: notification-service-consumer
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.nurseli.notificationservice.event
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: com.nurseli.notificationservice.event.NotificationRequestedEvent
+server:
+  port: 8089
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
