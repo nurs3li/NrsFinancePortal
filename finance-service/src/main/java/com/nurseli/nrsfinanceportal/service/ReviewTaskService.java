@@ -10,6 +10,8 @@ import com.nurseli.nrsfinanceportal.domain.task.ReviewTaskStatus;
 import com.nurseli.nrsfinanceportal.domain.task.ReviewTaskType;
 import com.nurseli.nrsfinanceportal.domain.user.Role;
 import com.nurseli.nrsfinanceportal.domain.user.User;
+import com.nurseli.nrsfinanceportal.integration.kafka.NotificationEventKafkaPublisher;
+import com.nurseli.nrsfinanceportal.integration.kafka.event.NotificationRequestedEvent;
 import com.nurseli.nrsfinanceportal.repository.AccountRepository;
 import com.nurseli.nrsfinanceportal.repository.ReviewTaskRepository;
 import com.nurseli.nrsfinanceportal.repository.SuspiciousEventRepository;
@@ -36,6 +38,7 @@ public class ReviewTaskService {
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
     private final CurrentUserResolver currentUserResolver;
+    private final NotificationEventKafkaPublisher notificationEventKafkaPublisher;
 
     private static final Set<ReviewTaskStatus> FM_OPEN = Set.of(
             ReviewTaskStatus.PENDING, ReviewTaskStatus.IN_REVIEW, ReviewTaskStatus.ESCALATED
@@ -229,6 +232,15 @@ public class ReviewTaskService {
             task.setOutcome("Hesap dondur");
             task.setCompletedAt(Instant.now());
             reviewTaskRepository.save(task);
+
+            notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                    account.getUser().getKeycloakUserId(),
+                    "Hesabınız donduruldu",
+                    reason != null ? reason : "Hesabınız inceleme sonucu donduruldu.",
+                    "ACCOUNT_FROZEN",
+                    "account",
+                    account.getId()
+            ));
             return ReviewTaskView.from(task);
         }
         if ("REJECT_FREEZE".equals(action)) {

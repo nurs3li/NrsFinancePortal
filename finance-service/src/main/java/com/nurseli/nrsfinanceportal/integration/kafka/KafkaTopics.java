@@ -10,7 +10,7 @@ public final class KafkaTopics {
         public static final String SUSPICIOUS_DETECTED = "finance.suspicious.detected";
         public static final String TRANSACTION_REVERSED = "finance.transaction.reversed";
         public static final String WHALE_ALERT_TRIGGERED = "whale.alert.triggered";
-
+        public static final String NOTIFICATION_EVENTS = "notification-events";
         /** Log4j2 appender tarafından kullanılır (log4j2-spring.xml) */
         public static final String APPLICATION_LOGS = "application-logs";
     }
