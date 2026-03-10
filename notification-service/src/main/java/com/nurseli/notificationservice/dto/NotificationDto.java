@@ -11,8 +11,10 @@ public record NotificationDto(
         String type,
         Instant readAt,
         Instant createdAt,
+        Instant lastOccurredAt,
         String referenceType,
-        Long referenceId
+        Long referenceId,
+        int occurrenceCount
 ) {
     public static NotificationDto from(Notification n) {
         if (n == null) return null;
@@ -23,8 +25,10 @@ public record NotificationDto(
                 n.getType(),
                 n.getReadAt(),
                 n.getCreatedAt(),
+                n.getLastOccurredAt(),
                 n.getReferenceType(),
-                n.getReferenceId()
+                n.getReferenceId(),
+                n.getOccurrenceCount()
         );
     }
 }

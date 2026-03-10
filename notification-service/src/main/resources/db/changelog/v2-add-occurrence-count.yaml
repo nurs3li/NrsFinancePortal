@@ -1,0 +1,28 @@
+databaseChangeLog:
+  - changeSet:
+      id: 5-add-occurrence-count
+      author: nrs
+      changes:
+        - addColumn:
+            schemaName: nrs_notification
+            tableName: notifications
+            columns:
+              - column:
+                  name: occurrence_count
+                  type: INT
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_occurred_at
+                  type: TIMESTAMP
+
+  - changeSet:
+      id: 6-backfill-last-occurred-at
+      author: nrs
+      changes:
+        - sql:
+            sql: >
+              UPDATE nrs_notification.notifications
+              SET last_occurred_at = created_at
+              WHERE last_occurred_at IS NULL

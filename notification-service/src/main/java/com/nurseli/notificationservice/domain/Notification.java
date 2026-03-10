@@ -42,10 +42,20 @@ public class Notification {
     @Column(name = "reference_id")
     private Long referenceId;
 
+    @Builder.Default
+    @Column(name = "occurrence_count", nullable = false)
+    private int occurrenceCount = 1;
+
+    @Column(name = "last_occurred_at")
+    private Instant lastOccurredAt;
+
     @PrePersist
     void createdAt() {
         if (createdAt == null) {
             createdAt = Instant.now();
+        }
+        if (lastOccurredAt == null) {
+            lastOccurredAt = createdAt;
         }
     }
 }
