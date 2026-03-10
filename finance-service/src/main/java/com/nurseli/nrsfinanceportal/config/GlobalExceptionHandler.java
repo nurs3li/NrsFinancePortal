@@ -1,6 +1,10 @@
 package com.nurseli.nrsfinanceportal.config;
 
 import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
+import com.nurseli.nrsfinanceportal.domain.user.Role;
+import com.nurseli.nrsfinanceportal.integration.kafka.NotificationEventKafkaPublisher;
+import com.nurseli.nrsfinanceportal.integration.kafka.event.NotificationRequestedEvent;
+import com.nurseli.nrsfinanceportal.repository.UserRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.ThreadContext;
@@ -14,6 +18,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.nurseli.nrsfinanceportal.config.CorrelationIdFilter.CORRELATION_ID_MDC_KEY;
 
@@ -21,6 +26,18 @@ import static com.nurseli.nrsfinanceportal.config.CorrelationIdFilter.CORRELATIO
 public class GlobalExceptionHandler {
 
     private static final Logger log = LogManager.getLogger(GlobalExceptionHandler.class);
+
+    private static final long ERROR_NOTIFY_COOLDOWN_MS = 5 * 60 * 1000L;
+    private final AtomicReference<Instant> lastErrorNotifiedAt = new AtomicReference<>(Instant.EPOCH);
+
+    private final NotificationEventKafkaPublisher notificationEventKafkaPublisher;
+    private final UserRepository userRepository;
+
+    public GlobalExceptionHandler(NotificationEventKafkaPublisher notificationEventKafkaPublisher,
+                                  UserRepository userRepository) {
+        this.notificationEventKafkaPublisher = notificationEventKafkaPublisher;
+        this.userRepository = userRepository;
+    }
 
     private static Map<String, Object> errorBody(String message, HttpServletRequest request) {
         Map<String, Object> map = new LinkedHashMap<>();
@@ -58,8 +75,41 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<?>> handleGeneric(Exception ex, HttpServletRequest request) {
         log.error("[EXCEPTION] Unexpected error", ex);
+
+        notifyAdminsOnError(ex, request);
+
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(errorBody("Internal server error", request)));
+    }
+
+    private void notifyAdminsOnError(Exception ex, HttpServletRequest request) {
+        try {
+            Instant now = Instant.now();
+            Instant last = lastErrorNotifiedAt.get();
+            if (now.toEpochMilli() - last.toEpochMilli() < ERROR_NOTIFY_COOLDOWN_MS) {
+                return;
+            }
+            if (!lastErrorNotifiedAt.compareAndSet(last, now)) {
+                return;
+            }
+
+            String path = request != null ? request.getRequestURI() : "unknown";
+            String msg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+            String body = "Endpoint: " + path + "\nHata: " + msg;
+
+            userRepository.findByRole(Role.ADMIN).forEach(admin ->
+                    notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                            admin.getKeycloakUserId(),
+                            "Sistem hatası tespit edildi",
+                            body,
+                            "SYSTEM_ERROR",
+                            "system",
+                            null
+                    ))
+            );
+        } catch (Exception notifyEx) {
+            log.error("[NOTIFICATION] Failed to notify admins about system error", notifyEx);
+        }
     }
 }

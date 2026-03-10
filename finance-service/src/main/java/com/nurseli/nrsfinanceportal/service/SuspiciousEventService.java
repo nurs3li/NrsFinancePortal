@@ -1,8 +1,11 @@
 package com.nurseli.nrsfinanceportal.service;
 
 import com.nurseli.nrsfinanceportal.domain.suspicious.SuspiciousEvent;
+import com.nurseli.nrsfinanceportal.integration.kafka.NotificationEventKafkaPublisher;
+import com.nurseli.nrsfinanceportal.integration.kafka.event.NotificationRequestedEvent;
 import com.nurseli.nrsfinanceportal.integration.kafka.event.SuspiciousActivityDetectedEvent;
 import com.nurseli.nrsfinanceportal.repository.SuspiciousEventRepository;
+import com.nurseli.nrsfinanceportal.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,9 +23,11 @@ public class SuspiciousEventService {
 
     private final SuspiciousEventRepository repository;
     private final ReviewTaskService reviewTaskService;
+    private final NotificationEventKafkaPublisher notificationEventKafkaPublisher;
+    private final UserRepository userRepository;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional(propagation = Propagation.REQUIRES_NEW)  // 🔥 KENDİ TRANSACTION'INI AÇ
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onSuspiciousActivity(SuspiciousActivityDetectedEvent event) {
 
         try {
@@ -40,12 +45,23 @@ public class SuspiciousEventService {
             SuspiciousEvent saved = repository.save(e);
             reviewTaskService.createFromSuspiciousEvent(saved.getId());
 
+            userRepository.findById(event.userId()).ifPresent(u ->
+                    notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                            u.getKeycloakUserId(),
+                            "Şüpheli aktivite tespit edildi",
+                            "Hesabınızda olağan dışı bir işlem tespit edildi. Güvenlik incelemesi başlatıldı.",
+                            "SUSPICIOUS_ACTIVITY",
+                            "suspicious_event",
+                            saved.getId()
+                    ))
+            );
+
             log.info("[SUSPICIOUS][DB] persisted id={} userId={} txId={} reason={}",
                     saved.getId(), event.userId(), event.transactionId(), event.reason());
         } catch (Exception ex) {
             log.error("[SUSPICIOUS][DB] FAILED userId={} txId={} reason={}",
                     event.userId(), event.transactionId(), event.reason(), ex);
-            throw ex; // Transaction rollback için
+            throw ex;
         }
     }
 

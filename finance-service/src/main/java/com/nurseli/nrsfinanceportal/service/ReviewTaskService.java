@@ -1,5 +1,4 @@
 package com.nurseli.nrsfinanceportal.service;
-
 import com.nurseli.nrsfinanceportal.common.dto.ReviewTaskView;
 import com.nurseli.nrsfinanceportal.domain.account.Account;
 import com.nurseli.nrsfinanceportal.domain.account.AccountType;
@@ -22,61 +21,60 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ReviewTaskService {
-
     private final ReviewTaskRepository reviewTaskRepository;
     private final SuspiciousEventRepository suspiciousEventRepository;
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
     private final CurrentUserResolver currentUserResolver;
     private final NotificationEventKafkaPublisher notificationEventKafkaPublisher;
-
     private static final Set<ReviewTaskStatus> FM_OPEN = Set.of(
             ReviewTaskStatus.PENDING, ReviewTaskStatus.IN_REVIEW, ReviewTaskStatus.ESCALATED
+    );
+    private static final Set<ReviewTaskStatus> ANY_OPEN = Set.of(
+            ReviewTaskStatus.PENDING, ReviewTaskStatus.IN_REVIEW, ReviewTaskStatus.ESCALATED,
+            ReviewTaskStatus.FREEZE_REQUESTED
     );
     private static final Set<ReviewTaskType> ADMIN_TASK_TYPES = Set.of(
             ReviewTaskType.FREEZE_APPROVAL
     );
-    /**
-     * Kullanıcının bir hesabını döner: önce CASH, yoksa herhangi bir hesap.
-     */
-    // ReviewTaskService içinde
-    /**
-     * Kullanıcının bir hesabını döner: önce CASH, yoksa herhangi bir hesap.
-     */
-    private java.util.Optional<Account> findAccountForUser(Long userId) {
-        if (userId == null) return java.util.Optional.empty();
-
-        // Önce CASH hesaplardan birini al (birden fazlaysa ilkini kullan)
+    private Optional<Account> findAccountForUser(Long userId) {
+        if (userId == null) return Optional.empty();
         List<Account> cashAccounts = accountRepository.findByUserIdAndType(userId, AccountType.CASH);
         if (!cashAccounts.isEmpty()) {
-            return java.util.Optional.of(cashAccounts.get(0));
+            return Optional.of(cashAccounts.get(0));
         }
-
-        // CASH yoksa, kullanıcının herhangi bir hesabını al (ilkini kullan)
         return userRepository.findById(userId)
                 .flatMap(u -> {
                     List<Account> accounts = accountRepository.findByUser(u);
                     return accounts.isEmpty()
-                            ? java.util.Optional.<Account>empty()
-                            : java.util.Optional.of(accounts.get(0));
+                            ? Optional.<Account>empty()
+                            : Optional.of(accounts.get(0));
                 });
+    }
+    private boolean hasOpenTask(Long userId) {
+        return findAccountForUser(userId)
+                .map(account -> reviewTaskRepository.existsByStatusInAndAccount_Id(
+                        ANY_OPEN, account.getId()))
+                .orElse(false);
     }
     @Transactional
     public void createFromSuspiciousEvent(Long suspiciousEventId) {
         SuspiciousEvent event = suspiciousEventRepository.findById(suspiciousEventId)
                 .orElseThrow(() -> new IllegalStateException("Suspicious event not found: " + suspiciousEventId));
         Long userId = event.getUserId();
-
+        if (hasOpenTask(userId)) {
+            log.info("[TASK] Skipping SUSPICIOUS_REVIEW for userId={}, open task already exists for this account", userId);
+            return;
+        }
         ReviewTask task = ReviewTask.createSuspiciousReview(
                 suspiciousEventId,
                 null,
@@ -84,18 +82,45 @@ public class ReviewTaskService {
         );
         findAccountForUser(userId).ifPresent(task::setAccount);
         reviewTaskRepository.save(task);
-        log.info("[TASK] Created SUSPICIOUS_REVIEW task id={} ref={} accountId={}", task.getId(), suspiciousEventId, task.getAccount() != null ? task.getAccount().getId() : null);
+        userRepository.findByRole(Role.FINANCE_MANAGER).forEach(fm ->
+                notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                        fm.getKeycloakUserId(),
+                        "Yeni inceleme görevi oluşturuldu",
+                        "Şüpheli işlem (#" + suspiciousEventId + ") için yeni inceleme görevi atandı.",
+                        "REVIEW_TASK_CREATED",
+                        "review_task",
+                        task.getId()
+                ))
+        );
+        log.info("[TASK] Created SUSPICIOUS_REVIEW task id={} ref={} accountId={}",
+                task.getId(), suspiciousEventId,
+                task.getAccount() != null ? task.getAccount().getId() : null);
     }
-
     @Transactional
     public void createFromWhaleAlert(Long userId) {
+        if (hasOpenTask(userId)) {
+            log.info("[TASK] Skipping WHALE_REVIEW for userId={}, open task already exists for this account", userId);
+            return;
+        }
         ReviewTask task = ReviewTask.createWhaleReview(
                 userId,
                 Instant.now().plusSeconds(24 * 3600)
         );
         findAccountForUser(userId).ifPresent(task::setAccount);
         reviewTaskRepository.save(task);
-        log.info("[TASK] Created WHALE_REVIEW task id={} userId={} accountId={}", task.getId(), userId, task.getAccount() != null ? task.getAccount().getId() : null);
+        userRepository.findByRole(Role.FINANCE_MANAGER).forEach(fm ->
+                notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                        fm.getKeycloakUserId(),
+                        "Yeni whale inceleme görevi",
+                        "Whale alert sonrası kullanıcı (#" + userId + ") için inceleme görevi oluşturuldu.",
+                        "REVIEW_TASK_CREATED",
+                        "review_task",
+                        task.getId()
+                ))
+        );
+        log.info("[TASK] Created WHALE_REVIEW task id={} userId={} accountId={}",
+                task.getId(), userId,
+                task.getAccount() != null ? task.getAccount().getId() : null);
     }
     @Transactional
     public int backfillAccountForExistingTasks() {
@@ -166,31 +191,38 @@ public class ReviewTaskService {
         if (!FM_OPEN.contains(task.getStatus()) && !ReviewTaskStatus.FREEZE_REQUESTED.equals(task.getStatus())) {
             throw new IllegalStateException("Task not in actionable state");
         }
+
         if ("APPROVE".equals(action)) {
             task.setStatus(ReviewTaskStatus.APPROVED);
             task.setOutcome("Temiz");
             task.setCompletedAt(Instant.now());
             reviewTaskRepository.save(task);
+
+            if (task.getAccount() != null) {
+                notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                        task.getAccount().getUser().getKeycloakUserId(),
+                        "İnceleme tamamlandı",
+                        "Hesabınızdaki inceleme tamamlanmıştır. Herhangi bir sorun tespit edilmemiştir.",
+                        "REVIEW_COMPLETED",
+                        "review_task",
+                        task.getId()
+                ));
+            }
+
             return ReviewTaskView.from(task);
         }
-        if ("REJECT".equals(action)) {
-            task.setStatus(ReviewTaskStatus.REJECTED);
-            task.setOutcome("Reddet");
-            task.setCompletedAt(Instant.now());
-            reviewTaskRepository.save(task);
-            return ReviewTaskView.from(task);
-        }
-        if ("TAKE_UNDER_MONITORING".equals(action)) {
-            task.setStatus(ReviewTaskStatus.APPROVED);
-            task.setOutcome("Takibe al");
-            task.setCompletedAt(Instant.now());
-            reviewTaskRepository.save(task);
-            return ReviewTaskView.from(task);
-        }
+
         if ("SUGGEST_FREEZE".equals(action)) {
             if (accountId == null) throw new IllegalArgumentException("accountId required for SUGGEST_FREEZE");
             Account account = accountRepository.findById(accountId)
                     .orElseThrow(() -> new IllegalStateException("Account not found: " + accountId));
+
+            boolean alreadyRequested = reviewTaskRepository.existsByStatusInAndAccount_Id(
+                    Set.of(ReviewTaskStatus.FREEZE_REQUESTED), account.getId());
+            if (alreadyRequested) {
+                throw new IllegalStateException("Bu hesap için zaten bir freeze talebi mevcut.");
+            }
+
             task.setStatus(ReviewTaskStatus.FREEZE_REQUESTED);
             task.setOutcome("Freeze öner");
             task.setAccount(account);
@@ -204,6 +236,7 @@ public class ReviewTaskService {
             log.info("[TASK] Freeze requested for account {} -> ADMIN task id={}", accountId, adminTask.getId());
             return ReviewTaskView.from(task);
         }
+
         throw new IllegalArgumentException("Unknown action: " + action);
     }
 
@@ -251,6 +284,35 @@ public class ReviewTaskService {
             return ReviewTaskView.from(task);
         }
         throw new IllegalArgumentException("Unknown admin action: " + action);
+    }
+
+    @Transactional
+    public int cleanupDuplicateTasks() {
+        AtomicInteger cleaned = new AtomicInteger(0);
+
+        for (ReviewTaskType type : List.of(ReviewTaskType.SUSPICIOUS_REVIEW, ReviewTaskType.WHALE_REVIEW)) {
+            List<ReviewTask> openTasks = reviewTaskRepository.findByTypeAndStatusIn(type, FM_OPEN);
+
+            java.util.Map<Long, List<ReviewTask>> byAccount = openTasks.stream()
+                    .filter(t -> t.getAccount() != null)
+                    .collect(java.util.stream.Collectors.groupingBy(t -> t.getAccount().getId()));
+
+            byAccount.forEach((acctId, tasks) -> {
+                if (tasks.size() <= 1) return;
+                tasks.sort(java.util.Comparator.comparing(ReviewTask::getCreatedAt).reversed());
+                for (int i = 1; i < tasks.size(); i++) {
+                    ReviewTask dup = tasks.get(i);
+                    dup.setStatus(ReviewTaskStatus.REJECTED);
+                    dup.setOutcome("Duplike — otomatik temizlendi");
+                    dup.setCompletedAt(Instant.now());
+                    reviewTaskRepository.save(dup);
+                    cleaned.incrementAndGet();
+                    log.info("[CLEANUP] Closed duplicate task id={} type={} accountId={}", dup.getId(), type, acctId);
+                }
+            });
+        }
+
+        return cleaned.get();
     }
 
     @Transactional
