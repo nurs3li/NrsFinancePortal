@@ -1,0 +1,26 @@
+databaseChangeLog:
+  - changeSet:
+      id: add-whale-history-details
+      author: nrs
+      changes:
+        - addColumn:
+            tableName: whale_history
+            columns:
+              - column:
+                  name: daily_volume
+                  type: DECIMAL(30, 10)
+              - column:
+                  name: hourly_transaction_count
+                  type: INT
+              - column:
+                  name: max_single_transaction
+                  type: DECIMAL(30, 10)
+              - column:
+                  name: pattern
+                  type: VARCHAR(64)
+              - column:
+                  name: behavior
+                  type: VARCHAR(64)
+              - column:
+                  name: risk
+                  type: VARCHAR(64)

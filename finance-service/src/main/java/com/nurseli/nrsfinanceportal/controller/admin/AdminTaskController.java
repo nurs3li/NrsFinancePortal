@@ -43,4 +43,10 @@ public class AdminTaskController {
         int n = reviewTaskService.backfillAccountForExistingTasks();
         return ResponseEntity.ok(ApiResponse.success(n));
     }
+
+    @PostMapping("/cleanup-duplicate-tasks")
+    public ResponseEntity<ApiResponse<Integer>> cleanupDuplicateTasks() {
+        int n = reviewTaskService.cleanupDuplicateTasks();
+        return ResponseEntity.ok(ApiResponse.success(n));
+    }
 }
