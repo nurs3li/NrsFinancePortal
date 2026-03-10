@@ -2,11 +2,13 @@ package com.nurseli.nrsfinanceportal.controller;
 
 import com.nurseli.nrsfinanceportal.common.dto.ReviewTaskView;
 import com.nurseli.nrsfinanceportal.common.dto.TaskActionRequest;
+import com.nurseli.nrsfinanceportal.common.dto.TaskInvestigationContext;
 import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.task.ReviewTask;
 import com.nurseli.nrsfinanceportal.domain.task.ReviewTaskStatus;
 import com.nurseli.nrsfinanceportal.domain.task.ReviewTaskType;
 import com.nurseli.nrsfinanceportal.service.ReviewTaskService;
+import com.nurseli.nrsfinanceportal.service.TaskInvestigationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 public class TaskController {
 
     private final ReviewTaskService reviewTaskService;
+    private final TaskInvestigationService taskInvestigationService;
 
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<Page<ReviewTaskView>>> getMyTasks(
@@ -39,6 +42,11 @@ public class TaskController {
     public ResponseEntity<ApiResponse<ReviewTaskView>> getTask(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(
                 ReviewTaskView.from(reviewTaskService.getById(id))));
+    }
+
+    @GetMapping("/{id}/context")
+    public ResponseEntity<ApiResponse<TaskInvestigationContext>> getTaskContext(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(taskInvestigationService.getContext(id)));
     }
 
     @PatchMapping("/{id}")
