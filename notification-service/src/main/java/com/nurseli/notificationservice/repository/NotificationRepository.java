@@ -16,4 +16,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     long countByUserSubAndReadAtIsNull(String userSub);
 
     Optional<Notification> findByIdAndUserSub(Long id, String userSub);
+
+    Optional<Notification> findFirstByUserSubAndTypeAndReadAtIsNullOrderByCreatedAtDesc(
+            String userSub, String type);
 }

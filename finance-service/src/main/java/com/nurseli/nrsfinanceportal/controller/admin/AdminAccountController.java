@@ -58,8 +58,20 @@ public class AdminAccountController {
                 .orElseThrow(() -> new IllegalStateException("Account not found: " + id));
         account.unfreeze();
         accountRepository.save(account);
+
+        String sub = account.getUser().getKeycloakUserId();
+        notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                sub,
+                "Hesabınız tekrar aktif",
+                "Hesabınız yönetici tarafından tekrar aktif hale getirildi.",
+                "ACCOUNT_UNFROZEN",
+                "account",
+                account.getId()
+        ));
+
         return ResponseEntity.ok(ApiResponse.success("OK"));
     }
+
     @GetMapping
     public ResponseEntity<ApiResponse<Page<AdminAccountView>>> list(
             @RequestParam(required = false) String status,
@@ -71,6 +83,7 @@ public class AdminAccountController {
         Page<AdminAccountView> viewPage = page.map(AdminAccountView::from);
         return ResponseEntity.ok(ApiResponse.success(viewPage));
     }
+
     @PostMapping("/by-user/{userId}/freeze-all")
     public ResponseEntity<ApiResponse<Integer>> freezeAllAccountsForUser(
             @PathVariable Long userId,
@@ -82,7 +95,7 @@ public class AdminAccountController {
             a.freeze(at, reason);
         }
         accountRepository.saveAll(accounts);
-        // saveAll'dan sonra ekle:
+
         User user = userRepository.findById(userId).orElse(null);
         if (user != null) {
             notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
@@ -102,6 +115,18 @@ public class AdminAccountController {
         List<Account> accounts = accountRepository.findByUser_Id(userId);
         accounts.forEach(Account::unfreeze);
         accountRepository.saveAll(accounts);
+
+        User user = userRepository.findById(userId).orElse(null);
+        if (user != null) {
+            notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                    user.getKeycloakUserId(),
+                    "Tüm hesaplarınız tekrar aktif",
+                    "Hesaplarınız yönetici tarafından tekrar aktif hale getirildi.",
+                    "ACCOUNT_UNFROZEN",
+                    "user",
+                    userId
+            ));
+        }
         return ResponseEntity.ok(ApiResponse.success(accounts.size()));
     }
 }
