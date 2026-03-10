@@ -22,7 +22,14 @@ public class WhaleTimelineService {
                         h.getId(),
                         h.getUserId(),
                         h.getWhaleLevel().name(),
+                        h.getImpactScore(),
                         h.getReason(),
+                        h.getDailyVolume(),
+                        h.getHourlyTransactionCount(),
+                        h.getMaxSingleTransaction(),
+                        h.getPattern(),
+                        h.getBehavior(),
+                        h.getRisk(),
                         h.getTriggeredAt(),
                         h.getCreatedAt()
                 ))
