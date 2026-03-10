@@ -3,7 +3,7 @@ import keycloak from '../auth/keycloak';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8085';
 const marketApiUrl = import.meta.env.VITE_MARKET_API_URL || 'http://localhost:8083';
-
+const notificationApiUrl = import.meta.env.VITE_NOTIFICATION_API_URL || 'http://localhost:8089';
 export const financeClient = axios.create({
     baseURL: apiUrl,
     headers: { 'Content-Type': 'application/json' },
@@ -53,6 +53,26 @@ metricsClient.interceptors.response.use(
     (r) => r,
     (err) => {
         if (err.response?.status === 401) keycloak.login();
+        return Promise.reject(err);
+    }
+);
+export const notificationClient = axios.create({
+    baseURL: notificationApiUrl,
+    headers: { 'Content-Type': 'application/json' },
+});
+
+notificationClient.interceptors.request.use((config) => {
+    if (keycloak.authenticated && keycloak.token) {
+        config.headers.Authorization = `Bearer ${keycloak.token}`;
+    }
+    return config;
+});
+
+notificationClient.interceptors.response.use(
+    (r) => r,
+    (err) => {
+        // 401'de login'e yönlendirme - notification servisi down/yanlış JWT olsa bile sayfa döngüye girmesin
+        // if (err.response?.status === 401) keycloak.login();
         return Promise.reject(err);
     }
 );
