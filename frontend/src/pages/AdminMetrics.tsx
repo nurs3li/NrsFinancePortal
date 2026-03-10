@@ -192,7 +192,7 @@ export function AdminMetrics() {
 
                 {metrics.whaleByLevel && metrics.whaleByLevel.length > 0 && (
                     <div style={cardStyle}>
-                        <h2 style={{ fontSize: '1.125rem', marginBottom: 16, fontWeight: 600 }}>Whale seviye dağılımı (pasta)</h2>
+                        <h2 style={{ fontSize: '1.125rem', marginBottom: 16, fontWeight: 600 }}>Whale seviye dağılımı (kullanıcı)</h2>
                         <div style={{ width: '100%', height: 300 }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
@@ -210,7 +210,7 @@ export function AdminMetrics() {
                                             <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} stroke={tokens.border} strokeWidth={1} />
                                         ))}
                                     </Pie>
-                                    <Tooltip contentStyle={chartTooltipStyle} formatter={tooltipAdetFormatter} />
+                                    <Tooltip contentStyle={chartTooltipStyle} formatter={((value: number) => [String(value), 'Kullanıcı']) as never} />
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>
@@ -219,7 +219,7 @@ export function AdminMetrics() {
                             <thead>
                             <tr style={{ borderBottom: `2px solid ${tokens.border}` }}>
                                 <th style={{ textAlign: 'left', padding: 8 }}>Seviye</th>
-                                <th style={{ textAlign: 'right', padding: 8 }}>Adet</th>
+                                <th style={{ textAlign: 'right', padding: 8 }}>Kullanıcı</th>
                             </tr>
                             </thead>
                             <tbody>
@@ -273,18 +273,18 @@ export function AdminMetrics() {
                 </div>
             )}
 
-            {/* Whale seviyeye göre – bar grafik */}
+            {/* Whale seviyeye göre – bar grafik (kullanıcı) */}
             {metrics.whaleByLevel && metrics.whaleByLevel.length > 0 && (
                 <div style={cardStyle}>
-                    <h2 style={{ fontSize: '1.125rem', marginBottom: 16, fontWeight: 600 }}>Whale seviyeye göre</h2>
+                    <h2 style={{ fontSize: '1.125rem', marginBottom: 16, fontWeight: 600 }}>Whale seviyeye göre (kullanıcı)</h2>
                     <div style={{ width: '100%', height: 260 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={metrics.whaleByLevel} margin={{ top: 16, right: 24, left: 8, bottom: 8 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke={tokens.border} />
                                 <XAxis dataKey="level" tick={{ fill: tokens.textMuted, fontSize: 11 }} />
-                                <YAxis tick={{ fill: tokens.textMuted, fontSize: 12 }} />
-                                <Tooltip contentStyle={chartTooltipStyle} formatter={tooltipAdetFormatter} />
-                                <Bar dataKey="count" name="Adet" radius={[6, 6, 0, 0]} fill={tokens.accent} />
+                                <YAxis tick={{ fill: tokens.textMuted, fontSize: 12 }} allowDecimals={false} />
+                                <Tooltip contentStyle={chartTooltipStyle} formatter={((value: number) => [String(value), 'Kullanıcı']) as never} />
+                                <Bar dataKey="count" name="Kullanıcı" radius={[6, 6, 0, 0]} fill={tokens.accent} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -292,7 +292,7 @@ export function AdminMetrics() {
                         <thead>
                         <tr style={{ borderBottom: `2px solid ${tokens.border}` }}>
                             <th style={{ textAlign: 'left', padding: 8 }}>Seviye</th>
-                            <th style={{ textAlign: 'right', padding: 8 }}>Adet</th>
+                            <th style={{ textAlign: 'right', padding: 8 }}>Kullanıcı</th>
                         </tr>
                         </thead>
                         <tbody>

@@ -104,7 +104,10 @@ public class MetricsQueryService {
     private List<DashboardMetricsDto.WhaleCountByLevel> getWhaleByLevel() throws IOException {
         SearchRequest request = new SearchRequest(OpenSearchIndexerService.INDEX_WHALES);
         SearchSourceBuilder src = new SearchSourceBuilder().size(0);
-        src.aggregation(AggregationBuilders.terms("by_level").field("whaleLevel").size(10));
+        src.aggregation(
+                AggregationBuilders.terms("by_level").field("whaleLevel").size(10)
+                        .subAggregation(AggregationBuilders.cardinality("unique_users").field("userId"))
+        );
         request.source(src);
 
         SearchResponse response = opensearchClient.search(request, RequestOptions.DEFAULT);
@@ -113,7 +116,13 @@ public class MetricsQueryService {
         if (terms == null) return List.of();
 
         return terms.getBuckets().stream()
-                .map(b -> new DashboardMetricsDto.WhaleCountByLevel(b.getKeyAsString(), b.getDocCount()))
+                .map(b -> {
+                    org.opensearch.search.aggregations.metrics.Cardinality card =
+                            b.getAggregations().get("unique_users");
+                    long uniqueCount = card != null ? card.getValue() : b.getDocCount();
+                    return new DashboardMetricsDto.WhaleCountByLevel(
+                            b.getKeyAsString(), uniqueCount);
+                })
                 .collect(Collectors.toList());
     }
 }

@@ -11,7 +11,14 @@ type WhaleTimelineItem = {
     id: number;
     userId: number;
     whaleLevel: string;
+    impactScore: number | null;
     reason: string | null;
+    dailyVolume: number | null;
+    hourlyTransactionCount: number | null;
+    maxSingleTransaction: number | null;
+    pattern: string | null;
+    behavior: string | null;
+    risk: string | null;
     triggeredAt: string;
     createdAt: string;
 };
@@ -128,12 +135,43 @@ export function FmRisk() {
                                     padding: '12px 0',
                                 }}
                             >
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 6 }}>
                                     <span style={{ fontWeight: 600 }}>{item.whaleLevel}</span>
                                     <span style={mutedStyle}>
-                                        {new Date(item.triggeredAt).toLocaleString('tr-TR')}
-                                    </span>
+                {new Date(item.triggeredAt).toLocaleString('tr-TR')}
+            </span>
                                     {item.reason && <span style={mutedStyle}>— {item.reason}</span>}
+                                    {item.risk && (
+                                        <span style={{
+                                            fontSize: '0.7rem',
+                                            fontWeight: 700,
+                                            padding: '2px 8px',
+                                            borderRadius: 8,
+                                            background: item.risk === 'CRITICAL' ? '#e74c3c'
+                                                : item.risk === 'HIGH' ? '#e67e22'
+                                                    : item.risk === 'MEDIUM' ? '#f1c40f'
+                                                        : tokens.accent,
+                                            color: '#fff',
+                                        }}>
+                    {item.risk}
+                </span>
+                                    )}
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: '0.8rem', color: tokens.textMuted }}>
+                                    {item.dailyVolume != null && (
+                                        <span>Günlük hacim: <strong style={{ color: tokens.text }}>₺{Number(item.dailyVolume).toLocaleString('tr-TR')}</strong></span>
+                                    )}
+                                    {item.hourlyTransactionCount != null && (
+                                        <span>Saatlik işlem: <strong style={{ color: tokens.text }}>{item.hourlyTransactionCount}</strong></span>
+                                    )}
+                                    {item.maxSingleTransaction != null && (
+                                        <span>Maks. tek işlem: <strong style={{ color: tokens.text }}>₺{Number(item.maxSingleTransaction).toLocaleString('tr-TR')}</strong></span>
+                                    )}
+                                    {item.impactScore != null && (
+                                        <span>Impact: <strong style={{ color: tokens.text }}>{item.impactScore}/100</strong></span>
+                                    )}
+                                    {item.pattern && <span>Pattern: <strong style={{ color: tokens.text }}>{item.pattern}</strong></span>}
+                                    {item.behavior && <span>Davranış: <strong style={{ color: tokens.text }}>{item.behavior}</strong></span>}
                                 </div>
                             </li>
                         ))}
