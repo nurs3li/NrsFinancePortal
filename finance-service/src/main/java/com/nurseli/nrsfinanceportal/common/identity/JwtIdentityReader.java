@@ -43,7 +43,16 @@ public class JwtIdentityReader {
 
         return jwt.getClaimAsString("preferred_username");
     }
+    public Boolean getEmailVerified() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
+        if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
+            return null;
+        }
+
+        Boolean v = jwt.getClaim("email_verified");
+        return v;
+    }
     /**
      * JWT realm_access.roles'dan uygulama rolünü döner.
      * Öncelik: ADMIN > FINANCE_MANAGER > USER (ilk eşleşen kullanılır).

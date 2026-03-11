@@ -33,6 +33,9 @@ public class User {
     @Column(name = "email")
     private String email;
 
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false)
     private Role role;
@@ -69,22 +72,17 @@ public class User {
         this.role = role;
         this.createdAt = Instant.now();
 
-        // defaults
+        this.emailVerified = false;
         this.whale = false;
         this.whaleLevel = WhaleLevel.NONE;
     }
-    /**
-     * Factory for first-login (varsayılan USER).
-     */
+
     public static User createFromIdentity(String keycloakUserId,
                                           String email,
                                           String username) {
         return createFromIdentity(keycloakUserId, email, username, Role.USER);
     }
 
-    /**
-     * Factory for first-login with role from Keycloak JWT.
-     */
     public static User createFromIdentity(String keycloakUserId,
                                           String email,
                                           String username,
@@ -99,26 +97,30 @@ public class User {
 
     // ===================== 🧠 DOMAIN BEHAVIOR =====================
 
-    /**
-     * Whale status updater (called from WhaleAlert consumer)
-     */
     public void markAsWhale(WhaleLevel level, Instant triggeredAt) {
         this.whale = true;
         this.whaleLevel = level;
         this.whaleSince = triggeredAt;
     }
 
-
     public void clearWhaleStatus() {
         this.whale = false;
         this.whaleLevel = WhaleLevel.NONE;
         this.whaleSince = null;
     }
+
     public void setRole(Role role) {
         if (role != null) {
             this.role = role;
         }
     }
+
+    public void setEmailVerified(Boolean verified) {
+        if (verified != null) {
+            this.emailVerified = verified;
+        }
+    }
+
     // ===================== GETTERS =====================
 
     public Long getId() {
@@ -135,6 +137,10 @@ public class User {
 
     public String getEmail() {
         return email;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
     }
 
     public Role getRole() {
@@ -155,5 +161,10 @@ public class User {
 
     public Instant getWhaleSince() {
         return whaleSince;
+    }
+    public void setEmail(String email) {
+        if (email != null && !email.isBlank()) {
+            this.email = email;
+        }
     }
 }

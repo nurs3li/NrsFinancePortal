@@ -24,11 +24,6 @@ public class CurrentUserResolver {
     private final AccountRepository accountRepository;
     private final BalanceRepository balanceRepository;
 
-    /**
-     * Returns the current authenticated User.
-     * If the user does not exist in DB, creates it (first login) with role from JWT.
-     * If the user exists, syncs role from JWT so DB stays correct.
-     */
     @Transactional
     public User getOrCreateCurrentUser() {
 
@@ -36,13 +31,31 @@ public class CurrentUserResolver {
         String email = jwtIdentityReader.getEmail();
         String username = jwtIdentityReader.getUsername();
         Role jwtRole = jwtIdentityReader.getRealmRole();
+        Boolean emailVerified = jwtIdentityReader.getEmailVerified();
 
         User user = userRepository.findByKeycloakUserId(keycloakUserId)
                 .orElseGet(() -> createNewUser(keycloakUserId, email, username, jwtRole));
 
-        // Her girişte JWT'deki rol ile DB'yi senkron tut
+        boolean changed = false;
+
         if (user.getRole() != jwtRole) {
             user.setRole(jwtRole);
+            changed = true;
+        }
+
+        if (emailVerified != null) {
+            boolean before = user.isEmailVerified();
+            user.setEmailVerified(emailVerified);
+            if (before != user.isEmailVerified()) {
+                changed = true;
+            }
+        }
+
+        if (email != null && !email.equals(user.getEmail())) {
+            user.setEmail(email);
+            changed = true;
+        }
+        if (changed) {
             userRepository.save(user);
         }
 
