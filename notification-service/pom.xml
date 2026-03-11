@@ -31,7 +31,18 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
-
+		<!-- Spring WebFlux (WebClient için) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webflux</artifactId>
+			<exclusions>
+				<!-- Zaten Log4j2 kullanıyoruz, default logging'i yine dışarıda bırak -->
+				<exclusion>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter-logging</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
