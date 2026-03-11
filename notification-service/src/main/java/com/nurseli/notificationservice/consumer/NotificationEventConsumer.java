@@ -1,7 +1,7 @@
 package com.nurseli.notificationservice.consumer;
 
 import com.nurseli.notificationservice.event.NotificationRequestedEvent;
-import com.nurseli.notificationservice.service.NotificationService;
+import com.nurseli.notificationservice.service.NotificationOrchestrator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -14,7 +14,7 @@ public class NotificationEventConsumer {
 
     private static final String TOPIC = "notification-events";
 
-    private final NotificationService notificationService;
+    private final NotificationOrchestrator notificationOrchestrator;
 
     @KafkaListener(topics = TOPIC, groupId = "notification-service-consumer")
     public void consume(NotificationRequestedEvent event) {
@@ -23,17 +23,15 @@ public class NotificationEventConsumer {
             return;
         }
         try {
-            notificationService.create(
+            var notification = notificationOrchestrator.handle(event);
+            log.info("[{}] Created notification id={} for sub={} type={}",
+                    TOPIC,
+                    notification.getId(),
                     event.targetKeycloakSub(),
-                    event.title() != null ? event.title() : "",
-                    event.body(),
-                    event.type() != null ? event.type() : "NOTIFICATION",
-                    event.referenceType(),
-                    event.referenceId()
-            );
-            log.info("[{}] Created notification for sub={} type={}", TOPIC, event.targetKeycloakSub(), event.type());
+                    event.type());
         } catch (Exception e) {
-            log.error("[{}] Failed to create notification for sub={} type={}", TOPIC, event.targetKeycloakSub(), event.type(), e);
+            log.error("[{}] Failed to process notification for sub={} type={}",
+                    TOPIC, event.targetKeycloakSub(), event.type(), e);
         }
     }
 }

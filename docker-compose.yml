@@ -3,9 +3,9 @@ services:
     image: postgres:16
     container_name: nrs-postgres
     environment:
-      POSTGRES_DB: nrs_finance
-      POSTGRES_USER: nrs
-      POSTGRES_PASSWORD: nrs123
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -105,7 +105,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
       SPRING_DATA_REDIS_HOST: nrs-redis
       KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
-      FINHUB_API_KEY: "d69m8shr01qhe6mo0t1gd69m8shr01qhe6mo0t20"
+      FINHUB_API_KEY: ${FINHUB_API_KEY}
     logging:
       driver: "json-file"
       options:
@@ -243,6 +243,13 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://nrs-postgres:5432/nrs_finance?currentSchema=public
       SPRING_KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
       KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
+      GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID}
+      GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET}
+      GMAIL_REFRESH_TOKEN: ${GMAIL_REFRESH_TOKEN}
+      GMAIL_FROM_ADDRESS: ${GMAIL_FROM_ADDRESS}
+      NOTIFICATION_TEST_EMAIL: ${NOTIFICATION_TEST_EMAIL}
+      KEYCLOAK_NOTIFICATION_S2S_SECRET: ${KEYCLOAK_NOTIFICATION_S2S_SECRET}
+      FINANCE_BASE_URL: ${FINANCE_BASE_URL}
     logging:
       driver: "json-file"
       options:
@@ -259,7 +266,7 @@ services:
         VITE_NOTIFICATION_API_URL: http://localhost:8089
         VITE_KEYCLOAK_URL: http://localhost:8081
         VITE_KEYCLOAK_REALM: nrs-finance
-        VITE_KEYCLOAK_CLIENT_ID: nrs-finance-backend
+        VITE_KEYCLOAK_CLIENT_ID: nrs-frontend
     container_name: nrs-frontend
     ports:
       - "3000:80"
