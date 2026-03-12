@@ -31,7 +31,7 @@ public interface ReviewTaskRepository extends JpaRepository<ReviewTask, Long> {
     java.util.Optional<ReviewTask> findByIdWithAccountAndUser(@Param("id") Long id);
 
     List<ReviewTask> findByStatusAndDueAtBefore(ReviewTaskStatus status, Instant dueAt);
-
+    List<ReviewTask> findByAccount_IdAndStatus(Long accountId, ReviewTaskStatus status);
     Page<ReviewTask> findByAssigneeRoleAndTypeInOrderByCreatedAtDesc(
             String assigneeRole,
             List<ReviewTaskType> types,

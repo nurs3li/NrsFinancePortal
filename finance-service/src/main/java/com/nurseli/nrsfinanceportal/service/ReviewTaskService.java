@@ -2,7 +2,6 @@ package com.nurseli.nrsfinanceportal.service;
 import com.nurseli.nrsfinanceportal.common.dto.ReviewTaskView;
 import com.nurseli.nrsfinanceportal.domain.account.Account;
 import com.nurseli.nrsfinanceportal.domain.account.AccountType;
-import com.nurseli.nrsfinanceportal.domain.account.AccountStatus;
 import com.nurseli.nrsfinanceportal.domain.suspicious.SuspiciousEvent;
 import com.nurseli.nrsfinanceportal.domain.task.ReviewTask;
 import com.nurseli.nrsfinanceportal.domain.task.ReviewTaskStatus;
@@ -17,8 +16,10 @@ import com.nurseli.nrsfinanceportal.repository.SuspiciousEventRepository;
 import com.nurseli.nrsfinanceportal.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Page;
+import java.time.temporal.ChronoUnit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
@@ -188,6 +189,7 @@ public class ReviewTaskService {
     public ReviewTaskView executeAction(Long taskId, String action, Long accountId) {
         User user = currentUserResolver.getOrCreateCurrentUser();
         ReviewTask task = getById(taskId);
+
         if (!FM_OPEN.contains(task.getStatus()) && !ReviewTaskStatus.FREEZE_REQUESTED.equals(task.getStatus())) {
             throw new IllegalStateException("Task not in actionable state");
         }
@@ -228,12 +230,26 @@ public class ReviewTaskService {
             task.setAccount(account);
             task.setCompletedAt(Instant.now());
             reviewTaskRepository.save(task);
+
             ReviewTask adminTask = ReviewTask.createFreezeApproval(
                     accountId, user.getId(), Instant.now().plusSeconds(24 * 3600)
             );
             adminTask.setAccount(account);
             reviewTaskRepository.save(adminTask);
             log.info("[TASK] Freeze requested for account {} -> ADMIN task id={}", accountId, adminTask.getId());
+
+            // ADMIN'e yeni freeze approval görevi için bildirim (in-app + email)
+            userRepository.findByRole(Role.ADMIN).forEach(admin ->
+                    notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                            admin.getKeycloakUserId(),
+                            "Yeni freeze onay görevi",
+                            "Bir FM, hesap #" + accountId + " için freeze talebi oluşturdu. Görev ID: " + adminTask.getId(),
+                            "FREEZE_APPROVAL_CREATED",
+                            "review_task",
+                            adminTask.getId()
+                    ))
+            );
+
             return ReviewTaskView.from(task);
         }
 
@@ -256,16 +272,35 @@ public class ReviewTaskService {
         if (!"ADMIN".equals(task.getAssigneeRole())) {
             throw new IllegalStateException("Not an admin task");
         }
+
         if ("FREEZE".equals(action)) {
             Account account = task.getAccount();
-            if (account == null) throw new IllegalStateException("No account on task");
+            if (account == null) {
+                throw new IllegalStateException("No account on task");
+            }
+
+            // 1) Hesabı dondur
             account.freeze(Instant.now(), reason != null ? reason : "Admin freeze");
             accountRepository.save(account);
+
+            // 2) Admin görevini tamamla
             task.setStatus(ReviewTaskStatus.APPROVED);
             task.setOutcome("Hesap dondur");
             task.setCompletedAt(Instant.now());
             reviewTaskRepository.save(task);
 
+            // 3) Aynı hesap için FREEZE_REQUESTED durumundaki FM görev(ler)ini de tamamla
+            List<ReviewTask> fmTasks = reviewTaskRepository
+                    .findByAccount_IdAndStatus(account.getId(), ReviewTaskStatus.FREEZE_REQUESTED);
+
+            for (ReviewTask fmTask : fmTasks) {
+                fmTask.setStatus(ReviewTaskStatus.APPROVED); // FM önerisi kabul edildi
+                fmTask.setOutcome("Freeze talebi admin tarafından onaylandı");
+                fmTask.setCompletedAt(Instant.now());
+                reviewTaskRepository.save(fmTask);
+            }
+
+            // 4) Kullanıcıya bildirim
             notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
                     account.getUser().getKeycloakUserId(),
                     "Hesabınız donduruldu",
@@ -274,15 +309,34 @@ public class ReviewTaskService {
                     "account",
                     account.getId()
             ));
+
             return ReviewTaskView.from(task);
         }
+
         if ("REJECT_FREEZE".equals(action)) {
+            // 1) Admin görevini reddedilmiş olarak tamamla
             task.setStatus(ReviewTaskStatus.REJECTED);
             task.setOutcome("Reddet");
             task.setCompletedAt(Instant.now());
             reviewTaskRepository.save(task);
+
+            // 2) İlgili hesap için FREEZE_REQUESTED durumundaki FM görev(ler)ini de kapat
+            if (task.getAccount() != null) {
+                Long accountId = task.getAccount().getId();
+                List<ReviewTask> fmTasks = reviewTaskRepository
+                        .findByAccount_IdAndStatus(accountId, ReviewTaskStatus.FREEZE_REQUESTED);
+
+                for (ReviewTask fmTask : fmTasks) {
+                    fmTask.setStatus(ReviewTaskStatus.REJECTED); // FM önerisi reddedildi
+                    fmTask.setOutcome("Freeze talebi admin tarafından reddedildi");
+                    fmTask.setCompletedAt(Instant.now());
+                    reviewTaskRepository.save(fmTask);
+                }
+            }
+
             return ReviewTaskView.from(task);
         }
+
         throw new IllegalArgumentException("Unknown admin action: " + action);
     }
 
@@ -314,6 +368,36 @@ public class ReviewTaskService {
 
         return cleaned.get();
     }
+    @Scheduled(fixedDelayString = "PT15M")
+    @Transactional(readOnly = true)
+    public void sendSlaReminderEmails() {
+        Instant now = Instant.now();
+        // Kalan süre 45–60 dakika arası olan görevler için tek seferlik hatırlatma
+        List<ReviewTaskStatus> statuses = List.of(ReviewTaskStatus.PENDING, ReviewTaskStatus.IN_REVIEW);
+        Page<ReviewTask> page = reviewTaskRepository
+                .findByAssigneeRoleAndStatusInOrderByDueAtAsc("FINANCE_MANAGER", statuses, Pageable.unpaged());
+        List<ReviewTask> tasks = page.getContent();
+        for (ReviewTask task : tasks) {
+            Instant dueAt = task.getDueAt();
+            if (dueAt == null) {
+                continue;
+            }
+            long minutesLeft = ChronoUnit.MINUTES.between(now, dueAt);
+            if (minutesLeft <= 60 && minutesLeft > 45) {
+                // Tüm FINANCE_MANAGER kullanıcılarına hatırlatma (oluşturma ile aynı mantık)
+                userRepository.findByRole(Role.FINANCE_MANAGER).forEach(fm ->
+                        notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                                fm.getKeycloakUserId(),
+                                "Görevinizi tamamlayın",
+                                "Görevinizin son tarihine 1 saatten az kaldı. Görev ID: " + task.getId(),
+                                "REVIEW_TASK_REMINDER",
+                                "review_task",
+                                task.getId()
+                        ))
+                );
+            }
+        }
+    }
 
     @Transactional
     public void escalateOverdueTasks() {
@@ -326,6 +410,18 @@ public class ReviewTaskService {
             t.setSlaEscalatedAt(Instant.now());
             reviewTaskRepository.save(t);
             log.info("[TASK] Escalated task id={} to ADMIN", t.getId());
+
+            // ADMIN'e escalation bildirimi (in-app + email)
+            userRepository.findByRole(Role.ADMIN).forEach(admin ->
+                    notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                            admin.getKeycloakUserId(),
+                            "Görev admin'e eskale edildi",
+                            "FM görevi SLA nedeniyle admin'e eskale edildi. Görev ID: " + t.getId(),
+                            "REVIEW_TASK_ESCALATED",
+                            "review_task",
+                            t.getId()
+                    ))
+            );
         }
     }
 }
