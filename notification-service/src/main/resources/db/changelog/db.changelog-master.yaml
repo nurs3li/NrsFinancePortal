@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/v1-notifications-schema.yaml
   - include:
       file: db/changelog/v2-add-occurrence-count.yaml
+  - include:
+      file: db/changelog/v3-email-delivery-audit.yaml

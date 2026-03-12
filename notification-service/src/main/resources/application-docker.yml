@@ -22,6 +22,10 @@ spring:
   liquibase:
     enabled: true
     change-log: classpath:db/changelog/db.changelog-master.yaml
+  data:
+    redis:
+      host: nrs-redis
+      port: 6379
 
   security:
     oauth2:
