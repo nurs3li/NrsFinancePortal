@@ -9,16 +9,22 @@ import java.util.Map;
 public class NotificationChannelPolicyResolver {
 
     private final Map<String, DeliveryDecision> typeBasedPolicy = Map.ofEntries(
-            // Normal user
+            // Kullanıcı bildirimleri
             Map.entry("ACCOUNT_FROZEN", DeliveryDecision.IN_APP_AND_EMAIL),
             Map.entry("ACCOUNT_UNFROZEN", DeliveryDecision.IN_APP_AND_EMAIL),
             Map.entry("REVIEW_COMPLETED", DeliveryDecision.IN_APP_ONLY),
 
-            // Finance Manager
+            // FM görevleri
             Map.entry("REVIEW_TASK_CREATED", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("REVIEW_TASK_REMINDER", DeliveryDecision.IN_APP_AND_EMAIL),
 
-            // Admin
-            Map.entry("WHALE_SPIKE", DeliveryDecision.IN_APP_AND_EMAIL)
+            // Admin görevleri / escalation
+            Map.entry("FREEZE_APPROVAL_CREATED", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("REVIEW_TASK_ESCALATED", DeliveryDecision.IN_APP_AND_EMAIL),
+
+            // Whale / sistem uyarıları
+            // Burada sadece in-app olsun, admin'e direk mail gitmesin
+            Map.entry("WHALE_SPIKE", DeliveryDecision.IN_APP_ONLY)
     );
 
     public DeliveryDecision decide(NotificationRequestedEvent event) {
