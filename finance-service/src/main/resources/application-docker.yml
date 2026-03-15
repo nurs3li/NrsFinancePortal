@@ -1,5 +1,6 @@
 server:
   port: 8080
+
 spring:
   application:
     name: finance-service
@@ -41,6 +42,25 @@ spring:
         jwt:
           # Docker'da custom JwtDecoder kullanıyoruz, auto-config'i disable et
           issuer-uri: null
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4318/v1/traces
+
+logging:
+  pattern:
+    level: "%5p [trace=%X{trace_id:-}, span=%X{span_id:-}]"
 
 market-data:
   base-url: http://nrs-market-data:8083

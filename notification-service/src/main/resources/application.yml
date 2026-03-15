@@ -18,6 +18,7 @@ spring:
   liquibase:
     enabled: true
     change-log: classpath:db/changelog/db.changelog-master.yaml
+
   data:
     redis:
       host: localhost
@@ -41,18 +42,33 @@ spring:
         spring.json.trusted.packages: com.nurseli.notificationservice.event
         spring.json.use.type.headers: false
         spring.json.value.default.type: com.nurseli.notificationservice.event.NotificationRequestedEvent
+
 server:
   port: 8091
 
+# Actuator + Prometheus (local)
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: when_authorized
 
+  tracing:
+    sampling:
+      probability: 1.0
+
+# OTLP: local'de collector yoksa bu bloğu sil veya yoruma al
+# otel:
+#   exporter:
+#     otlp:
+#       endpoint: http://localhost:4317
+
+logging:
+  pattern:
+    level: "%5p [trace=%X{trace_id:-}, span=%X{span_id:-}]"
 
 gmail:
   client-id: ${GMAIL_CLIENT_ID:}
@@ -60,13 +76,14 @@ gmail:
   refresh-token: ${GMAIL_REFRESH_TOKEN:}
   from-address: ${GMAIL_FROM_ADDRESS:}
 
-
 notification:
   test-email: ${NOTIFICATION_TEST_EMAIL:}
+
 keycloak:
   auth-server-url: http://localhost:8081
   realm: nrs-finance
   client-id: nrs-finance-backend
   client-secret: ${KEYCLOAK_NOTIFICATION_S2S_SECRET:}
+
 finance:
   base-url: ${FINANCE_BASE_URL:http://localhost:8085}

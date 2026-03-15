@@ -22,6 +22,7 @@ spring:
   liquibase:
     enabled: true
     change-log: classpath:db/changelog/db.changelog-master.yaml
+
   data:
     redis:
       host: nrs-redis
@@ -45,18 +46,31 @@ spring:
         spring.json.trusted.packages: com.nurseli.notificationservice.event
         spring.json.use.type.headers: false
         spring.json.value.default.type: com.nurseli.notificationservice.event.NotificationRequestedEvent
+
 server:
   port: 8089
 
+# ----- Actuator + OpenTelemetry + Prometheus -----
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: when_authorized
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4318/v1/traces
 
+logging:
+  pattern:
+    level: "%5p [trace=%X{trace_id:-}, span=%X{span_id:-}]"
+
+# ----- Uygulama / entegrasyon config -----
 gmail:
   client-id: ${GMAIL_CLIENT_ID:}
   client-secret: ${GMAIL_CLIENT_SECRET:}
@@ -71,5 +85,6 @@ keycloak:
   realm: nrs-finance
   client-id: nrs-finance-backend
   client-secret: ${KEYCLOAK_NOTIFICATION_S2S_SECRET:}
+
 finance:
   base-url: ${FINANCE_BASE_URL:http://nrs-finance:8080}
