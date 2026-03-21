@@ -17,4 +17,3 @@ public class OpenApiConfig {
                         .description("Metrics service endpoints"));
     }
 }
-

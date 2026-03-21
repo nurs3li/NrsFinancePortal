@@ -17,4 +17,3 @@ public class OpenApiConfig {
                         .description("Log consumer service endpoints"));
     }
 }
-

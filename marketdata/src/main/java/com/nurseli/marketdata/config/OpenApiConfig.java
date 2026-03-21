@@ -17,4 +17,3 @@ public class OpenApiConfig {
                         .description("Market data service endpoints"));
     }
 }
-

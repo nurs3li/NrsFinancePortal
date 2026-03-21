@@ -17,4 +17,3 @@ public class OpenApiConfig {
                         .description("Whale analytics service endpoints"));
     }
 }
-
