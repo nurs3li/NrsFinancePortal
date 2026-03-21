@@ -74,3 +74,11 @@ app:
     enabled: true
     max-transactions-per-minute: 1
     high-amount-threshold: 100
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
