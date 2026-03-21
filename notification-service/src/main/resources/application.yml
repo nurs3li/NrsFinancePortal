@@ -87,3 +87,11 @@ keycloak:
 
 finance:
   base-url: ${FINANCE_BASE_URL:http://localhost:8085}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
