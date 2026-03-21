@@ -37,11 +37,3 @@ management:
 opensearch:
   host: localhost
   port: 9200
-
-springdoc:
-  api-docs:
-    path: /v3/api-docs
-  swagger-ui:
-    path: /swagger-ui.html
-    operationsSorter: method
-    tagsSorter: alpha
