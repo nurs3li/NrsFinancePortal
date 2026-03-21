@@ -17,12 +17,7 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/actuator/**",
-                                "/v3/api-docs/**",
-                                "/swagger-ui.html",
-                                "/swagger-ui/**"
-                        ).permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers(req -> "OPTIONS".equalsIgnoreCase(req.getMethod())).permitAll()
                         .requestMatchers("/api/notifications/**").authenticated()
                         .anyRequest().denyAll()

@@ -61,11 +61,3 @@ whale:
       daily-volume: 5000000
       single-tx: 1000000
       hourly-count: 10
-
-springdoc:
-  api-docs:
-    path: /v3/api-docs
-  swagger-ui:
-    path: /swagger-ui.html
-    operationsSorter: method
-    tagsSorter: alpha
