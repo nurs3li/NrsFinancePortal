@@ -28,3 +28,15 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v10-add-email-verified-to-users.yaml
+
+  - include:
+      file: db/changelog/v11-manual-portfolio-position.yaml
+
+  - include:
+      file: db/changelog/v12-fund-requests.yaml
+
+  - include:
+      file: db/changelog/v13-fund-request-receipt-fields.yaml
+
+  - include:
+      file: db/changelog/v14-accounts-unique-user-type.yaml

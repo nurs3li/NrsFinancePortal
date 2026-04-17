@@ -25,15 +25,15 @@ public class UnifiedTimelineQueryService {
     private final WhaleHistoryRepository whaleRepository;
 
     /**
-     * 🔹 GERİYE UYUMLU METOT
+     * GERİYE UYUMLU METOT
      */
     public List<UnifiedTimelineDto> getTimelinePage(Long userId) {
         return getTimelinePage(userId, null, null, 50);
     }
 
     /**
-     * 🔹 FAZ 2.1 – CURSOR / KEYSET PAGINATION
-     * 🔹 FAZ 2.2 – SADECE EN GÜNCEL WHALE STATE
+     *   CURSOR / KEYSET PAGINATION
+     *   SADECE EN GÜNCEL WHALE STATE
      */
     public List<UnifiedTimelineDto> getTimelinePage(
             Long userId,
@@ -47,18 +47,18 @@ public class UnifiedTimelineQueryService {
         List<UnifiedTimelineDto> result = new ArrayList<>();
 
         /* =========================
-           1️⃣ EN GÜNCEL WHALE STATE
+           EN GÜNCEL WHALE STATE
            ========================= */
         whaleRepository
                 .findByUserIdOrderByTriggeredAtDesc(userId)
                 .stream()
-                .findFirst() // 🔥 SADECE EN GÜNCEL
+                .findFirst() //  SADECE EN GÜNCEL
                 .ifPresent(whale ->
                         result.add(mapWhaleToTimeline(whale))
                 );
 
         /* =========================
-           2️⃣ TRADE TIMELINE
+          TRADE TIMELINE
            ========================= */
         List<TradeHistoryDto> trades =
                 cursorOccurredAt == null
@@ -110,7 +110,7 @@ public class UnifiedTimelineQueryService {
                 .forEach(result::add);
 
         /* =========================
-           3️⃣ GLOBAL SORT
+           GLOBAL SORT
            ========================= */
         return result.stream()
                 .sorted(Comparator.comparing(UnifiedTimelineDto::occurredAt).reversed())

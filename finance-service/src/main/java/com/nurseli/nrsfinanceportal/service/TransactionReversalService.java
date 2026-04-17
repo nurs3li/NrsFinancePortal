@@ -23,7 +23,7 @@ public class TransactionReversalService {
     private final ApplicationEventPublisher eventPublisher;
 
     /**
-     * ⚠️ Balance mutation YOK
+     *  Balance mutation YOK
      * Balance TradeService tarafından hesaplanmış olmalı
      */
     @Transactional
@@ -32,7 +32,7 @@ public class TransactionReversalService {
             BigDecimal balanceAfter
     ) {
 
-        // 1️⃣ Orijinal transaction
+        //  Orijinal transaction
         Transaction original = transactionRepository
                 .findByIdWithAccountAndUser(transactionId)
                 .orElseThrow(() -> new IllegalArgumentException("Transaction not found"));
@@ -45,7 +45,7 @@ public class TransactionReversalService {
             throw new IllegalStateException("Transaction already reversed");
         }
 
-        // 2️⃣ Reversal transaction (SADECE KAYIT)
+        // Reversal transaction (SADECE KAYIT)
         Transaction reversal = Transaction.reversal(
                 original,
                 currentUserResolver.getOrCreateCurrentUser(),
@@ -54,7 +54,7 @@ public class TransactionReversalService {
 
         Transaction saved = transactionRepository.save(reversal);
 
-        // 3️⃣ Event publish
+        // Event publish
         publishTransactionReversedEvent(saved, original);
 
         return saved;

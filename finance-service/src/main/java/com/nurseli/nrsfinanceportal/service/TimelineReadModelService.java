@@ -29,13 +29,13 @@ public class TimelineReadModelService {
 
         String cacheKey = buildCacheKey(userId, cursorAt, cursorId, size);
 
-        // 1️⃣ Cache HIT
+        // Cache HIT
         Object cached = redisTemplate.opsForValue().get(cacheKey);
         if (cached instanceof TimelinePageResponse response) {
             return response;
         }
 
-        // 2️⃣ DB → size + 1 geldi
+        // DB → size + 1 geldi
         List<UnifiedTimelineDto> fetched =
                 timelineQueryService.getTimelinePage(
                         userId,
@@ -63,7 +63,7 @@ public class TimelineReadModelService {
         TimelinePageResponse response =
                 new TimelinePageResponse(items, nextCursor, hasMore);
 
-        // 3️⃣ Cache yaz
+        // Cache yaz
         redisTemplate.opsForValue()
                 .set(cacheKey, response, CACHE_TTL_SECONDS, TimeUnit.SECONDS);
 

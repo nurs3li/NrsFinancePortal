@@ -4,6 +4,7 @@ import com.nurseli.nrsfinanceportal.domain.account.Account;
 import com.nurseli.nrsfinanceportal.domain.event.TransactionCreatedEvent;
 import com.nurseli.nrsfinanceportal.domain.transaction.Transaction;
 import com.nurseli.nrsfinanceportal.domain.transaction.TransactionType;
+import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,12 +26,6 @@ public class TransactionService {
     private final CurrentUserResolver currentUserResolver;
     private final ApplicationEventPublisher eventPublisher;
 
-    /**
-     * 🔑 TEK GERÇEK KAYIT NOKTASI
-     *
-     * ❗ Balance mutation YOK
-     * ❗ BalanceAfter DIŞARIDAN gelir (TradeService)
-     */
     @Transactional
     public Transaction record(
             Account account,
@@ -38,28 +33,34 @@ public class TransactionService {
             TransactionType type,
             BigDecimal balanceAfter
     ) {
+        User actor = currentUserResolver.getOrCreateCurrentUser();
+        return recordForUser(account, actor, amount, type, balanceAfter);
+    }
 
+    @Transactional
+    public Transaction recordForUser(
+            Account account,
+            User user,
+            BigDecimal amount,
+            TransactionType type,
+            BigDecimal balanceAfter
+    ) {
         validateAmount(amount);
 
         Transaction transaction = Transaction.record(
                 account,
-                currentUserResolver.getOrCreateCurrentUser(),
+                user,
                 amount,
                 balanceAfter,
                 type
         );
 
         Transaction saved = transactionRepository.save(transaction);
-
         publishEventAfterCommit(saved);
-
         return saved;
     }
 
-    /* ================= EVENT PUBLISH ================= */
-
     private void publishEventAfterCommit(Transaction transaction) {
-
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization() {
                     @Override

@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - changeSet:
+      id: v14-accounts-unique-user-type
+      author: nurseli
+      changes:
+        - addUniqueConstraint:
+            tableName: accounts
+            columnNames: user_id, type
+            constraintName: uq_accounts_user_type
