@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - changeSet:
+      id: v13-fund-request-receipt-fields
+      author: nurseli
+      changes:
+        - addColumn:
+            tableName: fund_requests
+            columns:
+              - column:
+                  name: receipt_file_url
+                  type: VARCHAR(500)
+              - column:
+                  name: reference_no
+                  type: VARCHAR(100)
+              - column:
+                  name: source_bank_name
+                  type: VARCHAR(200)
+
+        - createIndex:
+            tableName: fund_requests
+            indexName: idx_fund_request_reference_no
+            columns:
+              - column:
+                  name: reference_no
