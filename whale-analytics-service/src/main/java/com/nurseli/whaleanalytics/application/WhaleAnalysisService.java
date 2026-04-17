@@ -19,7 +19,6 @@ public class WhaleAnalysisService {
     private final WhaleDecisionEngine decisionEngine;
     private final WhaleImpactScoreCalculator impactScoreCalculator;
 
-    // FAZ 3.1 ekleri
     private final TrendAnalyzer trendAnalyzer;
     private final PatternDetector patternDetector;
     private final BehaviorClassifier behaviorClassifier;
@@ -50,7 +49,7 @@ public class WhaleAnalysisService {
         Instant now = Instant.now();
 
         log.warn("""
-            🧠 WHALE FULL ANALYSIS
+            WHALE FULL ANALYSIS
             userId      : {}
             level       : {}
             trend       : {}

@@ -45,7 +45,7 @@ logging:
   pattern:
     level: "%5p [trace=%X{trace_id:-}, span=%X{span_id:-}]"
 
-# Veri kaynağı yapılandırması (FAZ 3.2)
+# Veri kaynağı yapılandırması
 app:
   data-sources:
     tcmb:

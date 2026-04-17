@@ -50,7 +50,7 @@ public class RedisWhaleRepository {
         }
     }
 
-    // 🔹 Transaction snapshot ZSET key
+    //  Transaction snapshot ZSET key
     private String txKey(Long userId) {
         return "whale:tx:" + userId;
     }

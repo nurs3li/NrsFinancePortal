@@ -11,41 +11,41 @@ public class RiskEvaluator {
             PatternResult pattern
     ) {
 
-        // 1️⃣ Manipulative pattern her zaman CRITICAL
+        //  Manipulative pattern her zaman CRITICAL
         if (pattern.isManipulative()) {
             return RiskLevel.CRITICAL;
         }
 
-        // 2️⃣ Manipulative behavior da CRITICAL
+        // Manipulative behavior da CRITICAL
         if (behavior == BehaviorClass.MANIPULATIVE) {
             return RiskLevel.CRITICAL;
         }
 
-        // 3️⃣ L3 + Aggressive → HIGH
+        //  L3 + Aggressive → HIGH
         if (whaleLevel == WhaleLevel.L3_MEGA_WHALE
                 && behavior == BehaviorClass.AGGRESSIVE) {
             return RiskLevel.HIGH;
         }
 
-        // 4️⃣ L2 + Strategic → MEDIUM
+        //  L2 + Strategic → MEDIUM
         if (whaleLevel == WhaleLevel.L2_WHALE
                 && behavior == BehaviorClass.STRATEGIC) {
             return RiskLevel.MEDIUM;
         }
 
-        // 5️⃣ L1 + Speculative → MEDIUM
+        //  L1 + Speculative → MEDIUM
         if (whaleLevel == WhaleLevel.L1_LARGE_TRADER
                 && behavior == BehaviorClass.SPECULATIVE) {
             return RiskLevel.MEDIUM;
         }
 
-        // 6️⃣ NONE + Conservative → LOW
+        //  NONE + Conservative → LOW
         if (whaleLevel == WhaleLevel.NONE
                 && behavior == BehaviorClass.CONSERVATIVE) {
             return RiskLevel.LOW;
         }
 
-        // 7️⃣ Default fallback
+        //  Default fallback
         if (whaleLevel == WhaleLevel.L3_MEGA_WHALE) {
             return RiskLevel.HIGH;
         }
