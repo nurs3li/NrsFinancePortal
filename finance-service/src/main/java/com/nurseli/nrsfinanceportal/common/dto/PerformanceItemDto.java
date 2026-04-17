@@ -1,0 +1,52 @@
+package com.nurseli.nrsfinanceportal.common.dto;
+
+import java.math.BigDecimal;
+
+public class PerformanceItemDto {
+
+    private final String source;
+    private final String type;
+    private final String symbol;
+    private final BigDecimal quantity;
+    private final BigDecimal avgBuyPrice;
+    private final BigDecimal currentPrice;
+    private final BigDecimal cost;
+    private final BigDecimal currentValue;
+    private final BigDecimal pnl;
+    private final BigDecimal pnlPct;
+
+    public PerformanceItemDto(
+            String source,
+            String type,
+            String symbol,
+            BigDecimal quantity,
+            BigDecimal avgBuyPrice,
+            BigDecimal currentPrice,
+            BigDecimal cost,
+            BigDecimal currentValue,
+            BigDecimal pnl,
+            BigDecimal pnlPct
+    ) {
+        this.source = source;
+        this.type = type;
+        this.symbol = symbol;
+        this.quantity = quantity;
+        this.avgBuyPrice = avgBuyPrice;
+        this.currentPrice = currentPrice;
+        this.cost = cost;
+        this.currentValue = currentValue;
+        this.pnl = pnl;
+        this.pnlPct = pnlPct;
+    }
+
+    public String getSource() { return source; }
+    public String getType() { return type; }
+    public String getSymbol() { return symbol; }
+    public BigDecimal getQuantity() { return quantity; }
+    public BigDecimal getAvgBuyPrice() { return avgBuyPrice; }
+    public BigDecimal getCurrentPrice() { return currentPrice; }
+    public BigDecimal getCost() { return cost; }
+    public BigDecimal getCurrentValue() { return currentValue; }
+    public BigDecimal getPnl() { return pnl; }
+    public BigDecimal getPnlPct() { return pnlPct; }
+}

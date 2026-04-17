@@ -1,0 +1,120 @@
+databaseChangeLog:
+  - changeSet:
+      id: v12-fund-requests
+      author: nurseli
+      changes:
+        - createTable:
+            tableName: fund_requests
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: account_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: type
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: amount
+                  type: NUMERIC(38,2)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: currency
+                  type: VARCHAR(10)
+                  defaultValue: TRY
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: request_note
+                  type: VARCHAR(500)
+
+              - column:
+                  name: review_note
+                  type: VARCHAR(500)
+
+              - column:
+                  name: bank_account_iban
+                  type: VARCHAR(50)
+
+              - column:
+                  name: approved_by_user_id
+                  type: BIGINT
+
+              - column:
+                  name: approved_at
+                  type: TIMESTAMPTZ
+
+              - column:
+                  name: rejected_at
+                  type: TIMESTAMPTZ
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: updated_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: fund_requests
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_fund_request_user
+
+        - addForeignKeyConstraint:
+            baseTableName: fund_requests
+            baseColumnNames: account_id
+            referencedTableName: accounts
+            referencedColumnNames: id
+            constraintName: fk_fund_request_account
+
+        - createIndex:
+            tableName: fund_requests
+            indexName: idx_fund_request_user_status
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: status
+
+        - createIndex:
+            tableName: fund_requests
+            indexName: idx_fund_request_type_status
+            columns:
+              - column:
+                  name: type
+              - column:
+                  name: status
