@@ -32,9 +32,6 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class TradeService {
 
-    private static final BigDecimal DEMO_INITIAL_BALANCE =
-            new BigDecimal("1000000");
-
     private final CurrentUserResolver currentUserResolver;
     private final AccountRepository accountRepository;
     private final BalanceRepository balanceRepository;
@@ -43,33 +40,25 @@ public class TradeService {
     private final PriceLookupService priceLookupService;
     private final TransactionService transactionService;
     private final ApplicationEventPublisher eventPublisher;
-
-    // 🔥 EKLENEN SERVIS
     private final TimelineCacheInvalidationService timelineCacheInvalidationService;
 
-    /**
-     * 🔥 TEK GERÇEK MUTATION NOKTASI
-     */
     @Transactional
     public TradeResponse execute(TradeRequest request) {
 
-        // 1️⃣ Current User
         User user = currentUserResolver.getOrCreateCurrentUser();
         if (accountRepository.existsByUser_IdAndStatus(user.getId(), AccountStatus.FROZEN)) {
             throw new IllegalStateException("Hesap askıya alınmış. İşlem yapılamaz.");
         }
-        // 2️⃣ DEMO Account
-        Account demoAccount = ensureDemoAccount(user);
-        if (demoAccount.isFrozen()) {
+
+        Account cashAccount = ensureCashAccount(user);
+        if (cashAccount.isFrozen()) {
             throw new IllegalStateException("Hesap askıya alınmış. İşlem yapılamaz.");
         }
 
-        // 3️⃣ Balance (FOR UPDATE)
         Balance balance = balanceRepository
-                .findByAccountForUpdate(demoAccount)
+                .findByAccountForUpdate(cashAccount)
                 .orElseThrow(() -> new IllegalStateException("Balance not found"));
 
-        // 4️⃣ TRY fiyat
         BigDecimal tryPrice = priceLookupService.getTryPrice(
                 request.assetType(),
                 request.symbol()
@@ -77,7 +66,6 @@ public class TradeService {
 
         BigDecimal totalTry = tryPrice.multiply(request.quantity());
 
-        // 5️⃣ Portfolio Asset
         PortfolioAsset asset = portfolioAssetRepository
                 .findByUserAndTypeAndSymbol(
                         user,
@@ -86,15 +74,18 @@ public class TradeService {
                 )
                 .orElse(null);
 
-        /* ======================
-           BUY
-           ====================== */
         if (request.tradeType() == TradeType.BUY) {
+
+            if (balance.getAmount().compareTo(totalTry) < 0) {
+                throw new IllegalStateException(
+                        "Yetersiz bakiye. Trade için önce para yatırma talebi oluşturun."
+                );
+            }
 
             BigDecimal balanceAfter = balance.decrease(totalTry);
 
             Transaction tx = transactionService.record(
-                    demoAccount,
+                    cashAccount,
                     totalTry,
                     TransactionType.WITHDRAW,
                     balanceAfter
@@ -123,10 +114,8 @@ public class TradeService {
 
             portfolioAssetRepository.save(asset);
 
-// 🔥 TIMELINE CACHE INVALIDATE
             timelineCacheInvalidationService.invalidateUserTimeline(user.getId());
 
-// ✅ Event'te sembol her zaman normalize (BTC -> BTCUSDT) metriklerde tek görünsün
             String normalizedSymbol = SymbolNormalizer.normalize(request.assetType(), request.symbol());
             eventPublisher.publishEvent(
                     new TradeCreatedEvent(
@@ -143,13 +132,8 @@ public class TradeService {
             );
 
             return response(request, tryPrice, totalTry, balanceAfter);
-
-
         }
 
-        /* ======================
-           SELL
-           ====================== */
         if (asset == null || asset.getQuantity().compareTo(request.quantity()) < 0) {
             throw new IllegalStateException("Insufficient asset quantity");
         }
@@ -159,7 +143,7 @@ public class TradeService {
         BigDecimal balanceAfter = balance.increase(totalTry);
 
         Transaction tx = transactionService.record(
-                demoAccount,
+                cashAccount,
                 totalTry,
                 TransactionType.DEPOSIT,
                 balanceAfter
@@ -181,36 +165,17 @@ public class TradeService {
             portfolioAssetRepository.save(asset);
         }
 
-        // 🔥 TIMELINE CACHE INVALIDATE
         timelineCacheInvalidationService.invalidateUserTimeline(user.getId());
 
         return response(request, tryPrice, totalTry, balanceAfter);
     }
 
-    /* ======================
-       DEMO ACCOUNT
-       ====================== */
-    private Account ensureDemoAccount(User user) {
-
+    private Account ensureCashAccount(User user) {
         return accountRepository
-                .findByUserAndType(user, AccountType.DEMO)
-                .orElseGet(() -> {
-
-                    Account demo = accountRepository.save(
-                            Account.create(AccountType.DEMO, user)
-                    );
-
-                    Balance balance = new Balance(demo);
-                    balance.increase(DEMO_INITIAL_BALANCE);
-                    balanceRepository.save(balance);
-
-                    return demo;
-                });
+                .findByUserAndType(user, AccountType.CASH)
+                .orElseThrow(() -> new IllegalStateException("Cash account not found"));
     }
 
-    /* ======================
-       RESPONSE
-       ====================== */
     private TradeResponse response(
             TradeRequest request,
             BigDecimal tryPrice,
