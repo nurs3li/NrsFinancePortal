@@ -16,7 +16,7 @@ public class NotificationOrchestrator {
 
     @Transactional
     public Notification handle(NotificationRequestedEvent event) {
-        // 1️⃣ In-app notification her zaman önce yazılır
+        // In-app notification her zaman önce yazılır
         Notification notification = notificationService.create(
                 event.targetKeycloakSub(),
                 event.title() != null ? event.title() : "",
@@ -26,7 +26,7 @@ public class NotificationOrchestrator {
                 event.referenceId()
         );
 
-        // 2️⃣ E-posta kanalı (Faz 1: sadece log)
+        //  E-posta kanalı
         emailNotificationService.sendIfEligible(event);
 
         return notification;
