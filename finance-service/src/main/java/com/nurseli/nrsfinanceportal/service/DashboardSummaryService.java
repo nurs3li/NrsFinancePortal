@@ -31,22 +31,22 @@ public class DashboardSummaryService {
     public DashboardSummaryResponse getSummary(Long userId) {
 
         /* ======================
-           2️⃣ Demo account & balance – yoksa boş özet (ADMIN/FINANCE_MANAGER vb.)
+           Demo account & balance – yoksa boş özet (ADMIN/FINANCE_MANAGER vb.)
            ====================== */
-        List<Account> demoAccounts = accountRepository.findByUserIdAndType(userId, AccountType.DEMO);
-        if (demoAccounts.isEmpty()) {
+        List<Account> cashAccounts = accountRepository.findByUserIdAndType(userId, AccountType.CASH);
+        if (cashAccounts.isEmpty()) {
             return emptySummary();
         }
-        Account demoAccount = demoAccounts.get(0);
+        Account cashAccount = cashAccounts.get(0);
 
-        var balanceOpt = balanceRepository.findByAccount(demoAccount);
+        var balanceOpt = balanceRepository.findByAccount(cashAccount);
         if (balanceOpt.isEmpty()) {
             return emptySummary();
         }
         BigDecimal cashTry = balanceOpt.get().getAmount();
 
         /* ======================
-           1️⃣ Whale (Redis)
+           Whale (Redis)
            ====================== */
         var whaleState = whaleStateCacheService.getLastWhaleState(userId);
 
@@ -63,10 +63,10 @@ public class DashboardSummaryService {
                 new DashboardSummaryResponse.CashSummary(cashTry);
 
         /* ======================
-           3️⃣ Portfolio (Market priced)
+           Portfolio (Market priced)
            ====================== */
         var portfolioSummary =
-                portfolioAggregationService.aggregate(demoAccount.getUser());
+                portfolioAggregationService.aggregate(cashAccount.getUser());
 
         var portfolio =
                 new DashboardSummaryResponse.PortfolioSummary(
@@ -75,7 +75,7 @@ public class DashboardSummaryService {
                 );
 
         /* ======================
-           4️⃣ Activity
+          Activity
            ====================== */
         Instant todayStart =
                 LocalDate.now()
@@ -95,7 +95,7 @@ public class DashboardSummaryService {
                 );
 
         /* ======================
-           5️⃣ Net Worth
+           Net Worth
            ====================== */
         BigDecimal netWorthTry =
                 cashTry.add(portfolioSummary.totalTry());

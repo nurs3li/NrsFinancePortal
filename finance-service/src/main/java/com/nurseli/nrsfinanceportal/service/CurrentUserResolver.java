@@ -19,6 +19,13 @@ import java.math.BigDecimal;
 @Service
 public class CurrentUserResolver {
 
+    /**
+     * Yeni kullanıcıya verilen "hoşgeldin" kredisi.
+     * Gerçek bankacılık flow'unu göstermek için düşük tutuldu;
+     * büyük trade'ler için kullanıcı fund-request ile bakiye yüklemeli.
+     */
+    private static final BigDecimal WELCOME_BONUS = new BigDecimal("30000");
+
     private final JwtIdentityReader jwtIdentityReader;
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
@@ -35,6 +42,8 @@ public class CurrentUserResolver {
 
         User user = userRepository.findByKeycloakUserId(keycloakUserId)
                 .orElseGet(() -> createNewUser(keycloakUserId, email, username, jwtRole));
+
+        ensureCashAccount(user);
 
         boolean changed = false;
 
@@ -62,6 +71,17 @@ public class CurrentUserResolver {
         return user;
     }
 
+    private void ensureCashAccount(User user) {
+        if (accountRepository.findByUserAndType(user, AccountType.CASH).isEmpty()) {
+            Account cash = accountRepository.save(
+                    Account.create(AccountType.CASH, user)
+            );
+            balanceRepository.save(
+                    Balance.of(cash, WELCOME_BONUS)
+            );
+        }
+    }
+
     private User createNewUser(String keycloakUserId, String email, String username, Role role) {
 
         User user = userRepository.save(
@@ -71,13 +91,8 @@ public class CurrentUserResolver {
         Account cash = accountRepository.save(
                 Account.create(AccountType.CASH, user)
         );
-        balanceRepository.save(Balance.zero(cash));
-
-        Account demo = accountRepository.save(
-                Account.create(AccountType.DEMO, user)
-        );
         balanceRepository.save(
-                Balance.of(demo, new BigDecimal("1000000"))
+                Balance.of(cash, WELCOME_BONUS)
         );
 
         return user;

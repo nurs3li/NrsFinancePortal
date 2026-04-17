@@ -23,22 +23,21 @@ public class BalanceController {
     private final AccountRepository accountRepository;
 
     /* ================= QUERY ================= */
-
     @GetMapping("/me")
     @PreAuthorize("hasRole('USER')")
     public ApiResponse<AccountBalanceView> myBalance() {
 
-        Account demoAccount = accountRepository
+        Account cashAccount = accountRepository
                 .findByUserAndType(
                         currentUserResolver.getOrCreateCurrentUser(),
-                        AccountType.DEMO
+                        AccountType.CASH
                 )
-                .orElseThrow(() -> new IllegalStateException("Demo account not found"));
+                .orElseThrow(() -> new IllegalStateException("Cash account not found"));
 
         return ApiResponse.success(
                 new AccountBalanceView(
-                        demoAccount.getId(),
-                        balanceService.getOf(demoAccount).getAmount()
+                        cashAccount.getId(),
+                        balanceService.getOf(cashAccount).getAmount()
                 )
         );
     }
