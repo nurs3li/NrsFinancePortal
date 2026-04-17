@@ -12,17 +12,17 @@ public class WhaleDecisionEngine {
 
     public WhaleLevel evaluate(WhaleMetrics metrics) {
 
-        // 🔥 L3 – MEGA WHALE (Market Mover)
+        //  L3 – MEGA WHALE (Market Mover)
         if (isL3(metrics)) {
             return WhaleLevel.L3_MEGA_WHALE;
         }
 
-        // 🐋 L2 – WHALE
+        //  L2 – WHALE
         if (isL2(metrics)) {
             return WhaleLevel.L2_WHALE;
         }
 
-        // 💰 L1 – LARGE TRADER
+        //  L1 – LARGE TRADER
         if (isL1(metrics)) {
             return WhaleLevel.L1_LARGE_TRADER;
         }

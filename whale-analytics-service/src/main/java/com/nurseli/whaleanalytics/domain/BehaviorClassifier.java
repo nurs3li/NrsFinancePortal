@@ -13,18 +13,18 @@ public class BehaviorClassifier {
             PatternResult pattern
     ) {
 
-        // 1️⃣ Manipulative pattern her zaman override eder
+        // Manipulative pattern her zaman override eder
         if (pattern.isManipulative()) {
             return BehaviorClass.MANIPULATIVE;
         }
 
-        // 2️⃣ Strategic → accumulation / distribution
+        //  Strategic → accumulation / distribution
         if (pattern.dominantPattern() == PatternType.ACCUMULATION
                 || pattern.dominantPattern() == PatternType.DISTRIBUTION) {
             return BehaviorClass.STRATEGIC;
         }
 
-        // 3️⃣ Aggressive → yüksek hacim + güçlü trend
+        //  Aggressive → yüksek hacim + güçlü trend
         if (isHighVolume(metrics)
                 && (trend.direction() == TrendDirection.UPWARD
                 || trend.direction() == TrendDirection.DOWNWARD)
@@ -33,12 +33,12 @@ public class BehaviorClassifier {
             return BehaviorClass.AGGRESSIVE;
         }
 
-        // 4️⃣ Speculative → volatile + orta hacim
+        // Speculative → volatile + orta hacim
         if (trend.direction() == TrendDirection.VOLATILE) {
             return BehaviorClass.SPECULATIVE;
         }
 
-        // 5️⃣ Conservative → düşük hacim + stable
+        // Conservative → düşük hacim + stable
         if (!isHighVolume(metrics)
                 && trend.direction() == TrendDirection.STABLE) {
 

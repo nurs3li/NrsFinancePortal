@@ -19,14 +19,14 @@ public class ImpactScoreNormalizer {
 
         int score = clamp(rawImpactScore);
 
-        // 1️⃣ WhaleLevel boost
+        //  WhaleLevel boost
         switch (level) {
             case L3_MEGA_WHALE -> score += 10;
             case L2_WHALE -> score += 5;
             default -> {}
         }
 
-        // 2️⃣ Trend influence
+        // Trend influence
         if (trend.direction() == TrendDirection.UPWARD
                 || trend.direction() == TrendDirection.DOWNWARD) {
 
@@ -41,7 +41,7 @@ public class ImpactScoreNormalizer {
             score += 5;
         }
 
-        // 3️⃣ Pattern influence
+        // Pattern influence
         switch (pattern.dominantPattern()) {
             case ACCUMULATION -> score += 4;
             case DISTRIBUTION -> score += 4;
@@ -50,7 +50,7 @@ public class ImpactScoreNormalizer {
             default -> {}
         }
 
-        // 4️⃣ Behavior influence
+        //  Behavior influence
         switch (behavior) {
             case AGGRESSIVE -> score += 5;
             case STRATEGIC -> score += 3;
@@ -59,7 +59,7 @@ public class ImpactScoreNormalizer {
             default -> {}
         }
 
-        // 5️⃣ Risk modifier
+        //  Risk modifier
         switch (risk) {
             case CRITICAL -> score += 5;
             case HIGH -> score += 3;

@@ -23,15 +23,15 @@ public class PatternDetector {
                 .sorted(Comparator.comparing(TransactionSnapshot::occurredAt))
                 .toList();
 
-        // 1️⃣ HIGH FREQUENCY CHECK
+        //  HIGH FREQUENCY CHECK
         PatternResult hf = detectHighFrequency(sorted);
         if (hf.dominantPattern() != PatternType.NONE) return hf;
 
-        // 2️⃣ PUMP & DUMP CHECK
+        //  PUMP & DUMP CHECK
         PatternResult pump = detectPumpAndDump(sorted);
         if (pump.dominantPattern() != PatternType.NONE) return pump;
 
-        // 3️⃣ ACCUMULATION / DISTRIBUTION
+        //  ACCUMULATION / DISTRIBUTION
         PatternResult acc = detectAccumulationOrDistribution(sorted);
         if (acc.dominantPattern() != PatternType.NONE) return acc;
 

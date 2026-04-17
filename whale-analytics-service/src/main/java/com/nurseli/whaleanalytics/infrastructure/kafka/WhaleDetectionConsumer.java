@@ -41,16 +41,16 @@ public class WhaleDetectionConsumer {
 
             Long userId = event.userId();
 
-            // 1️⃣ METRICS GÜNCELLEME
+            //  METRICS GÜNCELLEME
             whaleRepository.incrementHourlyCount(userId);
             whaleRepository.addDailyVolume(userId, event.amount());
             whaleRepository.updateMaxTransaction(userId, event.amount());
             whaleRepository.addTransactionSnapshot(userId, event.amount(), event.occurredAt());
 
-            // 2️⃣ ANALYSIS
+            //  ANALYSIS
             var result = analysisService.analyze(userId.toString());
 
-            // 3️⃣ Özet log
+            //  Özet log
             log.warn("""
                     🐋 WHALE ANALYSIS
                     userId        : {}
@@ -68,7 +68,7 @@ public class WhaleDetectionConsumer {
                     result.impactScore()
             );
 
-            // 4️⃣ EVENT PUBLISH (tek nokta)
+            // EVENT PUBLISH (tek nokta)
             if (result.level() != WhaleLevel.NONE) {
 
                 log.warn("""

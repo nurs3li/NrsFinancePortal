@@ -16,7 +16,7 @@ public class WhaleAlertProducer {
     public void publish(WhaleAlertDetectedEvent event) {
         kafkaTemplate.send(
                 TOPIC,
-                event.userId().toString(), // 🔥 TEK DÜZELTME
+                event.userId().toString(), //  TEK DÜZELTME
                 event
         );
     }
