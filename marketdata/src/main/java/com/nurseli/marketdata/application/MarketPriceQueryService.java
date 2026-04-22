@@ -105,6 +105,20 @@ public class MarketPriceQueryService {
                 .toList();
     }
 
+    /**
+     * Hisse geçmişi — yalnızca yapılandırılmış equity sembolleri (app.equity.symbols).
+     */
+    public List<MarketPriceHistoryResponse> getEquityHistory(String rawSymbol, int days) {
+        if (rawSymbol == null || rawSymbol.isBlank()) {
+            throw new InvalidRequestException("symbol zorunludur.");
+        }
+        String symbol = rawSymbol.trim().toUpperCase();
+        if (!isAllowedSymbol(MarketType.EQUITY, symbol)) {
+            throw new InvalidRequestException("type=EQUITY için geçersiz symbol: " + symbol);
+        }
+        return getHistory(symbol, days);
+    }
+
     // =========================
     // BATCH HISTORY (OHLC) + CACHE
     // =========================
