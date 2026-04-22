@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
+import { QueryProvider } from './providers/QueryProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './auth/ProtectedRoute';
 import { RoleProtectedRoute } from './auth/RoleProtectedRoute';
@@ -14,9 +15,12 @@ import { AdvancedMarket } from './pages/AdvancedMarket';
 import { Portfolio } from './pages/Portfolio';
 import { Trade } from './pages/Trade';
 import { Transactions } from './pages/Transactions';
+import { Wallet } from './pages/Wallet';
+import { Simulation } from './pages/Simulation';
 import { FmTasks } from './pages/FmTasks';
 import { FmRisk } from './pages/FmRisk';
 import { FmTaskDetail } from './pages/FmTaskDetail';
+import { FmFundRequests } from './pages/FmFundRequests';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminTasks } from './pages/AdminTasks';
 import { AdminUsersAndAccounts } from './pages/AdminUsersAndAccounts';
@@ -31,6 +35,7 @@ function App() {
         <ThemeProvider>
             <ErrorBoundary>
                 <AuthProvider>
+                    <QueryProvider>
                     <BrowserRouter>
                         <Routes>
                             <Route path="/" element={<HomeRedirect />} />
@@ -93,6 +98,22 @@ function App() {
                                     }
                                 />
                                 <Route
+                                    path="/wallet"
+                                    element={
+                                        <ProtectedRoute>
+                                            <Wallet />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/simulation"
+                                    element={
+                                        <ProtectedRoute>
+                                            <Simulation />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
                                     path="/fm/tasks"
                                     element={
                                         <RoleProtectedRoute
@@ -119,6 +140,16 @@ function App() {
                                             allowedRoles={['FINANCE_MANAGER']}
                                         >
                                             <FmRisk />
+                                        </RoleProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/fm/fund-requests"
+                                    element={
+                                        <RoleProtectedRoute
+                                            allowedRoles={['FINANCE_MANAGER']}
+                                        >
+                                            <FmFundRequests />
                                         </RoleProtectedRoute>
                                     }
                                 />
@@ -196,6 +227,7 @@ function App() {
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
                     </BrowserRouter>
+                    </QueryProvider>
                 </AuthProvider>
             </ErrorBoundary>
         </ThemeProvider>
