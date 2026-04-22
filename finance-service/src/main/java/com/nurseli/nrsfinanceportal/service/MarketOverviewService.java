@@ -45,7 +45,9 @@ public class MarketOverviewService {
                         Map.Entry::getKey,
                         e -> new MetalOverviewDto(
                                 e.getValue().buyPrice(),
-                                e.getValue().source()
+                                e.getValue().sellPrice(),
+                                e.getValue().source(),
+                                e.getValue().timestamp()
                         ),
                         (a, b) -> a,
                         LinkedHashMap::new
@@ -61,7 +63,9 @@ public class MarketOverviewService {
                         Map.Entry::getKey,
                         e -> new CryptoOverviewDto(
                                 e.getValue().buyPrice(),
-                                e.getValue().source()
+                                e.getValue().sellPrice(),
+                                e.getValue().source(),
+                                e.getValue().timestamp()
                         ),
                         (a, b) -> a,
                         LinkedHashMap::new
@@ -76,8 +80,10 @@ public class MarketOverviewService {
                 .collect(Collectors.toMap(
                         Map.Entry::getKey, // AES, AFT, TCD...
                         e -> new FundOverviewDto(
-                                e.getValue().buyPrice(), // fon fiyatı
-                                e.getValue().source()    // ETF
+                                e.getValue().buyPrice(),
+                                e.getValue().sellPrice(),
+                                e.getValue().source(),
+                                e.getValue().timestamp()
                         ),
                         (a, b) -> a,
                         LinkedHashMap::new
@@ -92,7 +98,9 @@ public class MarketOverviewService {
                         Map.Entry::getKey,
                         e -> new StockOverviewDto(
                                 e.getValue().buyPrice(),
-                                e.getValue().source()
+                                e.getValue().sellPrice(),
+                                e.getValue().source(),
+                                e.getValue().timestamp()
                         ),
                         (a, b) -> a,
                         LinkedHashMap::new

@@ -1,23 +1,30 @@
-import { Outlet, Link, useNavigate } from 'react-router-dom';
+import { Outlet, Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
 import { notificationClient } from '../api/client';
+import { Bell, ChevronDown, Landmark, LogOut, Moon, Sun } from 'lucide-react';
+import { useHeaderInteractions } from './header';
+import './Layout.css';
 
-const linkStyle = (tokens: { headerText: string }) => ({
-    color: tokens.headerText,
-    textDecoration: 'none',
-    fontSize: '0.9375rem',
-});
+type NavItem = {
+    key: string;
+    to: string;
+    label: string;
+    show: boolean;
+};
 
 export function Layout() {
     const { isAuthenticated, logout, role, user } = useAuth();
     const { theme, toggleTheme, tokens } = useTheme();
+    const location = useLocation();
     const navigate = useNavigate();
     const [unreadCount, setUnreadCount] = useState(0);
     const [dropdownItems, setDropdownItems] = useState<{ id: number; title: string; readAt: string | null; type: string }[]>([]);
-    const [dropdownOpen, setDropdownOpen] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
+    const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+    const notificationRef = useRef<HTMLDivElement>(null);
+    const userMenuRef = useRef<HTMLDivElement>(null);
+    const navRef = useRef<HTMLDivElement>(null);
 
     const fetchUnreadCount = useCallback(() => {
         if (!isAuthenticated) return;
@@ -40,15 +47,15 @@ export function Layout() {
     }, [fetchUnreadCount]);
 
     useEffect(() => {
-        if (dropdownOpen && isAuthenticated) {
+        if (isNotificationOpen && isAuthenticated) {
             fetchDropdownNotifications();
             fetchUnreadCount();
         }
-    }, [dropdownOpen, isAuthenticated, fetchDropdownNotifications, fetchUnreadCount]);
+    }, [isNotificationOpen, isAuthenticated, fetchDropdownNotifications, fetchUnreadCount]);
 
     useEffect(() => {
         const close = (e: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setDropdownOpen(false);
+            if (notificationRef.current && !notificationRef.current.contains(e.target as Node)) setIsNotificationOpen(false);
         };
         document.addEventListener('click', close);
         return () => document.removeEventListener('click', close);
@@ -73,184 +80,199 @@ export function Layout() {
     const showDashboard = !isFm && !isAdmin;
     /** Görevler (FM) sadece FM görsün; Admin sadece Admin Görevler görsün */
     const showFmTasks = isFm;
+    const navItems = useMemo<NavItem[]>(
+        () => [
+            { key: 'dashboard', to: '/dashboard', label: 'Dashboard', show: showDashboard },
+            { key: 'market', to: '/market', label: 'Piyasa', show: true },
+            { key: 'wallet', to: '/wallet', label: 'Cüzdan', show: showCustomerPortfolio },
+            { key: 'portfolio', to: '/portfolio', label: 'Portföy', show: showCustomerPortfolio },
+            { key: 'simulation', to: '/simulation', label: 'Simülasyon', show: showCustomerPortfolio },
+            { key: 'trade', to: '/trade', label: 'Trade', show: showCustomerPortfolio },
+            { key: 'transactions', to: '/transactions', label: 'İşlem Geçmişi', show: showCustomerPortfolio },
+            { key: 'news', to: '/news', label: 'Haberler', show: true },
+            { key: 'fm-tasks', to: '/fm/tasks', label: 'Görevler', show: showFmTasks },
+            { key: 'fm-funds', to: '/fm/fund-requests', label: 'Para Talepleri', show: showFmTasks },
+            { key: 'fm-risk', to: '/fm/risk', label: 'Risk Monitor', show: showFmTasks },
+            { key: 'fm-suspicious', to: '/operasyon/suspicious', label: 'Şüpheli Olaylar', show: showFmTasks },
+            { key: 'admin', to: '/admin', label: 'Admin Dashboard', show: isAdmin },
+            { key: 'admin-tasks', to: '/admin/tasks', label: 'Admin Görevler', show: isAdmin },
+            { key: 'admin-users', to: '/admin/users', label: 'Kullanıcı Yönetimi', show: isAdmin },
+            { key: 'admin-settings', to: '/admin/settings', label: 'Sistem Ayarları', show: isAdmin },
+            { key: 'admin-audit', to: '/admin/audit', label: 'Audit Logs', show: isAdmin },
+            { key: 'admin-metrics', to: '/admin/metrics', label: 'Metrikler', show: isAdmin },
+        ],
+        [showDashboard, showCustomerPortfolio, showFmTasks, isAdmin]
+    );
+    const visibleNavItems = navItems.filter((item) => item.show);
+    const activeNavKey = useMemo(() => {
+        const matched = visibleNavItems.find((item) => location.pathname.startsWith(item.to));
+        return matched?.key ?? '';
+    }, [location.pathname, visibleNavItems]);
+
+    const {
+        setHoveredNavKey,
+        highlightStyle,
+        isScrolled,
+        isUserMenuOpen,
+        setIsUserMenuOpen,
+        focusNavItem,
+    } = useHeaderInteractions({
+        navRef,
+        userMenuRef,
+        activeNavKey,
+    });
 
     return (
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: tokens.bg }}>
-            <header
-                style={{
-                    padding: '12px 24px',
-                    background: tokens.headerBg,
-                    color: tokens.headerText,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 24,
-                }}
-            >
-                <Link to="/" style={{ color: tokens.headerText, textDecoration: 'none', fontWeight: 700, fontSize: '1.125rem' }}>
-                    NRS Finance Portal
-                </Link>
-                <nav style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-                    {showDashboard && <Link to="/dashboard" style={linkStyle(tokens)}>Dashboard</Link>}
-                    <Link to="/market" style={linkStyle(tokens)}>Piyasa</Link>
-                    {showCustomerPortfolio && (
-                        <>
-                            <Link to="/portfolio" style={linkStyle(tokens)}>Portföy</Link>
-                            <Link to="/trade" style={linkStyle(tokens)}>Trade</Link>
-                            <Link to="/transactions" style={linkStyle(tokens)}>İşlem Geçmişi</Link>
-                        </>
-                    )}
-                    <Link to="/news" style={linkStyle(tokens)}>Haberler</Link>
-                    <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
+        <div
+            className="app-shell"
+            style={
+                {
+                    '--header-bg': tokens.headerBg,
+                    '--header-text': tokens.headerText,
+                    '--header-card': tokens.bgCard,
+                    '--header-border': tokens.border,
+                    '--header-accent': tokens.accent,
+                    '--header-muted': tokens.textMuted,
+                    '--header-danger': tokens.error,
+                    '--page-bg': tokens.bg,
+                } as CSSProperties
+            }
+        >
+            <header className={`app-header ${isScrolled ? 'is-scrolled' : ''}`}>
+                <div className="app-header__left">
+                    <Link to="/" className="app-header__logo">
+                        <Landmark size={16} />
+                        <span>NRS Finance Portal</span>
+                    </Link>
+                </div>
+
+                <div
+                    className="app-header__center"
+                    ref={navRef}
+                    onMouseLeave={() => setHoveredNavKey(null)}
+                >
+                    <span
+                        className="app-header__nav-highlight"
+                        style={{
+                            width: highlightStyle.width,
+                            transform: `translateX(${highlightStyle.left}px)`,
+                            opacity: highlightStyle.visible ? 1 : 0,
+                        }}
+                    />
+                    {visibleNavItems.map((item) => (
+                        <NavLink
+                            key={item.key}
+                            data-nav-key={item.key}
+                            to={item.to}
+                            className={({ isActive }) =>
+                                `app-header__nav-link ${isActive || location.pathname.startsWith(item.to) ? 'is-active' : ''}`
+                            }
+                            onMouseEnter={(event) => {
+                                setHoveredNavKey(item.key);
+                                focusNavItem(event.currentTarget);
+                            }}
+                            onFocus={(event) => {
+                                setHoveredNavKey(item.key);
+                                focusNavItem(event.currentTarget);
+                            }}
+                            onClick={(event) => focusNavItem(event.currentTarget)}
+                        >
+                            {item.label}
+                        </NavLink>
+                    ))}
+                </div>
+
+                <div className="app-header__right">
+                    <div ref={notificationRef} className="header-control-wrap">
                         <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); setDropdownOpen((o) => !o); }}
-                            style={{
-                                ...linkStyle(tokens),
-                                background: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
-                                padding: '4px 8px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6,
+                            className="header-icon-btn"
+                            aria-label="Bildirimleri aç"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsNotificationOpen((open) => !open);
                             }}
                         >
-                            🔔
+                            <Bell size={17} />
                             {unreadCount > 0 && (
-                                <span style={{
-                                    background: tokens.error,
-                                    color: '#fff',
-                                    borderRadius: 10,
-                                    minWidth: 18,
-                                    height: 18,
-                                    fontSize: '0.7rem',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                }}>
-                                    {unreadCount > 99 ? '99+' : unreadCount}
-                                </span>
+                                <span className="header-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
                             )}
                         </button>
-                        {dropdownOpen && (
-                            <div style={{
-                                position: 'absolute',
-                                top: '100%',
-                                right: 0,
-                                marginTop: 4,
-                                minWidth: 280,
-                                maxWidth: 360,
-                                maxHeight: 400,
-                                overflow: 'auto',
-                                background: tokens.bgCard,
-                                border: `1px solid ${tokens.border}`,
-                                borderRadius: 12,
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                zIndex: 1000,
-                            }}>
-                                <div style={{ padding: '12px 16px', borderBottom: `1px solid ${tokens.border}`, fontWeight: 600, fontSize: '0.9375rem' }}>
-                                    Bildirimler
-                                </div>
+                        {isNotificationOpen && (
+                            <div className="header-dropdown header-dropdown--notifications">
+                                <div className="header-dropdown__title">Bildirimler</div>
                                 {dropdownItems.length === 0 ? (
-                                    <div style={{ padding: 16, color: tokens.textMuted, fontSize: '0.875rem' }}>Bildirim yok</div>
+                                    <div className="header-dropdown__empty">Bildirim yok</div>
                                 ) : (
                                     dropdownItems.map((n) => (
                                         <div
                                             key={n.id}
-                                            onClick={() => { markNotificationRead(n.id); setDropdownOpen(false); navigate('/notifications'); }}
-                                            style={{
-                                                padding: '12px 16px',
-                                                borderBottom: `1px solid ${tokens.border}`,
-                                                cursor: 'pointer',
-                                                opacity: n.readAt ? 0.9 : 1,
+                                            className="header-dropdown__item"
+                                            onClick={() => {
+                                                markNotificationRead(n.id);
+                                                setIsNotificationOpen(false);
+                                                navigate('/notifications');
                                             }}
                                         >
-                                            <div style={{ fontWeight: 500, fontSize: '0.875rem' }}>{n.title}</div>
-                                            <div style={{ fontSize: '0.75rem', color: tokens.textMuted, marginTop: 2 }}>{n.type}</div>
+                                            <div className="header-dropdown__item-title">{n.title}</div>
+                                            <div className="header-dropdown__item-meta">{n.type}</div>
                                         </div>
                                     ))
                                 )}
                                 <Link
                                     to="/notifications"
-                                    onClick={() => setDropdownOpen(false)}
-                                    style={{
-                                        display: 'block',
-                                        padding: '10px 16px',
-                                        textAlign: 'center',
-                                        fontSize: '0.875rem',
-                                        color: tokens.accent,
-                                        textDecoration: 'none',
-                                        borderTop: `1px solid ${tokens.border}`,
-                                    }}
+                                    className="header-dropdown__footer"
+                                    onClick={() => setIsNotificationOpen(false)}
                                 >
                                     Tümünü gör
                                 </Link>
                             </div>
                         )}
                     </div>
-                    <Link to="/notifications" style={linkStyle(tokens)}> Bildirimler</Link>
 
-                    {showFmTasks && (
-                        <>
-                            <Link to="/fm/tasks" style={linkStyle(tokens)}> Görevler</Link>
-                            <Link to="/fm/risk" style={linkStyle(tokens)}> Risk Monitor</Link>
-                            <Link to="/operasyon/suspicious" style={linkStyle(tokens)}> Şüpheli Olaylar</Link>
-                        </>
-                    )}
+                    <div className="header-control-wrap" ref={userMenuRef}>
+                        <button
+                            type="button"
+                            className="header-user-trigger"
+                            onClick={() => setIsUserMenuOpen((open) => !open)}
+                            onMouseEnter={() => setIsUserMenuOpen(true)}
+                        >
+                            <span>{(user?.username ?? user?.email ?? 'testuser')} - {user?.role ?? role ?? 'USER'}</span>
+                            <ChevronDown size={14} className={isUserMenuOpen ? 'rotated' : ''} />
+                        </button>
+                        {isUserMenuOpen && (
+                            <div className="header-dropdown header-dropdown--user">
+                                <button
+                                    type="button"
+                                    className="header-dropdown__action"
+                                    onClick={toggleTheme}
+                                    title="Tema değiştir"
+                                >
+                                    <span className="theme-switch-icons">
+                                        <Sun size={14} className={theme === 'light' ? 'is-active' : ''} />
+                                        <Moon size={14} className={theme === 'dark' ? 'is-active' : ''} />
+                                    </span>
+                                    <span>{theme === 'light' ? 'Açık Tema' : 'Koyu Tema'}</span>
+                                </button>
+                            </div>
+                        )}
+                    </div>
 
-                    {isAdmin && (
-                        <>
-                            <Link to="/admin" style={linkStyle(tokens)}> Admin Dashboard</Link>
-                            <Link to="/admin/tasks" style={linkStyle(tokens)}>Admin Görevler</Link>
-                            <Link to="/admin/users" style={linkStyle(tokens)}>Kullanıcı Yönetimi</Link>
-                            <Link to="/admin/settings" style={linkStyle(tokens)}>Sistem Ayarları</Link>
-                            <Link to="/admin/audit" style={linkStyle(tokens)}>Audit Logs</Link>
-                            <Link to="/admin/metrics" style={linkStyle(tokens)}>Metrikler</Link>
-                        </>
-                    )}
-                </nav>
-
-                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                    {isAuthenticated && user && (
-                        <span style={{ fontSize: '0.8125rem', color: tokens.headerText, opacity: 0.9 }}>
-                            {user.username ?? user.email ?? '—'} · {user.role}
-                        </span>
-                    )}
-                    <button
-                        type="button"
-                        onClick={toggleTheme}
-                        style={{
-                            padding: '6px 12px',
-                            fontSize: '0.8125rem',
-                            background: 'rgba(255,255,255,0.15)',
-                            color: tokens.headerText,
-                            border: '1px solid rgba(255,255,255,0.3)',
-                            borderRadius: 8,
-                            cursor: 'pointer',
-                        }}
-                    >
-                        {theme === 'light' ? '🌙 Gece' : '☀️ Gündüz'}
-                    </button>
                     {isAuthenticated && (
                         <button
                             type="button"
+                            className="header-icon-btn"
                             onClick={handleLogout}
-                            style={{
-                                padding: '6px 12px',
-                                background: 'rgba(255,255,255,0.2)',
-                                color: tokens.headerText,
-                                border: 'none',
-                                borderRadius: 8,
-                                cursor: 'pointer',
-                                fontSize: '0.8125rem',
-                            }}
+                            aria-label="Çıkış yap"
+                            title="Çıkış yap"
                         >
-                            Çıkış
+                            <LogOut size={17} />
                         </button>
                     )}
                 </div>
             </header>
-            <main style={{ flex: 1, padding: 24, maxWidth: '100%' }}>
+
+            <main className="app-main">
                 <Outlet />
             </main>
         </div>
