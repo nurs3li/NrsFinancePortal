@@ -10,6 +10,7 @@ public class PerformanceItemDto {
     private final BigDecimal quantity;
     private final BigDecimal avgBuyPrice;
     private final BigDecimal currentPrice;
+    private final String currentPriceCurrency;
     private final BigDecimal cost;
     private final BigDecimal currentValue;
     private final BigDecimal pnl;
@@ -22,6 +23,7 @@ public class PerformanceItemDto {
             BigDecimal quantity,
             BigDecimal avgBuyPrice,
             BigDecimal currentPrice,
+            String currentPriceCurrency,
             BigDecimal cost,
             BigDecimal currentValue,
             BigDecimal pnl,
@@ -33,6 +35,7 @@ public class PerformanceItemDto {
         this.quantity = quantity;
         this.avgBuyPrice = avgBuyPrice;
         this.currentPrice = currentPrice;
+        this.currentPriceCurrency = currentPriceCurrency;
         this.cost = cost;
         this.currentValue = currentValue;
         this.pnl = pnl;
@@ -45,6 +48,7 @@ public class PerformanceItemDto {
     public BigDecimal getQuantity() { return quantity; }
     public BigDecimal getAvgBuyPrice() { return avgBuyPrice; }
     public BigDecimal getCurrentPrice() { return currentPrice; }
+    public String getCurrentPriceCurrency() { return currentPriceCurrency; }
     public BigDecimal getCost() { return cost; }
     public BigDecimal getCurrentValue() { return currentValue; }
     public BigDecimal getPnl() { return pnl; }
