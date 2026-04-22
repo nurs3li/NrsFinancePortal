@@ -22,8 +22,12 @@ public class NotificationChannelPolicyResolver {
             Map.entry("FREEZE_APPROVAL_CREATED", DeliveryDecision.IN_APP_AND_EMAIL),
             Map.entry("REVIEW_TASK_ESCALATED", DeliveryDecision.IN_APP_AND_EMAIL),
 
+            // Fund request bildirimleri
+            Map.entry("FUND_REQUEST_CREATED", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("FUND_REQUEST_APPROVED", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("FUND_REQUEST_REJECTED", DeliveryDecision.IN_APP_AND_EMAIL),
+
             // Whale / sistem uyarıları
-            // Burada sadece in-app olsun, admin'e direk mail gitmesin
             Map.entry("WHALE_SPIKE", DeliveryDecision.IN_APP_ONLY)
     );
 
