@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { marketClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import DOMPurify from 'dompurify';
+import './News.css';
 
 type NewsItem = {
     id: number;
     title: string;
     summary: string | null;
+    content?: string | null;
     source: string | null;
     url: string | null;
     category: string;
@@ -31,6 +34,38 @@ export function News() {
     const [selected, setSelected] = useState<NewsItem | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    const extractReadableNewsBody = (rawHtml: string | null | undefined): string => {
+        if (!rawHtml || !rawHtml.trim()) return '<p>İçerik bulunamadı.</p>';
+
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(rawHtml, 'text/html');
+            doc.querySelectorAll('script,style,iframe,object,embed,form,input,button,noscript,svg').forEach((el) => el.remove());
+
+            doc.querySelectorAll('*').forEach((el) => {
+                Array.from(el.attributes).forEach((attr) => {
+                    const name = attr.name.toLowerCase();
+                    if (name.startsWith('on')) el.removeAttribute(attr.name);
+                });
+            });
+
+            doc.querySelectorAll('a').forEach((anchor) => {
+                anchor.setAttribute('target', '_blank');
+                anchor.setAttribute('rel', 'noreferrer noopener');
+            });
+
+            const candidate = doc.querySelector('article') || doc.querySelector('.content') || doc.querySelector('main') || doc.body;
+            const cleaned = candidate?.innerHTML?.trim() || '<p>İçerik bulunamadı.</p>';
+            return DOMPurify.sanitize(cleaned, {
+                USE_PROFILES: { html: true },
+                ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a', 'blockquote', 'h2', 'h3', 'h4'],
+                ALLOWED_ATTR: ['href', 'target', 'rel'],
+            });
+        } catch {
+            return DOMPurify.sanitize(rawHtml);
+        }
+    };
 
     useEffect(() => {
         setLoading(true);
@@ -129,14 +164,20 @@ export function News() {
                 </div>
                 <div>
                     {selected ? (
-                        <div style={{ padding: 16, border: `1px solid ${tokens.border}`, borderRadius: 8, background: tokens.bgCard }}>
+                        <div style={{ padding: 16, border: `1px solid ${tokens.border}`, borderRadius: 8, background: tokens.bgCard }} className="news-detail-card">
                             <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: 8 }}>{selected.title}</h2>
-                            <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 8 }}>
-                                {selected.source} · {new Date(selected.publishedAt).toLocaleString('tr-TR')}
-                            </p>
-                            <p style={{ fontSize: '0.9375rem', lineHeight: 1.5 }}>{selected.summary || 'Özet yok.'}</p>
+                            <div className="news-detail-meta">
+                                <span><strong>Kaynak:</strong> {selected.source ?? 'Bilinmiyor'}</span>
+                                <span><strong>Tarih:</strong> {new Date(selected.publishedAt).toLocaleString('tr-TR')}</span>
+                            </div>
+                            <div
+                                className="content-container"
+                                dangerouslySetInnerHTML={{
+                                    __html: extractReadableNewsBody(selected.content ?? selected.summary),
+                                }}
+                            />
                             {selected.url && (
-                                <a href={selected.url} target="_blank" rel="noreferrer" style={{ color: tokens.accent, fontSize: '0.875rem', marginTop: 8, display: 'inline-block' }}>
+                                <a href={selected.url} target="_blank" rel="noreferrer" className="news-source-button">
                                     Kaynağa git
                                 </a>
                             )}
