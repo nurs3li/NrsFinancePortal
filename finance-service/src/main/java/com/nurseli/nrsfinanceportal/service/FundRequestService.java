@@ -1,6 +1,7 @@
 package com.nurseli.nrsfinanceportal.service;
 
 import com.nurseli.nrsfinanceportal.common.dto.FundRequestCreateRequest;
+import com.nurseli.nrsfinanceportal.config.FundRequestRuleProperties;
 import com.nurseli.nrsfinanceportal.domain.account.Account;
 import com.nurseli.nrsfinanceportal.domain.account.AccountType;
 import com.nurseli.nrsfinanceportal.domain.balance.Balance;
@@ -13,6 +14,7 @@ import com.nurseli.nrsfinanceportal.repository.AccountRepository;
 import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
 import com.nurseli.nrsfinanceportal.repository.FundRequestRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -20,10 +22,14 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FundRequestService {
+
+    private static final String AUTO_APPROVE_NOTE = "AUTO_APPROVED_BY_RULE";
 
     private final FundRequestRepository fundRequestRepository;
     private final AccountRepository accountRepository;
@@ -31,17 +37,18 @@ public class FundRequestService {
     private final CurrentUserResolver currentUserResolver;
     private final TransactionService transactionService;
     private final FundRequestNotificationHelper notificationHelper;
+    private final FundRequestRuleProperties ruleProperties;
 
     @Transactional
     public FundRequest createMyRequest(FundRequestCreateRequest request) {
         User user = currentUserResolver.getOrCreateCurrentUser();
-
         Account account = resolveAccount(user, request.getAccountId());
 
         if (account.isFrozen()) {
             throw new IllegalStateException("Account is frozen");
         }
 
+        // İlk guard (hızlı fail): withdrawal bakiyesi
         if (request.getType() == FundRequestType.WITHDRAWAL) {
             Balance balance = balanceRepository.findByAccount(account)
                     .orElseThrow(() -> new IllegalStateException("Balance not found"));
@@ -66,8 +73,18 @@ public class FundRequestService {
 
         FundRequest saved = fundRequestRepository.save(fundRequest);
 
-        notifyAfterCommit(() -> notificationHelper.notifyCreatedForFinanceManagers(saved));
+        if (isAutoApprovalCandidate(request)) {
+            boolean autoApproved = tryAutoApprove(saved);
+            if (autoApproved) {
+                notifyAfterCommit(() -> notificationHelper.notifyApproved(saved));
+                return saved;
+            }
+            // Auto uygun görünse bile lock anında yetersiz bakiye/frozen gibi durum çıktıysa FM'e düşsün
+            log.info("[FUND_REQUEST] auto-approve fallback to manual review. requestId={}", saved.getId());
+        }
 
+        // Manual review
+        notifyAfterCommit(() -> notificationHelper.notifyCreatedForFinanceManagers(saved));
         return saved;
     }
 
@@ -89,6 +106,73 @@ public class FundRequestService {
         FundRequest request = fundRequestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Fund request not found"));
 
+        applyApprovalWithStrictBalanceCheck(request, reviewer.getId(), reviewNote);
+
+        FundRequest saved = fundRequestRepository.save(request);
+        notifyAfterCommit(() -> notificationHelper.notifyApproved(saved));
+        return saved;
+    }
+
+    @Transactional
+    public FundRequest reject(Long requestId, String reviewNote) {
+        FundRequest request = fundRequestRepository.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Fund request not found"));
+
+        request.reject(reviewNote);
+        FundRequest saved = fundRequestRepository.save(request);
+
+        notifyAfterCommit(() -> notificationHelper.notifyRejected(saved));
+        return saved;
+    }
+
+    private boolean tryAutoApprove(FundRequest request) {
+        Account account = request.getAccount();
+        if (account.isFrozen()) {
+            return false;
+        }
+
+        Balance balance = balanceRepository.findByAccountForUpdate(account)
+                .orElseThrow(() -> new IllegalStateException("Balance not found"));
+
+        if (request.getType() == FundRequestType.DEPOSIT) {
+            BigDecimal balanceAfter = balance.increase(request.getAmount());
+            balanceRepository.save(balance);
+
+            transactionService.recordForUser(
+                    account,
+                    request.getUser(),
+                    request.getAmount(),
+                    TransactionType.DEPOSIT,
+                    balanceAfter
+            );
+
+            request.approve(null, AUTO_APPROVE_NOTE);
+            fundRequestRepository.save(request);
+            return true;
+        }
+
+        // WITHDRAWAL auto onay: lock sonrası tekrar kontrol
+        if (balance.getAmount().compareTo(request.getAmount()) < 0) {
+            return false;
+        }
+
+        BigDecimal balanceAfter = balance.decrease(request.getAmount());
+        balanceRepository.save(balance);
+
+        transactionService.recordForUser(
+                account,
+                request.getUser(),
+                request.getAmount(),
+                TransactionType.WITHDRAW,
+                balanceAfter
+        );
+
+        request.approve(null, AUTO_APPROVE_NOTE);
+        fundRequestRepository.save(request);
+        return true;
+    }
+
+    private void applyApprovalWithStrictBalanceCheck(FundRequest request, Long approverId, String reviewNote) {
         Account account = request.getAccount();
 
         if (account.isFrozen()) {
@@ -122,25 +206,46 @@ public class FundRequestService {
                 balanceAfter
         );
 
-        request.approve(reviewer.getId(), reviewNote);
-        FundRequest saved = fundRequestRepository.save(request);
-
-        notifyAfterCommit(() -> notificationHelper.notifyApproved(saved));
-
-        return saved;
+        request.approve(approverId, reviewNote);
     }
 
-    @Transactional
-    public FundRequest reject(Long requestId, String reviewNote) {
-        FundRequest request = fundRequestRepository.findById(requestId)
-                .orElseThrow(() -> new IllegalArgumentException("Fund request not found"));
+    private boolean isAutoApprovalCandidate(FundRequestCreateRequest request) {
+        if (!ruleProperties.isAutoApprovalEnabled()) {
+            return false;
+        }
 
-        request.reject(reviewNote);
-        FundRequest saved = fundRequestRepository.save(request);
+        String currency = request.getCurrency();
+        String effectiveCurrency = (currency == null || currency.isBlank()) ? "TRY" : currency.trim().toUpperCase(Locale.ROOT);
+        if (!"TRY".equals(effectiveCurrency)) {
+            return false;
+        }
 
-        notifyAfterCommit(() -> notificationHelper.notifyRejected(saved));
+        BigDecimal amount = request.getAmount();
+        if (amount == null || amount.signum() <= 0) {
+            return false;
+        }
 
-        return saved;
+        if (request.getType() == FundRequestType.DEPOSIT) {
+            if (amount.compareTo(ruleProperties.getDepositAutoApproveLimitTry()) > 0) {
+                return false;
+            }
+            if (ruleProperties.isRequireReceiptForDeposit() && !hasText(request.getReceiptFileUrl())) {
+                return false;
+            }
+            if (ruleProperties.isRequireReferenceNoForDeposit() && !hasText(request.getReferenceNo())) {
+                return false;
+            }
+            if (ruleProperties.isRequireIbanForDeposit() && !hasText(request.getBankAccountIban())) {
+                return false;
+            }
+            return true;
+        }
+
+        if (request.getType() == FundRequestType.WITHDRAWAL) {
+            return amount.compareTo(ruleProperties.getWithdrawalAutoApproveLimitTry()) <= 0;
+        }
+
+        return false;
     }
 
     private Account resolveAccount(User user, Long accountId) {
@@ -156,6 +261,10 @@ public class FundRequestService {
 
         return accountRepository.findByUserAndType(user, AccountType.CASH)
                 .orElseThrow(() -> new IllegalStateException("Cash account not found"));
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private void notifyAfterCommit(Runnable action) {

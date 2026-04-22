@@ -1,4 +1,3 @@
-// notification-service/src/main/java/com/nurseli/notificationservice/email/EmailNotificationService.java
 package com.nurseli.notificationservice.email;
 
 import com.nurseli.notificationservice.contact.UserEmailResolver;
@@ -23,7 +22,7 @@ public class EmailNotificationService {
     private final NotificationDedupService dedupService;
     private final EmailAuditService emailAuditService;
 
-    // Basit default değerler – istersen config’e taşıyabilirsin
+    // Basit default değerler – istersen config'e taşıyabilirsin
     private static final Duration RATE_WINDOW = Duration.ofMinutes(1);
     private static final long RATE_MAX_PER_WINDOW = 5;
     private static final Duration DEDUP_TTL = Duration.ofMinutes(5);
@@ -42,16 +41,30 @@ public class EmailNotificationService {
         DeliveryDecision decision = policyResolver.decide(event);
         if (decision == DeliveryDecision.IN_APP_ONLY) {
             log.debug("[EMAIL] Skipping email for type={} (IN_APP_ONLY)", type);
-            emailAuditService.record(sub, null, type,
-                    EmailDeliveryStatus.SKIPPED_POLICY, "policy=IN_APP_ONLY", refType, refId);
+            emailAuditService.record(
+                    sub,
+                    null,
+                    type,
+                    EmailDeliveryStatus.SKIPPED_POLICY,
+                    "policy=IN_APP_ONLY",
+                    refType,
+                    refId
+            );
             return;
         }
 
         // 2) Rate limit (sub + type)
         String rateKey = "email:rate:" + sub + ":" + type;
         if (!rateLimitService.allow(rateKey, RATE_WINDOW, RATE_MAX_PER_WINDOW)) {
-            emailAuditService.record(sub, null, type,
-                    EmailDeliveryStatus.SKIPPED_RATE_LIMIT, "rate_limit_exceeded", refType, refId);
+            emailAuditService.record(
+                    sub,
+                    null,
+                    type,
+                    EmailDeliveryStatus.SKIPPED_RATE_LIMIT,
+                    "rate_limit_exceeded",
+                    refType,
+                    refId
+            );
             return;
         }
 
@@ -60,17 +73,31 @@ public class EmailNotificationService {
                 ":" + (refType != null ? refType : "") +
                 ":" + (refId != null ? refId : "");
         if (!dedupService.firstTime(dedupKey, DEDUP_TTL)) {
-            emailAuditService.record(sub, null, type,
-                    EmailDeliveryStatus.SKIPPED_DEDUP, "duplicate_suppressed", refType, refId);
+            emailAuditService.record(
+                    sub,
+                    null,
+                    type,
+                    EmailDeliveryStatus.SKIPPED_DEDUP,
+                    "duplicate_suppressed",
+                    refType,
+                    refId
+            );
             return;
         }
 
-        // 4) Hedef e‑mail'i çöz
+        // 4) Hedef e-posta çöz
         String to = userEmailResolver.resolveEmail(sub);
         if (to == null || to.isBlank()) {
             log.warn("[EMAIL] No email resolved for sub={}, skipping. type={}", sub, type);
-            emailAuditService.record(sub, null, type,
-                    EmailDeliveryStatus.FAILED_PROVIDER, "email_resolution_failed", refType, refId);
+            emailAuditService.record(
+                    sub,
+                    null,
+                    type,
+                    EmailDeliveryStatus.FAILED_PROVIDER,
+                    "email_resolution_failed",
+                    refType,
+                    refId
+            );
             return;
         }
 
@@ -80,33 +107,63 @@ public class EmailNotificationService {
         try {
             log.info("[EMAIL] Sending email via Gmail API to={} type={} subject={}", to, type, subject);
             gmailClient.sendEmail(to, subject, body);
-            emailAuditService.record(sub, to, type,
-                    EmailDeliveryStatus.SENT, null, refType, refId);
+            emailAuditService.record(
+                    sub,
+                    to,
+                    type,
+                    EmailDeliveryStatus.SENT,
+                    null,
+                    refType,
+                    refId
+            );
         } catch (Exception e) {
             log.error("[EMAIL] Failed to send email to={} type={} subject={}", to, type, subject, e);
-            emailAuditService.record(sub, to, type,
-                    EmailDeliveryStatus.FAILED_PROVIDER, e.getMessage(), refType, refId);
+            emailAuditService.record(
+                    sub,
+                    to,
+                    type,
+                    EmailDeliveryStatus.FAILED_PROVIDER,
+                    e.getMessage(),
+                    refType,
+                    refId
+            );
         }
     }
 
     private String buildSubject(NotificationRequestedEvent event) {
-        if ("ACCOUNT_FROZEN".equals(event.type())) {
+        String type = event.type();
+
+        if ("ACCOUNT_FROZEN".equals(type)) {
             return "Hesabınız donduruldu";
         }
-        if ("ACCOUNT_UNFROZEN".equals(event.type())) {
+        if ("ACCOUNT_UNFROZEN".equals(type)) {
             return "Hesabınız yeniden kullanıma açıldı";
         }
-        if ("REVIEW_TASK_CREATED".equals(event.type())) {
+        if ("REVIEW_TASK_CREATED".equals(type)) {
             return "Yeni inceleme görevi oluşturuldu";
         }
-        if ("WHALE_SPIKE".equals(event.type())) {
+        if ("WHALE_SPIKE".equals(type)) {
             return "Whale alert spike tespit edildi";
         }
+
+        // Fund request akışı
+        if ("FUND_REQUEST_CREATED".equals(type)) {
+            return "Yeni para talebi inceleme bekliyor";
+        }
+        if ("FUND_REQUEST_APPROVED".equals(type)) {
+            return "Para talebiniz onaylandı";
+        }
+        if ("FUND_REQUEST_REJECTED".equals(type)) {
+            return "Para talebiniz reddedildi";
+        }
+
         return event.title() != null ? event.title() : "Bildirim";
     }
 
     private String buildBody(NotificationRequestedEvent event) {
-        if ("REVIEW_TASK_CREATED".equals(event.type())) {
+        String type = event.type();
+
+        if ("REVIEW_TASK_CREATED".equals(type)) {
             StringBuilder sb = new StringBuilder();
             sb.append("Merhaba,\n\n");
             sb.append("Size yeni bir inceleme görevi atandı.\n\n");
@@ -121,6 +178,76 @@ public class EmailNotificationService {
             sb.append("İyi çalışmalar.\n");
             return sb.toString();
         }
+
+        if ("FUND_REQUEST_CREATED".equals(type)) {
+            return buildFundCreatedBody(event);
+        }
+        if ("FUND_REQUEST_APPROVED".equals(type)) {
+            return buildFundApprovedBody(event);
+        }
+        if ("FUND_REQUEST_REJECTED".equals(type)) {
+            return buildFundRejectedBody(event);
+        }
+
         return event.body() != null ? event.body() : "";
+    }
+
+    private String buildFundCreatedBody(NotificationRequestedEvent event) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Merhaba,\n\n");
+        sb.append("Yeni bir para talebi oluşturuldu ve incelemenizi bekliyor.\n\n");
+
+        if (event.referenceId() != null) {
+            sb.append("- Talep ID: ").append(event.referenceId()).append("\n");
+        }
+        if (event.referenceType() != null && !event.referenceType().isBlank()) {
+            sb.append("- Referans tipi: ").append(event.referenceType()).append("\n");
+        }
+
+        if (event.body() != null && !event.body().isBlank()) {
+            sb.append("\nDetay:\n");
+            sb.append(event.body()).append("\n");
+        }
+
+        sb.append("\nNRS Finance Portal > Finance Manager panelinden talebi onaylayabilir/reddedebilirsiniz.\n");
+        sb.append("İyi çalışmalar.\n");
+        return sb.toString();
+    }
+
+    private String buildFundApprovedBody(NotificationRequestedEvent event) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Merhaba,\n\n");
+        sb.append("Para talebiniz onaylandı.\n");
+
+        if (event.referenceId() != null) {
+            sb.append("- Talep ID: ").append(event.referenceId()).append("\n");
+        }
+
+        if (event.body() != null && !event.body().isBlank()) {
+            sb.append("\nDetay:\n");
+            sb.append(event.body()).append("\n");
+        }
+
+        sb.append("\nİşleminiz tamamlanmıştır.\n");
+        sb.append("NRS Finance Portal üzerinden bakiyenizi kontrol edebilirsiniz.\n");
+        return sb.toString();
+    }
+
+    private String buildFundRejectedBody(NotificationRequestedEvent event) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Merhaba,\n\n");
+        sb.append("Para talebiniz reddedildi.\n");
+
+        if (event.referenceId() != null) {
+            sb.append("- Talep ID: ").append(event.referenceId()).append("\n");
+        }
+
+        if (event.body() != null && !event.body().isBlank()) {
+            sb.append("\nDetay:\n");
+            sb.append(event.body()).append("\n");
+        }
+
+        sb.append("\nGerekirse bilgileri güncelleyip yeni talep oluşturabilirsiniz.\n");
+        return sb.toString();
     }
 }
