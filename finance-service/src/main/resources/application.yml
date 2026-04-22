@@ -64,3 +64,10 @@ app:
     enabled: true
     max-transactions-per-minute: 1
     high-amount-threshold: 100
+  fund-request:
+    auto-approval-enabled: true
+    deposit-auto-approve-limit-try: 50000
+    withdrawal-auto-approve-limit-try: 3000
+    require-receipt-for-deposit: true
+    require-reference-no-for-deposit: true
+    require-iban-for-deposit: true

@@ -67,7 +67,8 @@ public class MarketDataClient {
             }
             case CRYPTO -> {
                 MarketPriceLatestDto crypto = getLatestCrypto().get(symbol);
-                yield crypto != null ? crypto.buyPrice() : BigDecimal.ZERO;
+                if (crypto == null) yield BigDecimal.ZERO;
+                yield usdToTry(crypto.buyPrice());
             }
             case METAL -> {
                 MarketPriceLatestDto metal = getLatestMetals().get(symbol);
@@ -75,18 +76,23 @@ public class MarketDataClient {
             }
             case FUND -> {
                 MarketPriceLatestDto fund = getLatestFunds().get(symbol);
-                yield fund != null ? fund.buyPrice() : BigDecimal.ZERO;
+                if (fund == null) yield BigDecimal.ZERO;
+                yield usdToTry(fund.buyPrice());
             }
             case STOCK -> {
                 MarketPriceLatestDto equity = getLatestEquity().get(symbol);
                 if (equity == null) yield BigDecimal.ZERO;
-                BigDecimal usdPrice = equity.buyPrice();
-                FxPriceDto usdTry = getLatestDoviz().get("USDTRY");
-                if (usdTry == null) yield usdPrice;
-                yield usdPrice.multiply(usdTry.buyPrice());
+                yield usdToTry(equity.buyPrice());
             }
             default -> BigDecimal.ZERO;
         };
+    }
+
+    private BigDecimal usdToTry(BigDecimal usdPrice) {
+        if (usdPrice == null) return BigDecimal.ZERO;
+        FxPriceDto usdTry = getLatestDoviz().get("USDTRY");
+        if (usdTry == null || usdTry.buyPrice() == null || usdTry.buyPrice().signum() <= 0) return usdPrice;
+        return usdPrice.multiply(usdTry.buyPrice());
     }
 
     public List<MarketPriceHistoryDto> getHistory(AssetType type, String symbol, int days) {
@@ -95,7 +101,7 @@ public class MarketDataClient {
             case CRYPTO -> "/api/market/crypto/history?symbol={symbol}&days={days}";
             case METAL -> "/api/market/metals/history?symbol={symbol}&days={days}";
             case FUND -> "/api/market/funds/history?symbol={symbol}&days={days}";
-            case STOCK -> throw new IllegalStateException("STOCK history endpoint is not available");
+            case STOCK -> "/api/market/equity/history?symbol={symbol}&days={days}";
             default -> throw new IllegalStateException("Unsupported asset type: " + type);
         };
 
