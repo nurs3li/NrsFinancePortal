@@ -50,6 +50,7 @@ public class PortfolioPerformanceService {
                     quantity,
                     avgBuy,
                     currentPrice,
+                    "TRY",
                     cost,
                     currentValue,
                     pnl,
