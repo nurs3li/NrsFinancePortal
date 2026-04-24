@@ -43,6 +43,7 @@ public class FundRequestService {
     public FundRequest createMyRequest(FundRequestCreateRequest request) {
         User user = currentUserResolver.getOrCreateCurrentUser();
         Account account = resolveAccount(user, request.getAccountId());
+        validateRequestByType(request);
 
         if (account.isFrozen()) {
             throw new IllegalStateException("Account is frozen");
@@ -65,10 +66,16 @@ public class FundRequestService {
                 request.getAmount(),
                 request.getCurrency(),
                 request.getRequestNote(),
-                request.getBankAccountIban(),
+                resolveLegacyBankIban(request),
                 request.getReceiptFileUrl(),
-                request.getReferenceNo(),
-                request.getSourceBankName()
+                request.getReceiptFileId(),
+                resolveExternalReferenceNo(request),
+                request.getSourceBankName(),
+                request.getDepositIban(),
+                request.getSystemIbanId(),
+                request.getDestinationIban(),
+                request.getDestinationAccountHolder(),
+                request.getDestinationBankName()
         );
 
         FundRequest saved = fundRequestRepository.save(fundRequest);
@@ -229,13 +236,15 @@ public class FundRequestService {
             if (amount.compareTo(ruleProperties.getDepositAutoApproveLimitTry()) > 0) {
                 return false;
             }
-            if (ruleProperties.isRequireReceiptForDeposit() && !hasText(request.getReceiptFileUrl())) {
+            if (ruleProperties.isRequireReceiptForDeposit()
+                    && !hasText(request.getReceiptFileUrl())
+                    && !hasText(request.getReceiptFileId())) {
                 return false;
             }
-            if (ruleProperties.isRequireReferenceNoForDeposit() && !hasText(request.getReferenceNo())) {
+            if (ruleProperties.isRequireReferenceNoForDeposit() && !hasText(resolveExternalReferenceNo(request))) {
                 return false;
             }
-            if (ruleProperties.isRequireIbanForDeposit() && !hasText(request.getBankAccountIban())) {
+            if (ruleProperties.isRequireIbanForDeposit() && !hasText(resolveLegacyBankIban(request))) {
                 return false;
             }
             return true;
@@ -265,6 +274,40 @@ public class FundRequestService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private void validateRequestByType(FundRequestCreateRequest request) {
+        if (request.getType() == FundRequestType.DEPOSIT) {
+            if (!hasText(request.getReceiptFileUrl()) && !hasText(request.getReceiptFileId())) {
+                throw new IllegalArgumentException("Deposit request requires receipt file");
+            }
+            if (!hasText(request.getDepositIban()) && !hasText(request.getBankAccountIban())) {
+                throw new IllegalArgumentException("Deposit request requires system iban");
+            }
+            return;
+        }
+        if (request.getType() == FundRequestType.WITHDRAWAL) {
+            if (!hasText(request.getDestinationIban())) {
+                throw new IllegalArgumentException("Withdrawal request requires destination iban");
+            }
+            if (!hasText(request.getDestinationAccountHolder())) {
+                throw new IllegalArgumentException("Withdrawal request requires destination account holder");
+            }
+            if (!hasText(request.getDestinationBankName())) {
+                throw new IllegalArgumentException("Withdrawal request requires destination bank name");
+            }
+        }
+    }
+
+    private String resolveLegacyBankIban(FundRequestCreateRequest request) {
+        if (request.getType() == FundRequestType.DEPOSIT) {
+            return hasText(request.getDepositIban()) ? request.getDepositIban() : request.getBankAccountIban();
+        }
+        return request.getDestinationIban();
+    }
+
+    private String resolveExternalReferenceNo(FundRequestCreateRequest request) {
+        return hasText(request.getExternalReferenceNo()) ? request.getExternalReferenceNo() : request.getReferenceNo();
     }
 
     private void notifyAfterCommit(Runnable action) {

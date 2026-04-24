@@ -49,11 +49,29 @@ public class FundRequest {
     @Column(name = "receipt_file_url", length = 500)
     private String receiptFileUrl;
 
+    @Column(name = "receipt_file_id", length = 200)
+    private String receiptFileId;
+
     @Column(name = "reference_no", length = 100)
     private String referenceNo;
 
     @Column(name = "source_bank_name", length = 200)
     private String sourceBankName;
+
+    @Column(name = "deposit_iban", length = 50)
+    private String depositIban;
+
+    @Column(name = "system_iban_id", length = 100)
+    private String systemIbanId;
+
+    @Column(name = "destination_iban", length = 50)
+    private String destinationIban;
+
+    @Column(name = "destination_account_holder", length = 200)
+    private String destinationAccountHolder;
+
+    @Column(name = "destination_bank_name", length = 200)
+    private String destinationBankName;
 
     @Column(name = "approved_by_user_id")
     private Long approvedByUserId;
@@ -82,8 +100,14 @@ public class FundRequest {
             String requestNote,
             String bankAccountIban,
             String receiptFileUrl,
+            String receiptFileId,
             String referenceNo,
-            String sourceBankName
+            String sourceBankName,
+            String depositIban,
+            String systemIbanId,
+            String destinationIban,
+            String destinationAccountHolder,
+            String destinationBankName
     ) {
         if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("Amount must be positive");
@@ -99,8 +123,14 @@ public class FundRequest {
         r.requestNote = requestNote;
         r.bankAccountIban = bankAccountIban;
         r.receiptFileUrl = receiptFileUrl;
+        r.receiptFileId = receiptFileId;
         r.referenceNo = referenceNo;
         r.sourceBankName = sourceBankName;
+        r.depositIban = depositIban;
+        r.systemIbanId = systemIbanId;
+        r.destinationIban = destinationIban;
+        r.destinationAccountHolder = destinationAccountHolder;
+        r.destinationBankName = destinationBankName;
         r.createdAt = Instant.now();
         r.updatedAt = Instant.now();
         return r;
@@ -146,8 +176,14 @@ public class FundRequest {
     public String getReviewNote() { return reviewNote; }
     public String getBankAccountIban() { return bankAccountIban; }
     public String getReceiptFileUrl() { return receiptFileUrl; }
+    public String getReceiptFileId() { return receiptFileId; }
     public String getReferenceNo() { return referenceNo; }
     public String getSourceBankName() { return sourceBankName; }
+    public String getDepositIban() { return depositIban; }
+    public String getSystemIbanId() { return systemIbanId; }
+    public String getDestinationIban() { return destinationIban; }
+    public String getDestinationAccountHolder() { return destinationAccountHolder; }
+    public String getDestinationBankName() { return destinationBankName; }
     public Long getApprovedByUserId() { return approvedByUserId; }
     public Instant getApprovedAt() { return approvedAt; }
     public Instant getRejectedAt() { return rejectedAt; }

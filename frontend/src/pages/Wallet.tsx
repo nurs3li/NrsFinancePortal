@@ -12,6 +12,22 @@ type BalanceView = {
     currentAmount: number;
 };
 
+type WalletSummary = {
+    accountId: number;
+    currentBalance: number;
+    availableBalance: number;
+    pendingDeposit: number;
+    pendingWithdrawal: number;
+};
+
+type DepositInstructions = {
+    iban: string;
+    recipientName: string;
+    bankName: string;
+    userReferenceCode: string;
+    systemIbanId: string;
+};
+
 type FundRequestView = {
     id: number;
     userId: number;
@@ -24,8 +40,14 @@ type FundRequestView = {
     reviewNote: string | null;
     bankAccountIban: string | null;
     receiptFileUrl: string | null;
+    receiptFileId: string | null;
     referenceNo: string | null;
     sourceBankName: string | null;
+    depositIban: string | null;
+    systemIbanId: string | null;
+    destinationIban: string | null;
+    destinationAccountHolder: string | null;
+    destinationBankName: string | null;
     approvedByUserId: number | null;
     approvedAt: string | null;
     rejectedAt: string | null;
@@ -37,10 +59,16 @@ type CreateFundRequestPayload = {
     amount: number;
     currency?: string;
     requestNote?: string;
-    bankAccountIban?: string;
     receiptFileUrl?: string;
+    receiptFileId?: string;
     referenceNo?: string;
+    externalReferenceNo?: string;
     sourceBankName?: string;
+    depositIban?: string;
+    systemIbanId?: string;
+    destinationIban?: string;
+    destinationAccountHolder?: string;
+    destinationBankName?: string;
 };
 
 function unwrapData<T>(res: any): T {
@@ -51,6 +79,8 @@ export function Wallet() {
     const { tokens } = useTheme();
 
     const [balance, setBalance] = useState<BalanceView | null>(null);
+    const [summary, setSummary] = useState<WalletSummary | null>(null);
+    const [depositInstructions, setDepositInstructions] = useState<DepositInstructions | null>(null);
     const [items, setItems] = useState<FundRequestView[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -60,10 +90,15 @@ export function Wallet() {
     const [type, setType] = useState<FundRequestType>('DEPOSIT');
     const [amount, setAmount] = useState('1000');
     const [currency, setCurrency] = useState('TRY');
-    const [bankAccountIban, setBankAccountIban] = useState('');
+    const [destinationIban, setDestinationIban] = useState('');
+    const [destinationAccountHolder, setDestinationAccountHolder] = useState('');
+    const [destinationBankName, setDestinationBankName] = useState('');
     const [sourceBankName, setSourceBankName] = useState('');
-    const [referenceNo, setReferenceNo] = useState('');
-    const [receiptFileUrl, setReceiptFileUrl] = useState('');
+    const [externalReferenceNo, setExternalReferenceNo] = useState('');
+    const [receiptFileUrl, setReceiptFileUrl] = useState<string | null>(null);
+    const [receiptFileId, setReceiptFileId] = useState<string | null>(null);
+    const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
+    const [uploadingReceipt, setUploadingReceipt] = useState(false);
     const [requestNote, setRequestNote] = useState('');
 
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -74,10 +109,14 @@ export function Wallet() {
 
         Promise.all([
             financeClient.get('/api/balance/me'),
+            financeClient.get('/api/wallet/summary'),
+            financeClient.get('/api/wallet/deposit-instructions'),
             financeClient.get('/api/fund-requests/me'),
         ])
-            .then(([balRes, reqRes]) => {
+            .then(([balRes, summaryRes, instructionsRes, reqRes]) => {
                 setBalance(unwrapData<BalanceView>(balRes));
+                setSummary(unwrapData<WalletSummary>(summaryRes));
+                setDepositInstructions(unwrapData<DepositInstructions>(instructionsRes));
                 setItems(unwrapData<FundRequestView[]>(reqRes) ?? []);
             })
             .catch((err) => {
@@ -98,18 +137,81 @@ export function Wallet() {
     useRefetchOnFocus(fetchAll);
     usePolling(fetchAll, 30_000);
 
+    useEffect(() => {
+        if (type === 'DEPOSIT') {
+            setDestinationIban('');
+            setDestinationAccountHolder('');
+            setDestinationBankName('');
+            setAmount('1000');
+            return;
+        }
+        setReceiptFileId(null);
+        setReceiptFileUrl(null);
+        setReceiptFileName(null);
+        setSourceBankName('');
+        setExternalReferenceNo('');
+        setAmount('1000');
+    }, [type]);
+
+    const uploadReceipt = async (file: File) => {
+        const ext = file.name.toLowerCase().split('.').pop() ?? '';
+        if (!['pdf', 'jpg', 'jpeg', 'png'].includes(ext)) {
+            alert('Dekont dosyası PDF/JPG/PNG olmalı.');
+            return;
+        }
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            setUploadingReceipt(true);
+            const res = await financeClient.post('/api/fund-requests/receipts', fd, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            const data = unwrapData<{ receiptFileId: string; receiptFileUrl: string; originalFileName: string }>(res);
+            setReceiptFileId(data.receiptFileId);
+            setReceiptFileUrl(data.receiptFileUrl);
+            setReceiptFileName(data.originalFileName);
+        } catch (err: any) {
+            alert(
+                err?.response?.data?.errors?.error ??
+                    err?.response?.data?.message ??
+                    err?.message ??
+                    'Dekont yüklenemedi'
+            );
+        } finally {
+            setUploadingReceipt(false);
+        }
+    };
+
     const submit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSuccessMsg(null);
 
         const parsedAmount = Number(amount);
         if (!parsedAmount || parsedAmount <= 0) {
-            alert('Tutar 0’dan büyük olmalı.');
+            alert('Tutar sıfırdan büyük olmalı.');
             return;
         }
 
-        if (type === 'DEPOSIT' && !bankAccountIban.trim()) {
-            alert('Deposit için IBAN zorunlu.');
+        if (type === 'WITHDRAWAL' && parsedAmount > Number(summary?.availableBalance ?? 0)) {
+            alert('Çekim tutarı kullanılabilir bakiyeden fazla olamaz.');
+            return;
+        }
+
+        if (type === 'DEPOSIT' && !receiptFileId && !receiptFileUrl) {
+            alert('Yatırım için dekont yüklemek zorunludur.');
+            return;
+        }
+
+        if (type === 'WITHDRAWAL' && !destinationIban.trim()) {
+            alert('Çekim için alıcı IBAN zorunludur.');
+            return;
+        }
+        if (type === 'WITHDRAWAL' && !destinationAccountHolder.trim()) {
+            alert('Çekim için alıcı ad soyad zorunludur.');
+            return;
+        }
+        if (type === 'WITHDRAWAL' && !destinationBankName.trim()) {
+            alert('Çekim için banka adı zorunludur.');
             return;
         }
 
@@ -118,16 +220,33 @@ export function Wallet() {
             amount: parsedAmount,
             currency: currency?.trim() || 'TRY',
             requestNote: requestNote?.trim() || undefined,
-            bankAccountIban: bankAccountIban?.trim() || undefined,
-            sourceBankName: sourceBankName?.trim() || undefined,
-            referenceNo: referenceNo?.trim() || undefined,
-            receiptFileUrl: receiptFileUrl?.trim() || undefined,
+            sourceBankName: type === 'DEPOSIT' ? sourceBankName?.trim() || undefined : undefined,
+            externalReferenceNo: type === 'DEPOSIT' ? externalReferenceNo?.trim() || undefined : undefined,
+            receiptFileUrl: type === 'DEPOSIT' ? receiptFileUrl ?? undefined : undefined,
+            receiptFileId: type === 'DEPOSIT' ? receiptFileId ?? undefined : undefined,
+            depositIban: type === 'DEPOSIT' ? depositInstructions?.iban : undefined,
+            systemIbanId: type === 'DEPOSIT' ? depositInstructions?.systemIbanId : undefined,
+            destinationIban: type === 'WITHDRAWAL' ? destinationIban?.trim() || undefined : undefined,
+            destinationAccountHolder: type === 'WITHDRAWAL' ? destinationAccountHolder?.trim() || undefined : undefined,
+            destinationBankName: type === 'WITHDRAWAL' ? destinationBankName?.trim() || undefined : undefined,
         };
 
         try {
             setSubmitting(true);
             await financeClient.post('/api/fund-requests', payload);
             setSuccessMsg('Talebiniz başarıyla oluşturuldu.');
+            setRequestNote('');
+            if (type === 'DEPOSIT') {
+                setReceiptFileId(null);
+                setReceiptFileUrl(null);
+                setReceiptFileName(null);
+                setExternalReferenceNo('');
+                setSourceBankName('');
+            } else {
+                setDestinationIban('');
+                setDestinationAccountHolder('');
+                setDestinationBankName('');
+            }
             await fetchAll();
         } catch (err: any) {
             alert(
@@ -144,10 +263,10 @@ export function Wallet() {
     const fmtMoney = (v: number) => `₺${Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`;
 
     const statusStyle = (status: FundRequestStatus): React.CSSProperties => {
-        if (status === 'APPROVED') return { color: '#22c55e', fontWeight: 600 };
-        if (status === 'REJECTED') return { color: '#ef4444', fontWeight: 600 };
-        if (status === 'PENDING') return { color: '#f59e0b', fontWeight: 600 };
-        return { color: tokens.textMuted, fontWeight: 600 };
+        if (status === 'APPROVED') return { color: '#166534', background: '#dcfce7', borderRadius: 999, padding: '2px 8px', fontWeight: 700 };
+        if (status === 'REJECTED') return { color: '#991b1b', background: '#fee2e2', borderRadius: 999, padding: '2px 8px', fontWeight: 700 };
+        if (status === 'PENDING') return { color: '#92400e', background: '#fef3c7', borderRadius: 999, padding: '2px 8px', fontWeight: 700 };
+        return { color: tokens.textMuted, background: tokens.inputBg, borderRadius: 999, padding: '2px 8px', fontWeight: 700 };
     };
 
     const pageStyle: React.CSSProperties = {
@@ -190,19 +309,37 @@ export function Wallet() {
                         style={{
                             ...cardStyle,
                             marginBottom: 16,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                            gap: 12,
                         }}
                     >
                         <div>
                             <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Mevcut Bakiye</div>
                             <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-                                {fmtMoney(balance?.currentAmount ?? 0)}
+                                {fmtMoney(summary?.currentBalance ?? balance?.currentAmount ?? 0)}
+                            </div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Kullanılabilir Bakiye</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>
+                                {fmtMoney(summary?.availableBalance ?? balance?.currentAmount ?? 0)}
+                            </div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Bekleyen Yatırma</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#22c55e' }}>
+                                {fmtMoney(summary?.pendingDeposit ?? 0)}
+                            </div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Bekleyen Çekim</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f59e0b' }}>
+                                {fmtMoney(summary?.pendingWithdrawal ?? 0)}
                             </div>
                         </div>
                         <div style={{ color: tokens.textMuted, fontSize: '0.8125rem' }}>
-                            accountId: {balance?.accountId ?? '-'}
+                            accountId: {summary?.accountId ?? balance?.accountId ?? '-'}
                         </div>
                     </div>
 
@@ -220,8 +357,8 @@ export function Wallet() {
                             <label style={{ fontSize: '0.875rem' }}>
                                 İşlem Tipi
                                 <select value={type} onChange={(e) => setType(e.target.value as FundRequestType)} style={inputStyle}>
-                                    <option value="DEPOSIT">DEPOSIT</option>
-                                    <option value="WITHDRAWAL">WITHDRAWAL</option>
+                                    <option value="DEPOSIT">Yatırım</option>
+                                    <option value="WITHDRAWAL">Çekim</option>
                                 </select>
                             </label>
 
@@ -247,45 +384,111 @@ export function Wallet() {
                                 />
                             </label>
 
-                            <label style={{ fontSize: '0.875rem' }}>
-                                IBAN
-                                <input
-                                    value={bankAccountIban}
-                                    onChange={(e) => setBankAccountIban(e.target.value)}
-                                    style={inputStyle}
-                                    placeholder="TR..."
-                                />
-                            </label>
+                            {type === 'DEPOSIT' ? (
+                                <>
+                                    <div
+                                        style={{
+                                            gridColumn: '1 / -1',
+                                            border: `1px solid ${tokens.border}`,
+                                            borderRadius: 10,
+                                            padding: 12,
+                                            background: tokens.inputBg,
+                                        }}
+                                    >
+                                        <div style={{ fontWeight: 700, marginBottom: 8 }}>Yatırım Talimatı (Sistem Hesabı)</div>
+                                        <div style={{ fontSize: '0.875rem', color: tokens.textMuted }}>
+                                            IBAN: <strong style={{ color: tokens.text }}>{depositInstructions?.iban ?? '-'}</strong>
+                                        </div>
+                                        <div style={{ fontSize: '0.875rem', color: tokens.textMuted }}>
+                                            Alıcı: <strong style={{ color: tokens.text }}>{depositInstructions?.recipientName ?? '-'}</strong>
+                                        </div>
+                                        <div style={{ fontSize: '0.875rem', color: tokens.textMuted }}>
+                                            Banka: <strong style={{ color: tokens.text }}>{depositInstructions?.bankName ?? '-'}</strong>
+                                        </div>
+                                        <div style={{ fontSize: '0.875rem', color: tokens.textMuted }}>
+                                            Kullanıcı Referansı:{' '}
+                                            <strong style={{ color: tokens.text }}>{depositInstructions?.userReferenceCode ?? '-'}</strong>
+                                        </div>
+                                    </div>
 
-                            <label style={{ fontSize: '0.875rem' }}>
-                                Kaynak Banka
-                                <input
-                                    value={sourceBankName}
-                                    onChange={(e) => setSourceBankName(e.target.value)}
-                                    style={inputStyle}
-                                    placeholder="Garanti BBVA"
-                                />
-                            </label>
+                                    <label style={{ fontSize: '0.875rem' }}>
+                                        Kaynak Banka (opsiyonel)
+                                        <input
+                                            value={sourceBankName}
+                                            onChange={(e) => setSourceBankName(e.target.value)}
+                                            style={inputStyle}
+                                            placeholder="Garanti BBVA"
+                                        />
+                                    </label>
 
-                            <label style={{ fontSize: '0.875rem' }}>
-                                Referans No
-                                <input
-                                    value={referenceNo}
-                                    onChange={(e) => setReferenceNo(e.target.value)}
-                                    style={inputStyle}
-                                    placeholder="EFT-..."
-                                />
-                            </label>
+                                    <label style={{ fontSize: '0.875rem' }}>
+                                        Referans No (opsiyonel)
+                                        <input
+                                            value={externalReferenceNo}
+                                            onChange={(e) => setExternalReferenceNo(e.target.value)}
+                                            style={inputStyle}
+                                            placeholder="EFT-..."
+                                        />
+                                    </label>
 
-                            <label style={{ gridColumn: '1 / -1', fontSize: '0.875rem' }}>
-                                Dekont URL
-                                <input
-                                    value={receiptFileUrl}
-                                    onChange={(e) => setReceiptFileUrl(e.target.value)}
-                                    style={inputStyle}
-                                    placeholder="https://..."
-                                />
-                            </label>
+                                    <label style={{ gridColumn: '1 / -1', fontSize: '0.875rem' }}>
+                                        Dekont Dosyası (PDF/JPG/PNG) *
+                                        <input
+                                            type="file"
+                                            accept=".pdf,.jpg,.jpeg,.png"
+                                            style={inputStyle}
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
+                                                    void uploadReceipt(file);
+                                                }
+                                            }}
+                                        />
+                                        <div style={{ marginTop: 6, fontSize: '0.8125rem', color: tokens.textMuted }}>
+                                            {uploadingReceipt
+                                                ? 'Dekont yükleniyor...'
+                                                : receiptFileName
+                                                  ? `Yüklendi: ${receiptFileName}`
+                                                  : 'Henüz dekont yüklenmedi'}
+                                        </div>
+                                    </label>
+                                </>
+                            ) : (
+                                <>
+                                    <label style={{ fontSize: '0.875rem' }}>
+                                        Alıcı IBAN
+                                        <input
+                                            value={destinationIban}
+                                            onChange={(e) => setDestinationIban(e.target.value)}
+                                            style={inputStyle}
+                                            placeholder="TR..."
+                                            required
+                                        />
+                                    </label>
+
+                                    <label style={{ fontSize: '0.875rem' }}>
+                                        Alıcı Ad Soyad
+                                        <input
+                                            value={destinationAccountHolder}
+                                            onChange={(e) => setDestinationAccountHolder(e.target.value)}
+                                            style={inputStyle}
+                                            placeholder="Ad Soyad"
+                                            required
+                                        />
+                                    </label>
+
+                                    <label style={{ fontSize: '0.875rem' }}>
+                                        Banka Adı
+                                        <input
+                                            value={destinationBankName}
+                                            onChange={(e) => setDestinationBankName(e.target.value)}
+                                            style={inputStyle}
+                                            placeholder="Banka"
+                                            required
+                                        />
+                                    </label>
+                                </>
+                            )}
 
                             <label style={{ gridColumn: '1 / -1', fontSize: '0.875rem' }}>
                                 Not
@@ -313,7 +516,7 @@ export function Wallet() {
                                         opacity: submitting ? 0.7 : 1,
                                     }}
                                 >
-                                    {submitting ? 'Gönderiliyor...' : 'Talep Oluştur'}
+                                    {submitting ? 'Gönderiliyor...' : 'Talep oluştur'}
                                 </button>
 
                                 {successMsg && <span style={{ color: '#22c55e', fontSize: '0.875rem' }}>{successMsg}</span>}
@@ -333,14 +536,15 @@ export function Wallet() {
                                         <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Tutar</th>
                                         <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Durum</th>
                                         <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Tarih</th>
-                                        <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Review Note</th>
+                                        <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Detay</th>
+                                        <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>İnceleme notu</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {items.length === 0 ? (
                                         <tr>
                                             <td
-                                                colSpan={6}
+                                                colSpan={7}
                                                 style={{
                                                     padding: 10,
                                                     borderBottom: `1px solid ${tokens.tableBorder}`,
@@ -364,6 +568,27 @@ export function Wallet() {
                                                 </td>
                                                 <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
                                                     {new Date(r.createdAt).toLocaleString('tr-TR')}
+                                                </td>
+                                                <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}`, fontSize: '0.8125rem' }}>
+                                                    {r.type === 'DEPOSIT' ? (
+                                                        <div>
+                                                            <div>Yatırım IBAN: {r.depositIban || r.bankAccountIban || '-'}</div>
+                                                            <div>Ref: {r.referenceNo || '-'}</div>
+                                                            {r.receiptFileUrl ? (
+                                                                <a href={r.receiptFileUrl} target="_blank" rel="noreferrer" style={{ color: '#60a5fa' }}>
+                                                                    Dekont
+                                                                </a>
+                                                            ) : (
+                                                                <div>Dekont: -</div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <div>
+                                                            <div>Alıcı IBAN: {r.destinationIban || '-'}</div>
+                                                            <div>Alıcı: {r.destinationAccountHolder || '-'}</div>
+                                                            <div>Banka: {r.destinationBankName || '-'}</div>
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
                                                     {r.reviewNote || '-'}
