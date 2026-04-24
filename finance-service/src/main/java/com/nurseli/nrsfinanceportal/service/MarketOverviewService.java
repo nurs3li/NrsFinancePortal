@@ -100,7 +100,10 @@ public class MarketOverviewService {
                                 e.getValue().buyPrice(),
                                 e.getValue().sellPrice(),
                                 e.getValue().source(),
-                                e.getValue().timestamp()
+                                e.getValue().timestamp(),
+                                e.getValue().marketCap(),
+                                e.getValue().marketCapSource(),
+                                e.getValue().marketCapAsOf()
                         ),
                         (a, b) -> a,
                         LinkedHashMap::new

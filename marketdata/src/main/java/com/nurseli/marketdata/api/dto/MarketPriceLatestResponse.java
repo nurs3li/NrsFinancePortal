@@ -8,5 +8,8 @@ public record MarketPriceLatestResponse(
         BigDecimal buyPrice,
         BigDecimal sellPrice,
         String source,
-        LocalDateTime timestamp
+        LocalDateTime timestamp,
+        BigDecimal marketCap,
+        String marketCapSource,
+        LocalDateTime marketCapAsOf
 ) {}

@@ -4,10 +4,16 @@ import type { HierarchyRectangularNode } from 'd3-hierarchy';
 
 export type TreemapTile = {
     sector: string;
+    industry?: string | null;
     symbol: string;
     assetClass: string;
     changePercent: number;
     layoutWeight: number;
+    mode?: string;
+    changeHorizon?: string;
+    weightMode?: string;
+    marketCapSource?: string | null;
+    marketCapAsOf?: string | null;
 };
 
 type HNode = {
@@ -15,7 +21,13 @@ type HNode = {
     value?: number;
     change?: number;
     symbol?: string;
+    industry?: string | null;
     assetClass?: string;
+    mode?: string;
+    changeHorizon?: string;
+    weightMode?: string;
+    marketCapSource?: string | null;
+    marketCapAsOf?: string | null;
     children?: HNode[];
 };
 
@@ -41,9 +53,19 @@ type Props = {
     tiles: TreemapTile[];
     borderColor: string;
     panelBg: string;
+    onTileHover?: (tile: TreemapTile) => void;
+    onTileLeave?: () => void;
+    onTileClick?: (tile: TreemapTile) => void;
 };
 
-export function MarketFinvizTreemap({ tiles, borderColor, panelBg }: Props) {
+export function MarketFinvizTreemap({
+    tiles,
+    borderColor,
+    panelBg,
+    onTileHover,
+    onTileLeave,
+    onTileClick,
+}: Props) {
     const wrapRef = useRef<HTMLDivElement>(null);
     const [size, setSize] = useState({ w: 300, h: 400 });
 
@@ -79,7 +101,13 @@ export function MarketFinvizTreemap({ tiles, borderColor, panelBg }: Props) {
                 value: Math.max(t.layoutWeight, 0.04),
                 change: t.changePercent,
                 symbol: t.symbol,
+                industry: t.industry,
                 assetClass: t.assetClass,
+                mode: t.mode,
+                changeHorizon: t.changeHorizon,
+                weightMode: t.weightMode,
+                marketCapSource: t.marketCapSource,
+                marketCapAsOf: t.marketCapAsOf,
             })),
         }));
 
@@ -100,7 +128,7 @@ export function MarketFinvizTreemap({ tiles, borderColor, panelBg }: Props) {
     if (!tiles.length) {
         return (
             <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>
-                Isı haritası için veri yok.
+                İsı haritası için veri yok.
             </p>
         );
     }
@@ -159,13 +187,42 @@ export function MarketFinvizTreemap({ tiles, borderColor, panelBg }: Props) {
                     const h = node.y1 - node.y0;
                     const sym = node.data.symbol ?? node.data.name;
                     const ch = node.data.change ?? 0;
+                    const industry = node.data.industry ?? '';
+                    const mode = node.data.mode ?? '';
+                    const horizon = node.data.changeHorizon ?? '';
+                    const weightMode = node.data.weightMode ?? '';
+                    const marketCapSource = node.data.marketCapSource ?? '';
+                    const marketCapAsOf = node.data.marketCapAsOf ?? '';
                     const area = w * h;
                     const showPct = area > 420;
                     const showSym = area > 180;
+                    const tile: TreemapTile = {
+                        sector: node.parent?.data.name ?? 'OTHER',
+                        industry: node.data.industry,
+                        symbol: sym,
+                        assetClass: node.data.assetClass ?? 'OTHER',
+                        changePercent: ch,
+                        layoutWeight: node.data.value ?? 1,
+                        mode: node.data.mode,
+                        changeHorizon: node.data.changeHorizon,
+                        weightMode: node.data.weightMode,
+                        marketCapSource: node.data.marketCapSource,
+                        marketCapAsOf: node.data.marketCapAsOf,
+                    };
+                    const titleParts = [`${sym} · ${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%`];
+                    if (industry) titleParts.push(industry);
+                    if (horizon) titleParts.push(`Horizon: ${horizon}`);
+                    if (weightMode) titleParts.push(`Weight: ${weightMode}`);
+                    if (marketCapSource) titleParts.push(`Cap Source: ${marketCapSource}`);
+                    if (marketCapAsOf) titleParts.push(`Cap AsOf: ${new Date(marketCapAsOf).toLocaleString('tr-TR')}`);
+                    if (mode) titleParts.push(`Mode: ${mode}`);
                     return (
                         <div
                             key={`leaf-${sym}-${node.x0}-${node.y0}`}
-                            title={`${sym} · ${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%`}
+                            title={titleParts.join(' | ')}
+                            onMouseEnter={() => onTileHover?.(tile)}
+                            onMouseLeave={() => onTileLeave?.()}
+                            onClick={() => onTileClick?.(tile)}
                             style={{
                                 position: 'absolute',
                                 left: node.x0,
@@ -182,6 +239,7 @@ export function MarketFinvizTreemap({ tiles, borderColor, panelBg }: Props) {
                                 padding: showSym ? 2 : 0,
                                 zIndex: 1,
                                 overflow: 'hidden',
+                                cursor: onTileClick ? 'pointer' : 'default',
                             }}
                         >
                             {showSym ? (

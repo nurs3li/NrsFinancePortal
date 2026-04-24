@@ -22,7 +22,7 @@ public class EquityMarketController {
 
     @GetMapping("/latest")
     public Map<String, MarketPriceLatestResponse> latest() {
-        return new LinkedHashMap<>(queryService.getLatestBySource("FINHUB"));
+        return new LinkedHashMap<>(queryService.getLatestEquity());
     }
 
     /**

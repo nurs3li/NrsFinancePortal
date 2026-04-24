@@ -7,6 +7,7 @@ public record MarketDashboardResponse(
         MarketOverviewResponse latest,
         List<SparklineEntry> sparklines,
         List<HeatmapTileEntry> heatmapTiles,
+        HeatmapMeta heatmapMeta,
         List<VolatilityEntry> volatility,
         LocalDateTime computedAt
 ) {}

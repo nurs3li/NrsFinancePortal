@@ -94,4 +94,26 @@ public class FinHubClient {
                 .doOnError(error -> log.error("[FINHUB] Quote fetch failed for {}: {}", symbol, error.getMessage()))
                 .onErrorResume(e -> Mono.empty());
     }
+
+    /**
+     * FinHub Company Profile 2 API.
+     * GET /stock/profile2?symbol=...&token=...
+     */
+    public Mono<FinHubCompanyProfileDto> fetchCompanyProfile(String symbol) {
+        String apiKey = dataSourcesProperties.getFinhub().getApiKey();
+        if (apiKey == null || apiKey.isBlank() || apiKey.equals("your-api-key-here")) {
+            log.warn("[FINHUB] API key not configured, skipping profile fetch");
+            return Mono.empty();
+        }
+        return webClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/stock/profile2")
+                        .queryParam("symbol", symbol)
+                        .queryParam("token", apiKey)
+                        .build())
+                .retrieve()
+                .bodyToMono(FinHubCompanyProfileDto.class)
+                .doOnError(error -> log.error("[FINHUB] Profile fetch failed for {}: {}", symbol, error.getMessage()))
+                .onErrorResume(e -> Mono.empty());
+    }
 }

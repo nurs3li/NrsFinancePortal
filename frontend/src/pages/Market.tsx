@@ -53,6 +53,12 @@ type BatchHistoryResponse = {
 };
 
 type CompareRow = { time: string; values: Record<string, number> };
+type StarSelection = { marketType: string; symbol: string; position?: number };
+type StarredAssetsResponse = {
+    maxItems: number;
+    selected: StarSelection[];
+    resolved: { marketType: string; symbol: string; position: number; defaultFilled: boolean }[];
+};
 
 const DAYS_OPTIONS = [7, 14, 30];
 const COMPARE_COLORS = ['#38bdf8', '#22c55e', '#eab308', '#f87171'];
@@ -164,6 +170,13 @@ export function Market() {
     const [compareCategory, setCompareCategory] = useState<TabId>('doviz');
     const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
     const [loadingCompare, setLoadingCompare] = useState(false);
+    const [savingStarKey, setSavingStarKey] = useState<string | null>(null);
+
+    const { data: starredData, refetch: refetchStarred } = useQuery({
+        queryKey: ['me', 'starred-assets'],
+        queryFn: () => financeClient.get<StarredAssetsResponse>('/api/me/starred-assets').then((r) => r.data),
+        staleTime: 60_000,
+    });
 
     const fetchIndicators = useCallback((tab: TabId, symbol: string, days: number) => {
         const type = getMarketType(tab);
@@ -314,6 +327,42 @@ export function Market() {
         }
         return out;
     }, [dashboard, compareCategory, compareSymbols]);
+
+    const selectedStars = useMemo(
+        () => (starredData?.selected ?? []).map((s) => `${s.marketType}|${s.symbol}`),
+        [starredData?.selected],
+    );
+
+    const selectedStarSet = useMemo(() => new Set(selectedStars), [selectedStars]);
+
+    const toggleStar = useCallback(
+        async (marketType: string, symbol: string) => {
+            const key = `${marketType}|${symbol}`;
+            const selected = [...(starredData?.selected ?? [])];
+            const exists = selected.some((s) => `${s.marketType}|${s.symbol}` === key);
+
+            let next: StarSelection[];
+            if (exists) {
+                next = selected.filter((s) => `${s.marketType}|${s.symbol}` !== key);
+            } else {
+                const maxItems = starredData?.maxItems ?? 7;
+                if (selected.length >= maxItems) {
+                    window.alert(`En fazla ${maxItems} varlık yıldızlanabilir.`);
+                    return;
+                }
+                next = [...selected, { marketType, symbol }];
+            }
+
+            try {
+                setSavingStarKey(key);
+                await financeClient.put('/api/me/starred-assets', { selected: next });
+                await refetchStarred();
+            } finally {
+                setSavingStarKey(null);
+            }
+        },
+        [refetchStarred, starredData?.maxItems, starredData?.selected],
+    );
 
     const handleGoToAdvanced = () => {
         if (!chartSymbol) return;
@@ -467,6 +516,9 @@ export function Market() {
                                                     spark && spark.length >= 2
                                                         ? sparkRangeChangePct(spark)
                                                         : null;
+                                                const starKey = `${getMarketType(activeTab)}|${sym}`;
+                                                const isStarred = selectedStarSet.has(starKey);
+                                                const starBusy = savingStarKey === starKey;
                                                 return (
                                                     <tr
                                                         key={sym}
@@ -489,6 +541,24 @@ export function Market() {
                                                                     fallbackColor={fb.color}
                                                                     size={28}
                                                                 />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => void toggleStar(getMarketType(activeTab), sym)}
+                                                                    title={isStarred ? 'Yıldızdan çıkar' : 'Yıldızla'}
+                                                                    disabled={starBusy}
+                                                                    style={{
+                                                                        border: 'none',
+                                                                        background: 'transparent',
+                                                                        color: isStarred ? '#facc15' : tokens.textMuted,
+                                                                        cursor: starBusy ? 'not-allowed' : 'pointer',
+                                                                        fontSize: 17,
+                                                                        lineHeight: 1,
+                                                                        padding: 0,
+                                                                        marginRight: 2,
+                                                                    }}
+                                                                >
+                                                                    {isStarred ? '★' : '☆'}
+                                                                </button>
                                                                 <div>
                                                                     <div
                                                                         style={{
@@ -910,9 +980,29 @@ export function Market() {
                             Piyasa ısı haritası
                         </h2>
                         <p style={{ ...mutedStyle, marginBottom: 12 }}>
-                            Finviz tarzı treemap: kutular göreli fiyat (kök ağırlık), renk yaklaşık 14 günlük
-                            penceredeki ilk ve son fiyata göre % değişim. Geçmiş yoksa gri nötr.
+                            Equity: {dashboard?.heatmapMeta?.equityMode ?? 'EQUITY_FINVIZ'} (
+                            {dashboard?.heatmapMeta?.equityChangeHorizon ?? '1D'} /{' '}
+                            {dashboard?.heatmapMeta?.equityWeightMode ?? 'EQUAL'}). Diğer varlıklar:{' '}
+                            {dashboard?.heatmapMeta?.multiAssetMode ?? 'MULTI_ASSET'} (
+                            {dashboard?.heatmapMeta?.multiAssetChangeHorizon ?? '14D'} /{' '}
+                            {dashboard?.heatmapMeta?.multiAssetWeightMode ?? 'PRICE_SQRT'}). Geçmiş yoksa gri nötr.
                         </p>
+                        <button
+                            type="button"
+                            onClick={() => navigate('/market/heatmap')}
+                            style={{
+                                marginBottom: 12,
+                                padding: '6px 12px',
+                                fontSize: '0.8rem',
+                                borderRadius: 999,
+                                border: `1px solid ${tokens.border}`,
+                                background: tokens.bgCard,
+                                color: tokens.accent,
+                                cursor: 'pointer',
+                            }}
+                        >
+                            Detaylı ısı haritası →
+                        </button>
                         <MarketFinvizTreemap
                             tiles={dashboard?.heatmapTiles ?? []}
                             borderColor={tokens.border}

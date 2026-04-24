@@ -13,6 +13,9 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 
+import java.time.Duration;
+import java.util.Map;
+
 @Configuration
 @EnableCaching
 public class RedisConfig {
@@ -41,9 +44,13 @@ public class RedisConfig {
                                 RedisSerializationContext.SerializationPair
                                         .fromSerializer(serializer)
                         );
+        Map<String, RedisCacheConfiguration> perCache = Map.of(
+                "market:equity-cap", config.entryTtl(Duration.ofDays(1))
+        );
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(config)
+                .withInitialCacheConfigurations(perCache)
                 .build();
     }
 }
