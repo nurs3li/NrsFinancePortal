@@ -15,6 +15,8 @@ public class PerformanceItemDto {
     private final BigDecimal currentValue;
     private final BigDecimal pnl;
     private final BigDecimal pnlPct;
+    /** MANUAL satirlari icin; TRADE icin null */
+    private final Long manualPositionId;
 
     public PerformanceItemDto(
             String source,
@@ -27,7 +29,8 @@ public class PerformanceItemDto {
             BigDecimal cost,
             BigDecimal currentValue,
             BigDecimal pnl,
-            BigDecimal pnlPct
+            BigDecimal pnlPct,
+            Long manualPositionId
     ) {
         this.source = source;
         this.type = type;
@@ -40,6 +43,7 @@ public class PerformanceItemDto {
         this.currentValue = currentValue;
         this.pnl = pnl;
         this.pnlPct = pnlPct;
+        this.manualPositionId = manualPositionId;
     }
 
     public String getSource() { return source; }
@@ -53,4 +57,8 @@ public class PerformanceItemDto {
     public BigDecimal getCurrentValue() { return currentValue; }
     public BigDecimal getPnl() { return pnl; }
     public BigDecimal getPnlPct() { return pnlPct; }
+
+    public Long getManualPositionId() {
+        return manualPositionId;
+    }
 }

@@ -24,7 +24,11 @@ public class UnifiedPortfolioService {
 
     @Transactional(readOnly = true)
     public List<UnifiedPortfolioItemView> myUnifiedPortfolio() {
-        User user = currentUserResolver.getOrCreateCurrentUser();
+        return unifiedForUser(currentUserResolver.getOrCreateCurrentUser());
+    }
+
+    @Transactional(readOnly = true)
+    public List<UnifiedPortfolioItemView> unifiedForUser(User user) {
 
         List<UnifiedPortfolioItemView> result = new ArrayList<>();
 
@@ -35,7 +39,10 @@ public class UnifiedPortfolioService {
                     a.getType().name(),
                     a.getSymbol(),
                     a.getQuantity(),
-                    a.getAvgBuyPrice()
+                    a.getAvgBuyPrice(),
+                    null,
+                    null,
+                    null
             ));
         }
 
@@ -46,7 +53,10 @@ public class UnifiedPortfolioService {
                     m.getType().name(),
                     m.getSymbol(),
                     m.getQuantity(),
-                    m.getBuyPrice()
+                    m.getBuyPrice(),
+                    m.getId(),
+                    m.getBuyDate(),
+                    m.getNote()
             ));
         }
 
