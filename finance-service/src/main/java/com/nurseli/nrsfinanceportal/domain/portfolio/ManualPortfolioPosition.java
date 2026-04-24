@@ -81,11 +81,19 @@ public class ManualPortfolioPosition {
     }
 
     public void update(
+            AssetType type,
+            String symbol,
             BigDecimal quantity,
             BigDecimal buyPrice,
             LocalDate buyDate,
             String note
     ) {
+        if (type == null) {
+            throw new IllegalArgumentException("Type is required");
+        }
+        if (symbol == null || symbol.isBlank()) {
+            throw new IllegalArgumentException("Symbol is required");
+        }
         if (quantity == null || quantity.signum() <= 0) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
@@ -96,6 +104,8 @@ public class ManualPortfolioPosition {
             throw new IllegalArgumentException("Buy date is required");
         }
 
+        this.type = type;
+        this.symbol = symbol;
         this.quantity = quantity;
         this.buyPrice = buyPrice;
         this.buyDate = buyDate;

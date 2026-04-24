@@ -25,10 +25,11 @@ public class SimulationController {
             @RequestParam AssetType type,
             @RequestParam String symbol,
             @RequestParam BigDecimal amount,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) BigDecimal buyPrice
     ) {
         return ApiResponse.success(
-                simulationService.simulate(type, symbol, amount, date)
+                simulationService.simulate(type, symbol, amount, date, buyPrice)
         );
     }
 }

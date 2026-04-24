@@ -18,8 +18,14 @@ public class FundRequestView {
     private final String reviewNote;
     private final String bankAccountIban;
     private final String receiptFileUrl;
+    private final String receiptFileId;
     private final String referenceNo;
     private final String sourceBankName;
+    private final String depositIban;
+    private final String systemIbanId;
+    private final String destinationIban;
+    private final String destinationAccountHolder;
+    private final String destinationBankName;
     private final Long approvedByUserId;
     private final Instant approvedAt;
     private final Instant rejectedAt;
@@ -37,8 +43,14 @@ public class FundRequestView {
             String reviewNote,
             String bankAccountIban,
             String receiptFileUrl,
+            String receiptFileId,
             String referenceNo,
             String sourceBankName,
+            String depositIban,
+            String systemIbanId,
+            String destinationIban,
+            String destinationAccountHolder,
+            String destinationBankName,
             Long approvedByUserId,
             Instant approvedAt,
             Instant rejectedAt,
@@ -55,8 +67,14 @@ public class FundRequestView {
         this.reviewNote = reviewNote;
         this.bankAccountIban = bankAccountIban;
         this.receiptFileUrl = receiptFileUrl;
+        this.receiptFileId = receiptFileId;
         this.referenceNo = referenceNo;
         this.sourceBankName = sourceBankName;
+        this.depositIban = depositIban;
+        this.systemIbanId = systemIbanId;
+        this.destinationIban = destinationIban;
+        this.destinationAccountHolder = destinationAccountHolder;
+        this.destinationBankName = destinationBankName;
         this.approvedByUserId = approvedByUserId;
         this.approvedAt = approvedAt;
         this.rejectedAt = rejectedAt;
@@ -76,8 +94,14 @@ public class FundRequestView {
                 r.getReviewNote(),
                 r.getBankAccountIban(),
                 r.getReceiptFileUrl(),
+                r.getReceiptFileId(),
                 r.getReferenceNo(),
                 r.getSourceBankName(),
+                r.getDepositIban(),
+                r.getSystemIbanId(),
+                r.getDestinationIban(),
+                r.getDestinationAccountHolder(),
+                r.getDestinationBankName(),
                 r.getApprovedByUserId(),
                 r.getApprovedAt(),
                 r.getRejectedAt(),
@@ -96,8 +120,14 @@ public class FundRequestView {
     public String getReviewNote() { return reviewNote; }
     public String getBankAccountIban() { return bankAccountIban; }
     public String getReceiptFileUrl() { return receiptFileUrl; }
+    public String getReceiptFileId() { return receiptFileId; }
     public String getReferenceNo() { return referenceNo; }
     public String getSourceBankName() { return sourceBankName; }
+    public String getDepositIban() { return depositIban; }
+    public String getSystemIbanId() { return systemIbanId; }
+    public String getDestinationIban() { return destinationIban; }
+    public String getDestinationAccountHolder() { return destinationAccountHolder; }
+    public String getDestinationBankName() { return destinationBankName; }
     public Long getApprovedByUserId() { return approvedByUserId; }
     public Instant getApprovedAt() { return approvedAt; }
     public Instant getRejectedAt() { return rejectedAt; }

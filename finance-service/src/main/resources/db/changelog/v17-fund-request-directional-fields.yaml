@@ -1,0 +1,26 @@
+databaseChangeLog:
+  - changeSet:
+      id: v17-fund-request-directional-fields
+      author: codex
+      changes:
+        - addColumn:
+            tableName: fund_requests
+            columns:
+              - column:
+                  name: receipt_file_id
+                  type: varchar(200)
+              - column:
+                  name: deposit_iban
+                  type: varchar(50)
+              - column:
+                  name: system_iban_id
+                  type: varchar(100)
+              - column:
+                  name: destination_iban
+                  type: varchar(50)
+              - column:
+                  name: destination_account_holder
+                  type: varchar(200)
+              - column:
+                  name: destination_bank_name
+                  type: varchar(200)

@@ -19,8 +19,14 @@ type FundRequestView = {
     reviewNote: string | null;
     bankAccountIban: string | null;
     receiptFileUrl: string | null;
+    receiptFileId: string | null;
     referenceNo: string | null;
     sourceBankName: string | null;
+    depositIban: string | null;
+    systemIbanId: string | null;
+    destinationIban: string | null;
+    destinationAccountHolder: string | null;
+    destinationBankName: string | null;
     approvedByUserId: number | null;
     approvedAt: string | null;
     rejectedAt: string | null;
@@ -138,26 +144,6 @@ export function FmFundRequests() {
         padding: 16,
     };
 
-    const tableStyle: React.CSSProperties = {
-        width: '100%',
-        borderCollapse: 'collapse',
-        fontSize: '0.875rem',
-    };
-
-    const thStyle: React.CSSProperties = {
-        textAlign: 'left',
-        padding: '10px 12px',
-        borderBottom: `2px solid ${tokens.border}`,
-        background: tokens.bgCard,
-        whiteSpace: 'nowrap',
-    };
-
-    const tdStyle: React.CSSProperties = {
-        padding: '10px 12px',
-        borderBottom: `1px solid ${tokens.tableBorder}`,
-        verticalAlign: 'top',
-    };
-
     const badgeStyle = (type: FundRequestType): React.CSSProperties => ({
         display: 'inline-block',
         borderRadius: 999,
@@ -171,6 +157,13 @@ export function FmFundRequests() {
                 : 'linear-gradient(90deg, #f59e0b, #f97316)',
     });
 
+    const statusBadgeStyle = (status: FundRequestStatus): React.CSSProperties => {
+        if (status === 'APPROVED') return { color: '#166534', background: '#dcfce7' };
+        if (status === 'REJECTED') return { color: '#991b1b', background: '#fee2e2' };
+        if (status === 'PENDING') return { color: '#92400e', background: '#fef3c7' };
+        return { color: tokens.textMuted, background: tokens.inputBg };
+    };
+
     return (
         <div style={pageStyle}>
             <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>Para Talepleri</h1>
@@ -183,114 +176,143 @@ export function FmFundRequests() {
                 {error && <p style={{ color: tokens.error }}>Hata: {error}</p>}
 
                 {!loading && !error && (
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={tableStyle}>
-                            <thead>
-                                <tr>
-                                    <th style={thStyle}>Talep</th>
-                                    <th style={thStyle}>Kullanıcı</th>
-                                    <th style={thStyle}>Tip</th>
-                                    <th style={thStyle}>Tutar</th>
-                                    <th style={thStyle}>Banka / Ref</th>
-                                    <th style={thStyle}>Dekont</th>
-                                    <th style={thStyle}>Not</th>
-                                    <th style={thStyle}>Tarih</th>
-                                    <th style={thStyle}>İşlem</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {items.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={9} style={{ ...tdStyle, textAlign: 'center', color: tokens.textMuted }}>
-                                            Bekleyen talep yok.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    items.map((r) => (
-                                        <tr key={r.id}>
-                                            <td style={tdStyle}>
-                                                <div>#{r.id}</div>
-                                                <div style={{ color: tokens.textMuted, fontSize: '0.75rem' }}>
-                                                    accountId: {r.accountId}
-                                                </div>
-                                            </td>
-
-                                            <td style={tdStyle}>
-                                                <div>userId: {r.userId}</div>
-                                            </td>
-
-                                            <td style={tdStyle}>
+                    <div>
+                        {items.length === 0 ? (
+                            <p style={{ color: tokens.textMuted, margin: 0 }}>Bekleyen talep yok.</p>
+                        ) : (
+                            <div style={{ display: 'grid', gap: 12 }}>
+                                {items.map((r) => (
+                                    <div
+                                        key={r.id}
+                                        style={{
+                                            border: `1px solid ${tokens.border}`,
+                                            borderRadius: 10,
+                                            padding: 12,
+                                            background: tokens.inputBg,
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                                <strong>#{r.id}</strong>
+                                                <span style={{ color: tokens.textMuted, fontSize: '0.8rem' }}>userId: {r.userId}</span>
+                                                <span style={{ color: tokens.textMuted, fontSize: '0.8rem' }}>accountId: {r.accountId}</span>
                                                 <span style={badgeStyle(r.type)}>{r.type}</span>
-                                            </td>
+                                                <span
+                                                    style={{
+                                                        ...statusBadgeStyle(r.status),
+                                                        borderRadius: 999,
+                                                        padding: '2px 8px',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: 700,
+                                                    }}
+                                                >
+                                                    {r.status}
+                                                </span>
+                                            </div>
+                                            <div style={{ fontWeight: 700 }}>{fmtMoney(r.amount, r.currency)}</div>
+                                        </div>
 
-                                            <td style={tdStyle}>{fmtMoney(r.amount, r.currency)}</td>
+                                        <div
+                                            style={{
+                                                marginTop: 10,
+                                                display: 'grid',
+                                                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                                                gap: 10,
+                                                fontSize: '0.85rem',
+                                            }}
+                                        >
+                                            {r.type === 'DEPOSIT' ? (
+                                                <>
+                                                    <div>
+                                                        <div style={{ color: tokens.textMuted }}>Sistem IBAN</div>
+                                                        <div>{r.depositIban || r.bankAccountIban || '-'}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ color: tokens.textMuted }}>Sistem IBAN ID</div>
+                                                        <div>{r.systemIbanId || '-'}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ color: tokens.textMuted }}>Kaynak Banka</div>
+                                                        <div>{r.sourceBankName || '-'}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ color: tokens.textMuted }}>Harici Referans</div>
+                                                        <div>{r.referenceNo || '-'}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ color: tokens.textMuted }}>Dekont</div>
+                                                        {r.receiptFileUrl ? (
+                                                            <a href={r.receiptFileUrl} target="_blank" rel="noreferrer" style={{ color: tokens.accent }}>
+                                                                Dekontu Aç
+                                                            </a>
+                                                        ) : (
+                                                            <span>-</span>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div>
+                                                        <div style={{ color: tokens.textMuted }}>Alıcı IBAN</div>
+                                                        <div>{r.destinationIban || r.bankAccountIban || '-'}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ color: tokens.textMuted }}>Alıcı Ad Soyad</div>
+                                                        <div>{r.destinationAccountHolder || '-'}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ color: tokens.textMuted }}>Banka Adı</div>
+                                                        <div>{r.destinationBankName || r.sourceBankName || '-'}</div>
+                                                    </div>
+                                                </>
+                                            )}
+                                            <div style={{ gridColumn: '1 / -1' }}>
+                                                <div style={{ color: tokens.textMuted }}>Not</div>
+                                                <div>{r.requestNote || '-'}</div>
+                                            </div>
+                                            <div style={{ gridColumn: '1 / -1', color: tokens.textMuted, fontSize: '0.8rem' }}>
+                                                Oluşturulma: {new Date(r.createdAt).toLocaleString('tr-TR')}
+                                            </div>
+                                        </div>
 
-                                            <td style={tdStyle}>
-                                                <div>IBAN: {r.bankAccountIban || '-'}</div>
-                                                <div>Banka: {r.sourceBankName || '-'}</div>
-                                                <div>Ref No: {r.referenceNo || '-'}</div>
-                                            </td>
-
-                                            <td style={tdStyle}>
-                                                {r.receiptFileUrl ? (
-                                                    <a
-                                                        href={r.receiptFileUrl}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        style={{ color: tokens.accent }}
-                                                    >
-                                                        Dekontu Aç
-                                                    </a>
-                                                ) : (
-                                                    <span style={{ color: tokens.textMuted }}>-</span>
-                                                )}
-                                            </td>
-
-                                            <td style={tdStyle}>{r.requestNote || '-'}</td>
-
-                                            <td style={tdStyle}>{new Date(r.createdAt).toLocaleString('tr-TR')}</td>
-
-                                            <td style={tdStyle}>
-                                                <div style={{ display: 'flex', gap: 8 }}>
-                                                    <button
-                                                        type="button"
-                                                        disabled={actionLoadingId === r.id}
-                                                        onClick={() => approve(r.id)}
-                                                        style={{
-                                                            padding: '6px 10px',
-                                                            borderRadius: 8,
-                                                            border: 'none',
-                                                            cursor: 'pointer',
-                                                            color: '#fff',
-                                                            background: 'linear-gradient(90deg,#16a34a,#22c55e)',
-                                                            opacity: actionLoadingId === r.id ? 0.7 : 1,
-                                                        }}
-                                                    >
-                                                        Onayla
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        disabled={actionLoadingId === r.id}
-                                                        onClick={() => openRejectModal(r.id)}
-                                                        style={{
-                                                            padding: '6px 10px',
-                                                            borderRadius: 8,
-                                                            border: 'none',
-                                                            cursor: 'pointer',
-                                                            color: '#fff',
-                                                            background: 'linear-gradient(90deg,#ef4444,#dc2626)',
-                                                            opacity: actionLoadingId === r.id ? 0.7 : 1,
-                                                        }}
-                                                    >
-                                                        Reddet
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                                        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                                            <button
+                                                type="button"
+                                                disabled={actionLoadingId === r.id}
+                                                onClick={() => approve(r.id)}
+                                                style={{
+                                                    padding: '6px 10px',
+                                                    borderRadius: 8,
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    color: '#fff',
+                                                    background: 'linear-gradient(90deg,#16a34a,#22c55e)',
+                                                    opacity: actionLoadingId === r.id ? 0.7 : 1,
+                                                }}
+                                            >
+                                                Onayla
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={actionLoadingId === r.id}
+                                                onClick={() => openRejectModal(r.id)}
+                                                style={{
+                                                    padding: '6px 10px',
+                                                    borderRadius: 8,
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    color: '#fff',
+                                                    background: 'linear-gradient(90deg,#ef4444,#dc2626)',
+                                                    opacity: actionLoadingId === r.id ? 0.7 : 1,
+                                                }}
+                                            >
+                                                Reddet
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

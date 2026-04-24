@@ -54,6 +54,12 @@ public class RateLimitFilter implements Filter {
             return;
         }
 
+        // 1b) Portföy snapshot okuma — sayfa başına çoklu istekte 429 önlemek için GET muaf
+        if ("GET".equals(method) && path.startsWith("/api/portfolio/snapshots")) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         // 2) FM / Admin için sadece "okuma" GET isteklerini rate-limit dışı bırak
         if ("GET".equals(method)
                 && (path.startsWith("/api/tasks")                 // /api/tasks/me, /api/tasks/{id}

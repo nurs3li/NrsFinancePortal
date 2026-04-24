@@ -17,12 +17,21 @@ public class FundRequestCreateRequest {
 
     private String currency;
     private String requestNote;
-    private String bankAccountIban;
+    private String bankAccountIban; // legacy alias (mapped to deposit/destination iban)
     private Long accountId;
 
     private String receiptFileUrl;
+    private String receiptFileId;
     private String referenceNo;
     private String sourceBankName;
+    private String externalReferenceNo;
+
+    private String depositIban;
+    private String systemIbanId;
+
+    private String destinationIban;
+    private String destinationAccountHolder;
+    private String destinationBankName;
 
     public FundRequestType getType() { return type; }
     public BigDecimal getAmount() { return amount; }
@@ -31,6 +40,13 @@ public class FundRequestCreateRequest {
     public String getBankAccountIban() { return bankAccountIban; }
     public Long getAccountId() { return accountId; }
     public String getReceiptFileUrl() { return receiptFileUrl; }
+    public String getReceiptFileId() { return receiptFileId; }
     public String getReferenceNo() { return referenceNo; }
     public String getSourceBankName() { return sourceBankName; }
+    public String getExternalReferenceNo() { return externalReferenceNo; }
+    public String getDepositIban() { return depositIban; }
+    public String getSystemIbanId() { return systemIbanId; }
+    public String getDestinationIban() { return destinationIban; }
+    public String getDestinationAccountHolder() { return destinationAccountHolder; }
+    public String getDestinationBankName() { return destinationBankName; }
 }
