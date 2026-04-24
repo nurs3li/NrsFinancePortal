@@ -35,4 +35,11 @@ public class ManualPortfolioCreateRequest {
     public BigDecimal getBuyPrice() { return buyPrice; }
     public LocalDate getBuyDate() { return buyDate; }
     public String getNote() { return note; }
+
+    public void setType(AssetType type) { this.type = type; }
+    public void setSymbol(String symbol) { this.symbol = symbol; }
+    public void setQuantity(BigDecimal quantity) { this.quantity = quantity; }
+    public void setBuyPrice(BigDecimal buyPrice) { this.buyPrice = buyPrice; }
+    public void setBuyDate(LocalDate buyDate) { this.buyDate = buyDate; }
+    public void setNote(String note) { this.note = note; }
 }

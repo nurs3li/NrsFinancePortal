@@ -2,6 +2,7 @@ package com.nurseli.nrsfinanceportal.common.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 public class SimulationResponseDto {
 
@@ -15,6 +16,9 @@ public class SimulationResponseDto {
     private final BigDecimal currentValueTry;
     private final BigDecimal pnlTry;
     private final BigDecimal pnlPct;
+    private final String buyPriceSource; // SYSTEM_HISTORY | USER_INPUT
+    private final LocalDate historicalPriceDate;
+    private final List<SimulationPerformancePointDto> performanceSeries;
     private final String message;
 
     public SimulationResponseDto(
@@ -28,6 +32,9 @@ public class SimulationResponseDto {
             BigDecimal currentValueTry,
             BigDecimal pnlTry,
             BigDecimal pnlPct,
+            String buyPriceSource,
+            LocalDate historicalPriceDate,
+            List<SimulationPerformancePointDto> performanceSeries,
             String message
     ) {
         this.type = type;
@@ -40,6 +47,9 @@ public class SimulationResponseDto {
         this.currentValueTry = currentValueTry;
         this.pnlTry = pnlTry;
         this.pnlPct = pnlPct;
+        this.buyPriceSource = buyPriceSource;
+        this.historicalPriceDate = historicalPriceDate;
+        this.performanceSeries = performanceSeries;
         this.message = message;
     }
 
@@ -53,5 +63,8 @@ public class SimulationResponseDto {
     public BigDecimal getCurrentValueTry() { return currentValueTry; }
     public BigDecimal getPnlTry() { return pnlTry; }
     public BigDecimal getPnlPct() { return pnlPct; }
+    public String getBuyPriceSource() { return buyPriceSource; }
+    public LocalDate getHistoricalPriceDate() { return historicalPriceDate; }
+    public List<SimulationPerformancePointDto> getPerformanceSeries() { return performanceSeries; }
     public String getMessage() { return message; }
 }
