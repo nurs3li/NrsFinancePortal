@@ -18,6 +18,13 @@ public class MarketDashboardService {
 
     private static final int HISTORY_DAYS = 14;
     private static final int SPARKLINE_POINTS = 24;
+    private static final String MODE_EQUITY_FINVIZ = "EQUITY_FINVIZ";
+    private static final String MODE_MULTI_ASSET = "MULTI_ASSET";
+    private static final String HORIZON_1D = "1D";
+    private static final String HORIZON_14D = "14D";
+    private static final String WEIGHT_MARKET_CAP = "MARKET_CAP";
+    private static final String WEIGHT_EQUAL = "EQUAL";
+    private static final String WEIGHT_PRICE_SQRT = "PRICE_SQRT";
 
     /** Finviz benzeri sektör etiketleri (US hisse evreni). */
     private static final Map<String, String> EQUITY_SECTOR = Map.ofEntries(
@@ -32,6 +39,19 @@ public class MarketDashboardService {
             Map.entry("JNJ", "HEALTHCARE"),
             Map.entry("V", "FINANCIAL"),
             Map.entry("WMT", "CONSUMER DEFENSIVE")
+    );
+    private static final Map<String, String> EQUITY_INDUSTRY = Map.ofEntries(
+            Map.entry("AAPL", "CONSUMER ELECTRONICS"),
+            Map.entry("MSFT", "SOFTWARE - INFRASTRUCTURE"),
+            Map.entry("GOOGL", "INTERNET CONTENT & INFORMATION"),
+            Map.entry("AMZN", "INTERNET RETAIL"),
+            Map.entry("META", "INTERNET CONTENT & INFORMATION"),
+            Map.entry("NVDA", "SEMICONDUCTORS"),
+            Map.entry("TSLA", "AUTO MANUFACTURERS"),
+            Map.entry("JPM", "BANKS - DIVERSIFIED"),
+            Map.entry("JNJ", "DRUG MANUFACTURERS - GENERAL"),
+            Map.entry("V", "CREDIT SERVICES"),
+            Map.entry("WMT", "DISCOUNT STORES")
     );
 
     private final MarketOverviewService overviewService;
@@ -54,6 +74,14 @@ public class MarketDashboardService {
                 latest,
                 sparklines,
                 heatmapTiles,
+                new HeatmapMeta(
+                        MODE_EQUITY_FINVIZ,
+                        HORIZON_1D,
+                        WEIGHT_MARKET_CAP + "->" + WEIGHT_EQUAL + " (fallback)",
+                        MODE_MULTI_ASSET,
+                        HORIZON_14D,
+                        WEIGHT_PRICE_SQRT
+                ),
                 volatility,
                 java.time.LocalDateTime.now()
         );
@@ -68,23 +96,62 @@ public class MarketDashboardService {
         for (var e : latest.stocks().entrySet()) {
             String symbol = e.getKey();
             StockOverviewDto dto = e.getValue();
-            BigDecimal px = dto != null ? dto.buyPrice() : null;
-            double weight = layoutWeight(px);
+            BigDecimal marketCap = dto != null ? dto.marketCap() : null;
+            boolean hasMarketCap = marketCap != null && marketCap.signum() > 0;
+            double weight = hasMarketCap ? marketCap.doubleValue() : 1d;
+            String equityWeightMode = hasMarketCap ? WEIGHT_MARKET_CAP : WEIGHT_EQUAL;
             String sector = EQUITY_SECTOR.getOrDefault(symbol, "EQUITY");
+            String industry = EQUITY_INDUSTRY.getOrDefault(symbol, "OTHER");
             List<MarketPriceHistoryDto> raw = fetchHistory(AssetType.STOCK, symbol);
             List<BigDecimal> closes = midClosesSorted(raw);
 
             if (closes.size() >= 2) {
                 sparklines.add(new SparklineEntry("STOCK", symbol, downsample(closes, SPARKLINE_POINTS)));
                 volatility.add(new VolatilityEntry("STOCK", symbol, round4(dailyReturnStdDev(closes))));
-                double pct = pctChangeHeatmapWindow(closes);
-                heatmapTiles.add(new HeatmapTileEntry(sector, symbol, "STOCK", round4(pct), weight));
+                double pct = pctChange1D(raw);
+                heatmapTiles.add(new HeatmapTileEntry(
+                        sector,
+                        industry,
+                        symbol,
+                        "STOCK",
+                        round4(pct),
+                        weight,
+                        MODE_EQUITY_FINVIZ,
+                        HORIZON_1D,
+                        equityWeightMode,
+                        dto != null ? dto.marketCapSource() : null,
+                        dto != null ? dto.marketCapAsOf() : null
+                ));
             } else if (closes.size() == 1) {
                 sparklines.add(new SparklineEntry("STOCK", symbol, new ArrayList<>(closes)));
                 volatility.add(new VolatilityEntry("STOCK", symbol, 0));
-                heatmapTiles.add(new HeatmapTileEntry(sector, symbol, "STOCK", 0, weight));
+                heatmapTiles.add(new HeatmapTileEntry(
+                        sector,
+                        industry,
+                        symbol,
+                        "STOCK",
+                        0,
+                        weight,
+                        MODE_EQUITY_FINVIZ,
+                        HORIZON_1D,
+                        equityWeightMode,
+                        dto != null ? dto.marketCapSource() : null,
+                        dto != null ? dto.marketCapAsOf() : null
+                ));
             } else {
-                heatmapTiles.add(new HeatmapTileEntry(sector, symbol, "STOCK", 0, weight));
+                heatmapTiles.add(new HeatmapTileEntry(
+                        sector,
+                        industry,
+                        symbol,
+                        "STOCK",
+                        0,
+                        weight,
+                        MODE_EQUITY_FINVIZ,
+                        HORIZON_1D,
+                        equityWeightMode,
+                        dto != null ? dto.marketCapSource() : null,
+                        dto != null ? dto.marketCapAsOf() : null
+                ));
             }
         }
     }
@@ -110,13 +177,49 @@ public class MarketDashboardService {
                 double vol = dailyReturnStdDev(closes);
                 volatility.add(new VolatilityEntry(assetClass, symbol, round4(vol)));
                 double pct = pctChangeHeatmapWindow(closes);
-                heatmapTiles.add(new HeatmapTileEntry(sector, symbol, assetClass, round4(pct), weight));
+                heatmapTiles.add(new HeatmapTileEntry(
+                        sector,
+                        null,
+                        symbol,
+                        assetClass,
+                        round4(pct),
+                        weight,
+                        MODE_MULTI_ASSET,
+                        HORIZON_14D,
+                        WEIGHT_PRICE_SQRT,
+                        null,
+                        null
+                ));
             } else if (closes.size() == 1) {
                 sparklines.add(new SparklineEntry(assetClass, symbol, new ArrayList<>(closes)));
                 volatility.add(new VolatilityEntry(assetClass, symbol, 0));
-                heatmapTiles.add(new HeatmapTileEntry(sector, symbol, assetClass, 0, weight));
+                heatmapTiles.add(new HeatmapTileEntry(
+                        sector,
+                        null,
+                        symbol,
+                        assetClass,
+                        0,
+                        weight,
+                        MODE_MULTI_ASSET,
+                        HORIZON_14D,
+                        WEIGHT_PRICE_SQRT,
+                        null,
+                        null
+                ));
             } else {
-                heatmapTiles.add(new HeatmapTileEntry(sector, symbol, assetClass, 0, weight));
+                heatmapTiles.add(new HeatmapTileEntry(
+                        sector,
+                        null,
+                        symbol,
+                        assetClass,
+                        0,
+                        weight,
+                        MODE_MULTI_ASSET,
+                        HORIZON_14D,
+                        WEIGHT_PRICE_SQRT,
+                        null,
+                        null
+                ));
             }
         }
     }
@@ -249,6 +352,49 @@ public class MarketDashboardService {
             return 0;
         }
         return last.subtract(first).divide(first, 8, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)).doubleValue();
+    }
+
+    /**
+     * Equity Finviz benzeri renk mantığı: son 24 saat içindeki ilk orta fiyat -> en son orta fiyat.
+     * Veri seyrekse güvenli fallback olarak serinin son iki noktasını kullanır.
+     */
+    private static double pctChange1D(List<MarketPriceHistoryDto> raw) {
+        if (raw == null || raw.size() < 2) {
+            return 0;
+        }
+        List<MarketPriceHistoryDto> sorted = raw.stream()
+                .filter(Objects::nonNull)
+                .filter(d -> d.timestamp() != null)
+                .sorted(Comparator.comparing(MarketPriceHistoryDto::timestamp))
+                .toList();
+        if (sorted.size() < 2) {
+            return 0;
+        }
+
+        MarketPriceHistoryDto lastRow = sorted.getLast();
+        BigDecimal lastMid = midPrice(lastRow);
+        if (lastMid == null || lastMid.signum() == 0 || lastRow.timestamp() == null) {
+            return 0;
+        }
+
+        java.time.LocalDateTime threshold = lastRow.timestamp().minusDays(1);
+        BigDecimal baseMid = null;
+        for (MarketPriceHistoryDto row : sorted) {
+            if (row.timestamp().isBefore(threshold)) {
+                continue;
+            }
+            baseMid = midPrice(row);
+            if (baseMid != null) {
+                break;
+            }
+        }
+        if (baseMid == null || baseMid.signum() == 0) {
+            baseMid = midPrice(sorted.get(sorted.size() - 2));
+        }
+        if (baseMid == null || baseMid.signum() == 0) {
+            return 0;
+        }
+        return lastMid.subtract(baseMid).divide(baseMid, 8, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)).doubleValue();
     }
 
     private static double round4(double v) {

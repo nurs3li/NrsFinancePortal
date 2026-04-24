@@ -64,7 +64,7 @@ type IndicatorsResponse = {
     };
 };
 
-const DAYS_OPTIONS = [30, 90, 180];
+const DAYS_OPTIONS = [1, 7, 14, 30, 90, 180];
 const COMPARE_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444'];
 
 function getMarketType(tab: TabId): 'FX' | 'CRYPTO' | 'METALS' | 'FUNDS' | 'EQUITY' {

@@ -5,8 +5,14 @@ package com.nurseli.nrsfinanceportal.dto;
  */
 public record HeatmapTileEntry(
         String sector,
+        String industry,
         String symbol,
         String assetClass,
         double changePercent,
-        double layoutWeight
+        double layoutWeight,
+        String mode,
+        String changeHorizon,
+        String weightMode,
+        String marketCapSource,
+        java.time.LocalDateTime marketCapAsOf
 ) {}

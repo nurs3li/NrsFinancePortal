@@ -30,13 +30,14 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MarketPriceQueryService {
 
-    private static final Set<Integer> ALLOWED_DAYS = Set.of(7, 14, 30, 90, 180, 365);
+    private static final Set<Integer> ALLOWED_DAYS = Set.of(1, 7, 14, 30, 90, 180, 365);
     private static final int MAX_SYMBOLS = 8;
     private static final BigDecimal ZERO_VOLUME = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
 
     private final MarketPriceHistoryRepository repository;
     private final EquityProperties equityProperties;
     private final EtfProperties etfProperties;
+    private final EquityMarketCapService equityMarketCapService;
 
     public MarketPriceLatestResponse getLatestOrThrow(String symbol) {
         return repository
@@ -46,7 +47,10 @@ public class MarketPriceQueryService {
                         e.getBuyPrice(),
                         e.getSellPrice(),
                         e.getSource(),
-                        e.getTimestamp()
+                        e.getTimestamp(),
+                        null,
+                        null,
+                        null
                 ))
                 .orElseThrow(() ->
                         new IllegalStateException("No data found for symbol: " + symbol)
@@ -63,7 +67,10 @@ public class MarketPriceQueryService {
                                 e.getBuyPrice(),
                                 e.getSellPrice(),
                                 e.getSource(),
-                                e.getTimestamp()
+                                e.getTimestamp(),
+                                null,
+                                null,
+                                null
                         ),
                         (a, b) -> a.timestamp().isAfter(b.timestamp()) ? a : b,
                         LinkedHashMap::new
@@ -87,7 +94,24 @@ public class MarketPriceQueryService {
     }
 
     public Map<String, MarketPriceLatestResponse> getLatestEquity() {
-        return getLatestBySource("FINHUB");
+        Map<String, MarketPriceLatestResponse> latest = getLatestBySource("FINHUB");
+        Map<String, MarketPriceLatestResponse> out = new LinkedHashMap<>();
+        for (var e : latest.entrySet()) {
+            String symbol = e.getKey();
+            MarketPriceLatestResponse row = e.getValue();
+            EquityMarketCapInfo marketCapInfo = equityMarketCapService.getMarketCap(symbol);
+            out.put(symbol, new MarketPriceLatestResponse(
+                    row.symbol(),
+                    row.buyPrice(),
+                    row.sellPrice(),
+                    row.source(),
+                    row.timestamp(),
+                    marketCapInfo != null ? marketCapInfo.marketCapUsd() : null,
+                    marketCapInfo != null ? marketCapInfo.marketCapSource() : null,
+                    marketCapInfo != null ? marketCapInfo.marketCapAsOf() : null
+            ));
+        }
+        return out;
     }
 
     public List<MarketPriceHistoryResponse> getHistory(String symbol, int days) {
@@ -150,7 +174,7 @@ public class MarketPriceQueryService {
 
     private void validateDays(int days) {
         if (!ALLOWED_DAYS.contains(days)) {
-            throw new InvalidRequestException("days sadece 7, 14, 30, 90, 180, 365 olabilir.");
+            throw new InvalidRequestException("days sadece 1, 7, 14, 30, 90, 180, 365 olabilir.");
         }
     }
 
@@ -270,8 +294,8 @@ public class MarketPriceQueryService {
                 repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
 
         List<CandlePointResponse> candles = toDailyCandles(rows);
-        if (candles.size() < 2) {
-            throw new InvalidRequestException("Trend hesaplamak için en az 2 günlük veri gerekli.");
+        if (candles.isEmpty()) {
+            throw new InvalidRequestException("Gosterge hesaplamak icin en az 1 gunluk veri gerekli.");
         }
 
         List<IndicatorPointResponse> closeSeries = candles.stream()
@@ -279,7 +303,14 @@ public class MarketPriceQueryService {
                 .toList();
 
         Map<Integer, List<IndicatorPointResponse>> maSeries = buildMovingAverages(closeSeries, maWindows);
-        TrendResponse trend = calculateTrend(closeSeries);
+        TrendResponse trend = closeSeries.size() < 2
+                ? new TrendResponse(
+                        "FLAT",
+                        BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP),
+                        BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP),
+                        BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP)
+                )
+                : calculateTrend(closeSeries);
 
         return new MarketIndicatorsResponse(type.name(), symbol, days, closeSeries, maSeries, trend);
     }
@@ -296,6 +327,9 @@ public class MarketPriceQueryService {
     }
 
     private List<Integer> parseMaWindows(String rawMa, int days) {
+        if (days < 2) {
+            return List.of();
+        }
         String value = (rawMa == null || rawMa.isBlank()) ? "7,30,90" : rawMa;
 
         List<Integer> windows = Arrays.stream(value.split(","))

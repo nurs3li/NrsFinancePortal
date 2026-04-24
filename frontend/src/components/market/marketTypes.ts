@@ -24,11 +24,25 @@ export type MarketDashboard = {
     sparklines: { assetClass: string; symbol: string; closes: number[] }[];
     heatmapTiles: {
         sector: string;
+        industry?: string | null;
         symbol: string;
         assetClass: string;
         changePercent: number;
         layoutWeight: number;
+        mode?: string;
+        changeHorizon?: string;
+        weightMode?: string;
+        marketCapSource?: string | null;
+        marketCapAsOf?: string | null;
     }[];
+    heatmapMeta?: {
+        equityMode?: string;
+        equityChangeHorizon?: string;
+        equityWeightMode?: string;
+        multiAssetMode?: string;
+        multiAssetChangeHorizon?: string;
+        multiAssetWeightMode?: string;
+    };
     volatility: { assetClass: string; symbol: string; dailyVolatility: number }[];
     computedAt: string;
 };
