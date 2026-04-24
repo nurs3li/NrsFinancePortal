@@ -5,8 +5,10 @@ import com.nurseli.nrsfinanceportal.domain.trade.TradeType;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.integration.kafka.KafkaTopics;
 import com.nurseli.nrsfinanceportal.integration.kafka.event.TradeCreatedEvent;
+import com.nurseli.nrsfinanceportal.domain.portfolio.SnapshotTriggerType;
 import com.nurseli.nrsfinanceportal.repository.PortfolioAssetRepository;
 import com.nurseli.nrsfinanceportal.repository.UserRepository;
+import com.nurseli.nrsfinanceportal.service.PortfolioSnapshotRecorder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -23,6 +25,7 @@ public class AvgBuyPriceReadModelService {
 
     private final PortfolioAssetRepository portfolioAssetRepository;
     private final UserRepository userRepository;
+    private final PortfolioSnapshotRecorder portfolioSnapshotRecorder;
 
     @KafkaListener(
             topics = KafkaTopics.TRADE_CREATED,
@@ -48,18 +51,23 @@ public class AvgBuyPriceReadModelService {
                 .orElse(null);
 
         if (asset == null) {
-            log.warn("PortfolioAsset not found for tradeId={} user={} symbol={}",
+            log.warn("PortfolioAsset not found for tradeId={} user={} symbol={} (ör. tam satış sonrası)",
                     event.tradeId(), event.userId(), event.symbol());
-            return;
+        } else {
+            if (event.tradeType() == TradeType.BUY) {
+                handleBuy(event, asset);
+            } else if (event.tradeType() == TradeType.SELL) {
+                handleSell(event, asset);
+            }
+            portfolioAssetRepository.save(asset);
         }
 
-        if (event.tradeType() == TradeType.BUY) {
-            handleBuy(event, asset);
-        } else if (event.tradeType() == TradeType.SELL) {
-            handleSell(event, asset);
+        try {
+            portfolioSnapshotRecorder.record(event.userId(), SnapshotTriggerType.TRADE, event.tradeId());
+        } catch (Exception e) {
+            log.warn("[PORTFOLIO_SNAPSHOT] trade snapshot failed user={} tradeId={}: {}",
+                    event.userId(), event.tradeId(), e.getMessage());
         }
-
-        portfolioAssetRepository.save(asset);
     }
 
     private void handleBuy(TradeCreatedEvent event, PortfolioAsset asset) {

@@ -1,9 +1,11 @@
 package com.nurseli.nrsfinanceportal.service;
 
 import com.nurseli.nrsfinanceportal.common.dto.DashboardSummaryResponse;
+import com.nurseli.nrsfinanceportal.common.dto.PerformanceItemDto;
+import com.nurseli.nrsfinanceportal.common.dto.PortfolioPerformanceDto;
 import com.nurseli.nrsfinanceportal.domain.account.Account;
 import com.nurseli.nrsfinanceportal.domain.account.AccountType;
-import com.nurseli.nrsfinanceportal.domain.portfolio.PortfolioAggregationService;
+import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.repository.AccountRepository;
 import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
 import com.nurseli.nrsfinanceportal.repository.TradeRepository;
@@ -11,9 +13,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
@@ -22,7 +28,7 @@ import java.util.Map;
 public class DashboardSummaryService {
 
     private final WhaleStateCacheService whaleStateCacheService;
-    private final PortfolioAggregationService portfolioAggregationService;
+    private final PortfolioPerformanceService portfolioPerformanceService;
 
     private final AccountRepository accountRepository;
     private final BalanceRepository balanceRepository;
@@ -63,16 +69,10 @@ public class DashboardSummaryService {
                 new DashboardSummaryResponse.CashSummary(cashTry);
 
         /* ======================
-           Portfolio (Market priced)
+           Portfolio — birleşik (TRADE + MANUAL), /api/portfolio/performance ile aynı mantık
            ====================== */
-        var portfolioSummary =
-                portfolioAggregationService.aggregate(cashAccount.getUser());
-
-        var portfolio =
-                new DashboardSummaryResponse.PortfolioSummary(
-                        portfolioSummary.totalTry(),
-                        portfolioSummary.distribution()
-                );
+        PortfolioPerformanceDto performance = portfolioPerformanceService.myPerformance();
+        var portfolio = buildPortfolioSummary(performance);
 
         /* ======================
           Activity
@@ -98,7 +98,7 @@ public class DashboardSummaryService {
            Net Worth
            ====================== */
         BigDecimal netWorthTry =
-                cashTry.add(portfolioSummary.totalTry());
+                cashTry.add(performance.getTotalCurrentValue());
 
         return new DashboardSummaryResponse(
                 whale,
@@ -116,9 +116,70 @@ public class DashboardSummaryService {
         return new DashboardSummaryResponse(
                 null,
                 new DashboardSummaryResponse.CashSummary(BigDecimal.ZERO),
-                new DashboardSummaryResponse.PortfolioSummary(BigDecimal.ZERO, Map.of()),
+                new DashboardSummaryResponse.PortfolioSummary(
+                        BigDecimal.ZERO,
+                        Map.of(),
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO,
+                        BigDecimal.ZERO,
+                        List.of()
+                ),
                 new DashboardSummaryResponse.ActivitySummary(null, 0),
                 BigDecimal.ZERO
         );
+    }
+
+    private static DashboardSummaryResponse.PortfolioSummary buildPortfolioSummary(PortfolioPerformanceDto perf) {
+        Map<AssetType, BigDecimal> distribution = new EnumMap<>(AssetType.class);
+        Map<AssetType, CategoryTotals> byType = new EnumMap<>(AssetType.class);
+
+        for (PerformanceItemDto item : perf.getItems()) {
+            AssetType t = AssetType.valueOf(item.getType());
+            BigDecimal value = nz(item.getCurrentValue());
+            BigDecimal cost = nz(item.getCost());
+            distribution.merge(t, value, BigDecimal::add);
+            byType.computeIfAbsent(t, k -> new CategoryTotals()).add(cost, value);
+        }
+
+        List<DashboardSummaryResponse.PortfolioCategoryBreakdown> categories = new ArrayList<>();
+        for (Map.Entry<AssetType, CategoryTotals> e : byType.entrySet()) {
+            CategoryTotals acc = e.getValue();
+            BigDecimal pnl = acc.valueTry.subtract(acc.costTry);
+            BigDecimal pnlPct = acc.costTry.signum() == 0
+                    ? BigDecimal.ZERO
+                    : pnl.divide(acc.costTry, 6, RoundingMode.HALF_UP)
+                    .multiply(new BigDecimal("100"));
+            categories.add(new DashboardSummaryResponse.PortfolioCategoryBreakdown(
+                    e.getKey(),
+                    acc.valueTry,
+                    acc.costTry,
+                    pnl,
+                    pnlPct
+            ));
+        }
+        categories.sort(Comparator.comparing(DashboardSummaryResponse.PortfolioCategoryBreakdown::valueTry).reversed());
+
+        return new DashboardSummaryResponse.PortfolioSummary(
+                nz(perf.getTotalCurrentValue()),
+                distribution,
+                nz(perf.getTotalCost()),
+                nz(perf.getTotalPnl()),
+                nz(perf.getTotalPnlPct()),
+                List.copyOf(categories)
+        );
+    }
+
+    private static BigDecimal nz(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
+    }
+
+    private static final class CategoryTotals {
+        private BigDecimal costTry = BigDecimal.ZERO;
+        private BigDecimal valueTry = BigDecimal.ZERO;
+
+        void add(BigDecimal cost, BigDecimal value) {
+            this.costTry = this.costTry.add(cost);
+            this.valueTry = this.valueTry.add(value);
+        }
     }
 }

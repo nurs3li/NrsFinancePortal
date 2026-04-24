@@ -42,6 +42,24 @@ public class PortfolioController {
         );
     }
 
+    @PutMapping("/manual/{id}")
+    @PreAuthorize("hasRole('USER')")
+    public ApiResponse<ManualPortfolioView> updateManualPosition(
+            @PathVariable Long id,
+            @Valid @RequestBody ManualPortfolioCreateRequest request
+    ) {
+        return ApiResponse.success(
+                ManualPortfolioView.from(manualPortfolioService.update(id, request))
+        );
+    }
+
+    @DeleteMapping("/manual/{id}")
+    @PreAuthorize("hasRole('USER')")
+    public ApiResponse<Void> deleteManualPosition(@PathVariable Long id) {
+        manualPortfolioService.delete(id);
+        return ApiResponse.success(null);
+    }
+
     @GetMapping("/me/unified")
     @PreAuthorize("hasRole('USER')")
     public ApiResponse<List<UnifiedPortfolioItemView>> myUnifiedPortfolio() {

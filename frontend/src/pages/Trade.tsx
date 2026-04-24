@@ -150,7 +150,7 @@ export function Trade() {
         e.preventDefault();
         const qty = Number(quantity);
         if (!symbol.trim() || isNaN(qty) || qty <= 0) {
-            setSubmitError('Sembol seçin ve miktar girin.');
+            setSubmitError('Lütfen sembol seçin ve miktar girin.');
             return;
         }
         const payload: TradeRequest = {
@@ -207,7 +207,7 @@ export function Trade() {
 
     return (
         <div style={pageStyle}>
-            <h1 style={titleStyle}>Alım &amp; Satım</h1>
+            <h1 style={titleStyle}>Alım ve satım</h1>
             <p style={mutedStyle}>
                 Varlık türüne göre sembol seçin; miktar girip emri gönderin.
             </p>
@@ -271,7 +271,7 @@ export function Trade() {
                                         fontWeight: 500,
                                     }}
                                 >
-                                    Al (BUY)
+                                    Al (AL)
                                 </button>
                                 <button
                                     type="button"
@@ -288,7 +288,7 @@ export function Trade() {
                                         fontWeight: 500,
                                     }}
                                 >
-                                    Sat (SELL)
+                                    Sat (SAT)
                                 </button>
                             </div>
                         </label>
@@ -322,7 +322,7 @@ export function Trade() {
                                 cursor: submitting ? 'default' : 'pointer',
                             }}
                         >
-                            {submitting ? 'Gönderiliyor...' : 'Emri Gönder'}
+                            {submitting ? 'Gönderiliyor...' : 'Emri gönder'}
                         </button>
                     </form>
                     {lastTrade && (
@@ -365,7 +365,7 @@ export function Trade() {
                                     <th style={{ textAlign: 'left', padding: 10 }}>Tür</th>
                                     <th style={{ textAlign: 'right', padding: 10 }}>Miktar</th>
                                     <th style={{ textAlign: 'right', padding: 10 }}>Toplam (TRY)</th>
-                                    <th style={{ textAlign: 'right', padding: 10 }}>Bakiye Sonrası</th>
+                                    <th style={{ textAlign: 'right', padding: 10 }}>İşlem sonrası bakiye</th>
                                 </tr>
                                 </thead>
                                 <tbody>

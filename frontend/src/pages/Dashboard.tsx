@@ -12,8 +12,60 @@ import './Dashboard.css';
 
 type WhaleSummary = { level?: string; impactScore?: number; triggeredAt?: string };
 type CashSummary = { amountTry?: number };
-type PortfolioSummary = { totalValueTry?: number; distribution?: Record<string, number> };
+type PortfolioCategoryBreakdown = {
+    assetType: string;
+    valueTry?: number;
+    costTry?: number;
+    pnlTry?: number;
+    pnlPct?: number;
+};
+type PortfolioSummary = {
+    totalValueTry?: number;
+    distribution?: Record<string, number>;
+    totalCostTry?: number;
+    totalPnlTry?: number;
+    totalPnlPct?: number;
+    categories?: PortfolioCategoryBreakdown[];
+};
 type ActivitySummary = { lastTradeAt?: string };
+
+const DISTRIBUTION_COLORS: Record<string, string> = {
+    CRYPTO: '#F7931A',
+    FX: '#22C55E',
+    METAL: '#EAB308',
+    FUND: '#6366F1',
+    STOCK: '#3182CE',
+};
+
+function assetTypeLabelTr(t: string): string {
+    const m: Record<string, string> = {
+        CRYPTO: 'Kripto',
+        FX: 'Döviz',
+        STOCK: 'Hisse',
+        METAL: 'Metal',
+        FUND: 'Fon',
+    };
+    return m[t] ?? t;
+}
+
+function buildDistributionConicGradient(slices: { key: string; pct: number }[], accent: string, borderColor: string): string {
+    if (slices.length === 0) {
+        return `conic-gradient(${borderColor} 0deg 360deg)`;
+    }
+    let deg = 0;
+    const parts: string[] = [];
+    for (const s of slices) {
+        const span = (s.pct / 100) * 360;
+        const start = deg;
+        deg += span;
+        const color = DISTRIBUTION_COLORS[s.key] ?? accent;
+        parts.push(`${color} ${start}deg ${deg}deg`);
+    }
+    if (deg < 360) {
+        parts.push(`${borderColor} ${deg}deg 360deg`);
+    }
+    return `conic-gradient(${parts.join(', ')})`;
+}
 
 type SummaryResponse = {
     whale?: WhaleSummary;
@@ -27,6 +79,11 @@ type LatestPrice = { symbol?: string; buyPrice?: number; sellPrice?: number; pri
 type NewsItem = { id: number; title: string; source: string | null; publishedAt: string };
 type NewsPage = { content: NewsItem[] };
 type TimeFilter = '1A' | '3A';
+type StarredAssetsResponse = {
+    maxItems: number;
+    selected: { marketType: string; symbol: string; position: number }[];
+    resolved: { marketType: string; symbol: string; position: number; defaultFilled: boolean }[];
+};
 
 type StarAsset = {
     key: string;
@@ -39,8 +96,8 @@ type StarAsset = {
 };
 
 const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
-    { id: '1A', label: '1A' },
-    { id: '3A', label: '3A' },
+    { id: '1A', label: '1 ay' },
+    { id: '3A', label: '3 ay' },
 ];
 
 export function Dashboard() {
@@ -95,7 +152,7 @@ export function Dashboard() {
         try {
             const end = new Date();
             const start = getFilterStart(selectedFilter);
-            const [summaryRes, txRes, fxRes, metalsRes, cryptoRes, fundsRes, equityRes, newsRes] = await Promise.all([
+            const [summaryRes, txRes, fxRes, metalsRes, cryptoRes, fundsRes, equityRes, newsRes, starredRes] = await Promise.all([
                 financeClient.get('/api/dashboard/summary'),
                 financeClient.get<{ content?: TxRow[] }>('/api/transactions/me/range', {
                     params: { start: start.toISOString(), end: end.toISOString(), page: 0, size: 500 },
@@ -106,6 +163,9 @@ export function Dashboard() {
                 marketClient.get<Record<string, LatestPrice>>('/api/market/funds/latest'),
                 marketClient.get<Record<string, LatestPrice>>('/api/market/equity/latest'),
                 marketClient.get<NewsPage>('/api/news', { params: { page: 0, size: 3 } }),
+                financeClient
+                    .get<StarredAssetsResponse>('/api/me/starred-assets')
+                    .catch(() => ({ data: { maxItems: 7, selected: [], resolved: [] } as StarredAssetsResponse })),
             ]);
 
             const rawSummary = summaryRes.data?.data ?? summaryRes.data;
@@ -130,18 +190,21 @@ export function Dashboard() {
             const newsContent = newsRes.data?.content ?? [];
             setLatestNews(newsContent.slice(0, 3));
 
-            const datasets: { marketType: MarketType; data: Record<string, LatestPrice> }[] = [
-                { marketType: 'FX', data: fx },
-                { marketType: 'METALS', data: metals },
-                { marketType: 'CRYPTO', data: crypto },
-                { marketType: 'FUNDS', data: funds },
-                { marketType: 'EQUITY', data: equity },
-            ];
+            const mapByType: Record<MarketType, Record<string, LatestPrice>> = {
+                FX: fx,
+                METALS: metals,
+                CRYPTO: crypto,
+                FUNDS: funds,
+                EQUITY: equity,
+            };
 
-            const starRows: StarAsset[] = datasets.flatMap(({ marketType, data }) =>
-                Object.entries(data)
-                    .filter(([, row]) => row && typeof row === 'object' && row.status !== 'NO_DATA')
-                    .map(([symbol, row]) => ({
+            const resolvedStars = starredRes.data?.resolved ?? [];
+            const starRows: StarAsset[] = resolvedStars
+                .map((item) => {
+                    const marketType = item.marketType as MarketType;
+                    const symbol = item.symbol;
+                    const row = mapByType[marketType]?.[symbol];
+                    return {
                         key: `${marketType}-${symbol}`,
                         label: formatAssetLabel(symbol, marketType),
                         code: symbol,
@@ -149,8 +212,8 @@ export function Dashboard() {
                         symbol,
                         price: getPrice(row),
                         change24h: 0,
-                    }))
-            );
+                    } satisfies StarAsset;
+                });
 
             const changeResults = await Promise.allSettled(
                 starRows.map((row) =>
@@ -202,12 +265,22 @@ export function Dashboard() {
     const totalPortfolio = summary?.portfolio?.totalValueTry ?? 0;
     const totalBalance = totalCash + totalPortfolio;
     const distribution = summary?.portfolio?.distribution ?? {};
-    const distributionRows = Object.entries(distribution);
-    const donutPercent = useMemo(() => {
-        if (!distributionRows.length || totalPortfolio <= 0) return 0;
-        const maxAsset = Math.max(...distributionRows.map(([, value]) => Number(value) || 0));
-        return Math.min(100, Math.round((maxAsset / totalPortfolio) * 100));
-    }, [distributionRows, totalPortfolio]);
+    const distributionSlices = useMemo(() => {
+        const rows = Object.entries(distribution)
+            .map(([key, value]) => ({ key, value: Number(value) || 0 }))
+            .filter((r) => r.value > 0)
+            .sort((a, b) => b.value - a.value);
+        if (!rows.length || totalPortfolio <= 0) return [] as { key: string; value: number; pct: number }[];
+        return rows.map((r) => ({
+            ...r,
+            pct: (r.value / totalPortfolio) * 100,
+        }));
+    }, [distribution, totalPortfolio]);
+
+    const donutBackground = useMemo(
+        () => buildDistributionConicGradient(distributionSlices, '#3182CE', tokens.border),
+        [distributionSlices, tokens.border]
+    );
 
     const dashboardVars = {
         '--dashboard-bg': theme === 'light' ? '#F9FAFB' : tokens.bg,
@@ -292,7 +365,7 @@ export function Dashboard() {
         return (
             <div className="saas-dashboard" style={dashboardVars}>
                 <h1 className="dashboard-title">Dashboard</h1>
-                <p className="dashboard-muted">Ozet verisi bulunamadi.</p>
+                <p className="dashboard-muted">Özet verisi bulunamadı.</p>
             </div>
         );
     }
@@ -308,7 +381,7 @@ export function Dashboard() {
 
             <div className="dashboard-kpi-grid">
                 <div className="dashboard-card">
-                    <p className="kpi-label">Toplam Portfoy Degeri</p>
+                    <p className="kpi-label">Toplam portföy değeri</p>
                     <p className="kpi-value">{formatMoney(totalPortfolio)}</p>
                     <p className="kpi-subtext">
                         Balina etkisi skoru:{' '}
@@ -320,11 +393,11 @@ export function Dashboard() {
                     <p className="kpi-value">{formatMoney(totalCash)}</p>
                 </div>
                 <div className="dashboard-card">
-                    <p className="kpi-label">Toplam Bakiye (Portfoy + Nakit)</p>
+                    <p className="kpi-label">Toplam bakiye (portföy + nakit)</p>
                     <p className="kpi-value">{formatMoney(totalBalance)}</p>
                 </div>
                 <div className="dashboard-card">
-                    <p className="kpi-label">Balina Seviyesi</p>
+                    <p className="kpi-label">Balina seviyesi</p>
                     <p className="kpi-value kpi-value-small">{summary.whale?.level ?? 'L1_LARGE_TRADER'}</p>
                     <p className="kpi-subtext">Kontrol Tarihi: {controlDate}</p>
                 </div>
@@ -332,7 +405,9 @@ export function Dashboard() {
 
             <div className="dashboard-card dashboard-chart-card">
                 <div className="chart-card-header">
-                    <h2 className="section-title">Bakiye grafigi (son 30 gun)</h2>
+                    <h2 className="section-title">
+                        Bakiye grafiği (son {selectedFilter === '1A' ? '30' : '90'} gün)
+                    </h2>
                     <div className="chart-filter-group">
                         {TIME_FILTERS.map((filter) => (
                             <button
@@ -349,7 +424,7 @@ export function Dashboard() {
 
                 <div className="chart-wrapper">
                     {balancePoints.length === 0 ? (
-                        <p className="dashboard-muted">Bu aralikta islem yok; grafik olusturulamadi.</p>
+                        <p className="dashboard-muted">Bu aralıkta işlem yok; grafik oluşturulamadı.</p>
                     ) : (
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={balancePoints} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
@@ -381,7 +456,7 @@ export function Dashboard() {
 
             <div className="dashboard-bottom-grid">
                 <div className="dashboard-card">
-                    <h2 className="section-title">Yildizlanan Varliklar</h2>
+                    <h2 className="section-title">Yıldızlanan varlıklar</h2>
                     <div className="assets-table">
                         {starAssets.map((asset) => {
                             const logoUrl = getDynamicLogoUrl(asset.code, asset.marketType);
@@ -413,16 +488,102 @@ export function Dashboard() {
                 </div>
 
                 <div className="dashboard-middle-column">
-                    <div className="dashboard-card">
-                        <h2 className="section-title">Portfoy Dagilimi</h2>
-                        <div className="donut-placeholder" style={{ ['--fill' as string]: `${donutPercent}%` }}>
-                            <div className="donut-inner">Dagilim</div>
-                        </div>
-                        <p className="dashboard-muted">Dagilim verisi yok.</p>
+                    <div className="dashboard-card portfolio-dist-card">
+                        <h2 className="section-title">Portföy dağılımı</h2>
+                        <p className="portfolio-dist-subtitle">Birleşik: gerçek işlemler + manuel pozisyonlar (TRY)</p>
+                        {distributionSlices.length === 0 ? (
+                            <>
+                                <div className="donut-placeholder donut-empty">
+                                    <div className="donut-inner">—</div>
+                                </div>
+                                <p className="dashboard-muted">Portföyde dağıtılacak varlık yok.</p>
+                            </>
+                        ) : (
+                            <>
+                                <div className="donut-placeholder donut-multi" style={{ background: donutBackground }}>
+                                    <div className="donut-inner">
+                                        <span className="donut-inner-label">TRY</span>
+                                    </div>
+                                </div>
+                                <ul className="donut-legend">
+                                    {distributionSlices.map((s) => (
+                                        <li key={s.key}>
+                                            <span
+                                                className="donut-legend-swatch"
+                                                style={{ background: DISTRIBUTION_COLORS[s.key] ?? '#3182CE' }}
+                                            />
+                                            <span className="donut-legend-label">{assetTypeLabelTr(s.key)}</span>
+                                            <span className="donut-legend-pct">
+                                                {s.pct.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}%
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <div className="portfolio-pnl-summary">
+                                    <div className="portfolio-pnl-row">
+                                        <span>Toplam maliyet</span>
+                                        <span>{formatMoney(summary.portfolio?.totalCostTry ?? 0)}</span>
+                                    </div>
+                                    <div className="portfolio-pnl-row">
+                                        <span>Güncel değer</span>
+                                        <span>{formatMoney(summary.portfolio?.totalValueTry ?? totalPortfolio)}</span>
+                                    </div>
+                                    <div className="portfolio-pnl-row">
+                                        <span>Toplam kar (PNL)</span>
+                                        <span
+                                            className={
+                                                (summary.portfolio?.totalPnlTry ?? 0) >= 0 ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'
+                                            }
+                                        >
+                                            {formatMoney(summary.portfolio?.totalPnlTry ?? 0)}
+                                        </span>
+                                    </div>
+                                    <div className="portfolio-pnl-row">
+                                        <span>Kar oranı</span>
+                                        <span
+                                            className={
+                                                (summary.portfolio?.totalPnlPct ?? 0) >= 0 ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'
+                                            }
+                                        >
+                                            {Number(summary.portfolio?.totalPnlPct ?? 0).toLocaleString('tr-TR', {
+                                                maximumFractionDigits: 2,
+                                            })}
+                                            %
+                                        </span>
+                                    </div>
+                                </div>
+                                {(summary.portfolio?.categories?.length ?? 0) > 0 ? (
+                                    <>
+                                        <p className="portfolio-category-heading">Sınıf bazında</p>
+                                        <div className="portfolio-category-list">
+                                            {(summary.portfolio?.categories ?? []).map((cat) => {
+                                                const pnl = Number(cat.pnlTry ?? 0);
+                                                const up = pnl >= 0;
+                                                return (
+                                                    <div key={cat.assetType} className="portfolio-category-row">
+                                                        <div className="portfolio-category-title">{assetTypeLabelTr(cat.assetType)}</div>
+                                                        <div className="portfolio-category-metrics">
+                                                            <span className="portfolio-cat-val">{formatMoney(Number(cat.valueTry ?? 0))}</span>
+                                                            <span className={up ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'}>
+                                                                Kar {formatMoney(pnl)} (
+                                                                {Number(cat.pnlPct ?? 0).toLocaleString('tr-TR', {
+                                                                    maximumFractionDigits: 2,
+                                                                })}
+                                                                %)
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                ) : null}
+                            </>
+                        )}
                     </div>
 
                     <div className="dashboard-card">
-                        <h2 className="section-title">Son Aktivite & Uyarilar</h2>
+                        <h2 className="section-title">Son aktivite ve uyarılar</h2>
                         <div className="activity-row">
                             <span className="status-dot" />
                             <p>Balina seviyesi: {summary.whale?.level ?? 'L1_LARGE_TRADER'}</p>
@@ -430,10 +591,10 @@ export function Dashboard() {
                         <div className="activity-row">
                             <span className="news-dot">📰</span>
                             <p>
-                                Son islem:{' '}
+                                Son işlem:{' '}
                                 {summary.activity?.lastTradeAt
                                     ? new Date(summary.activity.lastTradeAt).toLocaleString('tr-TR')
-                                    : 'Kayit bulunamadi'}
+                                    : 'Kayıt bulunamadı'}
                             </p>
                         </div>
                     </div>
@@ -443,7 +604,7 @@ export function Dashboard() {
                     <h2 className="section-title">En Son Haberler</h2>
                     <div className="news-list">
                         {latestNews.length === 0 ? (
-                            <p className="dashboard-muted">Haber verisi bulunamadi.</p>
+                            <p className="dashboard-muted">Haber verisi bulunamadı.</p>
                         ) : (
                             latestNews.map((item) => (
                                 <button
@@ -451,7 +612,7 @@ export function Dashboard() {
                                     className="news-item news-item-button"
                                     key={item.id}
                                     onClick={() => navigate('/news')}
-                                    title="Haberler sayfasina git"
+                                    title="Haberler sayfasına git"
                                 >
                                     <span className="news-logo">{item.source?.[0] ?? 'N'}</span>
                                     <div>

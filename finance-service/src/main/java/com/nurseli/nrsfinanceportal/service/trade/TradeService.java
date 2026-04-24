@@ -167,6 +167,21 @@ public class TradeService {
 
         timelineCacheInvalidationService.invalidateUserTimeline(user.getId());
 
+        String normalizedSymbolSell = SymbolNormalizer.normalize(request.assetType(), request.symbol());
+        eventPublisher.publishEvent(
+                new TradeCreatedEvent(
+                        trade.getId(),
+                        user.getId(),
+                        request.tradeType(),
+                        request.assetType(),
+                        normalizedSymbolSell,
+                        request.quantity(),
+                        tryPrice,
+                        totalTry,
+                        Instant.now()
+                )
+        );
+
         return response(request, tryPrice, totalTry, balanceAfter);
     }
 

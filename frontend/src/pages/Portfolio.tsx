@@ -1,4 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import {
+    Bar,
+    BarChart,
+    CartesianGrid,
+    Cell,
+    Pie,
+    PieChart,
+    ResponsiveContainer,
+    Tooltip,
+    XAxis,
+    YAxis,
+} from 'recharts';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
@@ -12,6 +24,9 @@ type UnifiedPortfolioItem = {
     symbol: string;
     quantity: number;
     avgBuyPrice: number;
+    manualPositionId?: number | null;
+    manualBuyDate?: string | null;
+    manualNote?: string | null;
 };
 
 type PerformanceItem = {
@@ -26,6 +41,7 @@ type PerformanceItem = {
     currentValue: number;
     pnl: number;
     pnlPct: number;
+    manualPositionId?: number | null;
 };
 
 type PortfolioPerformance = {
@@ -44,6 +60,20 @@ type ManualCreatePayload = {
     buyDate: string;
     note?: string;
 };
+
+function rowPerfKey(row: UnifiedPortfolioItem): string {
+    if (row.source === 'MANUAL' && row.manualPositionId != null) {
+        return `MANUAL-${row.manualPositionId}`;
+    }
+    return `${row.source}|${row.type}|${row.symbol}`;
+}
+
+function perfItemKey(item: PerformanceItem): string {
+    if (item.source === 'MANUAL' && item.manualPositionId != null) {
+        return `MANUAL-${item.manualPositionId}`;
+    }
+    return `${item.source}|${item.type}|${item.symbol}`;
+}
 
 type MarketOverview = {
     doviz?: Record<string, { buyPrice?: number; sellPrice?: number; source?: string }>;
@@ -69,6 +99,82 @@ function getOverviewKey(type: AssetType): keyof MarketOverview {
     }
 }
 
+const ASSET_TYPE_LABEL_TR: Record<string, string> = {
+    FX: 'Döviz',
+    CRYPTO: 'Kripto',
+    FUND: 'Fon',
+    STOCK: 'Hisse',
+    METAL: 'Metal',
+};
+
+const PIE_PALETTE = ['#22c55e', '#f59e0b', '#818cf8', '#06b6d4', '#ec4899', '#94a3b8'];
+const PNL_POSITIVE = '#22c55e';
+const PNL_NEGATIVE = '#ef4444';
+
+type DistMode = 'COMBINED' | 'TRADE' | 'MANUAL';
+
+function aggregateValueByAssetType(
+    items: PerformanceItem[] | undefined,
+    mode: DistMode
+): { name: string; value: number }[] {
+    if (!items?.length) return [];
+    const filtered = items.filter((it) => {
+        const src = String(it.source ?? '').toUpperCase();
+        if (mode === 'COMBINED') return true;
+        if (mode === 'MANUAL') return src === 'MANUAL';
+        return src !== 'MANUAL';
+    });
+    const map = new Map<string, number>();
+    for (const it of filtered) {
+        const t = String(it.type ?? 'OTHER').toUpperCase();
+        const add = Number(it.currentValue ?? 0);
+        if (!Number.isFinite(add) || add <= 0) continue;
+        map.set(t, (map.get(t) ?? 0) + add);
+    }
+    return [...map.entries()]
+        .map(([type, value]) => ({
+            name: ASSET_TYPE_LABEL_TR[type] ?? type,
+            value,
+        }))
+        .sort((a, b) => b.value - a.value);
+}
+
+type PnlMode = 'COMBINED' | 'TRADE' | 'MANUAL';
+
+function aggregatePnlByAsset(
+    items: PerformanceItem[] | undefined,
+    mode: PnlMode
+): { label: string; pnl: number; pnlPct: number }[] {
+    if (!items?.length) return [];
+    const filtered = items.filter((it) => {
+        const src = String(it.source ?? '').toUpperCase();
+        if (mode === 'COMBINED') return true;
+        if (mode === 'MANUAL') return src === 'MANUAL';
+        return src !== 'MANUAL';
+    });
+
+    const map = new Map<string, { pnl: number; cost: number }>();
+    for (const it of filtered) {
+        const key = String(it.symbol ?? '-').toUpperCase();
+        const pnl = Number(it.pnl ?? 0);
+        const cost = Number(it.cost ?? 0);
+        const prev = map.get(key) ?? { pnl: 0, cost: 0 };
+        map.set(key, {
+            pnl: prev.pnl + (Number.isFinite(pnl) ? pnl : 0),
+            cost: prev.cost + (Number.isFinite(cost) ? cost : 0),
+        });
+    }
+
+    return [...map.entries()]
+        .map(([label, v]) => ({
+            label,
+            pnl: v.pnl,
+            pnlPct: v.cost > 0 ? (v.pnl / v.cost) * 100 : 0,
+        }))
+        .sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))
+        .slice(0, 12);
+}
+
 export function Portfolio() {
     const { tokens } = useTheme();
 
@@ -79,6 +185,7 @@ export function Portfolio() {
     const [error, setError] = useState<string | null>(null);
 
     const [savingManual, setSavingManual] = useState(false);
+    const [editingManualId, setEditingManualId] = useState<number | null>(null);
 
     const [type, setType] = useState<AssetType>('CRYPTO');
     const [symbol, setSymbol] = useState('');
@@ -136,11 +243,26 @@ export function Portfolio() {
     const perfItemMap = useMemo(() => {
         const map = new Map<string, PerformanceItem>();
         (perf?.items ?? []).forEach((item) => {
-            const key = `${item.source}|${item.type}|${item.symbol}`;
-            map.set(key, item);
+            map.set(perfItemKey(item), item);
         });
         return map;
     }, [perf]);
+
+    const distributionCombined = useMemo(
+        () => aggregateValueByAssetType(perf?.items, 'COMBINED'),
+        [perf]
+    );
+    const distributionTrade = useMemo(
+        () => aggregateValueByAssetType(perf?.items, 'TRADE'),
+        [perf]
+    );
+    const distributionManual = useMemo(
+        () => aggregateValueByAssetType(perf?.items, 'MANUAL'),
+        [perf]
+    );
+    const pnlCombined = useMemo(() => aggregatePnlByAsset(perf?.items, 'COMBINED'), [perf]);
+    const pnlTrade = useMemo(() => aggregatePnlByAsset(perf?.items, 'TRADE'), [perf]);
+    const pnlManual = useMemo(() => aggregatePnlByAsset(perf?.items, 'MANUAL'), [perf]);
 
     useEffect(() => {
         if (symbolOptions.length === 0) {
@@ -152,19 +274,27 @@ export function Portfolio() {
         }
     }, [symbolOptions, symbol]);
 
+    const resetManualForm = () => {
+        setEditingManualId(null);
+        setQuantity('0.1');
+        setBuyPrice('100000');
+        setBuyDate(new Date().toISOString().slice(0, 10));
+        setNote('');
+    };
+
     const saveManual = async (e: React.FormEvent) => {
         e.preventDefault();
 
         const q = Number(quantity);
         const bp = Number(buyPrice);
         if (!q || q <= 0 || !bp || bp <= 0) {
-            alert('Miktar ve alış fiyatı 0’dan büyük olmalı.');
+            alert('Miktar ve alış fiyatı sıfırdan büyük olmalı.');
             return;
         }
 
         const normalizedSymbol = symbol.trim().toUpperCase();
         if (!normalizedSymbol) {
-            alert('Sembol seçmelisin veya girmelisin.');
+            alert('Lütfen sembol seçin veya girin.');
             return;
         }
 
@@ -179,7 +309,12 @@ export function Portfolio() {
 
         try {
             setSavingManual(true);
-            await financeClient.post('/api/portfolio/manual', payload);
+            if (editingManualId != null) {
+                await financeClient.put(`/api/portfolio/manual/${editingManualId}`, payload);
+            } else {
+                await financeClient.post('/api/portfolio/manual', payload);
+            }
+            resetManualForm();
             await fetchAll();
         } catch (err: any) {
             alert(
@@ -190,6 +325,34 @@ export function Portfolio() {
             );
         } finally {
             setSavingManual(false);
+        }
+    };
+
+    const startEditManual = (row: UnifiedPortfolioItem) => {
+        if (row.source !== 'MANUAL' || row.manualPositionId == null) return;
+        setEditingManualId(row.manualPositionId);
+        setType((row.type as AssetType) ?? 'CRYPTO');
+        setSymbol(String(row.symbol ?? '').trim());
+        setQuantity(String(row.quantity ?? ''));
+        setBuyPrice(String(row.avgBuyPrice ?? ''));
+        const d = row.manualBuyDate;
+        setBuyDate(typeof d === 'string' && d.length >= 10 ? d.slice(0, 10) : new Date().toISOString().slice(0, 10));
+        setNote(row.manualNote ?? '');
+    };
+
+    const deleteManual = async (id: number) => {
+        if (!window.confirm('Bu manuel pozisyonu silmek istediğinize emin misiniz?')) return;
+        try {
+            await financeClient.delete(`/api/portfolio/manual/${id}`);
+            if (editingManualId === id) resetManualForm();
+            await fetchAll();
+        } catch (err: any) {
+            alert(
+                err?.response?.data?.errors?.error ??
+                    err?.response?.data?.message ??
+                    err?.message ??
+                    'Pozisyon silinemedi'
+            );
         }
     };
 
@@ -240,8 +403,26 @@ export function Portfolio() {
     return (
         <div style={pageStyle}>
             <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>Portföylerim</h1>
-            <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 16 }}>
+            <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 8 }}>
                 Trade + manuel giriş birleşik görünüm ve performans özeti.
+            </p>
+            <p
+                style={{
+                    fontSize: '0.8125rem',
+                    color: tokens.textMuted,
+                    marginBottom: 16,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    border: `1px solid ${tokens.border}`,
+                    background: tokens.inputBg,
+                    lineHeight: 1.45,
+                }}
+            >
+                <strong style={{ color: tokens.text }}>Nasıl okunur?</strong> Aşağıdaki{' '}
+                <strong>üç halka grafik</strong>, güncel portföy değerinizin (TRY) varlık sınıfına göre payını gösterir:
+                soldan birleşik (trade+manuel), ortada yalnızca trade, sağda yalnızca manuel. Hemen altındaki{' '}
+                <strong>varlık bazlı kar/zarar grafikleri</strong> ise sembollerinizin güncel PnL durumunu (yeşil = kar,
+                kırmızı = zarar) doğrudan gösterir.
             </p>
 
             <div
@@ -265,7 +446,7 @@ export function Portfolio() {
                     </div>
                 </div>
                 <div style={cardStyle}>
-                    <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Toplam PNL</div>
+                    <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Toplam kar (TRY)</div>
                     <div
                         style={{
                             fontSize: '1.25rem',
@@ -292,6 +473,247 @@ export function Portfolio() {
                 </div>
             </div>
 
+            <div style={{ ...cardStyle, marginBottom: 16 }}>
+                <h2 style={{ margin: '0 0 6px 0', fontSize: '1rem' }}>Portföy dağılımı (TRY)</h2>
+                <p style={{ margin: '0 0 14px 0', fontSize: '0.8125rem', color: tokens.textMuted }}>
+                    Güncel değer üzerinden varlık sınıfı (döviz, kripto, fon, …) oranları — üç ayrı görünüm.
+                </p>
+                <div
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                        gap: 14,
+                    }}
+                >
+                    {(
+                        [
+                            {
+                                key: 'combined',
+                                title: 'Birleşik',
+                                subtitle: 'Trade + manuel pozisyonlar',
+                                data: distributionCombined,
+                            },
+                            {
+                                key: 'trade',
+                                title: 'Sadece trade',
+                                subtitle: 'Borsa / işlem hesabındaki satırlar',
+                                data: distributionTrade,
+                            },
+                            {
+                                key: 'manual',
+                                title: 'Sadece manuel',
+                                subtitle: 'Manuel eklediğiniz pozisyonlar',
+                                data: distributionManual,
+                            },
+                        ] as const
+                    ).map(({ key, title, subtitle, data }) => {
+                        const totalVal = data.reduce((s, d) => s + d.value, 0);
+                        return (
+                            <div
+                                key={key}
+                                style={{
+                                    border: `1px solid ${tokens.border}`,
+                                    borderRadius: 10,
+                                    padding: 12,
+                                    background: tokens.inputBg,
+                                }}
+                            >
+                                <div style={{ fontSize: '0.9375rem', fontWeight: 700, marginBottom: 2 }}>{title}</div>
+                                <div style={{ fontSize: '0.72rem', color: tokens.textMuted, marginBottom: 8 }}>
+                                    {subtitle}
+                                </div>
+                                {totalVal <= 0 ? (
+                                    <p style={{ margin: 0, fontSize: '0.8125rem', color: tokens.textMuted }}>
+                                        Bu görünümde pozisyon yok.
+                                    </p>
+                                ) : (
+                                    <>
+                                        <div style={{ position: 'relative', width: '100%', height: 220 }}>
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+                                                    <Pie
+                                                        data={data}
+                                                        dataKey="value"
+                                                        nameKey="name"
+                                                        cx="50%"
+                                                        cy="48%"
+                                                        innerRadius="46%"
+                                                        outerRadius="72%"
+                                                        paddingAngle={1.5}
+                                                    >
+                                                        {data.map((_, i) => (
+                                                            <Cell
+                                                                key={`${key}-cell-${i}`}
+                                                                fill={PIE_PALETTE[i % PIE_PALETTE.length]}
+                                                                stroke={tokens.bgCard}
+                                                                strokeWidth={1}
+                                                            />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip
+                                                        formatter={(v: number | undefined) =>
+                                                            v == null ? '' : fmtMoney(v)
+                                                        }
+                                                    />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                            <div
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: '50%',
+                                                    top: '44%',
+                                                    transform: 'translate(-50%, -50%)',
+                                                    fontSize: '0.8125rem',
+                                                    fontWeight: 700,
+                                                    color: tokens.textMuted,
+                                                    pointerEvents: 'none',
+                                                }}
+                                            >
+                                                TRY
+                                            </div>
+                                        </div>
+                                        <div
+                                            style={{
+                                                marginTop: 8,
+                                                fontSize: '0.75rem',
+                                                color: tokens.textMuted,
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: 4,
+                                            }}
+                                        >
+                                            {data.map((d, i) => {
+                                                const pct = totalVal > 0 ? (d.value / totalVal) * 100 : 0;
+                                                return (
+                                                    <div
+                                                        key={`${key}-leg-${d.name}`}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                                                    >
+                                                        <span
+                                                            style={{
+                                                                width: 8,
+                                                                height: 8,
+                                                                borderRadius: 2,
+                                                                background: PIE_PALETTE[i % PIE_PALETTE.length],
+                                                                flexShrink: 0,
+                                                            }}
+                                                        />
+                                                        <span style={{ flex: 1, color: tokens.text }}>
+                                                            {d.name}
+                                                        </span>
+                                                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                                                            {pct.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}%
+                                                        </span>
+                                                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                                                            {fmtMoney(d.value)}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <div
+                                            style={{
+                                                marginTop: 8,
+                                                paddingTop: 8,
+                                                borderTop: `1px solid ${tokens.border}`,
+                                                fontSize: '0.75rem',
+                                                color: tokens.textMuted,
+                                            }}
+                                        >
+                                            Toplam güncel değer:{' '}
+                                            <strong style={{ color: tokens.text }}>{fmtMoney(totalVal)}</strong>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div style={{ ...cardStyle, marginBottom: 16 }}>
+                <h2 style={{ margin: '0 0 8px 0', fontSize: '1rem' }}>Varlık bazlı kar / zarar (anlık)</h2>
+                <p style={{ margin: '0 0 12px 0', fontSize: '0.75rem', color: tokens.textMuted }}>
+                    Sembollerinize göre güncel PnL dağılımı. Yeşil barlar karı, kırmızı barlar zararı gösterir.
+                </p>
+                <div
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                        gap: 14,
+                    }}
+                >
+                    {(
+                        [
+                            { key: 'pnl-combined', title: 'Birleşik', data: pnlCombined },
+                            { key: 'pnl-trade', title: 'Sadece trade', data: pnlTrade },
+                            { key: 'pnl-manual', title: 'Sadece manuel', data: pnlManual },
+                        ] as const
+                    ).map(({ key, title, data }) => (
+                        <div
+                            key={key}
+                            style={{
+                                border: `1px solid ${tokens.border}`,
+                                borderRadius: 10,
+                                padding: 12,
+                                background: tokens.inputBg,
+                            }}
+                        >
+                            <div style={{ fontSize: '0.9375rem', fontWeight: 700, marginBottom: 8 }}>{title}</div>
+                            {data.length === 0 ? (
+                                <p style={{ margin: 0, fontSize: '0.8125rem', color: tokens.textMuted }}>
+                                    Bu görünümde varlık bulunamadı.
+                                </p>
+                            ) : (
+                                <>
+                                    <div style={{ width: '100%', height: 240 }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 24 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke={tokens.border} />
+                                                <XAxis
+                                                    dataKey="label"
+                                                    tick={{ fontSize: 10, fill: tokens.textMuted }}
+                                                    angle={-20}
+                                                    textAnchor="end"
+                                                    height={46}
+                                                />
+                                                <YAxis
+                                                    tick={{ fontSize: 10, fill: tokens.textMuted }}
+                                                    tickFormatter={(v) =>
+                                                        Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 0 })
+                                                    }
+                                                />
+                                                <Tooltip
+                                                    formatter={(v: number | undefined, _name, payload) => {
+                                                        if (v == null) return '';
+                                                        const pct = Number(payload?.payload?.pnlPct ?? 0);
+                                                        return [
+                                                            `${fmtMoney(v)} (${pct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%)`,
+                                                            'PnL',
+                                                        ];
+                                                    }}
+                                                />
+                                                <Bar dataKey="pnl" radius={[4, 4, 0, 0]}>
+                                                    {data.map((r) => (
+                                                        <Cell
+                                                            key={`${key}-${r.label}`}
+                                                            fill={r.pnl >= 0 ? PNL_POSITIVE : PNL_NEGATIVE}
+                                                        />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div style={{ marginTop: 8, fontSize: '0.75rem', color: tokens.textMuted }}>
+                                        En fazla hareket gösteren ilk {data.length} sembol listelenir.
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
             <div
                 style={{
                     display: 'grid',
@@ -306,28 +728,39 @@ export function Portfolio() {
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                             <thead>
                                 <tr>
-                                    <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Source</th>
-                                    <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Type</th>
-                                    <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Symbol</th>
-                                    <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Quantity</th>
-                                    <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Avg Buy</th>
-                                    <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Current Price</th>
+                                    <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Kaynak</th>
+                                    <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Tür</th>
+                                    <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Sembol</th>
+                                    <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Miktar</th>
+                                    <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Ort. alış</th>
+                                    <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Güncel fiyat</th>
+                                    <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>İşlem</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {unifiedItems.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} style={{ padding: 10, color: tokens.textMuted, textAlign: 'center' }}>
+                                        <td colSpan={7} style={{ padding: 10, color: tokens.textMuted, textAlign: 'center' }}>
                                             Portföyde varlık yok.
                                         </td>
                                     </tr>
                                 ) : (
                                     unifiedItems.map((row, i) => {
-                                        const perfKey = `${row.source}|${row.type}|${row.symbol}`;
+                                        const perfKey = rowPerfKey(row);
                                         const rowPerf = perfItemMap.get(perfKey);
                                         const priceCurrency = rowPerf?.currentPriceCurrency ?? 'TRY';
+                                        const btnStyle: CSSProperties = {
+                                            padding: '4px 8px',
+                                            fontSize: '0.75rem',
+                                            borderRadius: 6,
+                                            border: `1px solid ${tokens.border}`,
+                                            background: tokens.bgCard,
+                                            color: tokens.text,
+                                            cursor: 'pointer',
+                                            marginLeft: 4,
+                                        };
                                         return (
-                                        <tr key={`${row.source}-${row.symbol}-${i}`}>
+                                        <tr key={`${perfKey}-${i}`}>
                                             <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>{row.source}</td>
                                             <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>{row.type}</td>
                                             <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>{row.symbol}</td>
@@ -342,6 +775,24 @@ export function Portfolio() {
                                                     ? `${fmtMoney(Number(rowPerf.currentPrice ?? 0))} (${priceCurrency})`
                                                     : '-'}
                                             </td>
+                                            <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}`, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                                {row.source === 'MANUAL' && row.manualPositionId != null ? (
+                                                    <>
+                                                        <button type="button" style={btnStyle} onClick={() => startEditManual(row)}>
+                                                            Düzenle
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            style={{ ...btnStyle, color: '#b91c1c', borderColor: '#fecaca' }}
+                                                            onClick={() => deleteManual(row.manualPositionId!)}
+                                                        >
+                                                            Sil
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <span style={{ color: tokens.textMuted }}>—</span>
+                                                )}
+                                            </td>
                                         </tr>
                                     )})
                                 )}
@@ -351,11 +802,13 @@ export function Portfolio() {
                 </div>
 
                 <div style={cardStyle}>
-                    <h2 style={{ marginTop: 0, marginBottom: 12, fontSize: '1rem' }}>Manuel Pozisyon Ekle</h2>
+                    <h2 style={{ marginTop: 0, marginBottom: 12, fontSize: '1rem' }}>
+                        {editingManualId != null ? 'Manuel pozisyonu düzenle' : 'Manuel pozisyon ekle'}
+                    </h2>
 
                     <form onSubmit={saveManual} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         <label style={{ fontSize: '0.875rem' }}>
-                            Type
+                            Tür
                             <select value={type} onChange={(e) => setType(e.target.value as AssetType)} style={inputStyle}>
                                 <option value="CRYPTO">CRYPTO</option>
                                 <option value="FX">FX</option>
@@ -366,7 +819,7 @@ export function Portfolio() {
                         </label>
 
                         <label style={{ fontSize: '0.875rem' }}>
-                            Symbol
+                            Sembol
                             {loading || overviewLoading ? (
                                 <div style={{ ...inputStyle, color: tokens.textMuted }}>Yükleniyor...</div>
                             ) : symbolOptions.length === 0 ? (
@@ -383,22 +836,22 @@ export function Portfolio() {
                         </label>
 
                         <label style={{ fontSize: '0.875rem' }}>
-                            Quantity
+                            Miktar
                             <input type="number" step="0.00000001" value={quantity} onChange={(e) => setQuantity(e.target.value)} style={inputStyle} />
                         </label>
 
                         <label style={{ fontSize: '0.875rem' }}>
-                            Buy Price (TRY)
+                            Alış fiyatı (TRY)
                             <input type="number" step="0.00000001" value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} style={inputStyle} />
                         </label>
 
                         <label style={{ fontSize: '0.875rem' }}>
-                            Buy Date
+                            Alış tarihi
                             <input type="date" value={buyDate} onChange={(e) => setBuyDate(e.target.value)} style={inputStyle} />
                         </label>
 
                         <label style={{ fontSize: '0.875rem' }}>
-                            Note
+                            Not
                             <textarea
                                 rows={3}
                                 value={note}
@@ -407,23 +860,42 @@ export function Portfolio() {
                             />
                         </label>
 
-                        <button
-                            type="submit"
-                            disabled={savingManual}
-                            style={{
-                                marginTop: 4,
-                                padding: '8px 14px',
-                                borderRadius: 8,
-                                border: 'none',
-                                background: tokens.accentGradient,
-                                color: '#fff',
-                                fontWeight: 600,
-                                cursor: savingManual ? 'default' : 'pointer',
-                                opacity: savingManual ? 0.7 : 1,
-                            }}
-                        >
-                            {savingManual ? 'Kaydediliyor...' : 'Pozisyon Ekle'}
-                        </button>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                            <button
+                                type="submit"
+                                disabled={savingManual}
+                                style={{
+                                    padding: '8px 14px',
+                                    borderRadius: 8,
+                                    border: 'none',
+                                    background: tokens.accentGradient,
+                                    color: '#fff',
+                                    fontWeight: 600,
+                                    cursor: savingManual ? 'default' : 'pointer',
+                                    opacity: savingManual ? 0.7 : 1,
+                                }}
+                            >
+                                {savingManual ? 'Kaydediliyor...' : editingManualId != null ? 'Güncelle' : 'Pozisyon ekle'}
+                            </button>
+                            {editingManualId != null ? (
+                                <button
+                                    type="button"
+                                    onClick={resetManualForm}
+                                    disabled={savingManual}
+                                    style={{
+                                        padding: '8px 14px',
+                                        borderRadius: 8,
+                                        border: `1px solid ${tokens.border}`,
+                                        background: tokens.bgCard,
+                                        color: tokens.text,
+                                        fontWeight: 600,
+                                        cursor: savingManual ? 'default' : 'pointer',
+                                    }}
+                                >
+                                    İptal
+                                </button>
+                            ) : null}
+                        </div>
                     </form>
                 </div>
             </div>
