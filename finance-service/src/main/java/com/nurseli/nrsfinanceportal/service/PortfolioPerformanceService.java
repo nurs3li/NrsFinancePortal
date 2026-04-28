@@ -7,6 +7,7 @@ import com.nurseli.nrsfinanceportal.common.dto.UnifiedPortfolioItemView;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient;
+import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient.LatestPricingSnapshot;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +29,7 @@ public class PortfolioPerformanceService {
     @Transactional(readOnly = true)
     public PortfolioPerformanceDto myPerformance() {
         List<UnifiedPortfolioItemView> portfolio = unifiedPortfolioService.myUnifiedPortfolio();
+        LatestPricingSnapshot pricing = marketDataClient.loadLatestPricing();
         List<PerformanceItemDto> items = new ArrayList<>();
 
         BigDecimal totalCost = BigDecimal.ZERO;
@@ -38,7 +40,7 @@ public class PortfolioPerformanceService {
             BigDecimal quantity = nz(p.getQuantity());
             BigDecimal avgBuy = nz(p.getAvgBuyPrice());
 
-            BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, p.getSymbol()));
+            BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, p.getSymbol(), pricing));
             BigDecimal cost = avgBuy.multiply(quantity);
             BigDecimal currentValue = currentPrice.multiply(quantity);
             BigDecimal pnl = currentValue.subtract(cost);
@@ -86,6 +88,7 @@ public class PortfolioPerformanceService {
     @Transactional(readOnly = true)
     public PortfolioSnapshotMetricsDto computeSnapshotMetricsForUser(User user) {
         List<UnifiedPortfolioItemView> portfolio = unifiedPortfolioService.unifiedForUser(user);
+        LatestPricingSnapshot pricing = marketDataClient.loadLatestPricing();
 
         BigDecimal tradeValue = BigDecimal.ZERO;
         BigDecimal tradeCost = BigDecimal.ZERO;
@@ -96,7 +99,7 @@ public class PortfolioPerformanceService {
             AssetType type = AssetType.valueOf(p.getType());
             BigDecimal quantity = nz(p.getQuantity());
             BigDecimal avgBuy = nz(p.getAvgBuyPrice());
-            BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, p.getSymbol()));
+            BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, p.getSymbol(), pricing));
             BigDecimal cost = avgBuy.multiply(quantity);
             BigDecimal currentValue = currentPrice.multiply(quantity);
 
