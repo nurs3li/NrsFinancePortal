@@ -59,6 +59,19 @@ type StarredAssetsResponse = {
     selected: StarSelection[];
     resolved: { marketType: string; symbol: string; position: number; defaultFilled: boolean }[];
 };
+type ViopContract = { contractCode: string; underlying: string; expiry: string; type: string };
+type ViopSnapshot = {
+    contractCode: string;
+    price: number;
+    basis: number;
+    annualizedBasisPct: number;
+    openInterest: number;
+    oiPriceRegime: string;
+    source: string;
+    asOf: string;
+};
+type DebtInstrument = { isin: string; name: string; issuer: string; maturityDate: string };
+type DebtSnapshot = { isin: string; dirtyPrice: number; yieldPct: number; source: string; asOf: string };
 
 const DAYS_OPTIONS = [7, 14, 30];
 const COMPARE_COLORS = ['#38bdf8', '#22c55e', '#eab308', '#f87171'];
@@ -151,6 +164,26 @@ export function Market() {
         queryKey: ['market', 'dashboard'],
         queryFn: () => financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => r.data),
         refetchInterval: 60_000,
+    });
+    const { data: viopContracts = [] } = useQuery({
+        queryKey: ['market', 'viop', 'contracts'],
+        queryFn: () => marketClient.get<ViopContract[]>('/api/market/viop/contracts').then((r) => r.data),
+        staleTime: 120_000,
+    });
+    const { data: viopLatest = [] } = useQuery({
+        queryKey: ['market', 'viop', 'latest'],
+        queryFn: () => marketClient.get<ViopSnapshot[]>('/api/market/viop/latest').then((r) => r.data),
+        staleTime: 60_000,
+    });
+    const { data: debtCatalog = [] } = useQuery({
+        queryKey: ['market', 'debt', 'catalog'],
+        queryFn: () => marketClient.get<DebtInstrument[]>('/api/market/debt/catalog').then((r) => r.data),
+        staleTime: 120_000,
+    });
+    const { data: debtLatest = [] } = useQuery({
+        queryKey: ['market', 'debt', 'latest'],
+        queryFn: () => marketClient.get<DebtSnapshot[]>('/api/market/debt/latest').then((r) => r.data),
+        staleTime: 60_000,
     });
 
     useRefetchOnFocus(() => {
@@ -673,6 +706,29 @@ export function Market() {
                                                                             row.timestamp,
                                                                         ).toLocaleString('tr-TR')
                                                                       : '')}
+                                                            {!noData && row.qualityFlag ? (
+                                                                <span
+                                                                    style={{
+                                                                        marginLeft: 8,
+                                                                        padding: '1px 6px',
+                                                                        borderRadius: 999,
+                                                                        fontSize: '0.68rem',
+                                                                        fontWeight: 700,
+                                                                        background: row.qualityFlag === 'EXACT'
+                                                                            ? 'rgba(34,197,94,.2)'
+                                                                            : row.qualityFlag === 'PREVIOUS_DAY'
+                                                                                ? 'rgba(245,158,11,.2)'
+                                                                                : 'rgba(239,68,68,.2)',
+                                                                        color: row.qualityFlag === 'EXACT'
+                                                                            ? '#22c55e'
+                                                                            : row.qualityFlag === 'PREVIOUS_DAY'
+                                                                                ? '#f59e0b'
+                                                                                : '#ef4444',
+                                                                    }}
+                                                                >
+                                                                    {row.qualityFlag}
+                                                                </span>
+                                                            ) : null}
                                                         </td>
                                                     </tr>
                                                 );
@@ -1018,6 +1074,52 @@ export function Market() {
                             >
                                 Hesap:{' '}
                                 {new Date(dashboard.computedAt).toLocaleString('tr-TR')}
+                            </p>
+                        ) : null}
+                    </aside>
+                    <aside style={{ ...cardStyle, marginBottom: 0 }}>
+                        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>VİOP Paneli</h2>
+                        {viopLatest.length === 0 ? (
+                            <p style={mutedStyle}>VİOP verisi bekleniyor.</p>
+                        ) : (
+                            viopLatest.slice(0, 4).map((v) => (
+                                <div key={v.contractCode} style={{ borderBottom: `1px solid ${tokens.border}`, padding: '8px 0' }}>
+                                    <div style={{ fontWeight: 600 }}>{v.contractCode}</div>
+                                    <div style={{ fontSize: '0.78rem', color: tokens.textMuted }}>
+                                        Basis: {Number(v.basis).toLocaleString('tr-TR')} · Annualized: %{Number(v.annualizedBasisPct).toLocaleString('tr-TR')}
+                                    </div>
+                                    <div style={{ fontSize: '0.74rem', color: tokens.textMuted }}>
+                                        {v.source} · {new Date(v.asOf).toLocaleString('tr-TR')} · {v.oiPriceRegime}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                        {viopContracts.length > 0 ? (
+                            <p style={{ ...mutedStyle, marginTop: 8, fontSize: 11 }}>
+                                Kontrat sayısı: {viopContracts.length}
+                            </p>
+                        ) : null}
+                    </aside>
+                    <aside style={{ ...cardStyle, marginBottom: 0 }}>
+                        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>Debt/Bono Paneli</h2>
+                        {debtLatest.length === 0 ? (
+                            <p style={mutedStyle}>Debt verisi bekleniyor.</p>
+                        ) : (
+                            debtLatest.slice(0, 4).map((d) => (
+                                <div key={`${d.isin}-${d.asOf}`} style={{ borderBottom: `1px solid ${tokens.border}`, padding: '8px 0' }}>
+                                    <div style={{ fontWeight: 600 }}>{d.isin}</div>
+                                    <div style={{ fontSize: '0.78rem', color: tokens.textMuted }}>
+                                        Dirty: {Number(d.dirtyPrice).toLocaleString('tr-TR')} · Yield: %{Number(d.yieldPct).toLocaleString('tr-TR')}
+                                    </div>
+                                    <div style={{ fontSize: '0.74rem', color: tokens.textMuted }}>
+                                        {d.source} · {new Date(d.asOf).toLocaleString('tr-TR')}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                        {debtCatalog.length > 0 ? (
+                            <p style={{ ...mutedStyle, marginTop: 8, fontSize: 11 }}>
+                                Enstrüman sayısı: {debtCatalog.length}
                             </p>
                         ) : null}
                     </aside>

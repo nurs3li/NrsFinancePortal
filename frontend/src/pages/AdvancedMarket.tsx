@@ -28,6 +28,8 @@ type LatestPrice = {
     price?: number;
     source?: string;
     timestamp?: string;
+    asOf?: string;
+    qualityFlag?: string;
     status?: string;
     message?: string;
 };
@@ -393,6 +395,13 @@ export function AdvancedMarket() {
     }, [activeTab, selectedSymbol, days, fetchBatchHistory, fetchIndicators]);
 
     const symbolsForTab = getSymbolsForTab(activeTab);
+    const selectedLatest = (
+        activeTab === 'doviz' ? latestFx :
+        activeTab === 'crypto' ? latestCrypto :
+        activeTab === 'metals' ? latestMetals :
+        activeTab === 'funds' ? latestFunds :
+        latestEquity
+    )[selectedSymbol];
 
     useEffect(() => {
         if (!selectedSymbol && symbolsForTab.length > 0) setSelectedSymbol(symbolsForTab[0]);
@@ -535,6 +544,12 @@ export function AdvancedMarket() {
                     <span style={{ ...mutedStyle, fontSize: '0.75rem' }}>
                         MA 7 (mavi) · MA 30 (sarı) · MA 90 (kırmızı)
                     </span>
+                    {selectedLatest ? (
+                        <span style={{ ...mutedStyle, fontSize: '0.75rem' }}>
+                            Kaynak: {selectedLatest.source ?? '-'} · AsOf: {selectedLatest.asOf ?? selectedLatest.timestamp ?? '-'}
+                            {selectedLatest.qualityFlag ? ` · ${selectedLatest.qualityFlag}` : ''}
+                        </span>
+                    ) : null}
                 </div>
 
                 {tooltip && (
