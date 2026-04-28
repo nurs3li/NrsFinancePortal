@@ -4,8 +4,11 @@ import keycloak from '../auth/keycloak';
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8085';
 const marketApiUrl = import.meta.env.VITE_MARKET_API_URL || 'http://localhost:8083';
 const notificationApiUrl = import.meta.env.VITE_NOTIFICATION_API_URL || 'http://localhost:8089';
+const httpTimeoutMs = Number(import.meta.env.VITE_HTTP_TIMEOUT_MS) || 45000;
+
 export const financeClient = axios.create({
     baseURL: apiUrl,
+    timeout: httpTimeoutMs,
     headers: { 'Content-Type': 'application/json' },
 });
 
@@ -26,6 +29,7 @@ financeClient.interceptors.response.use(
 
 export const marketClient = axios.create({
     baseURL: marketApiUrl,
+    timeout: httpTimeoutMs,
     headers: { 'Content-Type': 'application/json' },
 });
 
@@ -39,6 +43,7 @@ const metricsApiUrl = import.meta.env.VITE_METRICS_URL || 'http://localhost:8088
 
 export const metricsClient = axios.create({
     baseURL: metricsApiUrl,
+    timeout: httpTimeoutMs,
     headers: { 'Content-Type': 'application/json' },
 });
 
@@ -58,6 +63,7 @@ metricsClient.interceptors.response.use(
 );
 export const notificationClient = axios.create({
     baseURL: notificationApiUrl,
+    timeout: httpTimeoutMs,
     headers: { 'Content-Type': 'application/json' },
 });
 
