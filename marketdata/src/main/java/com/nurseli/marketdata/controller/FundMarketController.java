@@ -1,7 +1,7 @@
 package com.nurseli.marketdata.controller;
 
 import com.nurseli.marketdata.api.dto.MarketPriceHistoryResponse;
-import com.nurseli.marketdata.application.MarketPriceQueryService;
+import com.nurseli.marketdata.application.provider.ProviderRegistry;
 import com.nurseli.marketdata.api.dto.MarketPriceLatestResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,12 +16,21 @@ import java.util.Map;
 @RequestMapping("/api/market/funds")
 @RequiredArgsConstructor
 public class FundMarketController {
-
-    private final MarketPriceQueryService queryService;
+    private final ProviderRegistry providerRegistry;
 
     @GetMapping("/latest")
     public Map<String, MarketPriceLatestResponse> latestFunds() {
-        return queryService.getLatestFunds();
+        Map<String, MarketPriceLatestResponse> latest = providerRegistry.fundCanonical().getLatest();
+        if (!latest.isEmpty()) {
+            return latest;
+        }
+        for (var fallback : providerRegistry.fundFallbackOrder()) {
+            Map<String, MarketPriceLatestResponse> fallbackLatest = fallback.getLatest();
+            if (!fallbackLatest.isEmpty()) {
+                return fallbackLatest;
+            }
+        }
+        return latest;
     }
 
     @GetMapping("/history")
@@ -29,6 +38,16 @@ public class FundMarketController {
             @RequestParam String symbol,
             @RequestParam(defaultValue = "7") int days
     ) {
-        return queryService.getHistory(symbol, days);
+        List<MarketPriceHistoryResponse> history = providerRegistry.fundCanonical().getHistory(symbol, days);
+        if (!history.isEmpty()) {
+            return history;
+        }
+        for (var fallback : providerRegistry.fundFallbackOrder()) {
+            List<MarketPriceHistoryResponse> fallbackHistory = fallback.getHistory(symbol, days);
+            if (!fallbackHistory.isEmpty()) {
+                return fallbackHistory;
+            }
+        }
+        return history;
     }
 }
