@@ -6,5 +6,8 @@ import java.time.LocalDateTime;
 public record MarketPriceHistoryResponse(
         BigDecimal buyPrice,
         BigDecimal sellPrice,
-        LocalDateTime timestamp
+        LocalDateTime timestamp,
+        String source,
+        LocalDateTime asOf,
+        DataQualityFlag qualityFlag
 ) {}

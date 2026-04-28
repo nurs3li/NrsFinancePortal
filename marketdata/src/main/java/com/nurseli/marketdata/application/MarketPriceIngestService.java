@@ -16,6 +16,7 @@ public class MarketPriceIngestService {
 
     private final TcmbClient tcmbClient;
     private final MarketPriceHistoryRepository repository;
+    private final TcmbFxSnapshotCache tcmbFxSnapshotCache;
 
     /**
      * Yeni FX verisi geldiğinde:
@@ -28,15 +29,18 @@ public class MarketPriceIngestService {
             allEntries = true
     )
     public void fetchAndSaveTcmbRates() {
+        var rates = tcmbClient.fetchRates();
+        LocalDateTime now = LocalDateTime.now();
+        tcmbFxSnapshotCache.replaceFromTcmbRates(rates, now);
 
-        tcmbClient.fetchRates().forEach(rate -> {
+        rates.forEach(rate -> {
 
             MarketPriceHistory entity = new MarketPriceHistory();
             entity.setSymbol(rate.symbol() + "TRY");
             entity.setBuyPrice(rate.buy());
             entity.setSellPrice(rate.sell());
             entity.setSource("TCMB");
-            entity.setTimestamp(LocalDateTime.now());
+            entity.setTimestamp(now);
 
             repository.save(entity);
         });

@@ -32,6 +32,25 @@ management:
       exposure:
         include: health,info
 
+market:
+  evds:
+    enabled: true
+    apiKey: ${EVDS_API_KEY:}
+    timeoutMs: 3000
+  providers:
+    viop:
+      enabled: false
+      baseUrl: ${VIOP_PROVIDER_BASE_URL:}
+      apiKey: ${VIOP_PROVIDER_API_KEY:}
+      timeoutMs: 3000
+      latestPath: /viop/latest
+    debt:
+      enabled: false
+      baseUrl: ${DEBT_PROVIDER_BASE_URL:}
+      apiKey: ${DEBT_PROVIDER_API_KEY:}
+      timeoutMs: 3000
+      latestPath: /debt/latest
+
 
 app:
   data-sources:
@@ -64,4 +83,20 @@ app:
       - IWM
       - GLD
       - VWO
-      - EEM    -
+      - EEM
+  market:
+    fx:
+      # TCMB ingest aralığı (ms). HTTP /doviz/latest canlı çekmez; DB + snapshot okur.
+      scheduler-ms: 60000
+      # Ingest sonrası bellek snapshot geçerlilik süresi (saniye)
+      snapshot-ttl-seconds: 90
+  providers:
+    fx:
+      canonical: TCMB
+      fallback-order: [BANK, EVDS]
+    fund:
+      canonical: ETF
+      fallback-order: []
+    equity:
+      canonical: FINHUB
+      fallback-order: []

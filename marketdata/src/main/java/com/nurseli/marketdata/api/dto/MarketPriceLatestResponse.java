@@ -9,6 +9,8 @@ public record MarketPriceLatestResponse(
         BigDecimal sellPrice,
         String source,
         LocalDateTime timestamp,
+        LocalDateTime asOf,
+        PriceQuality quality,
         BigDecimal marketCap,
         String marketCapSource,
         LocalDateTime marketCapAsOf

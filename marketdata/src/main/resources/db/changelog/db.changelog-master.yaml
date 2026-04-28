@@ -4,3 +4,8 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v2-news.yaml
+  - include:
+      file: db/changelog/v3-derivatives-debt.yaml
+
+  - include:
+      file: db/changelog/v4-market-price-latest-index.yaml

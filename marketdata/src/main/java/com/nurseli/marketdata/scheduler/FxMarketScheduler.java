@@ -1,6 +1,7 @@
 package com.nurseli.marketdata.scheduler;
 
 import com.nurseli.marketdata.application.MarketPriceIngestService;
+import com.nurseli.marketdata.application.EvdsIngestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -12,14 +13,24 @@ import org.springframework.stereotype.Component;
 public class FxMarketScheduler {
 
     private final MarketPriceIngestService ingestService;
+    private final EvdsIngestService evdsIngestService;
 
     /**
-     * FX rates (TCMB)
-     * 5 dakikada bir güncellenir
+     * FX rates (TCMB) — varsayılan 60 sn; ingest DB + bellek snapshot günceller.
+     * {@code app.market.fx.scheduler-ms} ile özelleştirilebilir.
      */
-    @Scheduled(fixedDelay = 300_000)
+    @Scheduled(fixedDelayString = "${app.market.fx.scheduler-ms:60000}")
     public void fetchFxRates() {
-        log.info("[SCHEDULER] Fetching FX rates from TCMB");
-        ingestService.fetchAndSaveTcmbRates();
+        try {
+            log.info("[SCHEDULER] Fetching FX rates from TCMB");
+            ingestService.fetchAndSaveTcmbRates();
+        } catch (Exception ex) {
+            log.warn("[SCHEDULER] TCMB ingest failed, fallback providers will serve data. reason={}", ex.getMessage());
+        }
+        try {
+            evdsIngestService.fetchAndSaveRecentFxHistory();
+        } catch (Exception ex) {
+            log.warn("[SCHEDULER] EVDS ingest failed. reason={}", ex.getMessage());
+        }
     }
 }

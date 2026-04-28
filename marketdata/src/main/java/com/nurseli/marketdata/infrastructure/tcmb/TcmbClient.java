@@ -2,6 +2,7 @@ package com.nurseli.marketdata.infrastructure.tcmb;
 
 import com.nurseli.marketdata.config.DataSourcesProperties;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.w3c.dom.Document;
@@ -53,7 +54,10 @@ public class TcmbClient {
     }
 
     private List<TcmbRate> fetchRatesFromUrl(String url) {
-        RestTemplate restTemplate = new RestTemplate();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        RestTemplate restTemplate = new RestTemplate(factory);
         String xml = restTemplate.getForObject(url, String.class);
 
         List<TcmbRate> result = new ArrayList<>();

@@ -5,6 +5,8 @@ import com.nurseli.marketdata.api.dto.CandlePointResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceHistoryResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceLatestResponse;
 import com.nurseli.marketdata.api.dto.MarketType;
+import com.nurseli.marketdata.api.dto.DataQualityFlag;
+import com.nurseli.marketdata.api.dto.PriceQuality;
 import com.nurseli.marketdata.api.exception.InvalidRequestException;
 import com.nurseli.marketdata.config.EquityProperties;
 import com.nurseli.marketdata.config.EtfProperties;
@@ -48,6 +50,8 @@ public class MarketPriceQueryService {
                         e.getSellPrice(),
                         e.getSource(),
                         e.getTimestamp(),
+                        e.getTimestamp(),
+                        PriceQuality.EXACT,
                         null,
                         null,
                         null
@@ -68,6 +72,8 @@ public class MarketPriceQueryService {
                                 e.getSellPrice(),
                                 e.getSource(),
                                 e.getTimestamp(),
+                                e.getTimestamp(),
+                                PriceQuality.EXACT,
                                 null,
                                 null,
                                 null
@@ -106,6 +112,8 @@ public class MarketPriceQueryService {
                     row.sellPrice(),
                     row.source(),
                     row.timestamp(),
+                    row.asOf(),
+                    row.quality(),
                     marketCapInfo != null ? marketCapInfo.marketCapUsd() : null,
                     marketCapInfo != null ? marketCapInfo.marketCapSource() : null,
                     marketCapInfo != null ? marketCapInfo.marketCapAsOf() : null
@@ -124,7 +132,10 @@ public class MarketPriceQueryService {
                 .map(b -> new MarketPriceHistoryResponse(
                         b.getBuyPrice(),
                         b.getSellPrice(),
-                        b.getTimestamp()
+                        b.getTimestamp(),
+                        "SYSTEM",
+                        b.getTimestamp(),
+                        DataQualityFlag.EXACT
                 ))
                 .toList();
     }
