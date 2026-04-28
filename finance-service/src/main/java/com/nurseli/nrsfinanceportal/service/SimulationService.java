@@ -65,7 +65,8 @@ public class SimulationService {
             historicalRef = new HistoricalPriceRef(
                     manualBuyPriceTry,
                     buyDate,
-                    "USER_INPUT"
+                    "USER_INPUT",
+                    "EXACT"
             );
         } else {
             historicalRef = resolveHistoricalPriceAtOrBeforeDate(history, buyDate);
@@ -116,6 +117,7 @@ public class SimulationService {
                 pnlPct,
                 historicalRef.source(),
                 historicalRef.priceDate(),
+                historicalRef.qualityFlag(),
                 performanceSeries,
                 message
         );
@@ -140,7 +142,8 @@ public class SimulationService {
         if (price == null || price.signum() <= 0) {
             throw new IllegalStateException("Historical price is invalid");
         }
-        return new HistoricalPriceRef(price, row.timestamp().toLocalDate(), "SYSTEM_HISTORY");
+        String quality = row.timestamp().toLocalDate().isEqual(buyDate) ? "EXACT" : "PREVIOUS_DAY";
+        return new HistoricalPriceRef(price, row.timestamp().toLocalDate(), "SYSTEM_HISTORY", quality);
     }
 
     /**
@@ -224,7 +227,8 @@ public class SimulationService {
     private record HistoricalPriceRef(
             BigDecimal priceTry,
             LocalDate priceDate,
-            String source
+            String source,
+            String qualityFlag
     ) {
     }
 }

@@ -18,6 +18,7 @@ public class SimulationResponseDto {
     private final BigDecimal pnlPct;
     private final String buyPriceSource; // SYSTEM_HISTORY | USER_INPUT
     private final LocalDate historicalPriceDate;
+    private final String qualityFlag; // EXACT | PREVIOUS_DAY | FALLBACK | MISSING
     private final List<SimulationPerformancePointDto> performanceSeries;
     private final String message;
 
@@ -34,6 +35,7 @@ public class SimulationResponseDto {
             BigDecimal pnlPct,
             String buyPriceSource,
             LocalDate historicalPriceDate,
+            String qualityFlag,
             List<SimulationPerformancePointDto> performanceSeries,
             String message
     ) {
@@ -49,6 +51,7 @@ public class SimulationResponseDto {
         this.pnlPct = pnlPct;
         this.buyPriceSource = buyPriceSource;
         this.historicalPriceDate = historicalPriceDate;
+        this.qualityFlag = qualityFlag;
         this.performanceSeries = performanceSeries;
         this.message = message;
     }
@@ -65,6 +68,7 @@ public class SimulationResponseDto {
     public BigDecimal getPnlPct() { return pnlPct; }
     public String getBuyPriceSource() { return buyPriceSource; }
     public LocalDate getHistoricalPriceDate() { return historicalPriceDate; }
+    public String getQualityFlag() { return qualityFlag; }
     public List<SimulationPerformancePointDto> getPerformanceSeries() { return performanceSeries; }
     public String getMessage() { return message; }
 }
