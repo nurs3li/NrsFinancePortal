@@ -64,6 +64,8 @@ logging:
 
 market-data:
   base-url: http://nrs-market-data:8083
+  connect-timeout-ms: 5000
+  response-timeout-ms: 20000
 
 app:
   rate-limit:
