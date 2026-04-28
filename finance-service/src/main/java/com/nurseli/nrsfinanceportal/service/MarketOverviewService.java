@@ -17,11 +17,12 @@ public class MarketOverviewService {
     private final MarketDataClient marketDataClient;
 
     public MarketOverviewResponse getOverview() {
+        var snap = marketDataClient.loadLatestPricing();
 
         // =====================
         // FX (DÖVİZ)
         // =====================
-        var doviz = marketDataClient.getLatestDoviz()
+        var doviz = snap.fx()
                 .entrySet()
                 .stream()
                 .collect(Collectors.toMap(
@@ -38,7 +39,7 @@ public class MarketOverviewService {
         // =====================
         // METALS
         // =====================
-        var metals = marketDataClient.getLatestMetals()
+        var metals = snap.metals()
                 .entrySet()
                 .stream()
                 .collect(Collectors.toMap(
@@ -56,7 +57,7 @@ public class MarketOverviewService {
         // =====================
         // CRYPTO
         // =====================
-        var crypto = marketDataClient.getLatestCrypto()
+        var crypto = snap.crypto()
                 .entrySet()
                 .stream()
                 .collect(Collectors.toMap(
@@ -74,7 +75,7 @@ public class MarketOverviewService {
         // =====================
         //   FONLAR (ETF – FinHub: SPY, QQQ, VOO...)
         // =====================
-        var funds = marketDataClient.getLatestFunds()
+        var funds = snap.funds()
                 .entrySet()
                 .stream()
                 .collect(Collectors.toMap(
@@ -91,7 +92,7 @@ public class MarketOverviewService {
         // =====================
         // HİSSELER (FINHUB – EQUITY)
         // =====================
-        var stocks = marketDataClient.getLatestEquity()
+        var stocks = snap.equity()
                 .entrySet()
                 .stream()
                 .collect(Collectors.toMap(

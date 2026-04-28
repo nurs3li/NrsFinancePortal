@@ -46,6 +46,8 @@ spring:
 
 market-data:
   base-url: http://localhost:8083
+  connect-timeout-ms: 5000
+  response-timeout-ms: 20000
 
 management:
   endpoints:
