@@ -175,6 +175,7 @@ services:
       SPRING_DATA_REDIS_HOST: nrs-redis
       KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
       FINHUB_API_KEY: ${FINHUB_API_KEY}
+      EVDS_API_KEY: ${EVDS_API_KEY}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
     logging:
       driver: "json-file"
