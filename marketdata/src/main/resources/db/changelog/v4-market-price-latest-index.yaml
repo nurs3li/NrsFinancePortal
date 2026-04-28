@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: v4-idx-market-price-history-source-symbol-ts
+      author: nrsfinanceportal
+      preConditions:
+        - onFail: MARK_RAN
+        - tableExists:
+            tableName: market_price_history
+      changes:
+        - createIndex:
+            indexName: idx_mph_source_symbol_timestamp
+            tableName: market_price_history
+            columns:
+              - column:
+                  name: source
+              - column:
+                  name: symbol
+              - column:
+                  name: timestamp

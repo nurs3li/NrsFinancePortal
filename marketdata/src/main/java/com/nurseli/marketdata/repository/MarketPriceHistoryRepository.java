@@ -21,20 +21,20 @@ public interface MarketPriceHistoryRepository
     // =====================================================
     // 🔹 LATEST – ALL SYMBOLS BY SOURCE (CRYPTO / FX / FUND)
     // =====================================================
-    @Query("""
-        SELECT m
-        FROM MarketPriceHistory m
-        WHERE m.source = :source
-          AND m.timestamp = (
-              SELECT MAX(m2.timestamp)
-              FROM MarketPriceHistory m2
-              WHERE m2.symbol = m.symbol
-          )
-        ORDER BY m.symbol
-    """)
-    List<MarketPriceHistory> findLatestBySource(
-            @Param("source") String source
-    );
+    /**
+     * Kaynak başına sembolün en son satırı (PostgreSQL).
+     * Eski JPQL korelasyonlu alt sorgu büyük tabloda çok yavaşlatıyordu.
+     */
+    @Query(
+            value = """
+                    SELECT DISTINCT ON (symbol) *
+                    FROM market_price_history
+                    WHERE source = :source
+                    ORDER BY symbol, timestamp DESC, id DESC
+                    """,
+            nativeQuery = true
+    )
+    List<MarketPriceHistory> findLatestBySource(@Param("source") String source);
 
     // =====================================================
     // 🔹 HISTORY – TIME BUCKET (1 MINUTE)

@@ -1,0 +1,203 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-derivative-and-debt-tables
+      author: codex
+      changes:
+        - createTable:
+            tableName: derivative_contract
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: contract_code
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: underlying
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: expiry
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: type
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+        - createTable:
+            tableName: derivative_snapshot
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: contract_code
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: price
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: theoretical_spot
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source
+                  type: VARCHAR(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: as_of
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createTable:
+            tableName: derivative_history_point
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: contract_code
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: close_price
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: as_of
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createTable:
+            tableName: open_interest_snapshot
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: contract_code
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: open_interest
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: as_of
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createTable:
+            tableName: debt_instrument
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: isin
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: name
+                  type: VARCHAR(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: issuer
+                  type: VARCHAR(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: maturity_date
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+        - createTable:
+            tableName: debt_snapshot
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: isin
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: dirty_price
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: yield_pct
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source
+                  type: VARCHAR(24)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: as_of
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createTable:
+            tableName: debt_history_point
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: isin
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: dirty_price
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: yield_pct
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: as_of
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
