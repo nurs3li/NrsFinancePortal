@@ -65,7 +65,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         keycloak
-            .init({ onLoad: 'check-sso' })
+            .init({
+                onLoad: 'check-sso',
+                // Chrome üçüncü taraf çerez kısıtları / iframe cache sorunlarında
+                // login-status-iframe takılı kalıp uygulamayı kilitlemesin diye.
+                checkLoginIframe: false,
+            })
             .then((auth) => {
                 setIsAuthenticated(auth);
                 if (auth && keycloak.token) {

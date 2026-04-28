@@ -8,6 +8,8 @@ export type LatestPriceRow = {
     price?: number;
     source?: string;
     timestamp?: string;
+    asOf?: string;
+    qualityFlag?: 'EXACT' | 'PREVIOUS_DAY' | 'FALLBACK' | 'MISSING' | string;
     status?: string;
     message?: string;
 };

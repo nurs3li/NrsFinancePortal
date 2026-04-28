@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { AxiosResponse } from 'axios';
 import { financeClient, marketClient } from '../api/client';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
@@ -74,6 +75,19 @@ type SummaryResponse = {
     activity?: ActivitySummary;
 };
 
+const FALLBACK_SUMMARY: SummaryResponse = {
+    cash: { amountTry: 0 },
+    portfolio: {
+        totalValueTry: 0,
+        distribution: {},
+        totalCostTry: 0,
+        totalPnlTry: 0,
+        totalPnlPct: 0,
+        categories: [],
+    },
+    activity: {},
+};
+
 type TxRow = { id: number; balanceAfter: number; createdAt: string };
 type LatestPrice = { symbol?: string; buyPrice?: number; sellPrice?: number; price?: number; status?: string };
 type NewsItem = { id: number; title: string; source: string | null; publishedAt: string };
@@ -145,6 +159,17 @@ export function Dashboard() {
 
     const hasLoadedOnceRef = useRef(false);
 
+    const unwrapAxiosData = <T,>(res: AxiosResponse<T>): T => {
+        const body = res.data as unknown;
+        if (body && typeof body === 'object' && 'data' in (body as object)) {
+            const w = body as { data: T };
+            if (w.data !== undefined) {
+                return w.data;
+            }
+        }
+        return body as T;
+    };
+
     const fetchDashboard = useCallback(async (silent = false) => {
         const showLoader = !silent || !hasLoadedOnceRef.current;
         if (showLoader) setLoading(true);
@@ -152,43 +177,71 @@ export function Dashboard() {
         try {
             const end = new Date();
             const start = getFilterStart(selectedFilter);
-            const [summaryRes, txRes, fxRes, metalsRes, cryptoRes, fundsRes, equityRes, newsRes, starredRes] = await Promise.all([
-                financeClient.get('/api/dashboard/summary'),
-                financeClient.get<{ content?: TxRow[] }>('/api/transactions/me/range', {
-                    params: { start: start.toISOString(), end: end.toISOString(), page: 0, size: 500 },
+            // Özet ve işlemler: biri hata verse bile diğerini göster; ikisini de all ile beklemek sayfayı gereksiz kilitlemez.
+            const phase1 = await Promise.allSettled([
+                financeClient.get<SummaryResponse>('/api/dashboard/summary'),
+                financeClient.get('/api/transactions/me/range', {
+                    params: { start: start.toISOString(), end: end.toISOString(), page: 0, size: 200 },
                 }),
+            ]);
+
+            if (phase1[0].status === 'fulfilled') {
+                setSummary(unwrapAxiosData(phase1[0].value));
+            } else {
+                if (!silent) {
+                    console.warn('Dashboard özet isteği başarısız', phase1[0].reason);
+                }
+                // Sayfanın geri kalanı (yıldız, haber) yine yüklensin; KPI'lar geçici olarak sıfır.
+                setSummary(FALLBACK_SUMMARY);
+            }
+
+            if (phase1[1].status === 'fulfilled') {
+                const page = unwrapAxiosData(phase1[1].value) as { content?: TxRow[] };
+                const txContent = page?.content ?? [];
+                const txList = Array.isArray(txContent) ? txContent : [];
+                const sortedTx = [...txList].sort(
+                    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                );
+                const chartData = sortedTx.map((tx) => ({
+                    date: new Date(tx.createdAt).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }),
+                    balance: Number(tx.balanceAfter),
+                }));
+                setBalancePoints(chartData);
+            } else {
+                setBalancePoints([]);
+            }
+
+            hasLoadedOnceRef.current = true;
+
+            if (showLoader) setLoading(false);
+
+            // İkinci aşama: her uç bağımsız — biri timeout/hata verse bile diğerlerini sıfırlama.
+            const settled = await Promise.allSettled([
                 marketClient.get<Record<string, LatestPrice>>('/api/market/doviz/latest'),
                 marketClient.get<Record<string, LatestPrice>>('/api/market/metals/latest'),
                 marketClient.get<Record<string, LatestPrice>>('/api/market/crypto/latest'),
                 marketClient.get<Record<string, LatestPrice>>('/api/market/funds/latest'),
                 marketClient.get<Record<string, LatestPrice>>('/api/market/equity/latest'),
                 marketClient.get<NewsPage>('/api/news', { params: { page: 0, size: 3 } }),
-                financeClient
-                    .get<StarredAssetsResponse>('/api/me/starred-assets')
-                    .catch(() => ({ data: { maxItems: 7, selected: [], resolved: [] } as StarredAssetsResponse })),
+                financeClient.get<StarredAssetsResponse>('/api/me/starred-assets'),
             ]);
 
-            const rawSummary = summaryRes.data?.data ?? summaryRes.data;
-            setSummary(rawSummary);
+            const pickData = <T,>(i: number): T | undefined => {
+                const r = settled[i];
+                if (!r || r.status !== 'fulfilled') return undefined;
+                return (r.value as AxiosResponse<T>).data;
+            };
 
-            const txContent = txRes.data?.content ?? txRes.data ?? [];
-            const txList = Array.isArray(txContent) ? txContent : [];
-            const sortedTx = [...txList].sort(
-                (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-            );
-            const chartData = sortedTx.map((tx) => ({
-                date: new Date(tx.createdAt).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }),
-                balance: Number(tx.balanceAfter),
-            }));
-            setBalancePoints(chartData);
-
-            const fx = fxRes.data ?? {};
-            const metals = metalsRes.data ?? {};
-            const crypto = cryptoRes.data ?? {};
-            const funds = fundsRes.data ?? {};
-            const equity = equityRes.data ?? {};
-            const newsContent = newsRes.data?.content ?? [];
+            const fx = pickData<Record<string, LatestPrice>>(0) ?? {};
+            const metals = pickData<Record<string, LatestPrice>>(1) ?? {};
+            const crypto = pickData<Record<string, LatestPrice>>(2) ?? {};
+            const funds = pickData<Record<string, LatestPrice>>(3) ?? {};
+            const equity = pickData<Record<string, LatestPrice>>(4) ?? {};
+            const newsPage = pickData<NewsPage>(5);
+            const newsContent = newsPage?.content ?? [];
             setLatestNews(newsContent.slice(0, 3));
+
+            const starred = pickData<StarredAssetsResponse>(6);
 
             const mapByType: Record<MarketType, Record<string, LatestPrice>> = {
                 FX: fx,
@@ -198,22 +251,21 @@ export function Dashboard() {
                 EQUITY: equity,
             };
 
-            const resolvedStars = starredRes.data?.resolved ?? [];
-            const starRows: StarAsset[] = resolvedStars
-                .map((item) => {
-                    const marketType = item.marketType as MarketType;
-                    const symbol = item.symbol;
-                    const row = mapByType[marketType]?.[symbol];
-                    return {
-                        key: `${marketType}-${symbol}`,
-                        label: formatAssetLabel(symbol, marketType),
-                        code: symbol,
-                        marketType,
-                        symbol,
-                        price: getPrice(row),
-                        change24h: 0,
-                    } satisfies StarAsset;
-                });
+            const resolvedStars = starred?.resolved ?? [];
+            const starRows: StarAsset[] = resolvedStars.map((item) => {
+                const marketType = item.marketType as MarketType;
+                const symbol = item.symbol;
+                const row = mapByType[marketType]?.[symbol];
+                return {
+                    key: `${marketType}-${symbol}`,
+                    label: formatAssetLabel(symbol, marketType),
+                    code: symbol,
+                    marketType,
+                    symbol,
+                    price: getPrice(row),
+                    change24h: 0,
+                } satisfies StarAsset;
+            });
 
             const changeResults = await Promise.allSettled(
                 starRows.map((row) =>
@@ -241,7 +293,6 @@ export function Dashboard() {
                             : 0,
                 }))
             );
-            hasLoadedOnceRef.current = true;
         } catch (err: any) {
             const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Bilinmeyen hata';
             if (!silent || !hasLoadedOnceRef.current) setError(msg);

@@ -33,6 +33,7 @@ type SimulationResponse = {
     pnlPct: number;
     buyPriceSource: 'SYSTEM_HISTORY' | 'USER_INPUT' | string;
     historicalPriceDate: string | null;
+    qualityFlag?: 'EXACT' | 'PREVIOUS_DAY' | 'FALLBACK' | 'MISSING' | string;
     performanceSeries: SimulationPerformancePoint[];
     message: string;
 };
@@ -48,6 +49,9 @@ type SimulationResultItem = {
     pnl: number;
     pnlPct: number;
     currentValue: number;
+    buyPriceSource: string;
+    historicalPriceDate: string;
+    qualityFlag: string;
     series: SimulationPerformancePoint[];
     visible: boolean;
     message: string;
@@ -161,6 +165,9 @@ export function Simulation() {
             pnl: Number(dto.pnlTry ?? 0),
             pnlPct: Number(dto.pnlPct ?? 0),
             currentValue: Number(dto.currentValueTry ?? 0),
+            buyPriceSource: dto.buyPriceSource ?? 'SYSTEM_HISTORY',
+            historicalPriceDate: dto.historicalPriceDate ?? buyDate,
+            qualityFlag: dto.qualityFlag ?? 'EXACT',
             series: (dto.performanceSeries ?? []).map((p) => ({
                 date: p.date,
                 priceTry: Number(p.priceTry ?? 0),
@@ -244,6 +251,9 @@ export function Simulation() {
             'currentValueTRY',
             'pnlTRY',
             'pnlPct',
+            'buyPriceSource',
+            'historicalPriceDate',
+            'qualityFlag',
             'visible',
         ];
         const esc = (v: string | number | boolean) => `"${String(v).replaceAll('"', '""')}"`;
@@ -259,6 +269,9 @@ export function Simulation() {
                 r.currentValue,
                 r.pnl,
                 r.pnlPct,
+                r.buyPriceSource,
+                r.historicalPriceDate,
+                r.qualityFlag,
                 r.visible,
             ].map(esc).join(',')
         );
@@ -499,13 +512,14 @@ export function Simulation() {
                                 <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Alış</th>
                                 <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Güncel</th>
                                 <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>PNL</th>
+                                <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Kaynak/Tarih/Kalite</th>
                                 <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>İşlem</th>
                             </tr>
                         </thead>
                         <tbody>
                             {displayedResults.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} style={{ padding: 10, color: tokens.textMuted, textAlign: 'center' }}>
+                                    <td colSpan={8} style={{ padding: 10, color: tokens.textMuted, textAlign: 'center' }}>
                                         Henüz simülasyon yok.
                                     </td>
                                 </tr>
@@ -532,6 +546,24 @@ export function Simulation() {
                                         <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
                                             <span style={{ color: r.pnl >= 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>
                                                 {fmtMoney(r.pnl)} ({r.pnlPct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%)
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
+                                            <div style={{ fontSize: '0.8rem' }}>{r.buyPriceSource}</div>
+                                            <div style={{ color: tokens.textMuted, fontSize: '0.75rem' }}>{new Date(r.historicalPriceDate).toLocaleDateString('tr-TR')}</div>
+                                            <span
+                                                style={{
+                                                    display: 'inline-block',
+                                                    marginTop: 4,
+                                                    borderRadius: 999,
+                                                    padding: '2px 8px',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: 700,
+                                                    background: r.qualityFlag === 'EXACT' ? 'rgba(34,197,94,.2)' : r.qualityFlag === 'PREVIOUS_DAY' ? 'rgba(245,158,11,.2)' : 'rgba(239,68,68,.2)',
+                                                    color: r.qualityFlag === 'EXACT' ? '#22c55e' : r.qualityFlag === 'PREVIOUS_DAY' ? '#f59e0b' : '#ef4444',
+                                                }}
+                                            >
+                                                {r.qualityFlag}
                                             </span>
                                         </td>
                                         <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
