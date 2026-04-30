@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:nrs_finance_test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  liquibase:
+    enabled: false
+  kafka:
+    bootstrap-servers: localhost:65535
+    listener:
+      auto-startup: false
+  data:
+    redis:
+      host: localhost
+      port: 65535
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:65535/realms/test
+
+market-data:
+  base-url: http://localhost:65535
+
+app:
+  kafka:
+    listeners-enabled: false

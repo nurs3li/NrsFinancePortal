@@ -21,6 +21,8 @@ public class KafkaConsumerConfig {
 
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
+    @Value("${app.kafka.listeners-enabled:true}")
+    private boolean listenersEnabled;
 
     @Bean
     public ConsumerFactory<String, WhaleAlertTriggeredEvent> whaleAlertConsumerFactory() {
@@ -54,6 +56,7 @@ public class KafkaConsumerConfig {
                 new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(whaleAlertConsumerFactory());
+        factory.setAutoStartup(listenersEnabled);
 
         // Error handling
         factory.setCommonErrorHandler(new org.springframework.kafka.listener.DefaultErrorHandler());
@@ -89,6 +92,7 @@ public class KafkaConsumerConfig {
                 new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(tradeCreatedConsumerFactory());
+        factory.setAutoStartup(listenersEnabled);
         factory.setCommonErrorHandler(new org.springframework.kafka.listener.DefaultErrorHandler());
 
         return factory;

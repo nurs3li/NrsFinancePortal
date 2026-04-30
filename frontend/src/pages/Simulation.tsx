@@ -11,6 +11,8 @@ import {
 } from 'recharts';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { Trash2 } from 'lucide-react';
+import './TerminalPages.css';
 
 type AssetType = 'CRYPTO' | 'FX' | 'FUND' | 'METAL' | 'STOCK';
 
@@ -310,13 +312,28 @@ export function Simulation() {
     };
 
     return (
-        <div style={pageStyle}>
+        <div
+            style={
+                {
+                    ...pageStyle,
+                    '--tp-bg': '#0a192f',
+                    '--tp-card': tokens.bgCard,
+                    '--tp-border': tokens.border,
+                    '--tp-text': tokens.text,
+                    '--tp-muted': tokens.textMuted,
+                    '--tp-success': '#22c55e',
+                    '--tp-danger': '#ef4444',
+                } as React.CSSProperties
+            }
+            className="terminal-pages-root"
+        >
             <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>Portföy Analiz Aracı</h1>
             <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 16 }}>
                 Çoklu simülasyon ekle, varlıkları karşılaştır, kümülatif getiri eğrilerini aynı grafikte takip et.
             </p>
 
             <div
+                className="tp-card"
                 style={{
                     ...cardStyle,
                     marginBottom: 16,
@@ -324,7 +341,7 @@ export function Simulation() {
                     top: 12,
                     zIndex: 3,
                     boxShadow: '0 6px 20px rgba(2, 6, 23, 0.35)',
-                    background: 'linear-gradient(180deg, rgba(3,10,30,0.96) 0%, rgba(9,18,40,0.96) 100%)',
+                    background: tokens.bgCard,
                 }}
             >
                 <form
@@ -414,7 +431,7 @@ export function Simulation() {
 
             {error && <div style={{ ...cardStyle, borderColor: tokens.error, color: tokens.error, marginBottom: 16 }}>Hata: {error}</div>}
 
-            <div style={{ ...cardStyle, marginBottom: 16 }}>
+            <div className="tp-card" style={{ ...cardStyle, marginBottom: 16 }}>
                 <h2 style={{ marginTop: 0, marginBottom: 10, fontSize: '1rem' }}>Karşılaştırmalı Performans Grafiği</h2>
                 <div style={{ color: tokens.textMuted, fontSize: '0.8125rem', marginBottom: 12 }}>
                     Kümülatif getiri (%) — parlak lacivert/silver tema
@@ -422,12 +439,12 @@ export function Simulation() {
                 {visibleResults.length === 0 || chartData.length === 0 ? (
                     <p style={{ color: tokens.textMuted, margin: 0 }}>Grafikte göstermek için en az bir simülasyon ekleyip görünür yap.</p>
                 ) : (
-                    <div style={{ width: '100%', height: 360, background: 'linear-gradient(180deg,#071429 0%,#0b1733 100%)', borderRadius: 10, padding: 8 }}>
+                    <div style={{ width: '100%', height: 360, background: tokens.inputBg, borderRadius: 10, padding: 8 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 8 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                <XAxis dataKey="date" tick={{ fill: '#cbd5e1', fontSize: 11 }} />
-                                <YAxis tick={{ fill: '#cbd5e1', fontSize: 11 }} tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
+                                <CartesianGrid strokeDasharray="3 3" stroke={tokens.border} />
+                                <XAxis dataKey="date" tick={{ fill: tokens.textMuted, fontSize: 11 }} />
+                                <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
                                 <Tooltip
                                     formatter={(v: number | string | undefined) =>
                                         v == null ? '' : `${Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%`
@@ -454,7 +471,7 @@ export function Simulation() {
                 )}
             </div>
 
-            <div style={cardStyle}>
+            <div className="tp-card" style={cardStyle}>
                 <div
                     style={{
                         display: 'flex',
@@ -503,7 +520,7 @@ export function Simulation() {
                     </div>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                    <table className="tp-table">
                         <thead>
                             <tr>
                                 <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Görünür</th>
@@ -525,7 +542,7 @@ export function Simulation() {
                                 </tr>
                             ) : (
                                 displayedResults.map((r) => (
-                                    <tr key={r.id}>
+                                    <tr key={r.id} className="tp-table-row-hover">
                                         <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
                                             <button
                                                 type="button"
@@ -540,10 +557,10 @@ export function Simulation() {
                                             <div>{r.assetName}</div>
                                             <div style={{ color: tokens.textMuted, fontSize: '0.75rem' }}>{r.assetType} • {new Date(r.buyDate).toLocaleDateString('tr-TR')}</div>
                                         </td>
-                                        <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.initialAmount)}</td>
-                                        <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.buyPrice)}</td>
-                                        <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.currentPrice)}</td>
-                                        <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
+                                        <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.initialAmount)}</td>
+                                        <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.buyPrice)}</td>
+                                        <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.currentPrice)}</td>
+                                        <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
                                             <span style={{ color: r.pnl >= 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>
                                                 {fmtMoney(r.pnl)} ({r.pnlPct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%)
                                             </span>
@@ -570,9 +587,11 @@ export function Simulation() {
                                             <button
                                                 type="button"
                                                 onClick={() => setSimulationResults((prev) => prev.filter((x) => x.id !== r.id))}
+                                                className="tp-icon-btn tp-icon-btn-danger"
                                                 style={{ borderRadius: 6, border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: '#ef4444', padding: '4px 8px', cursor: 'pointer' }}
+                                                title="Sil"
                                             >
-                                                Sil
+                                                <Trash2 size={14} />
                                             </button>
                                         </td>
                                     </tr>

@@ -12,6 +12,13 @@ type TransactionRow = {
     createdAt: string;
 };
 
+function unwrapPayload<T>(payload: unknown): T {
+    if (payload && typeof payload === 'object' && 'data' in (payload as object)) {
+        return (payload as { data: T }).data;
+    }
+    return payload as T;
+}
+
 function toISOStartOfDay(date: Date): string {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
@@ -48,10 +55,14 @@ export function Transactions() {
         financeClient
             .get(url, { params })
             .then((res) => {
-                const content = res.data?.content ?? res.data ?? [];
+                const body = unwrapPayload<{ content?: TransactionRow[]; totalPages?: number; totalElements?: number } | TransactionRow[]>(res.data);
+                const content = Array.isArray(body) ? body : body?.content ?? [];
                 const list = Array.isArray(content) ? content : [];
                 setItems(list);
-                const total = res.data?.totalPages ?? res.data?.totalElements ?? list.length;
+                const total =
+                    !Array.isArray(body) && typeof body === 'object'
+                        ? body?.totalPages ?? body?.totalElements ?? list.length
+                        : list.length;
                 setTotalPages(typeof total === 'number' ? Math.max(0, total - 1) : 0);
             })
             .catch((err) => {
