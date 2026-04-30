@@ -38,12 +38,20 @@ public class ViopIngestService {
                 )).toList();
 
         LocalDateTime now = LocalDateTime.now();
-        List<SeedContract> seeds = !realRows.isEmpty()
-                ? realRows
-                : List.of(
-                    new SeedContract("XU0300626", "XU030", "2026-06-30", "FUTURES", new BigDecimal("12400"), new BigDecimal("12335"), 145_000L),
-                    new SeedContract("USDTRY0626", "USDTRY", "2026-06-30", "FUTURES", new BigDecimal("45.20"), new BigDecimal("44.95"), 92_000L)
-                );
+        List<SeedContract> defaults = List.of(
+                new SeedContract("XU0300626", "XU030", "2026-06-30", "FUTURES", new BigDecimal("12400"), new BigDecimal("12335"), 145_000L),
+                new SeedContract("USDTRY0626", "USDTRY", "2026-06-30", "FUTURES", new BigDecimal("45.20"), new BigDecimal("44.95"), 92_000L),
+                new SeedContract("EURTRY0626", "EURTRY", "2026-06-30", "FUTURES", new BigDecimal("52.60"), new BigDecimal("52.35"), 61_000L),
+                new SeedContract("ALTIN0626", "ALTIN", "2026-06-30", "FUTURES", new BigDecimal("3150.00"), new BigDecimal("3128.00"), 44_000L)
+        );
+        java.util.LinkedHashMap<String, SeedContract> merged = new java.util.LinkedHashMap<>();
+        for (SeedContract r : realRows) {
+            merged.put(r.contractCode(), r);
+        }
+        for (SeedContract d : defaults) {
+            merged.putIfAbsent(d.contractCode(), d);
+        }
+        List<SeedContract> seeds = List.copyOf(merged.values());
 
         for (SeedContract s : seeds) {
             DerivativeContract contract = contractRepository.findByContractCode(s.contractCode())
