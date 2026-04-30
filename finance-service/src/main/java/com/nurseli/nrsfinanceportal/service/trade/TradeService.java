@@ -38,12 +38,14 @@ public class TradeService {
     private final PortfolioAssetRepository portfolioAssetRepository;
     private final TradeRepository tradeRepository;
     private final PriceLookupService priceLookupService;
+    private final OrderValidator orderValidator;
     private final TransactionService transactionService;
     private final ApplicationEventPublisher eventPublisher;
     private final TimelineCacheInvalidationService timelineCacheInvalidationService;
 
     @Transactional
     public TradeResponse execute(TradeRequest request) {
+        TradeRequest normalized = orderValidator.normalizeAndValidate(request);
 
         User user = currentUserResolver.getOrCreateCurrentUser();
         if (accountRepository.existsByUser_IdAndStatus(user.getId(), AccountStatus.FROZEN)) {
@@ -60,21 +62,21 @@ public class TradeService {
                 .orElseThrow(() -> new IllegalStateException("Balance not found"));
 
         BigDecimal tryPrice = priceLookupService.getTryPrice(
-                request.assetType(),
-                request.symbol()
+                normalized.assetType(),
+                normalized.symbol()
         );
 
-        BigDecimal totalTry = tryPrice.multiply(request.quantity());
+        BigDecimal totalTry = tryPrice.multiply(normalized.quantity());
 
         PortfolioAsset asset = portfolioAssetRepository
                 .findByUserAndTypeAndSymbol(
                         user,
-                        request.assetType(),
-                        request.symbol()
+                        normalized.assetType(),
+                        normalized.symbol()
                 )
                 .orElse(null);
 
-        if (request.tradeType() == TradeType.BUY) {
+        if (normalized.tradeType() == TradeType.BUY) {
 
             if (balance.getAmount().compareTo(totalTry) < 0) {
                 throw new IllegalStateException(
@@ -93,10 +95,10 @@ public class TradeService {
 
             Trade trade = Trade.create(
                     user,
-                    request.tradeType(),
-                    request.assetType(),
-                    request.symbol(),
-                    request.quantity(),
+                    normalized.tradeType(),
+                    normalized.assetType(),
+                    normalized.symbol(),
+                    normalized.quantity(),
                     tx.getId()
             );
             tradeRepository.save(trade);
@@ -104,41 +106,41 @@ public class TradeService {
             if (asset == null) {
                 asset = PortfolioAsset.create(
                         user,
-                        request.assetType(),
-                        request.symbol(),
-                        request.quantity()
+                        normalized.assetType(),
+                        normalized.symbol(),
+                        normalized.quantity()
                 );
             } else {
-                asset.increase(request.quantity());
+                asset.increase(normalized.quantity());
             }
 
             portfolioAssetRepository.save(asset);
 
             timelineCacheInvalidationService.invalidateUserTimeline(user.getId());
 
-            String normalizedSymbol = SymbolNormalizer.normalize(request.assetType(), request.symbol());
+            String normalizedSymbol = SymbolNormalizer.normalize(normalized.assetType(), normalized.symbol());
             eventPublisher.publishEvent(
                     new TradeCreatedEvent(
                             trade.getId(),
                             user.getId(),
-                            request.tradeType(),
-                            request.assetType(),
+                            normalized.tradeType(),
+                            normalized.assetType(),
                             normalizedSymbol,
-                            request.quantity(),
+                            normalized.quantity(),
                             tryPrice,
                             totalTry,
                             Instant.now()
                     )
             );
 
-            return response(request, tryPrice, totalTry, balanceAfter);
+            return response(normalized, tryPrice, totalTry, balanceAfter);
         }
 
-        if (asset == null || asset.getQuantity().compareTo(request.quantity()) < 0) {
+        if (asset == null || asset.getQuantity().compareTo(normalized.quantity()) < 0) {
             throw new IllegalStateException("Insufficient asset quantity");
         }
 
-        asset.decrease(request.quantity());
+        asset.decrease(normalized.quantity());
 
         BigDecimal balanceAfter = balance.increase(totalTry);
 
@@ -151,10 +153,10 @@ public class TradeService {
 
         Trade trade = Trade.create(
                 user,
-                request.tradeType(),
-                request.assetType(),
-                request.symbol(),
-                request.quantity(),
+                normalized.tradeType(),
+                normalized.assetType(),
+                normalized.symbol(),
+                normalized.quantity(),
                 tx.getId()
         );
         tradeRepository.save(trade);
@@ -167,22 +169,22 @@ public class TradeService {
 
         timelineCacheInvalidationService.invalidateUserTimeline(user.getId());
 
-        String normalizedSymbolSell = SymbolNormalizer.normalize(request.assetType(), request.symbol());
+        String normalizedSymbolSell = SymbolNormalizer.normalize(normalized.assetType(), normalized.symbol());
         eventPublisher.publishEvent(
                 new TradeCreatedEvent(
                         trade.getId(),
                         user.getId(),
-                        request.tradeType(),
-                        request.assetType(),
+                        normalized.tradeType(),
+                        normalized.assetType(),
                         normalizedSymbolSell,
-                        request.quantity(),
+                        normalized.quantity(),
                         tryPrice,
                         totalTry,
                         Instant.now()
                 )
         );
 
-        return response(request, tryPrice, totalTry, balanceAfter);
+        return response(normalized, tryPrice, totalTry, balanceAfter);
     }
 
     private Account ensureCashAccount(User user) {

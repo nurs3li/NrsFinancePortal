@@ -4,6 +4,7 @@ import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.domain.trade.TradeType;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 /**
  * UI'dan gelen trade isteği.
@@ -12,5 +13,7 @@ public record TradeRequest(
         AssetType assetType,   // CRYPTO, FX, FUND, METAL
         String symbol,          // BTCUSDT, USDTRY, AES...
         BigDecimal quantity,
-        TradeType tradeType     // BUY / SELL
+        TradeType tradeType,     // BUY / SELL
+        OrderTemplateType templateType,
+        Map<String, Object> attributes
 ) {}
