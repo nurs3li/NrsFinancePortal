@@ -32,11 +32,13 @@ public class FxProviderFacade {
         for (FxProvider fallback : providerRegistry.fxFallbackOrder()) {
             MarketPriceLatestResponse fromFallback = tryProvider(fallback, symbol, PriceQuality.FALLBACK);
             if (fromFallback != null) {
+                meterRegistry.counter("fx_provider_fallback_total", "from", primary.getName(), "to", fallback.getName()).increment();
                 return fromFallback;
             }
         }
         try {
             MarketPriceLatestResponse stale = queryService.getLatestOrThrow(symbol);
+            meterRegistry.counter("fx_provider_degraded_total", "stage", "DB_LAST").increment();
             return withQuality(stale, stale.source() == null ? "DB_LAST_KNOWN" : stale.source(), PriceQuality.STALE);
         } catch (Exception ex) {
             meterRegistry.counter("fx_provider_failure_total", "provider", "DB_LAST").increment();
@@ -52,7 +54,8 @@ public class FxProviderFacade {
                 return null;
             }
             meterRegistry.counter("fx_provider_success_total", "provider", provider.getName()).increment();
-            return withQuality(result, provider.getName(), quality);
+            String resolvedSource = (result.source() == null || result.source().isBlank()) ? provider.getName() : result.source();
+            return withQuality(result, resolvedSource, quality);
         } catch (Exception ex) {
             meterRegistry.counter("fx_provider_failure_total", "provider", provider.getName()).increment();
             return null;
