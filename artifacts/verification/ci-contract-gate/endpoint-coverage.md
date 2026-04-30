@@ -1,0 +1,10 @@
+# Endpoint Contract Coverage
+- total_api_endpoints: 2
+- in_scope_endpoints: 2
+- compliant_endpoints: 2
+- coverage_pct: 100.0
+- threshold_pct: 95.0
+- pass: True
+
+## Intentional Exceptions
+- `/api/fund-requests/receipts/{receiptId}`

@@ -1,0 +1,39 @@
+name: api-contract-gate
+
+on:
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+jobs:
+  contract-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Run finance-service tests
+        run: |
+          cd finance-service
+          ../mvnw -q test
+
+      - name: Run marketdata tests
+        run: |
+          cd marketdata
+          ../mvnw -q test
+
+      - name: Run endpoint contract coverage gate
+        run: |
+          python tools/endpoint_contract_gate.py
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: endpoint-contract-coverage
+          path: artifacts/verification/ci-contract-gate/*

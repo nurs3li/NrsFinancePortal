@@ -6,6 +6,7 @@ import com.nurseli.marketdata.application.provider.FundProvider;
 import com.nurseli.marketdata.application.provider.ProviderRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -21,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(FundMarketController.class)
+@AutoConfigureMockMvc(addFilters = false)
 class FundMarketControllerContractTest {
 
     @Autowired
@@ -54,6 +56,7 @@ class FundMarketControllerContractTest {
 
         mockMvc.perform(get("/api/market/funds/latest"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.SPY.source").value("ETF"));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.SPY.source").value("ETF"));
     }
 }

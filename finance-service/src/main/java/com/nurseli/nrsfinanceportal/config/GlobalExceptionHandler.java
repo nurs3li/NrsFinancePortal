@@ -1,6 +1,7 @@
 package com.nurseli.nrsfinanceportal.config;
 
 import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
+import com.nurseli.nrsfinanceportal.common.response.ApiErrorCode;
 import com.nurseli.nrsfinanceportal.domain.user.Role;
 import com.nurseli.nrsfinanceportal.integration.kafka.NotificationEventKafkaPublisher;
 import com.nurseli.nrsfinanceportal.integration.kafka.event.NotificationRequestedEvent;
@@ -39,8 +40,10 @@ public class GlobalExceptionHandler {
         this.userRepository = userRepository;
     }
 
-    private static Map<String, Object> errorBody(String message, HttpServletRequest request) {
+    private static Map<String, Object> errorBody(String code, String message, HttpServletRequest request) {
         Map<String, Object> map = new LinkedHashMap<>();
+        map.put("code", code);
+        map.put("message", message);
         map.put("timestamp", Instant.now().toString());
         map.put("error", message);
         map.put("path", request != null ? request.getRequestURI() : null);
@@ -53,7 +56,7 @@ public class GlobalExceptionHandler {
         log.warn("[EXCEPTION] IllegalArgumentException: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(errorBody(ex.getMessage(), request)));
+                .body(ApiResponse.error(errorBody(ApiErrorCode.BAD_REQUEST, ex.getMessage(), request)));
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -61,7 +64,7 @@ public class GlobalExceptionHandler {
         log.warn("[EXCEPTION] IllegalStateException: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
-                .body(ApiResponse.error(errorBody(ex.getMessage(), request)));
+                .body(ApiResponse.error(errorBody(ApiErrorCode.RESOURCE_NOT_FOUND, ex.getMessage(), request)));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
@@ -69,7 +72,7 @@ public class GlobalExceptionHandler {
         log.warn("[EXCEPTION] AccessDenied: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error(errorBody("Access denied", request)));
+                .body(ApiResponse.error(errorBody(ApiErrorCode.ACCESS_DENIED, "Access denied", request)));
     }
 
     @ExceptionHandler(Exception.class)
@@ -80,7 +83,7 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(errorBody("Internal server error", request)));
+                .body(ApiResponse.error(errorBody(ApiErrorCode.INTERNAL_SERVER_ERROR, "Internal server error", request)));
     }
 
     private void notifyAdminsOnError(Exception ex, HttpServletRequest request) {

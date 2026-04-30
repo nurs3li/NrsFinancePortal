@@ -5,19 +5,25 @@ public class ApiResponse<T> {
     private boolean success;
     private T data;
     private Object errors;
+    private Object meta;
 
-    private ApiResponse(boolean success, T data, Object errors) {
+    private ApiResponse(boolean success, T data, Object errors, Object meta) {
         this.success = success;
         this.data = data;
         this.errors = errors;
+        this.meta = meta;
     }
 
     public static <T> ApiResponse<T> success(T data) {
-        return new ApiResponse<>(true, data, null);
+        return new ApiResponse<>(true, data, null, null);
+    }
+
+    public static <T> ApiResponse<T> success(T data, Object meta) {
+        return new ApiResponse<>(true, data, null, meta);
     }
 
     public static ApiResponse<?> error(Object errors) {
-        return new ApiResponse<>(false, null, errors);
+        return new ApiResponse<>(false, null, errors, null);
     }
 
     public boolean isSuccess() {
@@ -30,5 +36,9 @@ public class ApiResponse<T> {
 
     public Object getErrors() {
         return errors;
+    }
+
+    public Object getMeta() {
+        return meta;
     }
 }

@@ -25,6 +25,11 @@ spring:
     redis:
       host: localhost
       port: 6379
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/nrs-finance}
 
 management:
   endpoints:
@@ -37,6 +42,22 @@ market:
     enabled: true
     apiKey: ${EVDS_API_KEY:}
     timeoutMs: 3000
+    debt:
+      enabled: ${EVDS_DEBT_ENABLED:false}
+      lookbackDays: ${EVDS_DEBT_LOOKBACK_DAYS:14}
+      instruments:
+        - isin: ${EVDS_DEBT_ISIN_1:TRT120228T10}
+          name: ${EVDS_DEBT_NAME_1:TR Hazine Tahvili 2028}
+          issuer: ${EVDS_DEBT_ISSUER_1:Hazine}
+          maturityDate: ${EVDS_DEBT_MATURITY_1:2028-02-12}
+          dirtyPriceSeries: ${EVDS_DEBT_DIRTY_PRICE_SERIES_1:}
+          yieldSeries: ${EVDS_DEBT_YIELD_SERIES_1:}
+        - isin: ${EVDS_DEBT_ISIN_2:TRT010531T16}
+          name: ${EVDS_DEBT_NAME_2:TR Hazine Bonosu 2031}
+          issuer: ${EVDS_DEBT_ISSUER_2:Hazine}
+          maturityDate: ${EVDS_DEBT_MATURITY_2:2031-05-01}
+          dirtyPriceSeries: ${EVDS_DEBT_DIRTY_PRICE_SERIES_2:}
+          yieldSeries: ${EVDS_DEBT_YIELD_SERIES_2:}
   providers:
     viop:
       enabled: false
@@ -45,11 +66,11 @@ market:
       timeoutMs: 3000
       latestPath: /viop/latest
     debt:
-      enabled: false
+      enabled: ${DEBT_PROVIDER_ENABLED:false}
       baseUrl: ${DEBT_PROVIDER_BASE_URL:}
       apiKey: ${DEBT_PROVIDER_API_KEY:}
       timeoutMs: 3000
-      latestPath: /debt/latest
+      latestPath: ${DEBT_PROVIDER_LATEST_PATH:/debt/latest}
 
 
 app:
@@ -94,6 +115,9 @@ app:
     fx:
       canonical: TCMB
       fallback-order: [BANK, EVDS]
+      # BANK provider ücretsiz ve güvenli degrade için EVDS proxy kullanabilir.
+      # BANK canlı kaynak yoksa sistem boş map dönmek yerine EVDS ile devam eder.
+      bank-proxy-evds-enabled: true
     fund:
       canonical: ETF
       fallback-order: []

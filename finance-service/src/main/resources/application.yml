@@ -58,6 +58,8 @@ management:
     health:
       show-details: when_authorized
 app:
+  trade:
+    order-form-v2-enabled: false
   rate-limit:
     enabled: true
     max-requests-per-minute: 20
