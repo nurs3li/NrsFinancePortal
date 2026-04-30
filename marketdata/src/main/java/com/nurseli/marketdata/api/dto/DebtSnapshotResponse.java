@@ -7,6 +7,11 @@ public record DebtSnapshotResponse(
         String isin,
         BigDecimal dirtyPrice,
         BigDecimal yieldPct,
+        String maturityDate,
+        Long daysToMaturity,
+        BigDecimal couponRate,
         String source,
-        LocalDateTime asOf
+        LocalDateTime asOf,
+        String quality,
+        Boolean synthetic
 ) {}
