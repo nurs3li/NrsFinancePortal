@@ -18,6 +18,11 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - name: Setup Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
       - name: Run finance-service tests
         run: |
           cd finance-service
@@ -30,7 +35,7 @@ jobs:
 
       - name: Run endpoint contract coverage gate
         run: |
-          python tools/endpoint_contract_gate.py
+          python3 tools/endpoint_contract_gate.py
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
