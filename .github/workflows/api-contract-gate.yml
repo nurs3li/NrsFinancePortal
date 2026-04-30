@@ -26,12 +26,12 @@ jobs:
       - name: Run finance-service tests
         run: |
           cd finance-service
-          ../mvnw -q test
+          bash ../mvnw -q test
 
       - name: Run marketdata tests
         run: |
           cd marketdata
-          ../mvnw -q test
+          bash ../mvnw -q test
 
       - name: Run endpoint contract coverage gate
         run: |
