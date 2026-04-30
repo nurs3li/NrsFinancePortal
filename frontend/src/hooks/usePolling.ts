@@ -9,7 +9,10 @@ export function usePolling(
     enabled = true
 ) {
     const refetchRef = useRef(refetch);
-    refetchRef.current = refetch;
+
+    useEffect(() => {
+        refetchRef.current = refetch;
+    }, [refetch]);
 
     useEffect(() => {
         if (!enabled || intervalMs <= 0) return;

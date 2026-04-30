@@ -10,6 +10,13 @@ function fmtPct(v: number): string {
     return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
 }
 
+function unwrapData<T>(payload: unknown): T {
+    if (payload && typeof payload === 'object' && 'data' in (payload as object)) {
+        return (payload as { data: T }).data;
+    }
+    return payload as T;
+}
+
 export function MarketHeatmap() {
     const navigate = useNavigate();
     const { tokens } = useTheme();
@@ -19,7 +26,7 @@ export function MarketHeatmap() {
 
     const { data, isLoading, error } = useQuery({
         queryKey: ['market', 'dashboard'],
-        queryFn: () => financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => r.data),
+        queryFn: () => financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => unwrapData<MarketDashboard>(r.data)),
         refetchInterval: 60_000,
     });
 

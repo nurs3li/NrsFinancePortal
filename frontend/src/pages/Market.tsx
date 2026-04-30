@@ -1,1017 +1,1633 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import type { AxiosResponse } from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { financeClient, marketClient } from '../api/client';
+import type { LatestPriceRow, MarketDashboard } from '../components/market/marketTypes';
 import { useTheme } from '../theme/ThemeContext';
-import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
-import { usePolling } from '../hooks/usePolling';
-import { Coins, DollarSign, TrendingUp, type LucideIcon } from 'lucide-react';
-import type { LatestPriceRow, MarketDashboard, TabId } from '../components/market/marketTypes';
-import {
-    formatAssetLabel,
-    getDynamicLogoUrl,
-    tabIdToMarketKind,
-    type MarketKind,
-} from '../lib/assetBranding';
-import { AssetLogo } from '../components/AssetLogo';
-import { sparklineClosesFor, volatilityForSymbol } from '../components/market/marketSparklineMap';
-import { MarketSparkline } from '../components/market/MarketSparkline';
-import { MarketFinvizTreemap } from '../components/market/MarketFinvizTreemap';
-import { MarketIndicatorAreaChart } from '../components/market/MarketIndicatorAreaChart';
+import { formatAssetLabel } from '../lib/assetBranding';
+import { MarketFinvizTreemap, type TreemapTile } from '../components/market/MarketFinvizTreemap';
+import { MarketTerminalChart } from '../components/market/MarketTerminalChart';
 import { MarketCompareLwChart } from '../components/market/MarketCompareLwChart';
+import { usePolling } from '../hooks/usePolling';
+import './MarketTerminal.css';
 
-type IndicatorPoint = {
-    t: string;
-    value: number;
-};
-
-type IndicatorsResponse = {
-    type: string;
+type MarketInstrument = {
     symbol: string;
-    days: number;
-    close: IndicatorPoint[];
-    ma: Record<string, IndicatorPoint[]>;
-    trend: {
-        direction: string;
-        slope: number;
-        normalizedReturn: number;
-        strength: number;
+    category: MarketCategory;
+    price: number;
+    changePercent: number;
+    trend: 'UP' | 'DOWN';
+    high?: number;
+    low?: number;
+    volume?: number | null;
+    metrics?: {
+        basis?: number;
+        yield?: number;
     };
 };
-
-type CandlePoint = {
-    t: string;
-    o: number;
-    h: number;
-    l: number;
-    c: number;
-    v: number;
+type InstrumentType = 'STOCK' | 'BOND' | 'FUTURES';
+type InstrumentVm = MarketInstrument & {
+    type: InstrumentType;
+    typeBadge: 'S' | 'B' | 'V';
+    displayName: string;
+    sparkline: number[];
+    maturityDate?: string;
+    daysToMaturity?: number;
+    couponRate?: number;
+    yieldToMaturity?: number;
+    contractMonth?: string;
+    expiryDate?: string;
+    marginRequirement?: number;
+    longShort?: 'LONG' | 'SHORT' | 'NÖTR';
 };
 
-type BatchHistoryResponse = {
-    series: Record<string, CandlePoint[]>;
+type IndicatorPoint = { t: string; value: number };
+type IndicatorsResponse = {
+    close: IndicatorPoint[];
+    ma: Record<string, IndicatorPoint[]>;
 };
-
-type CompareRow = { time: string; values: Record<string, number> };
-type StarSelection = { marketType: string; symbol: string; position?: number };
-type StarredAssetsResponse = {
-    maxItems: number;
-    selected: StarSelection[];
-    resolved: { marketType: string; symbol: string; position: number; defaultFilled: boolean }[];
+type CandlePoint = { t: string; o: number; h: number; l: number; c: number; v: number };
+type BatchHistoryResponse = { series: Record<string, CandlePoint[]> };
+type NewsItem = {
+    id: number;
+    title: string;
+    source?: string | null;
+    publishedAt: string;
+    summary?: string | null;
 };
-type ViopContract = { contractCode: string; underlying: string; expiry: string; type: string };
+type NewsPage = { content: NewsItem[] };
+type WhaleSummary = { triggeredAt?: string; impactScore?: number };
+type DashboardSummaryResponse = { whale?: WhaleSummary };
 type ViopSnapshot = {
     contractCode: string;
+    expiryDate?: string;
+    contractMonth?: string;
     price: number;
     basis: number;
     annualizedBasisPct: number;
-    openInterest: number;
-    oiPriceRegime: string;
-    source: string;
-    asOf: string;
+    marginRequirement?: number;
+    longShortIndicator?: 'LONG' | 'SHORT' | 'NEUTRAL';
+    openInterest?: number;
+    asOf?: string;
 };
+type DebtSnapshot = {
+    isin: string;
+    dirtyPrice: number;
+    yieldPct: number;
+    maturityDate?: string;
+    daysToMaturity?: number;
+    couponRate?: number;
+    asOf?: string;
+    source?: string;
+    quality?: 'EXACT' | 'FALLBACK' | 'STALE' | string;
+    synthetic?: boolean;
+};
+type ViopContract = { contractCode: string; underlying: string; expiry: string; type: string };
 type DebtInstrument = { isin: string; name: string; issuer: string; maturityDate: string };
-type DebtSnapshot = { isin: string; dirtyPrice: number; yieldPct: number; source: string; asOf: string };
+type MarketCategory = 'EQUITY' | 'CRYPTO' | 'FX' | 'FUTURES' | 'BOND';
+type CompareRow = { time: string; values: Record<string, number> };
+type NewsTone = 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
+type NewsMarkerVm = {
+    id: string;
+    time: string;
+    tone: NewsTone;
+    count: number;
+    items: NewsItem[];
+    matchedSymbols: string[];
+    relevanceScore: number;
+    impact: 'HIGH' | 'MEDIUM' | 'LOW';
+};
+type LiveTick = { category: MarketCategory; symbol: string; price: number; changePercent: number; volume: number };
+type LivePayload = { ts: string; ticks: LiveTick[] };
 
-const DAYS_OPTIONS = [7, 14, 30];
-const COMPARE_COLORS = ['#38bdf8', '#22c55e', '#eab308', '#f87171'];
+const RANGE_TO_DAYS: Record<'1D' | '1W' | '1M' | '1Y', number> = {
+    '1D': 1,
+    '1W': 7,
+    '1M': 30,
+    '1Y': 365,
+};
+const CATEGORY_LABELS: { id: MarketCategory; label: string }[] = [
+    { id: 'EQUITY', label: 'Hisse' },
+    { id: 'CRYPTO', label: 'Kripto' },
+    { id: 'FX', label: 'Döviz' },
+    { id: 'FUTURES', label: 'VİOP' },
+    { id: 'BOND', label: 'Tahvil' },
+];
 
-function fallbackForMarket(m: MarketKind): { Icon: LucideIcon; color: string } {
-    switch (m) {
-        case 'FX':
-            return { Icon: DollarSign, color: '#22c55e' };
-        case 'METALS':
-            return { Icon: Coins, color: '#eab308' };
-        case 'CRYPTO':
-            return { Icon: TrendingUp, color: '#f7931a' };
-        case 'FUNDS':
-        case 'EQUITY':
-            return { Icon: TrendingUp, color: '#38bdf8' };
-        default:
-            return { Icon: TrendingUp, color: '#94a3b8' };
+function heatAssetClassForCategory(category: MarketCategory): string {
+    if (category === 'EQUITY') return 'STOCK';
+    if (category === 'CRYPTO') return 'CRYPTO';
+    if (category === 'FX') return 'FX';
+    return '';
+}
+
+function pickPrice(row: LatestPriceRow): number {
+    if (!row || row.status === 'NO_DATA') return 0;
+    return Number(row.buyPrice ?? row.buy ?? row.price ?? row.sellPrice ?? row.sell ?? 0);
+}
+
+function computeChangePct(closes: number[]): number {
+    if (!Array.isArray(closes) || closes.length < 2) return 0;
+    const first = Number(closes[0] ?? 0);
+    const last = Number(closes[closes.length - 1] ?? 0);
+    if (!first) return 0;
+    return ((last - first) / first) * 100;
+}
+
+function resolveChangePercent(closes: number[], fallback?: number): number {
+    const computed = computeChangePct(closes);
+    if (Number.isFinite(computed) && Math.abs(computed) > 1e-6) {
+        return computed;
     }
-}
-
-function resolveBuy(row: LatestPriceRow): number | null {
-    if (row.status === 'NO_DATA') return null;
-    if (row.buyPrice != null) return Number(row.buyPrice);
-    if (row.buy != null) return Number(row.buy);
-    if (row.price != null) return Number(row.price);
-    return null;
-}
-
-function resolveSell(row: LatestPriceRow): number | null {
-    if (row.status === 'NO_DATA') return null;
-    if (row.sellPrice != null) return Number(row.sellPrice);
-    if (row.sell != null) return Number(row.sell);
-    return null;
-}
-
-/** Sparkline uçlarından yaklaşık trend % (tablo Trend sütunu). */
-function sparkRangeChangePct(closes: number[]): number | null {
-    if (!closes || closes.length < 2) return null;
-    const a = closes[0];
-    const b = closes[closes.length - 1];
-    if (a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b) || a === 0) return null;
-    return ((b - a) / a) * 100;
-}
-
-function getMarketType(tab: TabId): 'FX' | 'CRYPTO' | 'METALS' | 'FUNDS' | 'EQUITY' {
-    switch (tab) {
-        case 'doviz':
-            return 'FX';
-        case 'crypto':
-            return 'CRYPTO';
-        case 'metals':
-            return 'METALS';
-        case 'funds':
-            return 'FUNDS';
-        case 'equity':
-            return 'EQUITY';
-        default:
-            return 'FX';
+    if (fallback != null && Number.isFinite(fallback)) {
+        return fallback;
     }
+    return 0;
 }
 
-function latestMapForTab(latest: MarketDashboard['latest'], tab: TabId): Record<string, LatestPriceRow> {
-    switch (tab) {
-        case 'doviz':
-            return latest.doviz ?? {};
-        case 'crypto':
-            return latest.crypto ?? {};
-        case 'metals':
-            return latest.metals ?? {};
-        case 'funds':
-            return latest.funds ?? {};
-        case 'equity':
-            return latest.stocks ?? {};
-        default:
-            return {};
+function movingAverage(candles: { time: string; close: number }[], window: number): { time: string; value: number }[] {
+    if (!candles.length || window <= 1) {
+        return candles.map((c) => ({ time: c.time, value: c.close }));
     }
+    const out: { time: string; value: number }[] = [];
+    let sum = 0;
+    for (let i = 0; i < candles.length; i += 1) {
+        sum += candles[i].close;
+        if (i >= window) {
+            sum -= candles[i - window].close;
+        }
+        if (i >= window - 1) {
+            out.push({
+                time: candles[i].time,
+                value: Number((sum / window).toFixed(6)),
+            });
+        }
+    }
+    return out;
+}
+
+function parseViopContractLabel(contractCode: string): string {
+    const m = contractCode.match(/^([A-Z0-9_]+?)(\d{2})(\d{2})$/);
+    if (!m) return contractCode;
+    const [, rawUnderlying, mm, yy] = m;
+    const monthMap: Record<string, string> = {
+        '01': 'Oca',
+        '02': 'Şub',
+        '03': 'Mar',
+        '04': 'Nis',
+        '05': 'May',
+        '06': 'Haz',
+        '07': 'Tem',
+        '08': 'Ağu',
+        '09': 'Eyl',
+        '10': 'Eki',
+        '11': 'Kas',
+        '12': 'Ara',
+    };
+    const underlyingMap: Record<string, string> = {
+        XU030: 'BIST30',
+        USDTRY: 'USD/TRY',
+        EURTRY: 'EUR/TRY',
+        ALTIN: 'Altın',
+    };
+    const underlying = underlyingMap[rawUnderlying] ?? rawUnderlying;
+    const month = monthMap[mm] ?? mm;
+    return `${underlying} Vadeli (${month} 20${yy})`;
+}
+
+function buildRsi(points: { time: string; close: number }[], period = 14): { time: string; value: number }[] {
+    if (points.length <= period) return [];
+    const out: { time: string; value: number }[] = [];
+    let gains = 0;
+    let losses = 0;
+
+    for (let i = 1; i <= period; i += 1) {
+        const diff = points[i].close - points[i - 1].close;
+        if (diff >= 0) gains += diff;
+        else losses -= diff;
+    }
+    let avgGain = gains / period;
+    let avgLoss = losses / period;
+    const firstRs = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    out.push({ time: points[period].time, value: Number(firstRs.toFixed(2)) });
+
+    for (let i = period + 1; i < points.length; i += 1) {
+        const diff = points[i].close - points[i - 1].close;
+        const gain = diff > 0 ? diff : 0;
+        const loss = diff < 0 ? -diff : 0;
+        avgGain = (avgGain * (period - 1) + gain) / period;
+        avgLoss = (avgLoss * (period - 1) + loss) / period;
+        const rs = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+        out.push({ time: points[i].time, value: Number(rs.toFixed(2)) });
+    }
+    return out;
+}
+
+function toDayKey(value: string): string {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value.slice(0, 10);
+    return d.toISOString().slice(0, 10);
+}
+
+function classifyNewsTone(title: string): NewsTone {
+    const t = title.toLocaleLowerCase('tr-TR');
+    const negative = ['düşüş', 'kriz', 'zarar', 'iflas', 'gerile', 'savaş', 'enflasyon artt', 'risk'];
+    const positive = ['yükseliş', 'rekor', 'büyüme', 'kazanç', 'artış', 'anlaşma', 'güçlü', 'olumlu'];
+    if (negative.some((k) => t.includes(k))) return 'NEGATIVE';
+    if (positive.some((k) => t.includes(k))) return 'POSITIVE';
+    return 'NEUTRAL';
+}
+
+function impactLevel(impact: 'HIGH' | 'MEDIUM' | 'LOW'): 'Yüksek' | 'Orta' | 'Düşük' {
+    if (impact === 'HIGH') return 'Yüksek';
+    if (impact === 'MEDIUM') return 'Orta';
+    return 'Düşük';
+}
+
+function selectedNewsKey(category: MarketCategory, symbol: string): string {
+    if (category !== 'FUTURES') return symbol;
+    const m = symbol.match(/^([A-Z0-9_]+?)(\d{2})(\d{2})$/);
+    return m?.[1] ?? symbol;
+}
+
+function symbolAliases(symbol: string, category: MarketCategory): string[] {
+    const key = selectedNewsKey(category, symbol).toUpperCase();
+    const base = [key];
+    const map: Record<string, string[]> = {
+        MSFT: ['MICROSOFT'],
+        AAPL: ['APPLE'],
+        AMZN: ['AMAZON'],
+        GOOGL: ['GOOGLE', 'ALPHABET'],
+        NVDA: ['NVIDIA'],
+        TSLA: ['TESLA'],
+        META: ['META', 'FACEBOOK'],
+        JPM: ['JPMORGAN'],
+        USDTRY: ['USD/TRY', 'DOLAR'],
+        EURTRY: ['EUR/TRY', 'EURO'],
+        XU030: ['BIST30'],
+        ALTIN: ['GOLD', 'ONS'],
+        BTCUSDT: ['BITCOIN', 'BTC'],
+        ETHUSDT: ['ETHEREUM', 'ETH'],
+        ATOMUSDT: ['ATOM'],
+    };
+    return [...new Set([...base, ...(map[key] ?? [])])];
+}
+
+function matchesSelectedSymbol(selected: string, category: MarketCategory, matchedSymbols: string[]): boolean {
+    if (!selected) return false;
+    const aliases = symbolAliases(selected, category).map((x) => x.toUpperCase());
+    return matchedSymbols.some((m) => {
+        const upper = m.toUpperCase();
+        return aliases.some((a) => a.includes(upper) || upper.includes(a));
+    });
+}
+
+function normalizeSymbolKey(symbol: string): string {
+    return String(symbol ?? '')
+        .trim()
+        .replace(/\s+/g, '')
+        .toUpperCase();
+}
+
+function toContractMonth(label: string): string {
+    const m = label.match(/\((.+)\)/);
+    return m?.[1] ?? '—';
+}
+
+function inferMatchedSymbols(item: NewsItem): string[] {
+    const text = `${item.title ?? ''} ${item.summary ?? ''}`.toUpperCase();
+    const matches = new Set<string>();
+    const directSymbols = ['AAPL', 'AMZN', 'MSFT', 'GOOGL', 'NVDA', 'TSLA', 'USDTRY', 'EURTRY', 'XU030', 'ALTIN', 'BTC', 'ETH', 'BIST'];
+    directSymbols.forEach((s) => {
+        if (text.includes(s)) matches.add(s);
+    });
+    if (/(NASDAQ|WALL STREET|ABD BORSA|TEKNOLOJİ HİSSE)/.test(text)) matches.add('TECH');
+    if (/(FAİZ|ENFLASYON|TCMB|FED|ECB|FOMC|DOLAR|EURO|MAKRO|NFP|İŞSİZLİK|CPI|PPI)/.test(text)) matches.add('MACRO');
+    if (/(VIOP|VADELİ|KONTRAT|AÇIK POZİSYON|OPEN INTEREST)/.test(text)) matches.add('FUTURES');
+    if (/(BONO|TAHVİL|GETİRİ EĞRİSİ|YIELD)/.test(text)) matches.add('BOND');
+    return [...matches];
+}
+
+function calcRelevanceScore(item: NewsItem, key: string, category: MarketCategory, matched: string[]): number {
+    const text = `${item.title ?? ''} ${item.summary ?? ''}`.toUpperCase();
+    const selected = key.toUpperCase();
+    const aliases = symbolAliases(selected, category);
+    if (aliases.some((a) => text.includes(a))) return 0.95;
+    if (category === 'FUTURES' && matched.includes(selected)) return 0.9;
+    if (category === 'EQUITY' && matched.includes('TECH')) return 0.66;
+    if (category === 'FX' && matched.includes('MACRO')) return 0.74;
+    if (category === 'FUTURES' && matched.includes('FUTURES')) return 0.7;
+    if (category === 'BOND' && matched.includes('BOND')) return 0.7;
+    return 0.35;
+}
+
+function calcImpact(score: number, clusterCount: number): 'HIGH' | 'MEDIUM' | 'LOW' {
+    if (score >= 0.82 || clusterCount >= 3) return 'HIGH';
+    if (score >= 0.6 || clusterCount >= 2) return 'MEDIUM';
+    return 'LOW';
+}
+
+function newsCategoryForMarket(category: MarketCategory): string {
+    if (category === 'EQUITY') return 'STOCK';
+    if (category === 'CRYPTO') return 'CRYPTO';
+    if (category === 'FX') return 'FOREX';
+    return 'GENERAL';
+}
+
+function pickBestNewsForSymbol(marker: NewsMarkerVm, category: MarketCategory, symbol: string): NewsItem | null {
+    if (!marker?.items?.length) return null;
+    const key = selectedNewsKey(category, symbol);
+    const scored = marker.items.map((item) => {
+        const matched = inferMatchedSymbols(item);
+        const score = calcRelevanceScore(item, key, category, matched);
+        return { item, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0]?.item ?? marker.items[0] ?? null;
+}
+
+function unwrapData<T>(res: AxiosResponse<T>): T {
+    const body = res.data as unknown;
+    if (body && typeof body === 'object' && 'data' in (body as object)) {
+        return (body as { data: T }).data;
+    }
+    return body as T;
 }
 
 export function Market() {
-    const { tokens } = useTheme();
+    const { theme, tokens } = useTheme();
     const navigate = useNavigate();
-    const queryClient = useQueryClient();
-
-    const {
-        data: dashboard,
-        error: dashboardError,
-        isLoading: dashboardLoading,
-        refetch: refetchDashboard,
-    } = useQuery({
-        queryKey: ['market', 'dashboard'],
-        queryFn: () => financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => r.data),
-        refetchInterval: 60_000,
-    });
-    const { data: viopContracts = [] } = useQuery({
-        queryKey: ['market', 'viop', 'contracts'],
-        queryFn: () => marketClient.get<ViopContract[]>('/api/market/viop/contracts').then((r) => r.data),
-        staleTime: 120_000,
-    });
-    const { data: viopLatest = [] } = useQuery({
-        queryKey: ['market', 'viop', 'latest'],
-        queryFn: () => marketClient.get<ViopSnapshot[]>('/api/market/viop/latest').then((r) => r.data),
-        staleTime: 60_000,
-    });
-    const { data: debtCatalog = [] } = useQuery({
-        queryKey: ['market', 'debt', 'catalog'],
-        queryFn: () => marketClient.get<DebtInstrument[]>('/api/market/debt/catalog').then((r) => r.data),
-        staleTime: 120_000,
-    });
-    const { data: debtLatest = [] } = useQuery({
-        queryKey: ['market', 'debt', 'latest'],
-        queryFn: () => marketClient.get<DebtSnapshot[]>('/api/market/debt/latest').then((r) => r.data),
-        staleTime: 60_000,
-    });
-
-    useRefetchOnFocus(() => {
-        void queryClient.invalidateQueries({ queryKey: ['market', 'dashboard'] });
-    });
-    usePolling(() => {
-        void refetchDashboard();
-    }, 60_000);
-
-    const [activeTab, setActiveTab] = useState<TabId>('doviz');
-    const [chartSymbol, setChartSymbol] = useState<string>('USDTRY');
-    const [chartDays, setChartDays] = useState(7);
-    const [selectedMa, setSelectedMa] = useState<string[]>(['7', '30']);
-
+    const [activeCategory, setActiveCategory] = useState<MarketCategory>('EQUITY');
+    const [selectedSymbol, setSelectedSymbol] = useState<string>('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
+    const [tableScrollTop, setTableScrollTop] = useState(0);
+    const [liveOverrides, setLiveOverrides] = useState<Record<string, LiveTick>>({});
+    const [range, setRange] = useState<'1D' | '1W' | '1M' | '1Y'>('1M');
+    const [showMa, setShowMa] = useState(true);
+    const [showRsi, setShowRsi] = useState(true);
+    const [hoverTile, setHoverTile] = useState<TreemapTile | null>(null);
+    const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down'>>({});
+    const prevPricesRef = useRef<Record<string, number>>({});
     const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
-    const [compareDays, setCompareDays] = useState(7);
-    const [compareCategory, setCompareCategory] = useState<TabId>('doviz');
     const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
     const [loadingCompare, setLoadingCompare] = useState(false);
-    const [savingStarKey, setSavingStarKey] = useState<string | null>(null);
-
-    const { data: starredData, refetch: refetchStarred } = useQuery({
-        queryKey: ['me', 'starred-assets'],
-        queryFn: () => financeClient.get<StarredAssetsResponse>('/api/me/starred-assets').then((r) => r.data),
-        staleTime: 60_000,
-    });
-
-    const fetchIndicators = useCallback((tab: TabId, symbol: string, days: number) => {
-        const type = getMarketType(tab);
-        const allMa = [7, 30, 90];
-        const allowedMa = allMa.filter((w) => w <= days);
-        const maParam = allowedMa.join(',');
-
-        return marketClient
-            .get<IndicatorsResponse>('/api/market/indicators', {
-                params: { type, symbol, days, ma: maParam },
-            })
-            .then((res) => res.data);
-    }, []);
-
-    const fetchBatchHistory = useCallback((tab: TabId, symbols: string[], days: number) => {
-        const type = getMarketType(tab);
-        if (symbols.length < 2) {
-            return Promise.resolve<BatchHistoryResponse>({ series: {} });
-        }
-        return marketClient
-            .get<BatchHistoryResponse>('/api/market/history/batch', {
-                params: { type, symbols: symbols.join(','), days },
-            })
-            .then((res) => res.data);
-    }, []);
-
-    const getSymbolsForTab = useCallback(
-        (tab: TabId): string[] => {
-            if (!dashboard) return [];
-            const data = latestMapForTab(dashboard.latest, tab);
-            return Object.keys(data).filter(
-                (k) => data[k] && typeof data[k] === 'object' && data[k].status !== 'NO_DATA',
-            );
+    const [selectedNewsMarker, setSelectedNewsMarker] = useState<NewsMarkerVm | null>(null);
+    const onNewsMarkerSelect = useCallback(
+        (marker: NewsMarkerVm | null) => {
+            setSelectedNewsMarker(marker);
+            if (!marker || marker.items.length === 0) return;
+            const best = pickBestNewsForSymbol(marker, activeCategory, selectedSymbol);
+            if (!best) return;
+            const qs = new URLSearchParams({
+                focus: String(best.id),
+                category: newsCategoryForMarket(activeCategory),
+                from: 'chart',
+            });
+            navigate(`/news?${qs.toString()}`);
         },
-        [dashboard],
+        [activeCategory, selectedSymbol, navigate]
     );
 
     const {
-        data: indicatorData,
-        isFetching: loadingChart,
+        data: dashboard,
+        isLoading: loadingDashboard,
+        error: dashboardError,
+        refetch: refetchDashboard,
     } = useQuery({
-        queryKey: ['market', 'indicators', activeTab, chartSymbol, chartDays],
-        queryFn: () => fetchIndicators(activeTab, chartSymbol, chartDays),
-        enabled: Boolean(chartSymbol),
-        staleTime: 120_000,
+        queryKey: ['market', 'dashboard', 'terminal'],
+        queryFn: () => financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => unwrapData(r)),
+        refetchInterval: 12_000,
     });
-    const chartClose = indicatorData?.close ?? [];
-    const chartMa = indicatorData?.ma ?? {};
+
+    const { data: viopLatest = [] } = useQuery({
+        queryKey: ['market', 'viop', 'latest', 'terminal'],
+        queryFn: () => marketClient.get<ViopSnapshot[]>('/api/market/viop/latest').then((r) => r.data),
+        refetchInterval: 15_000,
+    });
+    const { data: viopContracts = [] } = useQuery({
+        queryKey: ['market', 'viop', 'contracts', 'terminal'],
+        queryFn: () => marketClient.get<ViopContract[]>('/api/market/viop/contracts').then((r) => r.data),
+        refetchInterval: 60_000,
+    });
+
+    const { data: debtLatest = [] } = useQuery({
+        queryKey: ['market', 'debt', 'latest', 'terminal'],
+        queryFn: () => marketClient.get<DebtSnapshot[]>('/api/market/debt/latest').then((r) => r.data),
+        refetchInterval: 15_000,
+    });
+    const { data: debtCatalog = [] } = useQuery({
+        queryKey: ['market', 'debt', 'catalog', 'terminal'],
+        queryFn: () => marketClient.get<DebtInstrument[]>('/api/market/debt/catalog').then((r) => r.data),
+        refetchInterval: 60_000,
+    });
+
+    const { data: newsPage } = useQuery({
+        queryKey: ['market', 'news', 'terminal'],
+        queryFn: () => marketClient.get<NewsPage>('/api/news', { params: { page: 0, size: 20 } }).then((r) => r.data),
+        refetchInterval: 60_000,
+    });
+
+    const { data: summary } = useQuery({
+        queryKey: ['market', 'summary', 'terminal'],
+        queryFn: () => financeClient.get<DashboardSummaryResponse>('/api/dashboard/summary').then((r) => unwrapData(r)),
+        refetchInterval: 30_000,
+    });
+
+    const fxSpreadMap = useMemo(() => {
+        const out: Record<string, number> = {};
+        if (!dashboard) return out;
+        Object.entries(dashboard.latest.doviz ?? {}).forEach(([symbol, row]) => {
+            const buy = Number(row.buyPrice ?? row.buy ?? row.price ?? 0);
+            const sell = Number(row.sellPrice ?? row.sell ?? row.price ?? buy);
+            out[symbol] = Math.max(0, sell - buy);
+        });
+        return out;
+    }, [dashboard]);
+
+    const debtNameMap = useMemo(() => {
+        const m: Record<string, string> = {};
+        debtCatalog.forEach((x) => {
+            m[normalizeSymbolKey(x.isin)] = x.name;
+        });
+        return m;
+    }, [debtCatalog]);
+    const debtMetaMap = useMemo(() => {
+        const m: Record<string, DebtInstrument> = {};
+        debtCatalog.forEach((x) => {
+            m[normalizeSymbolKey(x.isin)] = x;
+        });
+        return m;
+    }, [debtCatalog]);
+    const debtLatestMap = useMemo(() => {
+        const m: Record<string, DebtSnapshot> = {};
+        debtLatest.forEach((x) => {
+            m[normalizeSymbolKey(x.isin)] = x;
+        });
+        return m;
+    }, [debtLatest]);
+    const viopLatestMap = useMemo(() => {
+        const m: Record<string, ViopSnapshot> = {};
+        viopLatest.forEach((x) => {
+            m[normalizeSymbolKey(x.contractCode)] = x;
+        });
+        return m;
+    }, [viopLatest]);
+    const sparklineMap = useMemo(() => {
+        const m: Record<string, number[]> = {};
+        (dashboard?.sparklines ?? []).forEach((row) => {
+            m[normalizeSymbolKey(row.symbol)] = row.closes ?? [];
+        });
+        return m;
+    }, [dashboard]);
+
+    const instruments = useMemo<MarketInstrument[]>(() => {
+        if (activeCategory === 'FUTURES') {
+            const defaults = ['XU0300626', 'USDTRY0626', 'EURTRY0626', 'ALTIN0626'];
+            const merged = new Map<string, ViopSnapshot>();
+            viopLatest.forEach((v) => {
+                const key = normalizeSymbolKey(v?.contractCode);
+                if (!key) return;
+                const prev = merged.get(key);
+                if (!prev) {
+                    merged.set(key, v);
+                    return;
+                }
+                const prevTs = new Date(prev.asOf ?? 0).getTime();
+                const nextTs = new Date(v.asOf ?? 0).getTime();
+                if (nextTs >= prevTs) merged.set(key, v);
+            });
+            defaults.forEach((code) => {
+                const key = normalizeSymbolKey(code);
+                if (!merged.has(key)) {
+                    merged.set(key, {
+                        contractCode: code,
+                        price: 0,
+                        basis: 0,
+                        annualizedBasisPct: 0,
+                        openInterest: 0,
+                    });
+                }
+            });
+            return [...merged.values()]
+                .map((v) => {
+                    const pct = v.price ? (Number(v.basis ?? 0) / Number(v.price)) * 100 : 0;
+                    return {
+                        symbol: normalizeSymbolKey(v.contractCode),
+                        category: 'FUTURES' as const,
+                        price: Number(v.price ?? 0),
+                        changePercent: Number.isFinite(pct) ? pct : 0,
+                        trend: pct >= 0 ? ('UP' as const) : ('DOWN' as const),
+                        metrics: {
+                            basis: Number(v.basis ?? 0),
+                            yield: Number(v.annualizedBasisPct ?? 0),
+                        },
+                        volume: Number(v.openInterest ?? 0),
+                    } satisfies MarketInstrument;
+                })
+                .sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
+        }
+        if (activeCategory === 'BOND') {
+            const merged = new Map<string, DebtSnapshot>();
+            const historyByIsin = new Map<string, DebtSnapshot[]>();
+            debtLatest.forEach((d) => {
+                const key = normalizeSymbolKey(d?.isin);
+                if (!key) return;
+                if (!historyByIsin.has(key)) historyByIsin.set(key, []);
+                historyByIsin.get(key)!.push(d);
+                const prev = merged.get(key);
+                if (!prev) {
+                    merged.set(key, d);
+                    return;
+                }
+                const prevTs = new Date(prev.asOf ?? 0).getTime();
+                const nextTs = new Date(d.asOf ?? 0).getTime();
+                if (nextTs >= prevTs) merged.set(key, d);
+            });
+            historyByIsin.forEach((list) => {
+                list.sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
+            });
+            return [...merged.values()]
+                .map((d) => {
+                    const symbol = normalizeSymbolKey(d.isin);
+                    const history = historyByIsin.get(symbol) ?? [];
+                    const prev = history.length > 1 ? Number(history[history.length - 2]?.dirtyPrice ?? 0) : 0;
+                    const current = Number(d.dirtyPrice ?? 0);
+                    const changePercent = prev > 0 && Number.isFinite(current) ? ((current - prev) / prev) * 100 : 0;
+                    return {
+                        symbol,
+                        category: 'BOND' as const,
+                        price: current,
+                        changePercent,
+                        trend: changePercent >= 0 ? ('UP' as const) : ('DOWN' as const),
+                        metrics: { yield: Number(d.yieldPct ?? 0) },
+                        volume: d.synthetic ? null : current * 100,
+                    };
+                })
+                .sort((a, b) => b.price - a.price);
+        }
+        if (!dashboard) return [];
+        const latestMap =
+            activeCategory === 'EQUITY'
+                ? dashboard.latest.stocks
+                : activeCategory === 'CRYPTO'
+                ? dashboard.latest.crypto
+                : dashboard.latest.doviz;
+        const unique = new Map<string, MarketInstrument>();
+        Object.entries(latestMap ?? {})
+            .filter(([, row]) => row && row.status !== 'NO_DATA')
+            .forEach(([rawSymbol, row]) => {
+                const symbol = normalizeSymbolKey(rawSymbol);
+                if (!symbol) return;
+                const spark = dashboard.sparklines.find((s) => normalizeSymbolKey(s.symbol) === symbol)?.closes ?? [];
+                const volume = dashboard.heatmapTiles.find((t) => normalizeSymbolKey(t.symbol) === symbol)?.layoutWeight;
+                const tileChange = dashboard.heatmapTiles.find((t) => normalizeSymbolKey(t.symbol) === symbol)?.changePercent;
+                const changePercent = resolveChangePercent(spark, tileChange);
+                unique.set(symbol, {
+                    symbol,
+                    category: activeCategory,
+                    price: pickPrice(row),
+                    changePercent,
+                    trend: changePercent >= 0 ? 'UP' : 'DOWN',
+                    volume: volume != null && Number.isFinite(volume) ? Number(volume) : null,
+                    metrics: activeCategory === 'FX' ? { basis: fxSpreadMap[symbol] ?? 0 } : undefined,
+                });
+            });
+        return [...unique.values()].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
+    }, [activeCategory, dashboard, viopLatest, debtLatest, fxSpreadMap]);
+
+    useEffect(() => {
+        if (!instruments.length) {
+            setSelectedSymbol('');
+            return;
+        }
+        const stillExists = instruments.some((i) => i.symbol === selectedSymbol);
+        if (!selectedSymbol || !stillExists) setSelectedSymbol(instruments[0].symbol);
+    }, [instruments, selectedSymbol]);
+
+    useEffect(() => {
+        setCompareSymbols([]);
+        setCompareRows([]);
+        setSearchTerm('');
+        setIsDetailPanelOpen(false);
+    }, [activeCategory]);
+    useEffect(() => {
+        if (!isDetailPanelOpen) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setIsDetailPanelOpen(false);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [isDetailPanelOpen]);
+
+    useEffect(() => {
+        if (!instruments.length) return;
+        const nextFlash: Record<string, 'up' | 'down'> = {};
+        for (const row of instruments) {
+            const prev = prevPricesRef.current[row.symbol];
+            if (prev != null && prev !== row.price) {
+                nextFlash[row.symbol] = row.price > prev ? 'up' : 'down';
+            }
+            prevPricesRef.current[row.symbol] = row.price;
+        }
+        if (Object.keys(nextFlash).length > 0) {
+            setPriceFlash(nextFlash);
+            const timer = setTimeout(() => setPriceFlash({}), 260);
+            return () => clearTimeout(timer);
+        }
+    }, [instruments]);
+
+    const days = RANGE_TO_DAYS[range];
+    const marketType =
+        activeCategory === 'EQUITY'
+            ? 'EQUITY'
+            : activeCategory === 'CRYPTO'
+            ? 'CRYPTO'
+            : activeCategory === 'FX'
+            ? 'FX'
+            : null;
+
+    const { data: indicatorData, isLoading: loadingIndicators } = useQuery({
+        queryKey: ['market', 'indicators', 'terminal', activeCategory, selectedSymbol, days],
+        enabled: Boolean(selectedSymbol && marketType),
+        queryFn: () =>
+            marketClient
+                .get<IndicatorsResponse>('/api/market/indicators', {
+                    params: { type: marketType, symbol: selectedSymbol, days, ma: '7,21' },
+                })
+                .then((r) => r.data),
+        refetchInterval: 15_000,
+    });
+
+    const { data: batchData, isLoading: loadingCandles } = useQuery({
+        queryKey: ['market', 'candles', 'terminal', activeCategory, selectedSymbol, days],
+        enabled: Boolean(selectedSymbol && marketType),
+        queryFn: () =>
+            marketClient
+                .get<BatchHistoryResponse>('/api/market/history/batch', {
+                    params: { type: marketType, symbols: selectedSymbol, days },
+                })
+                .then((r) => r.data),
+        refetchInterval: 15_000,
+    });
+
+    const { data: viopHistory = [], isLoading: loadingViopHistory } = useQuery({
+        queryKey: ['market', 'viop-history', selectedSymbol, days],
+        enabled: activeCategory === 'FUTURES' && Boolean(selectedSymbol),
+        queryFn: () =>
+            marketClient
+                .get<ViopSnapshot[]>('/api/market/viop/history', {
+                    params: { contract: selectedSymbol, days },
+                })
+                .then((r) => r.data),
+        refetchInterval: 15_000,
+    });
+    const { data: viopOiHistory = [] } = useQuery({
+        queryKey: ['market', 'viop-oi-history', selectedSymbol, days],
+        enabled: activeCategory === 'FUTURES' && Boolean(selectedSymbol),
+        queryFn: () =>
+            marketClient
+                .get<ViopSnapshot[]>('/api/market/viop/oi-history', {
+                    params: { contract: selectedSymbol, days },
+                })
+                .then((r) => r.data),
+        refetchInterval: 15_000,
+    });
+
+    const { data: debtHistory = [], isLoading: loadingDebtHistory } = useQuery({
+        queryKey: ['market', 'debt-history', selectedSymbol, days],
+        enabled: activeCategory === 'BOND' && Boolean(selectedSymbol),
+        queryFn: () =>
+            marketClient
+                .get<DebtSnapshot[]>('/api/market/debt/history', {
+                    params: { isin: selectedSymbol, days },
+                })
+                .then((r) => r.data),
+        refetchInterval: 15_000,
+    });
+
+    const candles = useMemo(() => {
+        if (activeCategory === 'FUTURES') {
+            const sorted = [...viopHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
+            return sorted.map((x, idx) => {
+                const close = Number(x.price ?? 0);
+                const prev = idx > 0 ? Number(sorted[idx - 1]?.price ?? close) : close;
+                return {
+                    time: x.asOf ?? new Date().toISOString(),
+                    open: prev,
+                    high: Math.max(prev, close),
+                    low: Math.min(prev, close),
+                    close,
+                    volume: Number(x.openInterest ?? 0),
+                };
+            });
+        }
+        if (activeCategory === 'BOND') {
+            const sorted = [...debtHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
+            return sorted.map((x, idx) => {
+                const close = Number(x.dirtyPrice ?? 0);
+                const prev = idx > 0 ? Number(sorted[idx - 1]?.dirtyPrice ?? close) : close;
+                return {
+                    time: x.asOf ?? new Date().toISOString(),
+                    open: prev,
+                    high: Math.max(prev, close),
+                    low: Math.min(prev, close),
+                    close,
+                    volume: 0,
+                };
+            });
+        }
+        const series = batchData?.series?.[selectedSymbol] ?? [];
+        if (series.length > 0) {
+            return series.map((x) => ({
+                time: x.t,
+                open: Number(x.o),
+                high: Number(x.h),
+                low: Number(x.l),
+                close: Number(x.c),
+                volume: Number(x.v ?? 0),
+            }));
+        }
+        const closes = indicatorData?.close ?? [];
+        return closes.map((p, idx) => {
+            const close = Number(p.value);
+            const prev = idx > 0 ? Number(closes[idx - 1]?.value ?? close) : close;
+            return { time: p.t, open: prev, high: Math.max(prev, close), low: Math.min(prev, close), close, volume: 0 };
+        });
+    }, [activeCategory, viopHistory, debtHistory, batchData, indicatorData, selectedSymbol]);
+
+    const ma7 = useMemo(() => {
+        if (indicatorData?.ma?.['7']?.length) {
+            return indicatorData.ma['7'].map((p) => ({ time: p.t, value: Number(p.value) }));
+        }
+        return movingAverage(candles.map((c) => ({ time: c.time, close: c.close })), 7);
+    }, [indicatorData, candles]);
+    const ma21 = useMemo(() => {
+        if (indicatorData?.ma?.['21']?.length) {
+            return indicatorData.ma['21'].map((p) => ({ time: p.t, value: Number(p.value) }));
+        }
+        return movingAverage(candles.map((c) => ({ time: c.time, close: c.close })), 21);
+    }, [indicatorData, candles]);
+
+    const rsi14 = useMemo(
+        () => buildRsi(candles.map((c) => ({ time: c.time, close: c.close }))),
+        [candles]
+    );
+
+    const instrumentVms = useMemo<InstrumentVm[]>(() => {
+        return instruments.map((ins) => {
+            const symbolKey = normalizeSymbolKey(ins.symbol);
+            const live = liveOverrides[`${ins.category}:${symbolKey}`];
+            const livePrice = live && live.price > 0 ? live.price : ins.price;
+            const liveChange =
+                live && Number.isFinite(Number(live.changePercent)) && Math.abs(Number(live.changePercent)) > 1e-9
+                    ? Number(live.changePercent)
+                    : ins.changePercent;
+            const baseVolume = ins.volume != null && Number.isFinite(Number(ins.volume)) ? Number(ins.volume) : null;
+            const liveVolume =
+                live && Number.isFinite(Number(live.volume)) && Number(live.volume) > 0
+                    ? Number(live.volume)
+                    : baseVolume;
+            const spark = sparklineMap[symbolKey] ?? [];
+            if (ins.category === 'BOND') {
+                const debtMeta = debtMetaMap[symbolKey];
+                const latestDebt = debtLatestMap[symbolKey];
+                return {
+                    ...ins,
+                    price: livePrice,
+                    changePercent: liveChange,
+                    volume: liveVolume,
+                    type: 'BOND',
+                    typeBadge: 'B',
+                    displayName: debtNameMap[symbolKey] ?? symbolKey,
+                    sparkline: spark.length ? spark : [livePrice, livePrice, livePrice],
+                    maturityDate: latestDebt?.maturityDate ?? debtMeta?.maturityDate,
+                    daysToMaturity: latestDebt?.daysToMaturity,
+                    couponRate: Number(latestDebt?.couponRate ?? 0),
+                    yieldToMaturity: Number(latestDebt?.yieldPct ?? ins.metrics?.yield ?? 0),
+                    longShort: 'NÖTR',
+                };
+            }
+            if (ins.category === 'FUTURES') {
+                const contractLabel = parseViopContractLabel(symbolKey);
+                const latestViop = viopLatestMap[symbolKey];
+                const basis = Number(ins.metrics?.basis ?? 0);
+                return {
+                    ...ins,
+                    price: livePrice,
+                    changePercent: liveChange,
+                    volume: liveVolume,
+                    type: 'FUTURES',
+                    typeBadge: 'V',
+                    displayName: contractLabel,
+                    sparkline: spark.length ? spark : [livePrice * 0.99, livePrice, livePrice * 1.01],
+                    contractMonth: latestViop?.contractMonth ?? toContractMonth(contractLabel),
+                    expiryDate: latestViop?.expiryDate,
+                    marginRequirement: Number(latestViop?.marginRequirement ?? (ins.price * 0.12).toFixed(2)),
+                    longShort:
+                        latestViop?.longShortIndicator === 'LONG'
+                            ? 'LONG'
+                            : latestViop?.longShortIndicator === 'SHORT'
+                            ? 'SHORT'
+                            : basis > 0
+                            ? 'LONG'
+                            : basis < 0
+                            ? 'SHORT'
+                            : 'NÖTR',
+                };
+            }
+            return {
+                ...ins,
+                price: livePrice,
+                changePercent: liveChange,
+                volume: liveVolume,
+                type: 'STOCK',
+                typeBadge: 'S',
+                displayName:
+                    activeCategory === 'EQUITY'
+                        ? formatAssetLabel(symbolKey, 'EQUITY')
+                        : activeCategory === 'CRYPTO'
+                        ? formatAssetLabel(symbolKey, 'CRYPTO')
+                        : formatAssetLabel(symbolKey, 'FX'),
+                sparkline: spark.length ? spark : [livePrice * 0.995, livePrice, livePrice * 1.005],
+                longShort: ins.trend === 'UP' ? 'LONG' : 'SHORT',
+            };
+        });
+    }, [instruments, sparklineMap, debtMetaMap, debtLatestMap, viopLatestMap, debtNameMap, activeCategory, liveOverrides]);
+
+    const filteredInstruments = useMemo(() => {
+        const q = searchTerm.trim().toUpperCase();
+        if (!q) return instrumentVms;
+        return instrumentVms.filter(
+            (x) =>
+                x.symbol.includes(q) ||
+                x.displayName.toUpperCase().includes(q) ||
+                String(x.type).includes(q)
+        );
+    }, [instrumentVms, searchTerm]);
+    const selectedInstrumentVm = useMemo(
+        () => instrumentVms.find((x) => x.symbol === selectedSymbol) ?? instrumentVms[0] ?? null,
+        [instrumentVms, selectedSymbol]
+    );
+    const virtualRows = useMemo(() => {
+        const rowHeight = 52;
+        const viewport = 500;
+        const overscan = 8;
+        const start = Math.max(0, Math.floor(tableScrollTop / rowHeight) - overscan);
+        const visibleCount = Math.ceil(viewport / rowHeight) + overscan * 2;
+        const end = Math.min(filteredInstruments.length, start + visibleCount);
+        return {
+            rowHeight,
+            viewport,
+            start,
+            end,
+            totalHeight: filteredInstruments.length * rowHeight,
+            topSpacer: start * rowHeight,
+            rows: filteredInstruments.slice(start, end),
+        };
+    }, [filteredInstruments, tableScrollTop]);
+    const sparklinePath = useCallback((values: number[]) => {
+        if (!values.length) return '';
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const range = Math.max(max - min, 1e-6);
+        return values
+            .map((v, i) => {
+                const x = (i / Math.max(values.length - 1, 1)) * 100;
+                const y = 100 - ((v - min) / range) * 100;
+                return `${x},${y}`;
+            })
+            .join(' ');
+    }, []);
+
+    const hero = useMemo(() => {
+        const current = instruments.find((x) => x.symbol === selectedSymbol) ?? instruments[0];
+        if (!current) return null;
+        const highs = candles.map((c) => c.high);
+        const lows = candles.map((c) => c.low);
+        return {
+            ...current,
+            high: highs.length ? Math.max(...highs) : current.price,
+            low: lows.length ? Math.min(...lows) : current.price,
+        };
+    }, [instruments, selectedSymbol, candles]);
+    const futuresHeaderMetrics = useMemo(() => {
+        if (activeCategory !== 'FUTURES' || !selectedSymbol) return null;
+        const latest = viopLatest.find((x) => x.contractCode === selectedSymbol);
+        const oiSeries = [...viopOiHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
+        const lastOi = oiSeries.length
+            ? Number(oiSeries[oiSeries.length - 1]?.openInterest ?? latest?.openInterest ?? 0)
+            : Number(latest?.openInterest ?? 0);
+        const prevOi = oiSeries.length > 1 ? Number(oiSeries[oiSeries.length - 2]?.openInterest ?? 0) : lastOi;
+        const oiChangePct = prevOi > 0 ? ((lastOi - prevOi) / prevOi) * 100 : 0;
+        return {
+            basis: Number(latest?.basis ?? 0),
+            carry: Number(latest?.annualizedBasisPct ?? 0),
+            oiChangePct,
+            oi: lastOi,
+        };
+    }, [activeCategory, selectedSymbol, viopLatest, viopOiHistory]);
+
+    const newsMarkers = useMemo<NewsMarkerVm[]>(() => {
+        const selectedKey = selectedNewsKey(activeCategory, selectedSymbol);
+        const enriched = (newsPage?.content ?? []).slice(0, 32).map((item) => {
+            const matchedSymbols = inferMatchedSymbols(item);
+            const relevanceScore = calcRelevanceScore(item, selectedKey, activeCategory, matchedSymbols);
+            return { item, matchedSymbols, relevanceScore };
+        });
+
+        let filtered = enriched.filter((x) => {
+            if (!selectedKey) return false;
+            const hasDirect = matchesSelectedSymbol(selectedKey, activeCategory, x.matchedSymbols);
+            if (hasDirect) return true;
+            if (activeCategory === 'FX') {
+                return x.matchedSymbols.includes('MACRO');
+            }
+            if (activeCategory === 'FUTURES') {
+                return x.matchedSymbols.includes('FUTURES');
+            }
+            if (activeCategory === 'BOND') {
+                return x.matchedSymbols.includes('BOND');
+            }
+            return false;
+        });
+
+        if (activeCategory === 'FX') {
+            const hasSpecific = filtered.some((x) => matchesSelectedSymbol(selectedKey, activeCategory, x.matchedSymbols));
+            if (!hasSpecific) {
+                filtered = enriched.filter((x) => x.matchedSymbols.includes('MACRO'));
+            }
+        }
+
+        filtered = filtered.filter((x) => x.relevanceScore >= 0.6);
+        const grouped = new Map<string, typeof filtered>();
+        filtered.forEach((row) => {
+            const day = toDayKey(row.item.publishedAt);
+            if (!grouped.has(day)) grouped.set(day, []);
+            grouped.get(day)!.push(row);
+        });
+
+        return [...grouped.entries()]
+            .map(([day, rows]) => {
+                const items = rows.map((r) => r.item);
+                const avgScore = rows.reduce((acc, r) => acc + r.relevanceScore, 0) / rows.length;
+                const tones = items.map((x) => classifyNewsTone(x.title));
+                const toneScore = tones.reduce((acc, tone) => acc + (tone === 'POSITIVE' ? 1 : tone === 'NEGATIVE' ? -1 : 0), 0);
+                const tone: NewsTone = toneScore > 0 ? 'POSITIVE' : toneScore < 0 ? 'NEGATIVE' : 'NEUTRAL';
+                const matched = [...new Set(rows.flatMap((r) => r.matchedSymbols))];
+                const impact = calcImpact(avgScore, rows.length);
+                return {
+                    id: `news-${day}`,
+                    time: items[0].publishedAt,
+                    tone,
+                    count: items.length,
+                    items,
+                    matchedSymbols: matched,
+                    relevanceScore: Number(avgScore.toFixed(2)),
+                    impact,
+                };
+            })
+            .filter((m) => m.impact !== 'LOW')
+            .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+    }, [newsPage, activeCategory, selectedSymbol]);
+
+    const markers = useMemo(() => {
+        const fromNews = newsMarkers.map((n) => ({
+            time: n.time,
+            position: 'belowBar' as const,
+            color: n.impact === 'HIGH' ? '#ef4444' : n.impact === 'MEDIUM' ? '#eab308' : '#38bdf8',
+            shape: 'circle' as const,
+            text: '',
+        }));
+        const whale = summary?.whale?.triggeredAt
+            ? [
+                  {
+                      time: summary.whale.triggeredAt,
+                      position: 'aboveBar' as const,
+                      color: '#a78bfa',
+                      shape: 'square' as const,
+                        text: '',
+                  },
+              ]
+            : [];
+        return [...fromNews, ...whale];
+    }, [newsMarkers, summary]);
+
+    const topGainers = useMemo(
+        () => [...instruments].sort((a, b) => b.changePercent - a.changePercent).slice(0, 5),
+        [instruments]
+    );
+    const topLosers = useMemo(
+        () => [...instruments].sort((a, b) => a.changePercent - b.changePercent).slice(0, 5),
+        [instruments]
+    );
+    const futuresTopMovers = useMemo(
+        () => [...instruments].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent)).slice(0, 5),
+        [instruments]
+    );
+    const futuresHighestCarry = useMemo(
+        () => [...instruments].sort((a, b) => Number(b.metrics?.yield ?? 0) - Number(a.metrics?.yield ?? 0)).slice(0, 5),
+        [instruments]
+    );
+
+    const volumeLeaders = useMemo(() => {
+        if (activeCategory === 'FUTURES') {
+            return [...instruments]
+                .sort((a, b) => Number(b.volume ?? 0) - Number(a.volume ?? 0))
+                .slice(0, 5);
+        }
+        if (!dashboard) return [] as MarketInstrument[];
+        const target = heatAssetClassForCategory(activeCategory);
+        if (!target) return [] as MarketInstrument[];
+        const byVolume = dashboard.heatmapTiles
+            .filter((t) => t.assetClass === target)
+            .sort((a, b) => b.layoutWeight - a.layoutWeight)
+            .slice(0, 5);
+        return byVolume.map((tile) => {
+            const base = instruments.find((x) => x.symbol === tile.symbol);
+            return (
+                base ?? {
+                    symbol: tile.symbol,
+                    category: activeCategory,
+                    price: 0,
+                    changePercent: tile.changePercent,
+                    trend: tile.changePercent >= 0 ? 'UP' : 'DOWN',
+                    volume: tile.layoutWeight,
+                }
+            );
+        });
+    }, [dashboard, activeCategory, instruments]);
+
+    const cryptoDominance = useMemo(() => {
+        if (activeCategory !== 'CRYPTO' || !dashboard) return [] as { symbol: string; dominancePct: number }[];
+        const cryptoTiles = dashboard.heatmapTiles.filter((t) => t.assetClass === 'CRYPTO');
+        const total = cryptoTiles.reduce((acc, t) => acc + Number(t.layoutWeight ?? 0), 0);
+        if (total <= 0) return [] as { symbol: string; dominancePct: number }[];
+        return cryptoTiles
+            .map((t) => ({
+                symbol: t.symbol,
+                dominancePct: (Number(t.layoutWeight ?? 0) / total) * 100,
+            }))
+            .sort((a, b) => b.dominancePct - a.dominancePct)
+            .slice(0, 5);
+    }, [activeCategory, dashboard]);
+
+    const lineWidthBySymbol = useMemo(() => {
+        const out: Record<string, number> = {};
+        const slice = compareSymbols.slice(0, 4);
+        const vols = slice.map((s) => Math.abs(instruments.find((x) => x.symbol === s)?.changePercent ?? 0));
+        const max = Math.max(...vols, 0.0001);
+        for (const sym of slice) {
+            const v = Math.abs(instruments.find((x) => x.symbol === sym)?.changePercent ?? 0);
+            out[sym] = 2 + Math.min(2.5, (v / max) * 2.5);
+        }
+        return out;
+    }, [compareSymbols, instruments]);
 
     const loadCompare = useCallback(() => {
-        if (compareSymbols.length < 2) {
+        if ((activeCategory !== 'FUTURES' && !marketType) || compareSymbols.length < 2) {
             setCompareRows([]);
             return;
         }
         setLoadingCompare(true);
         const symbols = compareSymbols.slice(0, 4);
+        const request =
+            activeCategory === 'FUTURES'
+                ? Promise.all(
+                      symbols.map((sym) =>
+                          marketClient
+                              .get<ViopSnapshot[]>('/api/market/viop/history', {
+                                  params: { contract: sym, days },
+                              })
+                              .then((res) => [sym, res.data] as const)
+                      )
+                  ).then((rows) => {
+                      const series: Record<string, CandlePoint[]> = {};
+                      rows.forEach(([sym, data]) => {
+                          series[sym] = (data ?? []).map((x) => ({
+                              t: x.asOf ?? new Date().toISOString(),
+                              o: Number(x.price ?? 0),
+                              h: Number(x.price ?? 0),
+                              l: Number(x.price ?? 0),
+                              c: Number(x.price ?? 0),
+                              v: Number(x.openInterest ?? 0),
+                          }));
+                      });
+                      return { series } satisfies BatchHistoryResponse;
+                  })
+                : marketClient
+                      .get<BatchHistoryResponse>('/api/market/history/batch', {
+                          params: {
+                              type: marketType,
+                              symbols: symbols.join(','),
+                              days,
+                          },
+                      })
+                      .then((res) => res.data);
 
-        fetchBatchHistory(compareCategory, symbols, compareDays)
+        request
             .then((batch) => {
                 const byDate: Record<string, Record<string, number>> = {};
-                Object.entries(batch.series).forEach(([sym, candles]) => {
-                    candles.forEach((c) => {
-                        const d = new Date(c.t).toISOString().slice(0, 10);
-                        if (!byDate[d]) byDate[d] = {};
-                        byDate[d][sym] = Number(c.c);
+                Object.entries(batch.series ?? {}).forEach(([sym, candlesBySym]) => {
+                    candlesBySym.forEach((c) => {
+                        const date = new Date(c.t).toISOString().slice(0, 10);
+                        if (!byDate[date]) byDate[date] = {};
+                        byDate[date][sym] = Number(c.c);
                     });
                 });
-
                 const dates = Object.keys(byDate).sort();
-                if (dates.length === 0) {
+                if (!dates.length) {
                     setCompareRows([]);
                     return;
                 }
-
                 const first: Record<string, number> = {};
                 symbols.forEach((sym) => {
                     const d = dates.find((dt) => byDate[dt][sym] != null);
                     if (d != null) first[sym] = byDate[d][sym];
                 });
-
-                const out: CompareRow[] = dates.map((date) => {
+                const rows = dates.map((date) => {
                     const values: Record<string, number> = {};
                     symbols.forEach((sym) => {
                         const v = byDate[date][sym];
                         const base = first[sym];
-                        values[sym] =
-                            base && v != null ? Math.round((v / base) * 1000) / 10 : Number.NaN;
+                        values[sym] = base && v != null ? Math.round((v / base) * 1000) / 10 : Number.NaN;
                     });
                     return { time: date, values };
                 });
-
-                setCompareRows(out);
+                setCompareRows(rows);
             })
             .catch(() => setCompareRows([]))
             .finally(() => setLoadingCompare(false));
-    }, [compareSymbols, compareDays, compareCategory, fetchBatchHistory]);
+    }, [compareSymbols, days, marketType, activeCategory]);
 
     useEffect(() => {
-        if (compareSymbols.length >= 2) loadCompare();
-        else setCompareRows([]);
-    }, [compareSymbols, compareDays, compareCategory, loadCompare]);
-
-    const pageStyle: React.CSSProperties = {
-        padding: 24,
-        background: tokens.bg,
-        color: tokens.text,
-        minHeight: '100%',
-    };
-    const titleStyle: React.CSSProperties = {
-        fontSize: '1.75rem',
-        fontWeight: 700,
-        marginBottom: 4,
-    };
-    const mutedStyle: React.CSSProperties = {
-        color: tokens.textMuted,
-        fontSize: '0.875rem',
-    };
-    const cardStyle: React.CSSProperties = {
-        padding: 16,
-        borderRadius: 12,
-        background: tokens.bgCard,
-        border: `1px solid ${tokens.border}`,
-        marginBottom: 16,
-    };
-
-    const tabs: { id: TabId; label: string }[] = [
-        { id: 'doviz', label: 'Döviz' },
-        { id: 'crypto', label: 'Kripto' },
-        { id: 'metals', label: 'Altın' },
-        { id: 'funds', label: 'Fonlar' },
-        { id: 'equity', label: 'Hisse' },
-    ];
-
-    const tableData = dashboard ? latestMapForTab(dashboard.latest, activeTab) : {};
-    const tableEntries = Object.entries(tableData).filter(([, v]) => v && typeof v === 'object');
-    const symbolsForTab = getSymbolsForTab(activeTab);
-    const symbolsForCompare = getSymbolsForTab(compareCategory);
-
-    const lineWidthBySymbol = useMemo(() => {
-        const out: Record<string, number> = {};
-        if (!dashboard) return out;
-        const slice = compareSymbols.slice(0, 4);
-        const vols = slice.map((s) => volatilityForSymbol(dashboard, compareCategory, s));
-        const max = Math.max(...vols.map((v) => (v > 0 ? v : 0)), 0.0001);
-        for (const sym of slice) {
-            const v = volatilityForSymbol(dashboard, compareCategory, sym);
-            out[sym] = 2 + Math.min(2.5, (v / max) * 2.5);
+        if (compareSymbols.length >= 2) {
+            loadCompare();
+        } else {
+            setCompareRows([]);
         }
-        return out;
-    }, [dashboard, compareCategory, compareSymbols]);
+    }, [compareSymbols, loadCompare]);
 
-    const selectedStars = useMemo(
-        () => (starredData?.selected ?? []).map((s) => `${s.marketType}|${s.symbol}`),
-        [starredData?.selected],
-    );
-
-    const selectedStarSet = useMemo(() => new Set(selectedStars), [selectedStars]);
-
-    const toggleStar = useCallback(
-        async (marketType: string, symbol: string) => {
-            const key = `${marketType}|${symbol}`;
-            const selected = [...(starredData?.selected ?? [])];
-            const exists = selected.some((s) => `${s.marketType}|${s.symbol}` === key);
-
-            let next: StarSelection[];
-            if (exists) {
-                next = selected.filter((s) => `${s.marketType}|${s.symbol}` !== key);
-            } else {
-                const maxItems = starredData?.maxItems ?? 7;
-                if (selected.length >= maxItems) {
-                    window.alert(`En fazla ${maxItems} varlık yıldızlanabilir.`);
-                    return;
+    usePolling(() => {
+        void refetchDashboard();
+    }, 12_000);
+    useEffect(() => {
+        const base = (import.meta.env.VITE_MARKET_API_URL || 'http://localhost:8083').replace(/^http/i, 'ws');
+        const wsUrl = `${base}/ws/market`;
+        let socket: WebSocket | null = null;
+        let isCancelled = false;
+        const connect = () => {
+            if (isCancelled) return;
+            socket = new WebSocket(wsUrl);
+            socket.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(String(event.data)) as LivePayload;
+                    const next: Record<string, LiveTick> = {};
+                    (payload?.ticks ?? []).forEach((t) => {
+                        const cat = t.category as MarketCategory;
+                        next[`${cat}:${normalizeSymbolKey(t.symbol)}`] = {
+                            category: cat,
+                            symbol: normalizeSymbolKey(t.symbol),
+                            price: Number(t.price ?? 0),
+                            changePercent: Number(t.changePercent ?? 0),
+                            volume: Number(t.volume ?? 0),
+                        };
+                    });
+                    if (Object.keys(next).length) {
+                        setLiveOverrides((prev) => ({ ...prev, ...next }));
+                    }
+                } catch {
+                    // swallow malformed WS payloads, polling remains fallback
                 }
-                next = [...selected, { marketType, symbol }];
-            }
+            };
+            socket.onclose = () => {
+                if (!isCancelled) {
+                    window.setTimeout(connect, 1500);
+                }
+            };
+        };
+        connect();
+        return () => {
+            isCancelled = true;
+            socket?.close();
+        };
+    }, []);
 
-            try {
-                setSavingStarKey(key);
-                await financeClient.put('/api/me/starred-assets', { selected: next });
-                await refetchStarred();
-            } finally {
-                setSavingStarKey(null);
-            }
-        },
-        [refetchStarred, starredData?.maxItems, starredData?.selected],
+    const errMsg = dashboardError instanceof Error ? dashboardError.message : '';
+    const terminalVars = useMemo(
+        () =>
+            ({
+                '--terminal-bg': tokens.bg,
+                '--terminal-bg-accent': theme === 'dark' ? 'rgba(37, 99, 235, 0.16)' : 'rgba(59, 130, 246, 0.1)',
+                '--terminal-card-bg': tokens.bgCard,
+                '--terminal-border': tokens.border,
+                '--terminal-text': tokens.text,
+                '--terminal-muted': tokens.textMuted,
+                '--terminal-btn-bg': tokens.inputBg,
+                '--terminal-btn-active-bg': theme === 'dark' ? 'rgba(8, 47, 73, 0.8)' : 'rgba(29, 78, 216, 0.14)',
+                '--terminal-btn-active-text': tokens.text,
+                '--terminal-table-head-bg': theme === 'dark' ? 'rgba(15, 23, 42, 0.98)' : '#f8fafc',
+                '--terminal-hover-bg': theme === 'dark' ? 'rgba(30, 41, 59, 0.72)' : 'rgba(148, 163, 184, 0.16)',
+                '--terminal-active-row-bg': theme === 'dark' ? 'rgba(30, 58, 138, 0.28)' : 'rgba(59, 130, 246, 0.14)',
+            }) as CSSProperties,
+        [theme, tokens]
     );
-
-    const handleGoToAdvanced = () => {
-        if (!chartSymbol) return;
-        const type = getMarketType(activeTab);
-        const url = `/market/advanced?type=${type}&symbol=${encodeURIComponent(
-            chartSymbol,
-        )}&days=${chartDays}`;
-        navigate(url);
-    };
-
-    const errMsg =
-        dashboardError instanceof Error
-            ? dashboardError.message
-            : dashboardError != null
-              ? String((dashboardError as unknown as { message?: string }).message ?? dashboardError)
-              : undefined;
 
     if (errMsg) {
-        return (
-            <div style={pageStyle}>
-                <h1 style={titleStyle}>Piyasa</h1>
-                <p style={{ ...mutedStyle, color: tokens.error }}>Hata: {errMsg}</p>
-            </div>
-        );
+        return <div className="terminal-page">Piyasa terminali hatası: {errMsg}</div>;
     }
 
     return (
-        <div style={pageStyle}>
-            <h1 style={titleStyle}>Piyasa</h1>
-            <p style={mutedStyle}>
-                Finansal özet, sektör ısı haritası ve TradingView Lightweight Charts ile profesyonel
-                görünüm.
-            </p>
-
-            <div
-                style={{
-                    display: 'flex',
-                    gap: 8,
-                    marginBottom: 20,
-                    flexWrap: 'wrap',
-                }}
-            >
-                {tabs.map((t) => (
-                    <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => {
-                            setActiveTab(t.id);
-                            const syms = getSymbolsForTab(t.id);
-                            setChartSymbol(syms[0] ?? '');
-                        }}
-                        style={{
-                            padding: '8px 16px',
-                            fontSize: '0.875rem',
-                            fontWeight: activeTab === t.id ? 600 : 500,
-                            background: activeTab === t.id ? tokens.accent : tokens.bgCard,
-                            color: activeTab === t.id ? '#fff' : tokens.text,
-                            border: `1px solid ${tokens.border}`,
-                            borderRadius: 8,
-                            cursor: 'pointer',
-                        }}
-                    >
-                        {t.label}
-                    </button>
-                ))}
+        <div className="terminal-page" style={terminalVars}>
+            <div className="terminal-hero">
+                <div>
+                    <div style={{ fontSize: 12, color: tokens.textMuted, marginBottom: 2 }}>Seçili Enstrüman</div>
+                    <div style={{ fontSize: 22, fontWeight: 700 }}>
+                        {hero
+                            ? activeCategory === 'FUTURES'
+                                ? parseViopContractLabel(hero.symbol)
+                                : activeCategory === 'BOND'
+                                ? debtNameMap[hero.symbol] ?? hero.symbol
+                                : formatAssetLabel(hero.symbol, activeCategory === 'EQUITY' ? 'EQUITY' : activeCategory === 'CRYPTO' ? 'CRYPTO' : 'FX')
+                            : '—'}
+                    </div>
+                    <div style={{ fontSize: 12, color: tokens.textMuted }}>{hero?.symbol ?? ''}</div>
+                </div>
+                <div className="terminal-hero-price">
+                    {hero?.price?.toLocaleString('tr-TR', { maximumFractionDigits: 4 }) ?? '—'}
+                </div>
+                <div className={`terminal-hero-change ${hero?.trend === 'UP' ? 'up' : 'down'}`}>
+                    {(hero?.changePercent ?? 0) >= 0 ? '+' : ''}
+                    {(hero?.changePercent ?? 0).toFixed(2)}% {(hero?.trend === 'UP' ? '↑' : '↓')}
+                </div>
+                <div style={{ textAlign: 'right', fontSize: 12, color: tokens.textMuted }}>
+                    <div>H: {(hero?.high ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</div>
+                    <div>L: {(hero?.low ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</div>
+                    {activeCategory === 'FUTURES' && futuresHeaderMetrics ? (
+                        <>
+                            <div>Baz: {futuresHeaderMetrics.basis.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
+                            <div>Yıllık Taşıma: %{futuresHeaderMetrics.carry.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
+                            <div>
+                                OI Değişim: {futuresHeaderMetrics.oiChangePct >= 0 ? '+' : ''}
+                                {futuresHeaderMetrics.oiChangePct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
+                            </div>
+                        </>
+                    ) : null}
+                </div>
             </div>
 
-            {dashboardLoading ? (
-                <p style={mutedStyle}>Yükleniyor...</p>
+            {loadingDashboard ? (
+                <div className="terminal-card">Piyasa terminali yükleniyor...</div>
             ) : (
-                <div
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'minmax(0, 1fr) minmax(280px, 440px)',
-                        gap: 16,
-                        alignItems: 'start',
-                    }}
-                    className="market-dashboard-grid"
-                >
-                    <style>{`
-            @media (max-width: 1024px) {
-              .market-dashboard-grid { grid-template-columns: 1fr !important; }
-            }
-          `}</style>
-
-                    <div>
-                        <div style={cardStyle}>
-                            <h2
-                                style={{
-                                    fontSize: '1rem',
-                                    fontWeight: 600,
-                                    marginBottom: 12,
-                                }}
+                <>
+                    <div className="terminal-grid">
+                        <div className="terminal-card">
+                            <div style={{ fontWeight: 700, marginBottom: 10 }}>Piyasa Listesi</div>
+                            <input
+                                className="terminal-search"
+                                placeholder="Sembol / enstrüman ara"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                            <div
+                                className="terminal-table-wrap"
+                                onScroll={(e) => setTableScrollTop(e.currentTarget.scrollTop)}
                             >
-                                Güncel fiyatlar
-                            </h2>
-                            {tableEntries.length === 0 ? (
-                                <p style={mutedStyle}>Bu kategoride veri yok.</p>
-                            ) : (
-                                <div style={{ overflowX: 'auto' }}>
-                                    <table
-                                        style={{
-                                            width: '100%',
-                                            borderCollapse: 'collapse',
-                                            fontSize: '0.9375rem',
-                                        }}
-                                    >
-                                        <thead>
+                                <table className="terminal-data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Tip</th>
+                                            <th>Enstrüman</th>
+                                            <th>Fiyat</th>
+                                            <th>%</th>
+                                            <th>Hacim</th>
+                                            <th>Trend</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {virtualRows.topSpacer > 0 ? (
+                                            <tr style={{ height: virtualRows.topSpacer }}>
+                                                <td colSpan={6} />
+                                            </tr>
+                                        ) : null}
+                                        {virtualRows.rows.map((row) => (
                                             <tr
-                                                style={{
-                                                    borderBottom: `2px solid ${tokens.border}`,
+                                                key={row.symbol}
+                                                className={`${selectedSymbol === row.symbol ? 'active' : ''} ${
+                                                    priceFlash[row.symbol] === 'up'
+                                                        ? 'terminal-flash-up'
+                                                        : priceFlash[row.symbol] === 'down'
+                                                        ? 'terminal-flash-down'
+                                                        : ''
+                                                }`}
+                                                onClick={() => {
+                                                    setSelectedSymbol(row.symbol);
+                                                    setIsDetailPanelOpen(true);
                                                 }}
                                             >
-                                                <th style={{ textAlign: 'left', padding: 12 }}>
-                                                    Sembol
-                                                </th>
-                                                <th
-                                                    style={{
-                                                        textAlign: 'right',
-                                                        padding: 12,
-                                                        minWidth: 108,
-                                                    }}
-                                                >
-                                                    Trend (%)
-                                                </th>
-                                                <th style={{ textAlign: 'right', padding: 12 }}>
-                                                    Alış
-                                                </th>
-                                                <th style={{ textAlign: 'right', padding: 12 }}>
-                                                    Satış
-                                                </th>
-                                                <th style={{ textAlign: 'left', padding: 12 }}>
-                                                    Kaynak / Tarih
-                                                </th>
+                                                <td>
+                                                    <span className={`instrument-type-badge ${row.type.toLowerCase()}`}>{row.typeBadge}</span>
+                                                </td>
+                                                <td>
+                                                    <div style={{ fontWeight: 700 }}>{row.symbol}</div>
+                                                    <div style={{ fontSize: 11, color: tokens.textMuted }}>{row.displayName}</div>
+                                                </td>
+                                                <td>{row.price.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</td>
+                                                <td style={{ color: row.changePercent >= 0 ? '#22c55e' : '#ef4444' }}>
+                                                    {row.changePercent >= 0 ? '+' : ''}
+                                                    {row.changePercent.toFixed(2)}%
+                                                </td>
+                                                <td>{row.volume == null ? '—' : Number(row.volume).toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</td>
+                                                <td>
+                                                    <svg className="inline-spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+                                                        <polyline
+                                                            points={sparklinePath(row.sparkline.slice(-14))}
+                                                            fill="none"
+                                                            stroke={row.changePercent >= 0 ? '#22c55e' : '#ef4444'}
+                                                            strokeWidth="2"
+                                                        />
+                                                    </svg>
+                                                </td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            {tableEntries.map(([sym, row]) => {
-                                                const buy = resolveBuy(row);
-                                                const sell = resolveSell(row);
-                                                const noData = row.status === 'NO_DATA';
-                                                const mk = tabIdToMarketKind(activeTab);
-                                                const logoUrl = getDynamicLogoUrl(sym, mk);
-                                                const fb = fallbackForMarket(mk);
-                                                const spark = sparklineClosesFor(
-                                                    dashboard,
-                                                    activeTab,
-                                                    sym,
-                                                );
-                                                const trendPct =
-                                                    spark && spark.length >= 2
-                                                        ? sparkRangeChangePct(spark)
-                                                        : null;
-                                                const starKey = `${getMarketType(activeTab)}|${sym}`;
-                                                const isStarred = selectedStarSet.has(starKey);
-                                                const starBusy = savingStarKey === starKey;
-                                                return (
-                                                    <tr
-                                                        key={sym}
-                                                        style={{
-                                                            borderBottom: `1px solid ${tokens.border}`,
-                                                        }}
-                                                    >
-                                                        <td style={{ padding: 12 }}>
-                                                            <div
-                                                                style={{
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    gap: 10,
-                                                                }}
-                                                            >
-                                                                <AssetLogo
-                                                                    src={logoUrl}
-                                                                    alt=""
-                                                                    fallbackIcon={fb.Icon}
-                                                                    fallbackColor={fb.color}
-                                                                    size={28}
-                                                                />
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => void toggleStar(getMarketType(activeTab), sym)}
-                                                                    title={isStarred ? 'Yıldızdan çıkar' : 'Yıldızla'}
-                                                                    disabled={starBusy}
-                                                                    style={{
-                                                                        border: 'none',
-                                                                        background: 'transparent',
-                                                                        color: isStarred ? '#facc15' : tokens.textMuted,
-                                                                        cursor: starBusy ? 'not-allowed' : 'pointer',
-                                                                        fontSize: 17,
-                                                                        lineHeight: 1,
-                                                                        padding: 0,
-                                                                        marginRight: 2,
-                                                                    }}
-                                                                >
-                                                                    {isStarred ? '★' : '☆'}
-                                                                </button>
-                                                                <div>
-                                                                    <div
-                                                                        style={{
-                                                                            fontWeight: 600,
-                                                                            fontSize: '0.9rem',
-                                                                        }}
-                                                                    >
-                                                                        {formatAssetLabel(sym, mk)}
-                                                                    </div>
-                                                                    <div
-                                                                        style={{
-                                                                            fontSize: '0.72rem',
-                                                                            color: tokens.textMuted,
-                                                                            marginTop: 2,
-                                                                        }}
-                                                                    >
-                                                                        {row.symbol ?? sym}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                        <td
-                                                            style={{
-                                                                padding: '6px 12px',
-                                                                textAlign: 'right',
-                                                                verticalAlign: 'middle',
-                                                            }}
-                                                        >
-                                                            <div
-                                                                style={{
-                                                                    display: 'flex',
-                                                                    flexDirection: 'column',
-                                                                    alignItems: 'flex-end',
-                                                                    gap: 4,
-                                                                }}
-                                                            >
-                                                                {spark && spark.length >= 2 ? (
-                                                                    <>
-                                                                        <MarketSparkline
-                                                                            closes={spark}
-                                                                            bgColor={tokens.bgCard}
-                                                                            lineColor="#38bdf8"
-                                                                        />
-                                                                        <span
-                                                                            style={{
-                                                                                fontSize: 11,
-                                                                                fontWeight: 700,
-                                                                                color:
-                                                                                    trendPct == null
-                                                                                        ? tokens.textMuted
-                                                                                        : trendPct >= 0
-                                                                                          ? '#22c55e'
-                                                                                          : '#f87171',
-                                                                            }}
-                                                                        >
-                                                                            {trendPct == null
-                                                                                ? '—'
-                                                                                : `${trendPct >= 0 ? '+' : ''}${trendPct.toFixed(2)}%`}
-                                                                        </span>
-                                                                    </>
-                                                                ) : (
-                                                                    <span
-                                                                        style={{
-                                                                            fontSize: 11,
-                                                                            color: tokens.textMuted,
-                                                                        }}
-                                                                    >
-                                                                        —
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                        <td
-                                                            style={{
-                                                                padding: 12,
-                                                                textAlign: 'right',
-                                                            }}
-                                                        >
-                                                            {noData
-                                                                ? '-'
-                                                                : buy != null
-                                                                  ? buy.toLocaleString('tr-TR')
-                                                                  : '-'}
-                                                        </td>
-                                                        <td
-                                                            style={{
-                                                                padding: 12,
-                                                                textAlign: 'right',
-                                                            }}
-                                                        >
-                                                            {noData
-                                                                ? '-'
-                                                                : sell != null
-                                                                  ? sell.toLocaleString('tr-TR')
-                                                                  : buy != null
-                                                                    ? buy.toLocaleString('tr-TR')
-                                                                    : '-'}
-                                                        </td>
-                                                        <td
-                                                            style={{
-                                                                padding: 12,
-                                                                color: tokens.textMuted,
-                                                                fontSize: '0.8125rem',
-                                                            }}
-                                                        >
-                                                            {noData
-                                                                ? row.message ?? '-'
-                                                                : (row.source ?? '') +
-                                                                  (row.timestamp
-                                                                      ? ' · ' +
-                                                                        new Date(
-                                                                            row.timestamp,
-                                                                        ).toLocaleString('tr-TR')
-                                                                      : '')}
-                                                            {!noData && row.qualityFlag ? (
-                                                                <span
-                                                                    style={{
-                                                                        marginLeft: 8,
-                                                                        padding: '1px 6px',
-                                                                        borderRadius: 999,
-                                                                        fontSize: '0.68rem',
-                                                                        fontWeight: 700,
-                                                                        background: row.qualityFlag === 'EXACT'
-                                                                            ? 'rgba(34,197,94,.2)'
-                                                                            : row.qualityFlag === 'PREVIOUS_DAY'
-                                                                                ? 'rgba(245,158,11,.2)'
-                                                                                : 'rgba(239,68,68,.2)',
-                                                                        color: row.qualityFlag === 'EXACT'
-                                                                            ? '#22c55e'
-                                                                            : row.qualityFlag === 'PREVIOUS_DAY'
-                                                                                ? '#f59e0b'
-                                                                                : '#ef4444',
-                                                                    }}
-                                                                >
-                                                                    {row.qualityFlag}
-                                                                </span>
-                                                            ) : null}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
+                                        ))}
+                                        {Math.max(0, virtualRows.totalHeight - virtualRows.topSpacer - virtualRows.rows.length * virtualRows.rowHeight) > 0 ? (
+                                            <tr
+                                                style={{
+                                                    height: Math.max(
+                                                        0,
+                                                        virtualRows.totalHeight -
+                                                            virtualRows.topSpacer -
+                                                            virtualRows.rows.length * virtualRows.rowHeight
+                                                    ),
+                                                }}
+                                            >
+                                                <td colSpan={6} />
+                                            </tr>
+                                        ) : null}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
-                        <div style={cardStyle}>
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    marginBottom: 12,
-                                }}
-                            >
-                                <h2 style={{ fontSize: '1rem', fontWeight: 600 }}>
-                                    {activeTab === 'doviz' && 'Döviz grafiği'}
-                                    {activeTab === 'crypto' && 'Kripto grafiği'}
-                                    {activeTab === 'metals' && 'Altın grafiği'}
-                                    {activeTab === 'funds' && 'Fon grafiği'}
-                                    {activeTab === 'equity' && 'Hisse grafiği'}
-                                </h2>
-                                <button
-                                    type="button"
-                                    onClick={handleGoToAdvanced}
-                                    style={{
-                                        padding: '6px 12px',
-                                        fontSize: '0.8rem',
-                                        borderRadius: 999,
-                                        border: `1px solid ${tokens.border}`,
-                                        background: tokens.bgCard,
-                                        color: tokens.accent,
-                                        cursor: 'pointer',
-                                    }}
-                                >
-                                    Detaylı mum grafik →
-                                </button>
+                        <div className="terminal-card">
+                            <div className="terminal-btn-row" style={{ marginBottom: 10 }}>
+                                {CATEGORY_LABELS.map((cat) => (
+                                    <button
+                                        key={cat.id}
+                                        type="button"
+                                        className={`terminal-btn ${activeCategory === cat.id ? 'active' : ''}`}
+                                        onClick={() => setActiveCategory(cat.id)}
+                                    >
+                                        {cat.label}
+                                    </button>
+                                ))}
                             </div>
-                            <div
-                                style={{
-                                    marginBottom: 12,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 16,
-                                    flexWrap: 'wrap',
-                                }}
-                            >
-                                <label style={{ fontSize: '0.875rem' }}>
-                                    Sembol:
-                                    <select
-                                        value={chartSymbol}
-                                        onChange={(e) => setChartSymbol(e.target.value)}
-                                        style={{
-                                            marginLeft: 8,
-                                            padding: '6px 10px',
-                                            borderRadius: 8,
-                                            border: `1px solid ${tokens.border}`,
-                                            background:
-                                                (tokens as { inputBg?: string }).inputBg ??
-                                                tokens.bgCard,
-                                            color: tokens.text,
-                                            fontSize: '0.875rem',
-                                        }}
-                                    >
-                                        {symbolsForTab.map((s) => (
-                                            <option key={s} value={s}>
-                                                {s}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <label style={{ fontSize: '0.875rem' }}>
-                                    Dönem:
-                                    <select
-                                        value={chartDays}
-                                        onChange={(e) =>
-                                            setChartDays(Number(e.target.value))
-                                        }
-                                        style={{
-                                            marginLeft: 8,
-                                            padding: '6px 10px',
-                                            borderRadius: 8,
-                                            border: `1px solid ${tokens.border}`,
-                                            background:
-                                                (tokens as { inputBg?: string }).inputBg ??
-                                                tokens.bgCard,
-                                            color: tokens.text,
-                                            fontSize: '0.875rem',
-                                        }}
-                                    >
-                                        {DAYS_OPTIONS.map((d) => (
-                                            <option key={d} value={d}>
-                                                Son {d} gün
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <div
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 8,
-                                        flexWrap: 'wrap',
-                                        fontSize: '0.8125rem',
-                                    }}
-                                >
-                                    <span>MA:</span>
-                                    {['7', '30', '90'].map((ma) => (
-                                        <label
-                                            key={ma}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 4,
-                                            }}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedMa.includes(ma)}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) {
-                                                        setSelectedMa((prev) =>
-                                                            prev.includes(ma)
-                                                                ? prev
-                                                                : [...prev, ma],
-                                                        );
-                                                    } else {
-                                                        setSelectedMa((prev) =>
-                                                            prev.filter((m) => m !== ma),
-                                                        );
-                                                    }
-                                                }}
-                                            />
-                                            {ma}
-                                        </label>
+                            <div className="terminal-controls">
+                                <div className="terminal-btn-row">
+                                    {(['1D', '1W', '1M', '1Y'] as const).map((r) => (
+                                        <button key={r} type="button" className={`terminal-btn ${range === r ? 'active' : ''}`} onClick={() => setRange(r)}>
+                                            {r}
+                                        </button>
                                     ))}
                                 </div>
+                                <div className="terminal-btn-row">
+                                    <button type="button" className={`terminal-btn ${showMa ? 'active' : ''}`} onClick={() => setShowMa((v) => !v)}>
+                                        MA
+                                    </button>
+                                    <button type="button" className={`terminal-btn ${showRsi ? 'active' : ''}`} onClick={() => setShowRsi((v) => !v)}>
+                                        RSI
+                                    </button>
+                                </div>
                             </div>
-                            <MarketIndicatorAreaChart
-                                close={chartClose}
-                                chartMa={chartMa}
-                                selectedMa={selectedMa}
-                                loading={loadingChart}
+                            <MarketTerminalChart
+                                candles={candles}
+                                ma7={ma7}
+                                ma21={ma21}
+                                rsi14={rsi14}
+                                showMa={showMa}
+                                showRsi={showRsi}
+                                markers={markers}
+                                loading={loadingCandles || loadingIndicators || loadingViopHistory || loadingDebtHistory}
+                                symbol={selectedSymbol}
+                                trendLabel={hero?.trend}
+                                timeframeLabel={range}
+                                newsMarkers={newsMarkers}
+                                onNewsSelect={onNewsMarkerSelect}
                                 tokens={{
+                                    bg: tokens.bg,
                                     bgCard: tokens.bgCard,
                                     border: tokens.border,
                                     text: tokens.text,
                                     textMuted: tokens.textMuted,
                                 }}
-                                height={300}
                             />
                         </div>
 
-                        <div style={cardStyle}>
-                            <h2
-                                style={{
-                                    fontSize: '1rem',
-                                    fontWeight: 600,
-                                    marginBottom: 8,
-                                }}
-                            >
-                                Karşılaştırma (baz 100)
-                            </h2>
-                            <p style={{ ...mutedStyle, marginBottom: 12 }}>
-                                Aynı kategoriden 2–4 sembol seçtiğinizde baz-100 karşılaştırma grafiği
-                                çizilir (tek sembol veya seçim yoksa alan boş kalır). Yüksek volatilite
-                                daha kalın çizgi; çizgi üzerine gelince vurgulanır.
-                            </p>
-                            <div
-                                style={{
-                                    marginBottom: 12,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 16,
-                                    flexWrap: 'wrap',
-                                }}
-                            >
-                                <label style={{ fontSize: '0.875rem' }}>
-                                    Kategori:
-                                    <select
-                                        value={compareCategory}
-                                        onChange={(e) => {
-                                            setCompareCategory(e.target.value as TabId);
-                                            setCompareSymbols([]);
-                                        }}
-                                        style={{
-                                            marginLeft: 8,
-                                            padding: '6px 10px',
-                                            borderRadius: 8,
-                                            border: `1px solid ${tokens.border}`,
-                                            background:
-                                                (tokens as { inputBg?: string }).inputBg ??
-                                                tokens.bgCard,
-                                            color: tokens.text,
-                                        }}
-                                    >
-                                        {tabs.map((t) => (
-                                            <option key={t.id} value={t.id}>
-                                                {t.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <label style={{ fontSize: '0.875rem' }}>
-                                    Dönem:
-                                    <select
-                                        value={compareDays}
-                                        onChange={(e) =>
-                                            setCompareDays(Number(e.target.value))
-                                        }
-                                        style={{
-                                            marginLeft: 8,
-                                            padding: '6px 10px',
-                                            borderRadius: 8,
-                                            border: `1px solid ${tokens.border}`,
-                                            background:
-                                                (tokens as { inputBg?: string }).inputBg ??
-                                                tokens.bgCard,
-                                            color: tokens.text,
-                                        }}
-                                    >
-                                        {DAYS_OPTIONS.map((d) => (
-                                            <option key={d} value={d}>
-                                                Son {d} gün
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <div
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 8,
-                                        flexWrap: 'wrap',
-                                    }}
-                                >
-                                    <span style={{ fontSize: '0.875rem' }}>Semboller:</span>
-                                    {symbolsForCompare.slice(0, 12).map((sym) => (
-                                        <label
-                                            key={sym}
-                                            style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 4,
-                                                fontSize: '0.8125rem',
-                                            }}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={compareSymbols.includes(sym)}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) {
-                                                        setCompareSymbols((prev) =>
-                                                            prev.length >= 4 ? prev : [...prev, sym],
-                                                        );
-                                                    } else {
-                                                        setCompareSymbols((prev) =>
-                                                            prev.filter((s) => s !== sym),
-                                                        );
-                                                    }
-                                                }}
-                                            />
-                                            {sym}
-                                        </label>
+                        <div className="terminal-card terminal-right-panel">
+                            <div style={{ fontWeight: 700, marginBottom: 8 }}>Piyasa İçgörü</div>
+                            <div className="terminal-heatmap-detail" style={{ marginTop: 0 }}>
+                                {selectedNewsMarker ? (
+                                    <>
+                                        <div style={{ fontWeight: 700 }}>Haber Detayı</div>
+                                        <div>
+                                            {selectedNewsMarker.tone === 'POSITIVE'
+                                                ? 'Olumlu'
+                                                : selectedNewsMarker.tone === 'NEGATIVE'
+                                                ? 'Negatif'
+                                                : 'Nötr'}{' '}
+                                            · Etki: {impactLevel(selectedNewsMarker.impact)}
+                                        </div>
+                                        <div>Tarih: {new Date(selectedNewsMarker.time).toLocaleString('tr-TR')}</div>
+                                        <div>Kaynak: {selectedNewsMarker.items[0]?.source ?? 'Bilinmiyor'}</div>
+                                        <div>İlişki skoru: {selectedNewsMarker.relevanceScore.toLocaleString('tr-TR')}</div>
+                                        <div>Eşleşen semboller: {selectedNewsMarker.matchedSymbols.join(', ') || '—'}</div>
+                                        <div style={{ marginTop: 4, color: '#e2e8f0' }}>
+                                            {selectedNewsMarker.items[0]?.title ?? '—'}
+                                        </div>
+                                        {selectedNewsMarker.items.length > 1 ? (
+                                            <div style={{ marginTop: 4, color: '#94a3b8' }}>
+                                                Aynı gün {selectedNewsMarker.items.length} haber kümelendi.
+                                            </div>
+                                        ) : null}
+                                    </>
+                                ) : (
+                                    <div>Grafikteki haber noktasına tıklayınca detay burada açılır.</div>
+                                )}
+                            </div>
+                            {activeCategory === 'EQUITY' || activeCategory === 'CRYPTO' || activeCategory === 'FX' ? (
+                                <>
+                                    <MarketFinvizTreemap
+                                        tiles={(dashboard?.heatmapTiles ?? []).filter((tile) => {
+                                            if (activeCategory === 'EQUITY') return tile.assetClass === 'STOCK';
+                                            if (activeCategory === 'CRYPTO') return tile.assetClass === 'CRYPTO';
+                                            return tile.assetClass === 'FX';
+                                        })}
+                                        borderColor="rgba(71, 85, 105, 0.55)"
+                                        panelBg={tokens.bgCard}
+                                        onTileHover={setHoverTile}
+                                        onTileLeave={() => setHoverTile(null)}
+                                    />
+                                    <div style={{ marginTop: 8 }}>
+                                        <button type="button" className="terminal-btn" onClick={() => navigate('/market/heatmap')}>
+                                            Detaylı ısı haritası
+                                        </button>
+                                    </div>
+                                    <div className="terminal-heatmap-detail">
+                                        {hoverTile ? (
+                                            <>
+                                                <div>
+                                                    <strong>{hoverTile.symbol}</strong> · {hoverTile.assetClass}
+                                                </div>
+                                                <div>
+                                                    Değişim: {hoverTile.changePercent >= 0 ? '+' : ''}
+                                                    {hoverTile.changePercent.toFixed(2)}%
+                                                </div>
+                                                <div>Sektör: {hoverTile.sector}</div>
+                                            </>
+                                        ) : (
+                                            <div>Detay için ısı haritasında bir alana gelin.</div>
+                                        )}
+                                    </div>
+                                </>
+                            ) : null}
+
+                            {activeCategory === 'FUTURES' ? (
+                                <div className="terminal-mini-list">
+                                    <strong style={{ fontSize: 13 }}>Top Futures Movers</strong>
+                                    {futuresTopMovers.map((v) => (
+                                        <div key={`mv-${v.symbol}`} className="terminal-mini-item">
+                                            <span>{parseViopContractLabel(v.symbol)}</span>
+                                            <span>
+                                                {v.changePercent >= 0 ? '+' : ''}
+                                                {v.changePercent.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
+                                            </span>
+                                        </div>
+                                    ))}
+                                    <strong style={{ fontSize: 13, marginTop: 4 }}>Highest Carry</strong>
+                                    {futuresHighestCarry.map((v) => (
+                                        <div key={`carry-${v.symbol}`} className="terminal-mini-item">
+                                            <span>{parseViopContractLabel(v.symbol)}</span>
+                                            <span>%{Number(v.metrics?.yield ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
+                                        </div>
+                                    ))}
+                                    <strong style={{ fontSize: 13, marginTop: 4 }}>Highest Volume</strong>
+                                    {volumeLeaders.map((v) => (
+                                        <div key={`vol-${v.symbol}`} className="terminal-mini-item">
+                                            <span>{parseViopContractLabel(v.symbol)}</span>
+                                            <span>{v.volume == null ? '—' : Number(v.volume).toLocaleString('tr-TR')}</span>
+                                        </div>
+                                    ))}
+                                    {futuresHeaderMetrics ? (
+                                        <div className="terminal-mini-item">
+                                            <span>Spot vs Vadeli Farkı</span>
+                                            <span>{futuresHeaderMetrics.basis.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
+                                        </div>
+                                    ) : null}
+                                    {futuresHeaderMetrics ? (
+                                        <div className="terminal-mini-item">
+                                            <span>Yön</span>
+                                            <span>{futuresHeaderMetrics.basis >= 0 ? 'UP' : 'DOWN'}</span>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            ) : null}
+
+                            {activeCategory === 'FX' ? (
+                                <div className="terminal-mini-list">
+                                    <strong style={{ fontSize: 13 }}>Makas / Volatilite</strong>
+                                    {instruments.slice(0, 8).map((ins) => (
+                                        <div key={`fx-metric-${ins.symbol}`} className="terminal-mini-item">
+                                            <span>{ins.symbol}</span>
+                                            <span>
+                                                Makas {(ins.metrics?.basis ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })} · Vol {Math.abs(
+                                                    ins.changePercent
+                                                ).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+                                                %
+                                            </span>
+                                        </div>
                                     ))}
                                 </div>
+                            ) : null}
+
+                            {activeCategory !== 'FUTURES' ? <div className="terminal-mini-list">
+                                <strong style={{ fontSize: 13 }}>En Çok Yükselenler</strong>
+                                {topGainers.map((r) => (
+                                    <div key={`g-${r.symbol}`} className="terminal-mini-item">
+                                        <span>{r.symbol}</span>
+                                        <span style={{ color: '#22c55e' }}>+{r.changePercent.toFixed(2)}%</span>
+                                    </div>
+                                ))}
+                                <strong style={{ fontSize: 13, marginTop: 4 }}>En Çok Düşenler</strong>
+                                {topLosers.map((r) => (
+                                    <div key={`l-${r.symbol}`} className="terminal-mini-item">
+                                        <span>{r.symbol}</span>
+                                        <span style={{ color: '#ef4444' }}>{r.changePercent.toFixed(2)}%</span>
+                                    </div>
+                                ))}
+                                <strong style={{ fontSize: 13, marginTop: 4 }}>Hacim Liderleri</strong>
+                                {volumeLeaders.map((r) => (
+                                    <div key={`v-${r.symbol}`} className="terminal-mini-item">
+                                        <span>{r.symbol}</span>
+                                        <span>{r.volume == null ? '—' : Number(r.volume).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                ))}
+                                {activeCategory === 'CRYPTO' ? <><strong style={{ fontSize: 13, marginTop: 4 }}>Dominans</strong>
+                                {cryptoDominance.map((r) => (
+                                    <div key={`d-${r.symbol}`} className="terminal-mini-item">
+                                        <span>{r.symbol}</span>
+                                        <span>%{r.dominancePct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                ))}</> : null}
+                            </div> : null}
+                        </div>
+                    </div>
+
+                    <div className="terminal-card" style={{ marginTop: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                            <strong style={{ fontSize: 14 }}>Karşılaştırma Grafiği (Baz 100)</strong>
+                            <div style={{ fontSize: 12, color: '#94a3b8' }}>Aynı kategoriden 2-4 sembol seç</div>
+                        </div>
+                        {marketType ? <div className="terminal-compare-selector">
+                            {instruments.slice(0, 12).map((ins) => {
+                                const checked = compareSymbols.includes(ins.symbol);
+                                return (
+                                    <label key={`cmp-${ins.symbol}`} className="terminal-chip">
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setCompareSymbols((prev) => (prev.length >= 4 ? prev : [...prev, ins.symbol]));
+                                                } else {
+                                                    setCompareSymbols((prev) => prev.filter((s) => s !== ins.symbol));
+                                                }
+                                            }}
+                                        />
+                                        {ins.symbol}
+                                    </label>
+                                );
+                            })}
+                        </div> : null}
+                        {!marketType && activeCategory !== 'FUTURES' ? (
+                            <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
+                                Tahvil kategorisinde karşılaştırma grafiği yerine üstteki ana chart kullanılır.
                             </div>
-                            {loadingCompare ? (
-                                <p style={mutedStyle}>Karşılaştırma yükleniyor...</p>
-                            ) : compareRows.length === 0 ? (
-                                <p style={mutedStyle}>
-                                    Karşılaştırma grafiği için aynı kategoriden en az iki sembol
-                                    işaretleyin.
-                                </p>
-                            ) : (
+                        ) : null}
+                        {loadingCompare ? (
+                            <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
+                                Karşılaştırma yükleniyor...
+                            </div>
+                        ) : compareRows.length === 0 ? (
+                            <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
+                                Karşılaştırma için en az iki sembol seçin.
+                            </div>
+                        ) : (
+                            <div style={{ marginTop: 10 }}>
                                 <MarketCompareLwChart
                                     rows={compareRows}
                                     symbols={compareSymbols.slice(0, 4)}
-                                    colors={COMPARE_COLORS}
+                                    colors={['#38bdf8', '#22c55e', '#eab308', '#f87171']}
                                     lineWidthBySymbol={lineWidthBySymbol}
                                     tokens={{
                                         bgCard: tokens.bgCard,
@@ -1019,112 +1635,104 @@ export function Market() {
                                         text: tokens.text,
                                         textMuted: tokens.textMuted,
                                     }}
-                                    height={320}
+                                    height={280}
                                 />
-                            )}
+                            </div>
+                        )}
+                    </div>
+                    <div style={{ marginTop: 8, display: 'flex', gap: 12, fontSize: 11, color: '#94a3b8' }}>
+                        <span>VİOP kontrat: {viopContracts.length}</span>
+                        <span>Tahvil enstrüman: {debtCatalog.length}</span>
+                    </div>
+                </>
+            )}
+            {isDetailPanelOpen && selectedInstrumentVm ? (
+                <>
+                <button
+                    type="button"
+                    className="instrument-drawer-backdrop"
+                    aria-label="Detay panelini kapat"
+                    onClick={() => setIsDetailPanelOpen(false)}
+                />
+                <aside className="instrument-drawer">
+                    <div className="instrument-drawer-head">
+                        <strong>Enstrüman Detayı</strong>
+                        <button type="button" className="terminal-btn" onClick={() => setIsDetailPanelOpen(false)}>
+                            Kapat
+                        </button>
+                    </div>
+                    <div className="instrument-drawer-body">
+                        <div className="instrument-drawer-symbol">
+                            <span className={`instrument-type-badge ${selectedInstrumentVm.type.toLowerCase()}`}>{selectedInstrumentVm.typeBadge}</span>
+                            <div>
+                                <div style={{ fontWeight: 700 }}>{selectedInstrumentVm.symbol}</div>
+                                <div style={{ fontSize: 12, color: '#94a3b8' }}>{selectedInstrumentVm.displayName}</div>
+                            </div>
+                        </div>
+                        <div className="instrument-drawer-grid">
+                            <div>Fiyat</div>
+                            <div>{selectedInstrumentVm.price.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</div>
+                            <div>Değişim</div>
+                            <div style={{ color: selectedInstrumentVm.changePercent >= 0 ? '#22c55e' : '#ef4444' }}>
+                                {selectedInstrumentVm.changePercent >= 0 ? '+' : ''}
+                                {selectedInstrumentVm.changePercent.toFixed(2)}%
+                            </div>
+                            <div>Hacim</div>
+                            <div>{selectedInstrumentVm.volume == null ? '—' : Number(selectedInstrumentVm.volume).toLocaleString('tr-TR')}</div>
+                            {selectedInstrumentVm.type === 'BOND' ? (
+                                <>
+                                    <div>Vade Tarihi</div>
+                                    <div>{selectedInstrumentVm.maturityDate ?? '—'}</div>
+                                    <div>Vadeye Kalan Gün</div>
+                                    <div>
+                                        <span className="instrument-highlight-chip">
+                                            {selectedInstrumentVm.daysToMaturity != null
+                                                ? `${selectedInstrumentVm.daysToMaturity} gün`
+                                                : '—'}
+                                        </span>
+                                    </div>
+                                    <div>Kupon Oranı</div>
+                                    <div>%{Number(selectedInstrumentVm.couponRate ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
+                                    <div>YTM</div>
+                                    <div>%{Number(selectedInstrumentVm.yieldToMaturity ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
+                                </>
+                            ) : null}
+                            {selectedInstrumentVm.type === 'FUTURES' ? (
+                                <>
+                                    <div>Kontrat Ayı</div>
+                                    <div>{selectedInstrumentVm.contractMonth ?? '—'}</div>
+                                    <div>Son İşlem (Expiry)</div>
+                                    <div>
+                                        <span className="instrument-highlight-chip">
+                                            {selectedInstrumentVm.expiryDate ?? '—'}
+                                        </span>
+                                    </div>
+                                    <div>Teminat Gereksinimi</div>
+                                    <div>{Number(selectedInstrumentVm.marginRequirement ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
+                                    <div>Long/Short</div>
+                                    <div>{selectedInstrumentVm.longShort ?? 'NÖTR'}</div>
+                                </>
+                            ) : null}
+                        </div>
+                        <div style={{ marginTop: 10 }}>
+                            <button
+                                type="button"
+                                className="terminal-btn active"
+                                onClick={() =>
+                                    navigate(
+                                        `/trade?symbol=${encodeURIComponent(selectedInstrumentVm.symbol)}&kind=${encodeURIComponent(
+                                            selectedInstrumentVm.type
+                                        )}`
+                                    )
+                                }
+                            >
+                                Yeni Emir Gir
+                            </button>
                         </div>
                     </div>
-
-                    <aside style={{ ...cardStyle, marginBottom: 0, position: 'sticky', top: 16 }}>
-                        <h2
-                            style={{
-                                fontSize: '1rem',
-                                fontWeight: 600,
-                                marginBottom: 8,
-                            }}
-                        >
-                            Piyasa ısı haritası
-                        </h2>
-                        <p style={{ ...mutedStyle, marginBottom: 12 }}>
-                            Equity: {dashboard?.heatmapMeta?.equityMode ?? 'EQUITY_FINVIZ'} (
-                            {dashboard?.heatmapMeta?.equityChangeHorizon ?? '1D'} /{' '}
-                            {dashboard?.heatmapMeta?.equityWeightMode ?? 'EQUAL'}). Diğer varlıklar:{' '}
-                            {dashboard?.heatmapMeta?.multiAssetMode ?? 'MULTI_ASSET'} (
-                            {dashboard?.heatmapMeta?.multiAssetChangeHorizon ?? '14D'} /{' '}
-                            {dashboard?.heatmapMeta?.multiAssetWeightMode ?? 'PRICE_SQRT'}). Geçmiş yoksa gri nötr.
-                        </p>
-                        <button
-                            type="button"
-                            onClick={() => navigate('/market/heatmap')}
-                            style={{
-                                marginBottom: 12,
-                                padding: '6px 12px',
-                                fontSize: '0.8rem',
-                                borderRadius: 999,
-                                border: `1px solid ${tokens.border}`,
-                                background: tokens.bgCard,
-                                color: tokens.accent,
-                                cursor: 'pointer',
-                            }}
-                        >
-                            Detaylı ısı haritası →
-                        </button>
-                        <MarketFinvizTreemap
-                            tiles={dashboard?.heatmapTiles ?? []}
-                            borderColor={tokens.border}
-                            panelBg={tokens.bg}
-                        />
-                        {dashboard?.computedAt ? (
-                            <p
-                                style={{
-                                    ...mutedStyle,
-                                    marginTop: 12,
-                                    fontSize: 11,
-                                }}
-                            >
-                                Hesap:{' '}
-                                {new Date(dashboard.computedAt).toLocaleString('tr-TR')}
-                            </p>
-                        ) : null}
-                    </aside>
-                    <aside style={{ ...cardStyle, marginBottom: 0 }}>
-                        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>VİOP Paneli</h2>
-                        {viopLatest.length === 0 ? (
-                            <p style={mutedStyle}>VİOP verisi bekleniyor.</p>
-                        ) : (
-                            viopLatest.slice(0, 4).map((v) => (
-                                <div key={v.contractCode} style={{ borderBottom: `1px solid ${tokens.border}`, padding: '8px 0' }}>
-                                    <div style={{ fontWeight: 600 }}>{v.contractCode}</div>
-                                    <div style={{ fontSize: '0.78rem', color: tokens.textMuted }}>
-                                        Basis: {Number(v.basis).toLocaleString('tr-TR')} · Annualized: %{Number(v.annualizedBasisPct).toLocaleString('tr-TR')}
-                                    </div>
-                                    <div style={{ fontSize: '0.74rem', color: tokens.textMuted }}>
-                                        {v.source} · {new Date(v.asOf).toLocaleString('tr-TR')} · {v.oiPriceRegime}
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                        {viopContracts.length > 0 ? (
-                            <p style={{ ...mutedStyle, marginTop: 8, fontSize: 11 }}>
-                                Kontrat sayısı: {viopContracts.length}
-                            </p>
-                        ) : null}
-                    </aside>
-                    <aside style={{ ...cardStyle, marginBottom: 0 }}>
-                        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>Debt/Bono Paneli</h2>
-                        {debtLatest.length === 0 ? (
-                            <p style={mutedStyle}>Debt verisi bekleniyor.</p>
-                        ) : (
-                            debtLatest.slice(0, 4).map((d) => (
-                                <div key={`${d.isin}-${d.asOf}`} style={{ borderBottom: `1px solid ${tokens.border}`, padding: '8px 0' }}>
-                                    <div style={{ fontWeight: 600 }}>{d.isin}</div>
-                                    <div style={{ fontSize: '0.78rem', color: tokens.textMuted }}>
-                                        Dirty: {Number(d.dirtyPrice).toLocaleString('tr-TR')} · Yield: %{Number(d.yieldPct).toLocaleString('tr-TR')}
-                                    </div>
-                                    <div style={{ fontSize: '0.74rem', color: tokens.textMuted }}>
-                                        {d.source} · {new Date(d.asOf).toLocaleString('tr-TR')}
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                        {debtCatalog.length > 0 ? (
-                            <p style={{ ...mutedStyle, marginTop: 8, fontSize: 11 }}>
-                                Enstrüman sayısı: {debtCatalog.length}
-                            </p>
-                        ) : null}
-                    </aside>
-                </div>
-            )}
+                </aside>
+                </>
+            ) : null}
         </div>
     );
 }

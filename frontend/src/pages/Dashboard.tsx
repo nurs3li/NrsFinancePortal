@@ -6,7 +6,7 @@ import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 import { useTheme } from '../theme/ThemeContext';
 import { Coins, DollarSign, TrendingUp, type LucideIcon } from 'lucide-react';
-import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatAssetLabel, getDynamicLogoUrl, type MarketType } from '../lib/assetBranding';
 import { AssetLogo } from '../components/AssetLogo';
 import './Dashboard.css';
@@ -99,6 +99,13 @@ type StarredAssetsResponse = {
     resolved: { marketType: string; symbol: string; position: number; defaultFilled: boolean }[];
 };
 
+function unwrapPayload<T>(payload: unknown): T {
+    if (payload && typeof payload === 'object' && 'data' in (payload as object)) {
+        return (payload as { data: T }).data;
+    }
+    return payload as T;
+}
+
 type StarAsset = {
     key: string;
     label: string;
@@ -108,6 +115,7 @@ type StarAsset = {
     price: number;
     change24h: number;
 };
+type BalancePoint = { key: string; date: string; balance: number };
 
 const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
     { id: '1A', label: '1 ay' },
@@ -118,7 +126,7 @@ export function Dashboard() {
     const navigate = useNavigate();
     const { theme, tokens } = useTheme();
     const [summary, setSummary] = useState<SummaryResponse | null>(null);
-    const [balancePoints, setBalancePoints] = useState<{ date: string; balance: number }[]>([]);
+    const [balancePoints, setBalancePoints] = useState<BalancePoint[]>([]);
     const [selectedFilter, setSelectedFilter] = useState<TimeFilter>('1A');
     const [starAssets, setStarAssets] = useState<StarAsset[]>([]);
     const [latestNews, setLatestNews] = useState<NewsItem[]>([]);
@@ -158,6 +166,30 @@ export function Dashboard() {
     };
 
     const hasLoadedOnceRef = useRef(false);
+
+    const buildDailyBalanceSeries = (txList: TxRow[]): BalancePoint[] => {
+        if (!Array.isArray(txList) || txList.length === 0) return [];
+        const sorted = [...txList].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        const latestByDay = new Map<string, { ts: number; balance: number }>();
+        sorted.forEach((tx) => {
+            const dt = new Date(tx.createdAt);
+            if (Number.isNaN(dt.getTime())) return;
+            const key = dt.toISOString().slice(0, 10);
+            latestByDay.set(key, {
+                ts: dt.getTime(),
+                balance: Number(tx.balanceAfter ?? 0),
+            });
+        });
+        return [...latestByDay.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([key, value]) => ({
+                key,
+                date: new Date(`${key}T00:00:00`).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }),
+                balance: value.balance,
+            }));
+    };
 
     const unwrapAxiosData = <T,>(res: AxiosResponse<T>): T => {
         const body = res.data as unknown;
@@ -199,14 +231,7 @@ export function Dashboard() {
                 const page = unwrapAxiosData(phase1[1].value) as { content?: TxRow[] };
                 const txContent = page?.content ?? [];
                 const txList = Array.isArray(txContent) ? txContent : [];
-                const sortedTx = [...txList].sort(
-                    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-                );
-                const chartData = sortedTx.map((tx) => ({
-                    date: new Date(tx.createdAt).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }),
-                    balance: Number(tx.balanceAfter),
-                }));
-                setBalancePoints(chartData);
+                setBalancePoints(buildDailyBalanceSeries(txList));
             } else {
                 setBalancePoints([]);
             }
@@ -229,7 +254,7 @@ export function Dashboard() {
             const pickData = <T,>(i: number): T | undefined => {
                 const r = settled[i];
                 if (!r || r.status !== 'fulfilled') return undefined;
-                return (r.value as AxiosResponse<T>).data;
+                return unwrapPayload<T>((r.value as AxiosResponse<T>).data);
             };
 
             const fx = pickData<Record<string, LatestPrice>>(0) ?? {};
@@ -495,10 +520,10 @@ export function Dashboard() {
                                 />
                                 <Tooltip
                                     formatter={(value: number | undefined) => [formatMoney(Number(value ?? 0)), 'Bakiye']}
+                                    labelFormatter={(label: any) => `Tarih: ${String(label ?? '')}`}
                                     contentStyle={{ borderRadius: 12, border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: tokens.text }}
                                 />
-                                <Area type="monotone" dataKey="balance" stroke="none" fill="url(#balanceFill)" />
-                                <Line type="monotone" dataKey="balance" stroke="#3182CE" strokeWidth={3} dot={false} />
+                                <Area type="monotone" dataKey="balance" stroke="#3182CE" strokeWidth={3} fill="url(#balanceFill)" />
                             </AreaChart>
                         </ResponsiveContainer>
                     )}

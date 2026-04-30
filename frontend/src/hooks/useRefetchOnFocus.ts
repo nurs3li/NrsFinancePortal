@@ -8,7 +8,10 @@ export function useRefetchOnFocus(
     enabled = true
 ) {
     const refetchRef = useRef(refetch);
-    refetchRef.current = refetch;
+
+    useEffect(() => {
+        refetchRef.current = refetch;
+    }, [refetch]);
 
     useEffect(() => {
         if (!enabled) return;

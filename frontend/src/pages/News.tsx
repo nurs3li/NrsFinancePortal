@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { marketClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import DOMPurify from 'dompurify';
+import { useSearchParams } from 'react-router-dom';
 import './News.css';
 
 type NewsItem = {
@@ -28,12 +29,24 @@ const CATEGORIES = [
 
 export function News() {
     const { tokens } = useTheme();
+    const [searchParams] = useSearchParams();
+    const focusId = Number(searchParams.get('focus') ?? 0);
+    const queryCategory = searchParams.get('category') ?? '';
     const [page, setPage] = useState<NewsPage | null>(null);
     const [category, setCategory] = useState('');
     const [pageNum, setPageNum] = useState(0);
     const [selected, setSelected] = useState<NewsItem | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!queryCategory) return;
+        const allowed = new Set(CATEGORIES.map((x) => x.value));
+        if (allowed.has(queryCategory)) {
+            setCategory(queryCategory);
+            setPageNum(0);
+        }
+    }, [queryCategory]);
 
     const extractReadableNewsBody = (rawHtml: string | null | undefined): string => {
         if (!rawHtml || !rawHtml.trim()) return '<p>İçerik bulunamadı.</p>';
@@ -77,6 +90,21 @@ export function News() {
             .catch((err) => setError(err.message ?? 'Hata'))
             .finally(() => setLoading(false));
     }, [category, pageNum]);
+
+    useEffect(() => {
+        if (!focusId || !page) return;
+        const found = page.content.find((n) => n.id === focusId);
+        if (found) {
+            setSelected(found);
+            return;
+        }
+        marketClient
+            .get<NewsItem>(`/api/news/${focusId}`)
+            .then((res) => setSelected(res.data))
+            .catch(() => {
+                // Odak haberi bulunamazsa mevcut akışı bozma.
+            });
+    }, [focusId, page]);
 
     const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
     const titleStyle: React.CSSProperties = { fontSize: '1.75rem', fontWeight: 700, marginBottom: 4 };

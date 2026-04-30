@@ -15,6 +15,8 @@ import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
+import { ChevronDown, Info, Pencil, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import './TerminalPages.css';
 
 type AssetType = 'STOCK' | 'CRYPTO' | 'FX' | 'METAL' | 'FUND';
 
@@ -177,6 +179,7 @@ function aggregatePnlByAsset(
 
 export function Portfolio() {
     const { tokens } = useTheme();
+    const [infoOpen, setInfoOpen] = useState(false);
 
     const [unifiedItems, setUnifiedItems] = useState<UnifiedPortfolioItem[]>([]);
     const [perf, setPerf] = useState<PortfolioPerformance | null>(null);
@@ -401,73 +404,87 @@ export function Portfolio() {
     }
 
     return (
-        <div style={pageStyle}>
+        <div
+            style={
+                {
+                    ...pageStyle,
+                    '--tp-bg': '#0a192f',
+                    '--tp-card': tokens.bgCard,
+                    '--tp-border': tokens.border,
+                    '--tp-text': tokens.text,
+                    '--tp-muted': tokens.textMuted,
+                    '--tp-success': '#22c55e',
+                    '--tp-danger': '#ef4444',
+                } as CSSProperties
+            }
+            className="terminal-pages-root"
+        >
             <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>Portföylerim</h1>
             <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 8 }}>
                 Trade + manuel giriş birleşik görünüm ve performans özeti.
             </p>
-            <p
-                style={{
-                    fontSize: '0.8125rem',
-                    color: tokens.textMuted,
-                    marginBottom: 16,
-                    padding: '10px 12px',
-                    borderRadius: 8,
-                    border: `1px solid ${tokens.border}`,
-                    background: tokens.inputBg,
-                    lineHeight: 1.45,
-                }}
-            >
-                <strong style={{ color: tokens.text }}>Nasıl okunur?</strong> Aşağıdaki{' '}
-                <strong>üç halka grafik</strong>, güncel portföy değerinizin (TRY) varlık sınıfına göre payını gösterir:
-                soldan birleşik (trade+manuel), ortada yalnızca trade, sağda yalnızca manuel. Hemen altındaki{' '}
-                <strong>varlık bazlı kar/zarar grafikleri</strong> ise sembollerinizin güncel PnL durumunu (yeşil = kar,
-                kırmızı = zarar) doğrudan gösterir.
-            </p>
+            <div className="tp-info-banner" style={{ marginBottom: 16 }}>
+                <div className="tp-info-head" onClick={() => setInfoOpen((v) => !v)}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <Info size={16} />
+                        <strong style={{ fontSize: '0.86rem' }}>Portföy Okuma Rehberi</strong>
+                    </div>
+                    <ChevronDown size={16} style={{ transform: infoOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 150ms ease' }} />
+                </div>
+                {infoOpen ? (
+                    <p style={{ margin: '8px 0 0', fontSize: '0.8125rem', color: tokens.textMuted, lineHeight: 1.45 }}>
+                        Üç halka grafik, dağılımı birleşik/trade/manuel olarak ayrı gösterir. Bar grafikler sembol bazında PnL etkisini
+                        verir; yeşil kar, kırmızı zarar. Tabloda sayısal alanlar sağ hizalı ve monospaced font ile gösterilir.
+                    </p>
+                ) : null}
+            </div>
 
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                    gap: 12,
-                    marginBottom: 16,
-                }}
-            >
-                <div style={{ ...cardStyle, background: tokens.accentGradient, color: '#fff', border: 'none' }}>
+            <div className="tp-summary-grid" style={{ marginBottom: 16 }}>
+                <div className="tp-card tp-summary-card" style={{ ...cardStyle, background: tokens.accentGradient, color: '#fff', border: 'none' }}>
                     <div style={{ fontSize: '0.8125rem', opacity: 0.9 }}>Toplam Maliyet</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 6 }}>
+                    <div className="tp-mono" style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 6 }}>
                         {fmtMoney(perf?.totalCost ?? 0)}
                     </div>
                 </div>
-                <div style={cardStyle}>
-                    <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Güncel Değer</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: 6 }}>
+                <div className="tp-card tp-summary-card" style={cardStyle}>
+                    <div className="tp-label">Güncel Değer</div>
+                    <div className="tp-value tp-mono" style={{ marginTop: 6 }}>
                         {fmtMoney(perf?.totalCurrentValue ?? 0)}
                     </div>
                 </div>
-                <div style={cardStyle}>
-                    <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Toplam kar (TRY)</div>
+                <div className="tp-card tp-summary-card" style={cardStyle}>
+                    <div className="tp-label">Toplam kar (TRY)</div>
                     <div
                         style={{
                             fontSize: '1.25rem',
                             fontWeight: 700,
                             marginTop: 6,
                             color: (perf?.totalPnl ?? 0) >= 0 ? '#22c55e' : '#ef4444',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
                         }}
+                        className="tp-mono"
                     >
+                        {(perf?.totalPnl ?? 0) >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                         {fmtMoney(perf?.totalPnl ?? 0)}
                     </div>
                 </div>
-                <div style={cardStyle}>
-                    <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Toplam PNL %</div>
+                <div className="tp-card tp-summary-card" style={cardStyle}>
+                    <div className="tp-label">Toplam PNL %</div>
                     <div
                         style={{
                             fontSize: '1.25rem',
                             fontWeight: 700,
                             marginTop: 6,
                             color: (perf?.totalPnlPct ?? 0) >= 0 ? '#22c55e' : '#ef4444',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
                         }}
+                        className="tp-mono"
                     >
+                        {(perf?.totalPnlPct ?? 0) >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                         {Number(perf?.totalPnlPct ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
                     </div>
                 </div>
@@ -725,7 +742,7 @@ export function Portfolio() {
                     <h2 style={{ marginTop: 0, marginBottom: 12, fontSize: '1rem' }}>Birleşik Varlık Listesi</h2>
 
                     <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                        <table className="tp-table">
                             <thead>
                                 <tr>
                                     <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Kaynak</th>
@@ -760,17 +777,21 @@ export function Portfolio() {
                                             marginLeft: 4,
                                         };
                                         return (
-                                        <tr key={`${perfKey}-${i}`}>
-                                            <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>{row.source}</td>
+                                        <tr key={`${perfKey}-${i}`} className="tp-table-row-hover">
+                                            <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
+                                                <span className={`tp-badge ${row.source === 'MANUAL' ? 'tp-badge-manual' : 'tp-badge-trade'}`}>
+                                                    {row.source}
+                                                </span>
+                                            </td>
                                             <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>{row.type}</td>
                                             <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>{row.symbol}</td>
-                                            <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}`, textAlign: 'right' }}>
+                                            <td className="tp-mono" style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}`, textAlign: 'right' }}>
                                                 {Number(row.quantity).toLocaleString('tr-TR', { maximumFractionDigits: 8 })}
                                             </td>
-                                            <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}`, textAlign: 'right' }}>
+                                            <td className="tp-mono" style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}`, textAlign: 'right' }}>
                                                 {fmtMoney(row.avgBuyPrice)}
                                             </td>
-                                            <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}`, textAlign: 'right' }}>
+                                            <td className="tp-mono" style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}`, textAlign: 'right' }}>
                                                 {rowPerf
                                                     ? `${fmtMoney(Number(rowPerf.currentPrice ?? 0))} (${priceCurrency})`
                                                     : '-'}
@@ -778,15 +799,17 @@ export function Portfolio() {
                                             <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}`, textAlign: 'right', whiteSpace: 'nowrap' }}>
                                                 {row.source === 'MANUAL' && row.manualPositionId != null ? (
                                                     <>
-                                                        <button type="button" style={btnStyle} onClick={() => startEditManual(row)}>
-                                                            Düzenle
+                                                        <button type="button" className="tp-icon-btn" style={btnStyle} onClick={() => startEditManual(row)} title="Düzenle">
+                                                            <Pencil size={14} />
                                                         </button>
                                                         <button
                                                             type="button"
+                                                            className="tp-icon-btn tp-icon-btn-danger"
                                                             style={{ ...btnStyle, color: '#b91c1c', borderColor: '#fecaca' }}
                                                             onClick={() => deleteManual(row.manualPositionId!)}
+                                                            title="Sil"
                                                         >
-                                                            Sil
+                                                            <Trash2 size={14} />
                                                         </button>
                                                     </>
                                                 ) : (

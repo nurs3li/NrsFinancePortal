@@ -1,15 +1,19 @@
 import { useEffect, useState, useCallback } from 'react';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { useSearchParams } from 'react-router-dom';
 
 type AssetType = 'CRYPTO' | 'FX' | 'FUND' | 'METAL' | 'STOCK';
 type TradeType = 'BUY' | 'SELL';
+type TemplateType = 'SPOT' | 'FUTURES' | 'FIXED_INCOME';
 
 type TradeRequest = {
     assetType: AssetType;
     symbol: string;
     quantity: number;
     tradeType: TradeType;
+    templateType?: TemplateType;
+    attributes?: Record<string, unknown>;
 };
 
 type TradeResponse = {
@@ -55,6 +59,19 @@ const ASSET_TYPES: { value: AssetType; label: string }[] = [
     { value: 'METAL', label: 'Altın' },
     { value: 'STOCK', label: 'Hisse' },
 ];
+const TEMPLATE_LABELS: Record<TemplateType, string> = {
+    SPOT: 'Spot',
+    FUTURES: 'VİOP',
+    FIXED_INCOME: 'Tahvil/Bono',
+};
+const INSTRUMENT_CONFIG: Record<TemplateType, AssetType[]> = {
+    SPOT: ['CRYPTO', 'FX', 'STOCK', 'METAL'],
+    FUTURES: ['FX', 'STOCK', 'METAL'],
+    FIXED_INCOME: ['FUND'],
+};
+const orderFormV2Enabled = String(import.meta.env.VITE_ORDER_FORM_V2_ENABLED ?? 'true') === 'true';
+const ISIN_PATTERN = /^TR[A-Z0-9]{10}$/;
+const FUTURES_PATTERN = /^[A-Z0-9_]+\d{4}$/;
 
 function getOverviewKey(type: AssetType): keyof MarketOverview {
     switch (type) {
@@ -69,17 +86,24 @@ function getOverviewKey(type: AssetType): keyof MarketOverview {
 
 export function Trade() {
     const { tokens } = useTheme();
+    const [searchParams] = useSearchParams();
 
     const [assetType, setAssetType] = useState<AssetType>('CRYPTO');
     const [symbol, setSymbol] = useState('');
+    const [templateType, setTemplateType] = useState<TemplateType>('SPOT');
     const [tradeType, setTradeType] = useState<TradeType>('BUY');
     const [quantity, setQuantity] = useState<string>('0.1');
+    const [limitPrice, setLimitPrice] = useState<string>('');
+    const [contractMonth, setContractMonth] = useState<string>('Haz 2026');
+    const [nominal, setNominal] = useState<string>('');
+    const [priceMode, setPriceMode] = useState<'PRICE' | 'YIELD'>('PRICE');
 
     const [overview, setOverview] = useState<MarketOverview | null>(null);
     const [overviewLoading, setOverviewLoading] = useState(true);
 
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [restrictionToast, setRestrictionToast] = useState<string | null>(null);
     const [lastTrade, setLastTrade] = useState<TradeResponse | null>(null);
 
     const [history, setHistory] = useState<Page<TradeHistoryItem> | null>(null);
@@ -107,14 +131,67 @@ export function Trade() {
     useEffect(() => {
         loadOverview();
     }, [loadOverview]);
+    useEffect(() => {
+        const kind = String(searchParams.get('kind') ?? '').toUpperCase();
+        const symbolFromQs = searchParams.get('symbol');
+        if (kind === 'BOND') {
+            setTemplateType('FIXED_INCOME');
+        } else if (kind === 'FUTURES') {
+            setTemplateType('FUTURES');
+        } else if (kind === 'STOCK') {
+            setTemplateType('SPOT');
+        }
+        if (symbolFromQs) {
+            const normalized = symbolFromQs.toUpperCase();
+            setSymbol(normalized);
+            if (orderFormV2Enabled) {
+                if (ISIN_PATTERN.test(normalized)) {
+                    setTemplateType('FIXED_INCOME');
+                    setAssetType('FUND');
+                } else if (FUTURES_PATTERN.test(normalized)) {
+                    setTemplateType('FUTURES');
+                    setAssetType('FX');
+                }
+            }
+        }
+    }, [searchParams]);
+    useEffect(() => {
+        if (!orderFormV2Enabled) return;
+        const allowed = INSTRUMENT_CONFIG[templateType];
+        if (!allowed.includes(assetType)) {
+            setAssetType(allowed[0]);
+        }
+    }, [templateType, assetType]);
+    useEffect(() => {
+        if (!orderFormV2Enabled || !symbol) return;
+        const normalized = symbol.trim().toUpperCase();
+        if (ISIN_PATTERN.test(normalized) && templateType !== 'FIXED_INCOME') {
+            setTemplateType('FIXED_INCOME');
+            setAssetType('FUND');
+            return;
+        }
+        if (FUTURES_PATTERN.test(normalized) && templateType !== 'FUTURES') {
+            setTemplateType('FUTURES');
+            if (!INSTRUMENT_CONFIG.FUTURES.includes(assetType)) {
+                setAssetType('FX');
+            }
+        }
+    }, [symbol, templateType, assetType]);
 
     const symbolOptions = ((): string[] => {
         if (!overview) return [];
         const key = getOverviewKey(assetType);
         const map = overview[key];
         if (!map || typeof map !== 'object') return [];
-        return Object.keys(map).filter((k) => map[k] != null);
+        const base = Object.keys(map).filter((k) => map[k] != null);
+        if (symbol && !base.includes(symbol)) {
+            return [symbol, ...base];
+        }
+        return base;
     })();
+    const selectableAssetTypes = orderFormV2Enabled
+        ? ASSET_TYPES.filter((a) => INSTRUMENT_CONFIG[templateType].includes(a.value))
+        : ASSET_TYPES;
 
     useEffect(() => {
         if (symbolOptions.length > 0 && !symbolOptions.includes(symbol)) {
@@ -153,14 +230,37 @@ export function Trade() {
             setSubmitError('Lütfen sembol seçin ve miktar girin.');
             return;
         }
+        if (orderFormV2Enabled) {
+            const allowed = INSTRUMENT_CONFIG[templateType];
+            if (!allowed.includes(assetType)) {
+                setSubmitError('Market Order Restriction: Şablon ve varlık türü uyumsuz.');
+                return;
+            }
+        }
+        const attributes: Record<string, unknown> = {};
+        if (templateType === 'FUTURES') {
+            attributes.contractMonth = contractMonth;
+            attributes.expiryDate = contractMonth;
+        }
+        if (templateType === 'FIXED_INCOME') {
+            attributes.nominal = nominal ? Number(nominal) : null;
+            attributes.priceMode = priceMode;
+            attributes.yield = priceMode === 'YIELD' ? limitPrice : null;
+        }
+        if (templateType === 'SPOT' && limitPrice) {
+            attributes.limitPrice = Number(limitPrice);
+        }
         const payload: TradeRequest = {
             assetType,
             symbol: symbol.trim(),
             quantity: qty,
             tradeType,
+            templateType: orderFormV2Enabled ? templateType : undefined,
+            attributes: orderFormV2Enabled ? attributes : undefined,
         };
         setSubmitting(true);
         setSubmitError(null);
+        setRestrictionToast(null);
         financeClient
             .post<{ data: TradeResponse }>('/api/trades', payload)
             .then((res) => {
@@ -176,6 +276,9 @@ export function Trade() {
                     err.message ??
                     'Emir gönderilirken hata oluştu.';
                 setSubmitError(msg);
+                if (String(msg).includes('MARKET_ORDER_RESTRICTION')) {
+                    setRestrictionToast(`Market Order Restriction: ${String(msg).replace('MARKET_ORDER_RESTRICTION:', '').trim()}`);
+                }
             })
             .finally(() => setSubmitting(false));
     };
@@ -207,6 +310,21 @@ export function Trade() {
 
     return (
         <div style={pageStyle}>
+            {restrictionToast ? (
+                <div
+                    style={{
+                        marginBottom: 12,
+                        borderRadius: 10,
+                        border: `1px solid ${tokens.error}`,
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        color: '#fecaca',
+                        padding: '10px 12px',
+                        fontSize: '0.85rem',
+                    }}
+                >
+                    {restrictionToast}
+                </div>
+            ) : null}
             <h1 style={titleStyle}>Alım ve satım</h1>
             <p style={mutedStyle}>
                 Varlık türüne göre sembol seçin; miktar girip emri gönderin.
@@ -224,13 +342,27 @@ export function Trade() {
                     <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>Emir Formu</h2>
                     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <label style={{ fontSize: '0.875rem' }}>
+                            Enstrüman Şablonu
+                            <select
+                                value={templateType}
+                                onChange={(e) => setTemplateType(e.target.value as TemplateType)}
+                                style={inputStyle}
+                            >
+                                {Object.keys(TEMPLATE_LABELS).map((key) => (
+                                    <option key={key} value={key}>
+                                        {TEMPLATE_LABELS[key as TemplateType]}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label style={{ fontSize: '0.875rem' }}>
                             Varlık Türü
                             <select
                                 value={assetType}
                                 onChange={(e) => setAssetType(e.target.value as AssetType)}
                                 style={inputStyle}
                             >
-                                {ASSET_TYPES.map((t) => (
+                                {selectableAssetTypes.map((t) => (
                                     <option key={t.value} value={t.value}>{t.label}</option>
                                 ))}
                             </select>
@@ -302,6 +434,55 @@ export function Trade() {
                                 style={inputStyle}
                             />
                         </label>
+                        {templateType === 'SPOT' ? (
+                            <label style={{ fontSize: '0.875rem' }}>
+                                Fiyat (opsiyonel)
+                                <input
+                                    type="number"
+                                    step="0.0001"
+                                    value={limitPrice}
+                                    onChange={(e) => setLimitPrice(e.target.value)}
+                                    style={inputStyle}
+                                />
+                            </label>
+                        ) : null}
+                        {templateType === 'FUTURES' ? (
+                            <label style={{ fontSize: '0.875rem' }}>
+                                Sözleşme Vadesi
+                                <select value={contractMonth} onChange={(e) => setContractMonth(e.target.value)} style={inputStyle}>
+                                    <option value="Haz 2026">Haz 2026</option>
+                                    <option value="Eyl 2026">Eyl 2026</option>
+                                    <option value="Ara 2026">Ara 2026</option>
+                                    <option value="Mar 2027">Mar 2027</option>
+                                </select>
+                            </label>
+                        ) : null}
+                        {templateType === 'FIXED_INCOME' ? (
+                            <>
+                                <label style={{ fontSize: '0.875rem' }}>
+                                    Nominal
+                                    <input
+                                        type="number"
+                                        step="1"
+                                        value={nominal}
+                                        onChange={(e) => setNominal(e.target.value)}
+                                        style={inputStyle}
+                                    />
+                                </label>
+                                <label style={{ fontSize: '0.875rem' }}>
+                                    Fiyat/Yield Modu
+                                    <select value={priceMode} onChange={(e) => setPriceMode(e.target.value as 'PRICE' | 'YIELD')} style={inputStyle}>
+                                        <option value="PRICE">Fiyat</option>
+                                        <option value="YIELD">Yield</option>
+                                    </select>
+                                </label>
+                            </>
+                        ) : null}
+                        {(templateType === 'FIXED_INCOME' || templateType === 'FUTURES') ? (
+                            <div style={{ fontSize: '0.75rem', color: tokens.textMuted }}>
+                                Şablon ve varlık eşleşmeleri iş kuralına göre filtrelenmiştir.
+                            </div>
+                        ) : null}
                         {submitError && (
                             <div style={{ color: tokens.error, fontSize: '0.8125rem' }}>{submitError}</div>
                         )}
