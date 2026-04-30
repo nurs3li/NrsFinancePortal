@@ -23,6 +23,10 @@ public class MarketDataClient {
     /** Döviz dahil tüm latest uçları market-data {@code MarketPriceLatestResponse} ile aynı şema. */
     private static final ParameterizedTypeReference<Map<String, MarketPriceLatestDto>> LATEST_MAP =
             new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<Map<String, MarketPriceLatestDto>>> LATEST_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<List<MarketPriceHistoryDto>>> HISTORY_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
 
     private final WebClient marketDataWebClient;
 
@@ -31,11 +35,11 @@ public class MarketDataClient {
      * çoklu sembol döngülerinde her satır için ayrı HTTP yapılmasını önler.
      */
     public LatestPricingSnapshot loadLatestPricing() {
-        Mono<Map<String, MarketPriceLatestDto>> fx = latestMono("/api/market/doviz/latest", LATEST_MAP);
-        Mono<Map<String, MarketPriceLatestDto>> metals = latestMono("/api/market/metals/latest", LATEST_MAP);
-        Mono<Map<String, MarketPriceLatestDto>> crypto = latestMono("/api/market/crypto/latest", LATEST_MAP);
-        Mono<Map<String, MarketPriceLatestDto>> funds = latestMono("/api/market/funds/latest", LATEST_MAP);
-        Mono<Map<String, MarketPriceLatestDto>> equity = latestMono("/api/market/equity/latest", LATEST_MAP);
+        Mono<Map<String, MarketPriceLatestDto>> fx = latestMono("/api/market/doviz/latest");
+        Mono<Map<String, MarketPriceLatestDto>> metals = latestMono("/api/market/metals/latest");
+        Mono<Map<String, MarketPriceLatestDto>> crypto = latestMono("/api/market/crypto/latest");
+        Mono<Map<String, MarketPriceLatestDto>> funds = latestMono("/api/market/funds/latest");
+        Mono<Map<String, MarketPriceLatestDto>> equity = latestMono("/api/market/equity/latest");
 
         return Mono.zip(fx, metals, crypto, funds, equity)
                 .map(t -> new LatestPricingSnapshot(
@@ -50,11 +54,12 @@ public class MarketDataClient {
                 .block();
     }
 
-    private <T> Mono<Map<String, T>> latestMono(String uri, ParameterizedTypeReference<Map<String, T>> ref) {
+    private Mono<Map<String, MarketPriceLatestDto>> latestMono(String uri) {
         return marketDataWebClient.get()
                 .uri(uri)
                 .retrieve()
-                .bodyToMono(ref)
+                .bodyToMono(LATEST_ENVELOPE)
+                .map(envelope -> envelope.data() != null ? envelope.data() : Map.<String, MarketPriceLatestDto>of())
                 .timeout(REQUEST_TIMEOUT)
                 .onErrorReturn(Map.of());
     }
@@ -64,7 +69,9 @@ public class MarketDataClient {
     }
 
     private <T> Map<String, T> blockLatest(String uri, ParameterizedTypeReference<Map<String, T>> ref) {
-        return emptyMap(latestMono(uri, ref).block(REQUEST_TIMEOUT.plusSeconds(1)));
+        @SuppressWarnings("unchecked")
+        Map<String, T> latest = (Map<String, T>) latestMono(uri).block(REQUEST_TIMEOUT.plusSeconds(1));
+        return emptyMap(latest);
     }
 
     public Map<String, MarketPriceLatestDto> getLatestDoviz() {
@@ -146,12 +153,15 @@ public class MarketDataClient {
         List<MarketPriceHistoryDto> list = marketDataWebClient.get()
                 .uri(uri, symbol, days)
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<MarketPriceHistoryDto>>() {})
+                .bodyToMono(HISTORY_ENVELOPE)
+                .map(envelope -> envelope.data() != null ? envelope.data() : List.<MarketPriceHistoryDto>of())
                 .timeout(REQUEST_TIMEOUT)
                 .onErrorReturn(List.of())
                 .block(REQUEST_TIMEOUT.plusSeconds(1));
         return list != null ? list : List.of();
     }
+
+    private record ApiEnvelope<T>(Boolean success, T data, Object errors, Object meta) {}
 
     public record LatestPricingSnapshot(
             Map<String, MarketPriceLatestDto> fx,

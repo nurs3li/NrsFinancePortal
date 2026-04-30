@@ -68,6 +68,8 @@ market-data:
   response-timeout-ms: 20000
 
 app:
+  trade:
+    order-form-v2-enabled: true
   rate-limit:
     enabled: true
     max-requests-per-minute: 20

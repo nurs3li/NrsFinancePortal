@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/finance")
+@Deprecated(forRemoval = false, since = "2026-04")
 public class FinanceController {
 
     /**
