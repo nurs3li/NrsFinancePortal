@@ -14,6 +14,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -27,6 +28,11 @@ import java.util.concurrent.TimeUnit;
 public class RateLimitFilter implements Filter {
 
     private static final String RATE_LIMIT_KEY_PREFIX = "ratelimit:ip:";
+    private static final Set<String> DASHBOARD_READ_PATHS = Set.of(
+            "/api/users/me",
+            "/api/me/starred-assets",
+            "/api/transactions/me/range"
+    );
 
     private final StringRedisTemplate redisTemplate;
     private final RateLimitProperties properties;
@@ -48,8 +54,8 @@ public class RateLimitFilter implements Filter {
         String path = httpRequest.getRequestURI();
         String method = httpRequest.getMethod();
 
-        // 1) Dashboard özet endpoint'ini rate-limit dışı bırak
-        if (path.equals("/api/dashboard/summary")) {
+        // 1) Dashboard/oturum için kritik GET endpoint'lerini rate-limit dışı bırak
+        if ("GET".equals(method) && (path.equals("/api/dashboard/summary") || DASHBOARD_READ_PATHS.contains(path))) {
             chain.doFilter(request, response);
             return;
         }
@@ -77,7 +83,9 @@ public class RateLimitFilter implements Filter {
         }
 
         String clientIp = getClientIp(httpRequest);
-        String key = RATE_LIMIT_KEY_PREFIX + clientIp;
+        // Tek IP altında farklı endpointlerin birbirini kilitlemesini engellemek için sayaç anahtarını endpoint bazlı tut.
+        String endpointKey = method + ":" + path;
+        String key = RATE_LIMIT_KEY_PREFIX + clientIp + ":" + endpointKey;
 
         try {
             Long count = redisTemplate.opsForValue().increment(key);

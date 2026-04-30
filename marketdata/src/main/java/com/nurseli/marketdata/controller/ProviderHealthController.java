@@ -12,6 +12,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/internal/providers")
 @RequiredArgsConstructor
+@Deprecated(forRemoval = false, since = "2026-04")
 public class ProviderHealthController {
 
     private final ProviderHealthService providerHealthService;

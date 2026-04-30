@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/internal/market/backfill")
 @RequiredArgsConstructor
+@Deprecated(forRemoval = false, since = "2026-04")
 public class BackfillController {
 
     private final MarketPriceBackfillService backfillService;

@@ -75,12 +75,59 @@ public class ViopQueryService {
     private ViopSnapshotResponse build(
             String contractCode, BigDecimal price, BigDecimal spot, Long oi, LocalDateTime asOf, String source
     ) {
+        String expiry = contractRepository.findByContractCode(contractCode).map(c -> c.getExpiry()).orElse(null);
+        String contractMonth = expiryToContractMonth(expiry);
         BigDecimal safeSpot = spot == null || spot.signum() == 0 ? BigDecimal.ONE : spot;
         BigDecimal basis = price.subtract(safeSpot);
         BigDecimal annualized = basis.divide(safeSpot, 6, RoundingMode.HALF_UP)
                 .multiply(new BigDecimal("36500"))
                 .divide(new BigDecimal("30"), 4, RoundingMode.HALF_UP);
         String regime = basis.signum() >= 0 && oi > 0 ? "PRICE_UP_OI_UP" : "NEUTRAL";
-        return new ViopSnapshotResponse(contractCode, price, safeSpot, basis, annualized, oi, regime, source, asOf);
+        BigDecimal marginRequirement = price.multiply(new BigDecimal("0.12")).setScale(4, RoundingMode.HALF_UP);
+        String longShortIndicator = basis.signum() > 0 ? "LONG" : basis.signum() < 0 ? "SHORT" : "NEUTRAL";
+        return new ViopSnapshotResponse(
+                contractCode,
+                expiry,
+                contractMonth,
+                price,
+                safeSpot,
+                basis,
+                annualized,
+                marginRequirement,
+                longShortIndicator,
+                oi,
+                regime,
+                source,
+                asOf
+        );
+    }
+
+    private String expiryToContractMonth(String expiry) {
+        if (expiry == null || expiry.isBlank()) return null;
+        try {
+            String[] parts = expiry.split("-");
+            if (parts.length >= 2) {
+                int month = Integer.parseInt(parts[1]);
+                String monthName = switch (month) {
+                    case 1 -> "Oca";
+                    case 2 -> "Şub";
+                    case 3 -> "Mar";
+                    case 4 -> "Nis";
+                    case 5 -> "May";
+                    case 6 -> "Haz";
+                    case 7 -> "Tem";
+                    case 8 -> "Ağu";
+                    case 9 -> "Eyl";
+                    case 10 -> "Eki";
+                    case 11 -> "Kas";
+                    case 12 -> "Ara";
+                    default -> null;
+                };
+                if (monthName != null) return monthName + " " + parts[0];
+            }
+            return expiry;
+        } catch (Exception ignored) {
+            return expiry;
+        }
     }
 }

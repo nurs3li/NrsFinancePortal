@@ -11,5 +11,23 @@ public class EvdsProperties {
     private boolean enabled = true;
     private String apiKey;
     private int timeoutMs = 3000;
-    private String baseUrl = "https://evds2.tcmb.gov.tr/service/evds";
+    private String baseUrl = "https://evds3.tcmb.gov.tr/igmevdsms-dis";
+    private Debt debt = new Debt();
+
+    @Data
+    public static class Debt {
+        private boolean enabled = false;
+        private int lookbackDays = 14;
+        private java.util.List<Instrument> instruments = new java.util.ArrayList<>();
+    }
+
+    @Data
+    public static class Instrument {
+        private String isin;
+        private String name;
+        private String issuer;
+        private String maturityDate;
+        private String dirtyPriceSeries;
+        private String yieldSeries;
+    }
 }

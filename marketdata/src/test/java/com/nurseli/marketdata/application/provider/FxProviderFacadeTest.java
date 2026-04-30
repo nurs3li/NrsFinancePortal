@@ -47,6 +47,22 @@ class FxProviderFacadeTest {
     }
 
     @Test
+    void fallbackProviderCanExposeActualSource() {
+        ProviderRegistry registry = Mockito.mock(ProviderRegistry.class);
+        MarketPriceQueryService queryService = Mockito.mock(MarketPriceQueryService.class);
+        FxProvider tcmb = provider("TCMB", Map.of());
+        FxProvider bankProxyEvds = provider("BANK", Map.of("USDTRY", row("EVDS")));
+        Mockito.when(registry.fxCanonical()).thenReturn(tcmb);
+        Mockito.when(registry.fxFallbackOrder()).thenReturn(List.of(bankProxyEvds));
+
+        FxProviderFacade facade = new FxProviderFacade(registry, queryService, new SimpleMeterRegistry());
+        MarketPriceLatestResponse response = facade.getLatest("USDTRY");
+
+        assertEquals(PriceQuality.FALLBACK, response.quality());
+        assertEquals("EVDS", response.source());
+    }
+
+    @Test
     void bothFailShouldReturnStaleFromDb() {
         ProviderRegistry registry = Mockito.mock(ProviderRegistry.class);
         MarketPriceQueryService queryService = Mockito.mock(MarketPriceQueryService.class);

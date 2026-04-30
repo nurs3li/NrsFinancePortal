@@ -37,13 +37,8 @@ public class EvdsClient {
         }
         String series = mapSeries(symbol);
         String json = webClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/series={series}")
-                        .queryParam("startDate", startDate.format(EVDS_DATE))
-                        .queryParam("endDate", endDate.format(EVDS_DATE))
-                        .queryParam("type", "json")
-                        .queryParam("key", evdsProperties.getApiKey())
-                        .build(series))
+                .uri(buildSeriesUri(series, startDate, endDate))
+                .header("key", evdsProperties.getApiKey())
                 .retrieve()
                 .bodyToMono(String.class)
                 .timeout(java.time.Duration.ofMillis(evdsProperties.getTimeoutMs()))
@@ -58,6 +53,17 @@ public class EvdsClient {
             return List.of();
         }
         return parseSeries(symbol, json);
+    }
+
+    private String buildSeriesUri(String series, LocalDate startDate, LocalDate endDate) {
+        String start = startDate.format(EVDS_DATE);
+        String end = endDate.format(EVDS_DATE);
+        String baseUrl = evdsProperties.getBaseUrl() == null ? "" : evdsProperties.getBaseUrl().toLowerCase();
+        if (baseUrl.contains("igmevdsms-dis")) {
+            return "/series=%s&startDate=%s&endDate=%s&type=json".formatted(series, start, end);
+        }
+        return "/series=%s?startDate=%s&endDate=%s&type=json&key=%s"
+                .formatted(series, start, end, evdsProperties.getApiKey());
     }
 
     private List<EvdsFxPoint> parseSeries(String symbol, String json) {

@@ -270,7 +270,7 @@ public class MarketPriceQueryService {
                     high,
                     low,
                     close,
-                    ZERO_VOLUME
+                    deriveSyntheticVolume(dayRows, open, high, low, close)
             ));
         }
 
@@ -281,6 +281,36 @@ public class MarketPriceQueryService {
         return row.getBuyPrice()
                 .add(row.getSellPrice())
                 .divide(BigDecimal.valueOf(2), 6, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal deriveSyntheticVolume(
+            List<MarketPriceHistory> dayRows,
+            BigDecimal open,
+            BigDecimal high,
+            BigDecimal low,
+            BigDecimal close
+    ) {
+        if (dayRows == null || dayRows.isEmpty()) {
+            return ZERO_VOLUME;
+        }
+        BigDecimal maxPrice = List.of(open, high, low, close).stream()
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(BigDecimal.ZERO);
+        BigDecimal minPrice = List.of(open, high, low, close).stream()
+                .filter(Objects::nonNull)
+                .min(Comparator.naturalOrder())
+                .orElse(BigDecimal.ZERO);
+        BigDecimal range = maxPrice.subtract(minPrice).abs();
+        if (maxPrice.signum() <= 0) {
+            return BigDecimal.valueOf(dayRows.size());
+        }
+        BigDecimal volatilityScore = range.divide(maxPrice, 8, RoundingMode.HALF_UP);
+        BigDecimal tradeCountScore = BigDecimal.valueOf(dayRows.size());
+        return tradeCountScore
+                .multiply(BigDecimal.valueOf(1000))
+                .multiply(BigDecimal.ONE.add(volatilityScore))
+                .setScale(6, RoundingMode.HALF_UP);
     }
 
     // =========================
