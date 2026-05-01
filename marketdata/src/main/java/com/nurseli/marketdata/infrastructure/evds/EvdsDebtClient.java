@@ -41,38 +41,46 @@ public class EvdsDebtClient {
         }
 
         List<EvdsDebtRow> out = new ArrayList<>();
+        int pointLimit = Math.max(2, evdsProperties.getDebt().getLookbackDays());
         for (EvdsProperties.Instrument instrument : instruments) {
             if (instrument == null || instrument.getIsin() == null || instrument.getIsin().isBlank()) {
                 continue;
             }
-            EvdsPoint pricePoint = fetchLatestSeriesPoint(instrument.getDirtyPriceSeries());
-            EvdsPoint yieldPoint = fetchLatestSeriesPoint(instrument.getYieldSeries());
-            if (pricePoint == null && yieldPoint == null) {
-                continue;
-            }
-            BigDecimal dirtyPrice = pricePoint != null ? pricePoint.value() : null;
-            BigDecimal yieldPct = yieldPoint != null ? yieldPoint.value() : null;
-            LocalDateTime asOf = pricePoint != null
-                    ? pricePoint.asOf()
-                    : (yieldPoint != null ? yieldPoint.asOf() : LocalDateTime.now());
+            List<EvdsPoint> pricePoints = fetchRecentSeriesPoints(instrument.getDirtyPriceSeries(), pointLimit);
+            List<EvdsPoint> yieldPoints = fetchRecentSeriesPoints(instrument.getYieldSeries(), pointLimit);
+            int rowCount = Math.max(pricePoints.size(), yieldPoints.size());
+            for (int idx = 0; idx < rowCount; idx++) {
+                EvdsPoint pricePoint = idx < pricePoints.size() ? pricePoints.get(idx) : null;
+                EvdsPoint yieldPoint = idx < yieldPoints.size() ? yieldPoints.get(idx) : null;
+                if (pricePoint == null && yieldPoint == null) {
+                    continue;
+                }
+                BigDecimal dirtyPrice = pricePoint != null ? pricePoint.value() : null;
+                BigDecimal yieldPct = yieldPoint != null ? yieldPoint.value() : null;
+                BigDecimal normalizedDirtyPrice = normalizeByScale(dirtyPrice, instrument.getDirtyPriceScale());
+                BigDecimal normalizedYieldPct = normalizeByScale(yieldPct, instrument.getYieldScale());
+                LocalDateTime asOf = pricePoint != null
+                        ? pricePoint.asOf()
+                        : (yieldPoint != null ? yieldPoint.asOf() : LocalDateTime.now());
 
-            out.add(new EvdsDebtRow(
-                    instrument.getIsin(),
-                    instrument.getName(),
-                    instrument.getIssuer(),
-                    instrument.getMaturityDate(),
-                    dirtyPrice,
-                    yieldPct,
-                    asOf,
-                    "EVDS"
-            ));
+                out.add(new EvdsDebtRow(
+                        instrument.getIsin(),
+                        instrument.getName(),
+                        instrument.getIssuer(),
+                        instrument.getMaturityDate(),
+                        normalizedDirtyPrice,
+                        normalizedYieldPct,
+                        asOf,
+                        "EVDS"
+                ));
+            }
         }
         return out;
     }
 
-    private EvdsPoint fetchLatestSeriesPoint(String seriesCode) {
+    private List<EvdsPoint> fetchRecentSeriesPoints(String seriesCode, int limit) {
         if (seriesCode == null || seriesCode.isBlank()) {
-            return null;
+            return List.of();
         }
         String normalizedSeries = normalizeSeriesCode(seriesCode);
         LocalDate end = LocalDate.now();
@@ -91,9 +99,9 @@ public class EvdsDebtClient {
                 })
                 .block();
         if (json == null || json.isBlank()) {
-            return null;
+            return List.of();
         }
-        return parseLatestPoint(json);
+        return parseRecentPoints(json, Math.max(1, limit));
     }
 
     private String normalizeSeriesCode(String seriesCode) {
@@ -111,14 +119,14 @@ public class EvdsDebtClient {
                 .formatted(seriesCode, startDate, endDate, evdsProperties.getApiKey());
     }
 
-    private EvdsPoint parseLatestPoint(String json) {
+    private List<EvdsPoint> parseRecentPoints(String json, int limit) {
         try {
             JsonNode root = objectMapper.readTree(json);
             JsonNode items = root.path("items");
             if (!items.isArray() || items.isEmpty()) {
-                return null;
+                return List.of();
             }
-            EvdsPoint latest = null;
+            List<EvdsPoint> parsed = new ArrayList<>();
             for (JsonNode item : items) {
                 String dateText = item.path("Tarih").asText(null);
                 if (dateText == null || dateText.isBlank()) {
@@ -132,15 +140,27 @@ public class EvdsDebtClient {
                 if (value == null) {
                     continue;
                 }
-                EvdsPoint point = new EvdsPoint(date.atStartOfDay(), value);
-                if (latest == null || point.asOf().isAfter(latest.asOf())) {
-                    latest = point;
+                parsed.add(new EvdsPoint(date.atStartOfDay(), value));
+            }
+            if (parsed.isEmpty()) {
+                return List.of();
+            }
+            parsed.sort((a, b) -> b.asOf().compareTo(a.asOf()));
+            List<EvdsPoint> uniqueByDate = new ArrayList<>();
+            for (EvdsPoint point : parsed) {
+                boolean exists = uniqueByDate.stream().anyMatch(x -> x.asOf().toLocalDate().equals(point.asOf().toLocalDate()));
+                if (exists) {
+                    continue;
+                }
+                uniqueByDate.add(point);
+                if (uniqueByDate.size() >= limit) {
+                    break;
                 }
             }
-            return latest;
+            return uniqueByDate;
         } catch (Exception ex) {
             log.warn("[EVDS_DEBT] parse error: {}", ex.getMessage());
-            return null;
+            return List.of();
         }
     }
 
@@ -176,6 +196,16 @@ public class EvdsDebtClient {
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private BigDecimal normalizeByScale(BigDecimal value, BigDecimal scale) {
+        if (value == null) {
+            return null;
+        }
+        if (scale == null || scale.compareTo(BigDecimal.ZERO) <= 0 || BigDecimal.ONE.compareTo(scale) == 0) {
+            return value;
+        }
+        return value.divide(scale, 6, java.math.RoundingMode.HALF_UP);
     }
 
     public record EvdsDebtRow(

@@ -15,7 +15,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -47,7 +46,15 @@ public class DebtQueryService {
                         (left, right) -> {
                             LocalDateTime leftAsOf = left.getAsOf() == null ? LocalDateTime.MIN : left.getAsOf();
                             LocalDateTime rightAsOf = right.getAsOf() == null ? LocalDateTime.MIN : right.getAsOf();
-                            return rightAsOf.isAfter(leftAsOf) ? right : left;
+                            if (rightAsOf.isAfter(leftAsOf)) {
+                                return right;
+                            }
+                            if (leftAsOf.isAfter(rightAsOf)) {
+                                return left;
+                            }
+                            Long leftId = left.getId() == null ? Long.MIN_VALUE : left.getId();
+                            Long rightId = right.getId() == null ? Long.MIN_VALUE : right.getId();
+                            return rightId > leftId ? right : left;
                         }
                 ))
                 .values().stream()
@@ -59,14 +66,35 @@ public class DebtQueryService {
                 .toList();
         if (rows.isEmpty()) {
             log.info("[DEBT] latest() returned empty list (no fresh snapshots)");
+            return rows;
         }
-        return rows;
+        boolean hasExact = rows.stream().anyMatch(r -> !Boolean.TRUE.equals(r.synthetic()));
+        if (!hasExact) {
+            return rows;
+        }
+        return rows.stream()
+                .filter(r -> !Boolean.TRUE.equals(r.synthetic()))
+                .toList();
     }
 
     public List<DebtSnapshotResponse> history(String isin, int days) {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(days);
         return debtSnapshotRepository.findByIsinOrderByAsOfAsc(isin).stream()
                 .filter(s -> !s.getAsOf().isBefore(cutoff))
+                .collect(Collectors.toMap(
+                        s -> s.getAsOf() == null ? LocalDateTime.MIN : s.getAsOf(),
+                        s -> s,
+                        (left, right) -> {
+                            Long leftId = left.getId() == null ? Long.MIN_VALUE : left.getId();
+                            Long rightId = right.getId() == null ? Long.MIN_VALUE : right.getId();
+                            return rightId > leftId ? right : left;
+                        }
+                ))
+                .values().stream()
+                .sorted(Comparator.comparing(
+                        com.nurseli.marketdata.domain.debt.DebtSnapshot::getAsOf,
+                        Comparator.nullsFirst(Comparator.naturalOrder())
+                ))
                 .map(this::toResponse)
                 .toList();
     }
