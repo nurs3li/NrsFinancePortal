@@ -101,6 +101,8 @@ export function MarketTerminalChart({
         () => [...candles].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()),
         [candles]
     );
+    const candleCount = sortedCandles.length;
+    const compactBars = candleCount <= 6;
 
     useEffect(() => {
         const el = chartRef.current;
@@ -118,7 +120,14 @@ export function MarketTerminalChart({
                 horzLines: { color: 'rgba(71, 85, 105, 0.3)' },
             },
             rightPriceScale: { borderColor: tokens.border },
-            timeScale: { borderColor: tokens.border, timeVisible: true, secondsVisible: false },
+            timeScale: {
+                borderColor: tokens.border,
+                timeVisible: true,
+                secondsVisible: false,
+                barSpacing: compactBars ? 10 : 6,
+                minBarSpacing: compactBars ? 8 : 4,
+                rightOffset: compactBars ? 10 : 2,
+            },
             crosshair: { mode: 1 },
         });
 
@@ -148,7 +157,7 @@ export function MarketTerminalChart({
         });
         volumeSeries.priceScale().applyOptions({
             scaleMargins: {
-                top: 0.82,
+                top: compactBars ? 0.9 : 0.84,
                 bottom: 0,
             },
         });
@@ -228,7 +237,7 @@ export function MarketTerminalChart({
             ma21Series = null;
             chart.remove();
         };
-    }, [loading, sortedCandles, markers, showMa, ma7, ma21, tokens, newsByDay, onNewsSelect]);
+    }, [loading, sortedCandles, markers, showMa, ma7, ma21, tokens, newsByDay, onNewsSelect, compactBars]);
 
     if (loading) {
         return <div className="terminal-chart-empty">Grafik yükleniyor...</div>;
