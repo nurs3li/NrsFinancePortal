@@ -214,6 +214,11 @@ app:
     finhub:
       url: https://finnhub.io/api/v1
       api-key: ${FINHUB_API_KEY:your-api-key-here}  # Environment variable'dan oku, yoksa default
+    stooq:
+      url: ${STOOQ_BASE_URL:https://stooq.com}
+      api-key: ${STOOQ_API_KEY:}
+    yahoo:
+      url: ${YAHOO_BASE_URL:https://query1.finance.yahoo.com}
   equity:
     symbols:  # FinHub free plan: US only
       - AAPL
@@ -227,6 +232,28 @@ app:
       - JNJ
       - V
       - WMT
+    history-incremental-cron: ${EQUITY_HISTORY_INCREMENTAL_CRON:0 30 2 * * *}
+    history-backfill:
+      enabled: ${EQUITY_HISTORY_BACKFILL_ENABLED:false}
+      periodDays: ${EQUITY_HISTORY_BACKFILL_PERIOD_DAYS:365}
+      batchSize: ${EQUITY_HISTORY_BACKFILL_BATCH_SIZE:20}
+      shutdownOnComplete: ${EQUITY_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
+  crypto:
+    history-incremental-cron: ${CRYPTO_HISTORY_INCREMENTAL_CRON:0 45 2 * * *}
+    history-backfill:
+      enabled: ${CRYPTO_HISTORY_BACKFILL_ENABLED:false}
+      periodDays: ${CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS:365}
+      shutdownOnComplete: ${CRYPTO_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
+  fx:
+    history-backfill:
+      enabled: ${FX_HISTORY_BACKFILL_ENABLED:false}
+      periodDays: ${FX_HISTORY_BACKFILL_PERIOD_DAYS:730}
+      shutdownOnComplete: ${FX_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
+  debt:
+    history-backfill:
+      enabled: ${DEBT_HISTORY_BACKFILL_ENABLED:false}
+      periodDays: ${DEBT_HISTORY_BACKFILL_PERIOD_DAYS:730}
+      shutdownOnComplete: ${DEBT_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
   etf:
     symbols: # FinHub free plan: US ETF
       - SPY
@@ -272,3 +299,8 @@ app:
       kafkaBootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS:}
       kafkaTopic: ${VIOP_HYBRID_KAFKA_TOPIC:high-volatility-alert}
       openInterestSurgeThresholdPct: ${VIOP_OI_SURGE_THRESHOLD_PCT:10}
+    backfill:
+      enabled: ${VIOP_BACKFILL_ENABLED:false}
+      dir: ${VIOP_BACKFILL_DIR:artifacts/viop}
+      pattern: ${VIOP_BACKFILL_PATTERN:viop_*.csv}
+      shutdownOnComplete: ${VIOP_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
