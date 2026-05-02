@@ -27,16 +27,34 @@ type Props = {
     tokens: ThemeSlice;
 };
 
-function toDayTime(value: string): Time {
+function toChartTime(value: string): Time {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value.slice(0, 10) as Time;
+    const hasClock = /T\d{2}:\d{2}:\d{2}/.test(value);
+    if (hasClock) {
+        return Math.floor(d.getTime() / 1000) as Time;
+    }
     return d.toISOString().slice(0, 10) as Time;
+}
+
+function chartTimeKey(value: Time): string {
+    if (typeof value === 'number') {
+        return new Date(value * 1000).toISOString();
+    }
+    return String(value);
 }
 
 export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timeframeLabel, trendLabel, tokens }: Props) {
     const chartRef = useRef<HTMLDivElement>(null);
     const [hover, setHover] = useState<{ time: string; price: number; yieldPct: number } | null>(null);
-    const sorted = useMemo(() => [...points].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()), [points]);
+    const sorted = useMemo(() => {
+        const byTime = new Map<string, BondPoint>();
+        [...points]
+            .filter((p) => Number.isFinite(p.price) && p.price > 0)
+            .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
+            .forEach((p) => byTime.set(chartTimeKey(toChartTime(p.time)), p));
+        return [...byTime.values()];
+    }, [points]);
 
     useEffect(() => {
         const el = chartRef.current;
@@ -71,7 +89,7 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
         priceArea.setData(
             sorted
                 .filter((p) => Number.isFinite(p.price) && p.price > 0)
-                .map((p) => ({ time: toDayTime(p.time), value: p.price }))
+                .map((p) => ({ time: toChartTime(p.time), value: p.price }))
         );
 
         const yieldLine = chart.addLineSeries({
@@ -84,7 +102,7 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
         yieldLine.setData(
             sorted
                 .filter((p) => Number.isFinite(p.yieldPct))
-                .map((p) => ({ time: toDayTime(p.time), value: p.yieldPct }))
+                .map((p) => ({ time: toChartTime(p.time), value: p.yieldPct }))
         );
 
         if (showMa) {
@@ -95,7 +113,7 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                 priceLineVisible: false,
                 lastValueVisible: false,
             });
-            ma7Series.setData(ma7.map((p) => ({ time: toDayTime(p.time), value: p.value })));
+            ma7Series.setData(ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })));
 
             const ma21Series = chart.addLineSeries({
                 priceScaleId: 'left',
@@ -104,7 +122,7 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                 priceLineVisible: false,
                 lastValueVisible: false,
             });
-            ma21Series.setData(ma21.map((p) => ({ time: toDayTime(p.time), value: p.value })));
+            ma21Series.setData(ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })));
         }
 
         const volumeSeries = chart.addHistogramSeries({
@@ -119,7 +137,7 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
         });
         volumeSeries.setData(
             sorted.map((p) => ({
-                time: toDayTime(p.time),
+                time: toChartTime(p.time),
                 value: Number(p.volume ?? 0),
                 color: 'rgba(148,163,184,0.2)',
             }))
@@ -130,14 +148,14 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                 setHover(null);
                 return;
             }
-            const day = String(param.time).slice(0, 10);
-            const row = sorted.find((p) => toDayTime(p.time) === day);
+            const key = chartTimeKey(param.time);
+            const row = sorted.find((p) => chartTimeKey(toChartTime(p.time)) === key);
             if (!row) {
                 setHover(null);
                 return;
             }
             setHover({
-                time: day,
+                time: key.slice(0, 10),
                 price: row.price,
                 yieldPct: row.yieldPct,
             });
@@ -157,6 +175,9 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
     }
     if (!sorted.length) {
         return <div className="terminal-chart-empty">Tahvil fiyat/getiri verisi bulunamadı.</div>;
+    }
+    if (sorted.length < 2) {
+        return <div className="terminal-chart-empty">Tahvil grafik için en az 2 veri noktası gerekli.</div>;
     }
 
     return (

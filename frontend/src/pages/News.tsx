@@ -25,6 +25,8 @@ const CATEGORIES = [
     { value: 'FOREX', label: 'Döviz' },
     { value: 'CRYPTO', label: 'Kripto' },
     { value: 'STOCK', label: 'Hisse' },
+    { value: 'VIOP', label: 'VİOP' },
+    { value: 'BOND', label: 'Tahvil' },
 ];
 
 export function News() {
