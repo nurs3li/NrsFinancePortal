@@ -1,6 +1,7 @@
 package com.nurseli.marketdata.application;
 
 import com.nurseli.marketdata.api.dto.ViopContractResponse;
+import com.nurseli.marketdata.api.dto.ViopMarketWatchResponse;
 import com.nurseli.marketdata.api.dto.ViopSnapshotResponse;
 import com.nurseli.marketdata.domain.derivatives.DerivativeSnapshot;
 import com.nurseli.marketdata.domain.derivatives.OpenInterestSnapshot;
@@ -14,7 +15,9 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -23,17 +26,37 @@ public class ViopQueryService {
     private final DerivativeContractRepository contractRepository;
     private final DerivativeSnapshotRepository snapshotRepository;
     private final OpenInterestSnapshotRepository openInterestSnapshotRepository;
+    private final ViopContractParser viopContractParser;
 
     public List<ViopContractResponse> contracts() {
         return contractRepository.findAll().stream()
-                .map(c -> new ViopContractResponse(c.getContractCode(), c.getUnderlying(), c.getExpiry(), c.getType()))
+                .collect(Collectors.toMap(
+                        c -> viopContractParser.normalizeContractCode(c.getContractCode()),
+                        c -> c,
+                        (left, right) -> right
+                ))
+                .values().stream()
+                .map(c -> new ViopContractResponse(
+                        viopContractParser.normalizeContractCode(c.getContractCode()),
+                        c.getUnderlying(),
+                        c.getExpiry(),
+                        c.getType()
+                ))
                 .toList();
     }
 
     public List<ViopSnapshotResponse> latest() {
-        LocalDateTime cutoff = LocalDateTime.now().minusDays(1);
         List<ViopSnapshotResponse> rows = snapshotRepository.findAll().stream()
-                .filter(s -> !s.getAsOf().isBefore(cutoff))
+                .collect(Collectors.toMap(
+                        s -> viopContractParser.normalizeContractCode(s.getContractCode()),
+                        s -> s,
+                        (left, right) -> {
+                            LocalDateTime leftAsOf = left.getAsOf() == null ? LocalDateTime.MIN : left.getAsOf();
+                            LocalDateTime rightAsOf = right.getAsOf() == null ? LocalDateTime.MIN : right.getAsOf();
+                            return rightAsOf.isAfter(leftAsOf) ? right : left;
+                        }
+                ))
+                .values().stream()
                 .map(this::toSnapshotResponse)
                 .toList();
         if (rows.isEmpty()) {
@@ -44,7 +67,7 @@ public class ViopQueryService {
 
     public List<ViopSnapshotResponse> history(String contract, int days) {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(days);
-        return snapshotRepository.findByContractCodeOrderByAsOfAsc(contract).stream()
+        return loadSnapshotsByAlias(contract).stream()
                 .filter(s -> !s.getAsOf().isBefore(cutoff))
                 .map(this::toSnapshotResponse)
                 .toList();
@@ -52,41 +75,108 @@ public class ViopQueryService {
 
     public List<ViopSnapshotResponse> oiHistory(String contract, int days) {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(days);
-        return openInterestSnapshotRepository.findByContractCodeOrderByAsOfAsc(contract).stream()
+        return loadOiByAlias(contract).stream()
                 .filter(oi -> !oi.getAsOf().isBefore(cutoff))
                 .map(oi -> {
-                    DerivativeSnapshot latestSnapshot = snapshotRepository.findTopByContractCodeOrderByAsOfDesc(contract).orElse(null);
+                    DerivativeSnapshot latestSnapshot = findLatestByAlias(contract);
                     BigDecimal spot = latestSnapshot != null ? latestSnapshot.getTheoreticalSpot() : BigDecimal.ONE;
                     BigDecimal price = latestSnapshot != null ? latestSnapshot.getPrice() : BigDecimal.ONE;
-                    return build(contract, price, spot, oi.getOpenInterest(), oi.getAsOf(), latestSnapshot != null ? latestSnapshot.getSource() : "VIOP");
+                    return build(
+                            viopContractParser.normalizeContractCode(contract),
+                            price,
+                            spot,
+                            oi.getOpenInterest(),
+                            oi.getDailyVolume(),
+                            oi.getAsOf(),
+                            latestSnapshot != null ? latestSnapshot.getSource() : "VIOP",
+                            latestSnapshot != null ? latestSnapshot.getBasis() : null,
+                            latestSnapshot != null ? latestSnapshot.getMaintenanceMargin() : null,
+                            latestSnapshot != null ? latestSnapshot.getDaysToExpiry() : null,
+                            latestSnapshot != null ? latestSnapshot.getDataQuality() : null,
+                            latestSnapshot != null ? latestSnapshot.getPriceSource() : null,
+                            latestSnapshot != null ? latestSnapshot.getPriceLatencyMs() : null
+                    );
                 })
                 .toList();
     }
 
+    public ViopMarketWatchResponse marketWatch() {
+        List<ViopSnapshotResponse> latest = latest();
+        List<ViopMarketWatchResponse.Leader> topGainers = latest.stream()
+                .sorted(Comparator.comparing(ViopSnapshotResponse::annualizedBasisPct, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(5)
+                .map(this::toLeader)
+                .toList();
+        List<ViopMarketWatchResponse.Leader> volumeLeaders = latest.stream()
+                .sorted((a, b) -> Long.compare(nullSafeLong(b.dailyVolume()), nullSafeLong(a.dailyVolume())))
+                .limit(5)
+                .map(this::toLeader)
+                .toList();
+        List<ViopMarketWatchResponse.Leader> oiSurgeLeaders = latest.stream()
+                .sorted((a, b) -> Long.compare(nullSafeLong(b.openInterest()), nullSafeLong(a.openInterest())))
+                .limit(5)
+                .map(this::toLeader)
+                .toList();
+        return new ViopMarketWatchResponse(topGainers, volumeLeaders, oiSurgeLeaders, LocalDateTime.now());
+    }
+
     private ViopSnapshotResponse toSnapshotResponse(DerivativeSnapshot s) {
-        Long oi = openInterestSnapshotRepository.findTopByContractCodeOrderByAsOfDesc(s.getContractCode())
-                .map(OpenInterestSnapshot::getOpenInterest)
-                .orElse(0L);
+        OpenInterestSnapshot latestOi = findLatestOiByAlias(s.getContractCode());
+        Long oi = latestOi != null ? latestOi.getOpenInterest() : 0L;
+        Long dailyVolume = latestOi != null ? latestOi.getDailyVolume() : null;
         String source = (s.getSource() == null || s.getSource().isBlank()) ? "VIOP_MVP" : s.getSource();
         LocalDateTime asOf = s.getAsOf() == null ? LocalDateTime.now() : s.getAsOf();
-        return build(s.getContractCode(), s.getPrice(), s.getTheoreticalSpot(), oi, asOf, source);
+        return build(
+                viopContractParser.normalizeContractCode(s.getContractCode()),
+                s.getPrice(),
+                s.getTheoreticalSpot(),
+                oi,
+                dailyVolume,
+                asOf,
+                source,
+                s.getBasis(),
+                s.getMaintenanceMargin(),
+                s.getDaysToExpiry(),
+                s.getDataQuality(),
+                s.getPriceSource(),
+                s.getPriceLatencyMs()
+        );
     }
 
     private ViopSnapshotResponse build(
-            String contractCode, BigDecimal price, BigDecimal spot, Long oi, LocalDateTime asOf, String source
+            String contractCode,
+            BigDecimal price,
+            BigDecimal spot,
+            Long oi,
+            Long dailyVolume,
+            LocalDateTime asOf,
+            String source,
+            BigDecimal providedBasis,
+            BigDecimal providedMargin,
+            Integer providedDaysToExpiry,
+            String dataQuality,
+            String priceSource,
+            Long priceLatencyMs
     ) {
-        String expiry = contractRepository.findByContractCode(contractCode).map(c -> c.getExpiry()).orElse(null);
+        String normalizedCode = viopContractParser.normalizeContractCode(contractCode);
+        String expiry = contractRepository.findByContractCode(normalizedCode).map(c -> c.getExpiry()).orElse(null);
+        if (expiry == null || expiry.isBlank()) {
+            expiry = contractRepository.findByContractCode("F_" + normalizedCode).map(c -> c.getExpiry()).orElse(null);
+        }
         String contractMonth = expiryToContractMonth(expiry);
         BigDecimal safeSpot = spot == null || spot.signum() == 0 ? BigDecimal.ONE : spot;
-        BigDecimal basis = price.subtract(safeSpot);
+        BigDecimal basis = providedBasis != null ? providedBasis : price.subtract(safeSpot);
         BigDecimal annualized = basis.divide(safeSpot, 6, RoundingMode.HALF_UP)
                 .multiply(new BigDecimal("36500"))
                 .divide(new BigDecimal("30"), 4, RoundingMode.HALF_UP);
         String regime = basis.signum() >= 0 && oi > 0 ? "PRICE_UP_OI_UP" : "NEUTRAL";
-        BigDecimal marginRequirement = price.multiply(new BigDecimal("0.12")).setScale(4, RoundingMode.HALF_UP);
+        BigDecimal marginRequirement = providedMargin != null
+                ? providedMargin
+                : price.multiply(new BigDecimal("0.12")).setScale(4, RoundingMode.HALF_UP);
         String longShortIndicator = basis.signum() > 0 ? "LONG" : basis.signum() < 0 ? "SHORT" : "NEUTRAL";
+        Integer daysToExpiry = providedDaysToExpiry != null ? providedDaysToExpiry : calculateDaysToExpiry(expiry);
         return new ViopSnapshotResponse(
-                contractCode,
+                normalizedCode,
                 expiry,
                 contractMonth,
                 price,
@@ -96,10 +186,74 @@ public class ViopQueryService {
                 marginRequirement,
                 longShortIndicator,
                 oi,
+                dailyVolume,
                 regime,
                 source,
-                asOf
+                asOf,
+                daysToExpiry,
+                dataQuality == null ? "EXACT" : dataQuality,
+                priceSource == null ? source : priceSource,
+                priceLatencyMs
         );
+    }
+
+    private Integer calculateDaysToExpiry(String expiry) {
+        if (expiry == null || expiry.isBlank()) return null;
+        try {
+            java.time.LocalDate now = java.time.LocalDate.now();
+            java.time.LocalDate e = java.time.LocalDate.parse(expiry);
+            return (int) java.time.temporal.ChronoUnit.DAYS.between(now, e);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private ViopMarketWatchResponse.Leader toLeader(ViopSnapshotResponse row) {
+        return new ViopMarketWatchResponse.Leader(
+                row.contractCode(),
+                row.price(),
+                row.annualizedBasisPct(),
+                row.openInterest(),
+                row.dailyVolume(),
+                row.source(),
+                row.dataQuality()
+        );
+    }
+
+    private long nullSafeLong(Long value) {
+        return value == null ? 0L : value;
+    }
+
+    private List<DerivativeSnapshot> loadSnapshotsByAlias(String contract) {
+        String normalized = viopContractParser.normalizeContractCode(contract);
+        List<DerivativeSnapshot> rows = snapshotRepository.findByContractCodeOrderByAsOfAsc(normalized);
+        if (!rows.isEmpty()) {
+            return rows;
+        }
+        return snapshotRepository.findByContractCodeOrderByAsOfAsc("F_" + normalized);
+    }
+
+    private List<OpenInterestSnapshot> loadOiByAlias(String contract) {
+        String normalized = viopContractParser.normalizeContractCode(contract);
+        List<OpenInterestSnapshot> rows = openInterestSnapshotRepository.findByContractCodeOrderByAsOfAsc(normalized);
+        if (!rows.isEmpty()) {
+            return rows;
+        }
+        return openInterestSnapshotRepository.findByContractCodeOrderByAsOfAsc("F_" + normalized);
+    }
+
+    private DerivativeSnapshot findLatestByAlias(String contract) {
+        String normalized = viopContractParser.normalizeContractCode(contract);
+        return snapshotRepository.findTopByContractCodeOrderByAsOfDesc(normalized)
+                .or(() -> snapshotRepository.findTopByContractCodeOrderByAsOfDesc("F_" + normalized))
+                .orElse(null);
+    }
+
+    private OpenInterestSnapshot findLatestOiByAlias(String contract) {
+        String normalized = viopContractParser.normalizeContractCode(contract);
+        return openInterestSnapshotRepository.findTopByContractCodeOrderByAsOfDesc(normalized)
+                .or(() -> openInterestSnapshotRepository.findTopByContractCodeOrderByAsOfDesc("F_" + normalized))
+                .orElse(null);
     }
 
     private String expiryToContractMonth(String expiry) {
