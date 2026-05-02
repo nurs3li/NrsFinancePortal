@@ -52,6 +52,6 @@ public class CryptoMarketController {
             @RequestParam String symbol,
             @RequestParam(defaultValue = "7") int days
     ) {
-        return queryService.getHistory(symbol, days);
+        return queryService.getCryptoHistory(symbol, days);
     }
 }

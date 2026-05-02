@@ -33,12 +33,6 @@ public class SimulationService {
             LocalDate buyDate,
             BigDecimal manualBuyPriceTry
     ) {
-        if (type == AssetType.STOCK) {
-            throw new IllegalArgumentException(
-                    "STOCK simulation is not supported yet. Historical stock data feed is planned in the next phase."
-            );
-        }
-
         if (rawSymbol == null || rawSymbol.isBlank()) {
             throw new IllegalArgumentException("Symbol is required");
         }
@@ -53,11 +47,19 @@ public class SimulationService {
         }
 
         String symbol = SymbolNormalizer.normalize(type, rawSymbol.trim().toUpperCase());
-        int days = dateToDaysHelper.toDays(buyDate);
+        // Add a small buffer to avoid boundary misses from provider/day-cutoff behavior.
+        int days = Math.min(dateToDaysHelper.toDays(buyDate) + 7, 3650);
 
         List<MarketPriceHistoryDto> history = marketDataClient.getHistory(type, symbol, days);
-        if (history == null || history.isEmpty()) {
-            throw new IllegalStateException("No historical data for symbol: " + symbol);
+        if (history == null) {
+            history = List.of();
+        }
+
+        BigDecimal usdTryRate = resolveUsdTryRate();
+        List<MarketPriceHistoryDto> normalizedHistory = normalizeHistoryPricesToTry(history, type, usdTryRate);
+        BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, symbol));
+        if (currentPrice.signum() <= 0) {
+            throw new IllegalStateException("Current price not found");
         }
 
         HistoricalPriceRef historicalRef;
@@ -68,15 +70,19 @@ public class SimulationService {
                     "USER_INPUT",
                     "EXACT"
             );
+        } else if (!normalizedHistory.isEmpty()) {
+            historicalRef = resolveHistoricalPriceAtOrBeforeDate(normalizedHistory, buyDate);
         } else {
-            historicalRef = resolveHistoricalPriceAtOrBeforeDate(history, buyDate);
+            // History may be temporarily missing for some symbols although latest quote exists.
+            // In that case, allow simulation with latest price fallback instead of hard-failing.
+            historicalRef = new HistoricalPriceRef(
+                    currentPrice,
+                    buyDate,
+                    "SYSTEM_LATEST_FALLBACK",
+                    "FALLBACK"
+            );
         }
         BigDecimal historicalPrice = historicalRef.priceTry();
-
-        BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, symbol));
-        if (currentPrice.signum() <= 0) {
-            throw new IllegalStateException("Current price not found");
-        }
 
         BigDecimal units = amountTry.divide(historicalPrice, 8, RoundingMode.HALF_UP);
         BigDecimal currentValue = units.multiply(currentPrice);
@@ -98,7 +104,7 @@ public class SimulationService {
                 );
 
         List<SimulationPerformancePointDto> performanceSeries = buildPerformanceSeries(
-                history,
+                normalizedHistory,
                 buyDate,
                 historicalPrice,
                 currentPrice
@@ -136,13 +142,28 @@ public class SimulationService {
                 .filter(h -> h.timestamp() != null)
                 .filter(h -> !h.timestamp().toLocalDate().isAfter(buyDate))
                 .max(Comparator.comparing(MarketPriceHistoryDto::timestamp))
-                .orElseThrow(() -> new IllegalStateException("No historical point at or before selected date"));
+                .orElse(null);
+
+        if (row == null) {
+            // If there is no point at/before the selected date, fallback to earliest available point.
+            row = history.stream()
+                    .filter(h -> h.timestamp() != null)
+                    .min(Comparator.comparing(MarketPriceHistoryDto::timestamp))
+                    .orElseThrow(() -> new IllegalStateException("No historical point available for selected symbol"));
+        }
 
         BigDecimal price = midPrice(row);
         if (price == null || price.signum() <= 0) {
             throw new IllegalStateException("Historical price is invalid");
         }
-        String quality = row.timestamp().toLocalDate().isEqual(buyDate) ? "EXACT" : "PREVIOUS_DAY";
+        String quality;
+        if (row.timestamp().toLocalDate().isEqual(buyDate)) {
+            quality = "EXACT";
+        } else if (row.timestamp().toLocalDate().isBefore(buyDate)) {
+            quality = "PREVIOUS_DAY";
+        } else {
+            quality = "FALLBACK";
+        }
         return new HistoricalPriceRef(price, row.timestamp().toLocalDate(), "SYSTEM_HISTORY", quality);
     }
 
@@ -222,6 +243,35 @@ public class SimulationService {
 
     private BigDecimal nz(BigDecimal v) {
         return v == null ? BigDecimal.ZERO : v;
+    }
+
+    private BigDecimal resolveUsdTryRate() {
+        BigDecimal rate = nz(marketDataClient.getPriceTry(AssetType.FX, "USDTRY"));
+        if (rate.signum() <= 0) {
+            // Keep backward compatibility: if FX feed is unavailable, assume already-TRY history.
+            return BigDecimal.ONE;
+        }
+        return rate;
+    }
+
+    private List<MarketPriceHistoryDto> normalizeHistoryPricesToTry(
+            List<MarketPriceHistoryDto> history,
+            AssetType type,
+            BigDecimal usdTryRate
+    ) {
+        if (history == null || history.isEmpty()) return List.of();
+        boolean usdQuoted = type == AssetType.CRYPTO || type == AssetType.FUND || type == AssetType.STOCK;
+        if (!usdQuoted) return history;
+        if (usdTryRate == null || usdTryRate.signum() <= 0) return history;
+
+        return history.stream()
+                .filter(Objects::nonNull)
+                .map(h -> new MarketPriceHistoryDto(
+                        nz(h.buyPrice()).multiply(usdTryRate),
+                        nz(h.sellPrice()).multiply(usdTryRate),
+                        h.timestamp()
+                ))
+                .toList();
     }
 
     private record HistoricalPriceRef(
