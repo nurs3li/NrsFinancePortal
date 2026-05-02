@@ -32,6 +32,10 @@ public class EvdsDebtClient {
     }
 
     public List<EvdsDebtRow> fetchLatest() {
+        return fetchLatest(null);
+    }
+
+    public List<EvdsDebtRow> fetchLatest(Integer lookbackDaysOverride) {
         if (!evdsProperties.isEnabled() || evdsProperties.getDebt() == null || !evdsProperties.getDebt().isEnabled()) {
             return List.of();
         }
@@ -41,7 +45,7 @@ public class EvdsDebtClient {
         }
 
         List<EvdsDebtRow> out = new ArrayList<>();
-        int pointLimit = Math.max(2, evdsProperties.getDebt().getLookbackDays());
+        int pointLimit = Math.max(2, resolveLookbackDays(lookbackDaysOverride));
         for (EvdsProperties.Instrument instrument : instruments) {
             if (instrument == null || instrument.getIsin() == null || instrument.getIsin().isBlank()) {
                 continue;
@@ -78,13 +82,20 @@ public class EvdsDebtClient {
         return out;
     }
 
+    private int resolveLookbackDays(Integer overrideDays) {
+        if (overrideDays != null && overrideDays > 0) {
+            return overrideDays;
+        }
+        return Math.max(1, evdsProperties.getDebt().getLookbackDays());
+    }
+
     private List<EvdsPoint> fetchRecentSeriesPoints(String seriesCode, int limit) {
         if (seriesCode == null || seriesCode.isBlank()) {
             return List.of();
         }
         String normalizedSeries = normalizeSeriesCode(seriesCode);
         LocalDate end = LocalDate.now();
-        int lookbackDays = Math.max(3, evdsProperties.getDebt().getLookbackDays());
+        int lookbackDays = Math.max(3, limit);
         LocalDate start = end.minusDays(lookbackDays);
         String json = webClient.get()
                 .uri(buildSeriesUri(normalizedSeries, start, end))

@@ -13,9 +13,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -144,6 +146,66 @@ public class DebtIngestService {
                     return sorted.stream();
                 })
                 .toList();
+    }
+
+    @Transactional
+    public void ingestEvdsHistoryBackfill(int lookbackDays) {
+        int safeLookback = Math.max(30, Math.min(lookbackDays, 730));
+        List<SeedDebt> evdsRows = evdsDebtClient.fetchLatest(safeLookback).stream()
+                .map(r -> new SeedDebt(
+                        r.isin(),
+                        r.name(),
+                        r.issuer(),
+                        r.maturityDate(),
+                        r.dirtyPrice(),
+                        r.yieldPct(),
+                        r.source(),
+                        r.asOf(),
+                        false
+                ))
+                .toList();
+        if (evdsRows.isEmpty()) {
+            log.warn("[DEBT_HISTORY_BACKFILL] No EVDS rows fetched for lookbackDays={}", safeLookback);
+            return;
+        }
+        Map<String, List<SeedDebt>> byIsin = evdsRows.stream()
+                .filter(r -> r.isin() != null && !r.isin().isBlank() && r.asOf() != null)
+                .collect(Collectors.groupingBy(SeedDebt::isin));
+        for (Map.Entry<String, List<SeedDebt>> entry : byIsin.entrySet()) {
+            String isin = entry.getKey();
+            List<SeedDebt> rows = entry.getValue().stream()
+                    .sorted(Comparator.comparing(SeedDebt::asOf))
+                    .toList();
+            DebtInstrument instrument = debtInstrumentRepository.findByIsin(isin)
+                    .orElseGet(() -> {
+                        SeedDebt first = rows.get(0);
+                        DebtInstrument i = new DebtInstrument();
+                        i.setIsin(first.isin());
+                        i.setName(first.name());
+                        i.setIssuer(first.issuer());
+                        i.setMaturityDate(first.maturityDate());
+                        return debtInstrumentRepository.save(i);
+                    });
+            Set<LocalDateTime> existingDates = debtSnapshotRepository.findByIsinOrderByAsOfAsc(isin).stream()
+                    .map(DebtSnapshot::getAsOf)
+                    .collect(Collectors.toCollection(HashSet::new));
+            int inserted = 0;
+            for (SeedDebt s : rows) {
+                if (s.asOf() == null || existingDates.contains(s.asOf())) {
+                    continue;
+                }
+                DebtSnapshot snapshot = new DebtSnapshot();
+                snapshot.setIsin(instrument.getIsin());
+                snapshot.setDirtyPrice(s.dirtyPrice());
+                snapshot.setYieldPct(s.yieldPct());
+                snapshot.setSource(resolveSource(s));
+                snapshot.setAsOf(s.asOf());
+                debtSnapshotRepository.save(snapshot);
+                existingDates.add(s.asOf());
+                inserted++;
+            }
+            log.info("[DEBT_HISTORY_BACKFILL] isin={} rows={} inserted={}", isin, rows.size(), inserted);
+        }
     }
 
     private record SeedDebt(
