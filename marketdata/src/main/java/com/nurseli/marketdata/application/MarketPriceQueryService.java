@@ -11,7 +11,13 @@ import com.nurseli.marketdata.api.exception.InvalidRequestException;
 import com.nurseli.marketdata.config.EquityProperties;
 import com.nurseli.marketdata.config.EtfProperties;
 import com.nurseli.marketdata.domain.price.CryptoSymbolMapping;
+import com.nurseli.marketdata.domain.price.CryptoDailyCandle;
+import com.nurseli.marketdata.domain.price.EquityDailyCandle;
+import com.nurseli.marketdata.domain.price.FxDailyCandle;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
+import com.nurseli.marketdata.repository.CryptoDailyCandleRepository;
+import com.nurseli.marketdata.repository.EquityDailyCandleRepository;
+import com.nurseli.marketdata.repository.FxDailyCandleRepository;
 import com.nurseli.marketdata.repository.MarketPriceBucketView;
 import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +43,9 @@ public class MarketPriceQueryService {
     private static final BigDecimal ZERO_VOLUME = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
 
     private final MarketPriceHistoryRepository repository;
+    private final CryptoDailyCandleRepository cryptoDailyCandleRepository;
+    private final EquityDailyCandleRepository equityDailyCandleRepository;
+    private final FxDailyCandleRepository fxDailyCandleRepository;
     private final EquityProperties equityProperties;
     private final EtfProperties etfProperties;
     private final EquityMarketCapService equityMarketCapService;
@@ -151,6 +160,34 @@ public class MarketPriceQueryService {
         if (!isAllowedSymbol(MarketType.EQUITY, symbol)) {
             throw new InvalidRequestException("type=EQUITY için geçersiz symbol: " + symbol);
         }
+        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime start = end.minusDays(days);
+        List<CandlePointResponse> candles = toEquityCandles(symbol, start.toLocalDate(), end.toLocalDate());
+        if (!candles.isEmpty()) {
+            return toHistoryFromCandles(candles);
+        }
+        return getHistory(symbol, days);
+    }
+
+    public List<MarketPriceHistoryResponse> getCryptoHistory(String rawSymbol, int days) {
+        if (rawSymbol == null || rawSymbol.isBlank()) {
+            throw new InvalidRequestException("symbol zorunludur.");
+        }
+        String symbol = rawSymbol.trim().toUpperCase();
+        if (!isAllowedSymbol(MarketType.CRYPTO, symbol)) {
+            String maybeUsdt = symbol.endsWith("USDT") ? symbol : symbol + "USDT";
+            if (isAllowedSymbol(MarketType.CRYPTO, maybeUsdt)) {
+                symbol = maybeUsdt;
+            } else {
+                throw new InvalidRequestException("type=CRYPTO için geçersiz symbol: " + symbol);
+            }
+        }
+        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime start = end.minusDays(days);
+        List<CandlePointResponse> candles = toCryptoCandles(symbol, start.toLocalDate(), end.toLocalDate());
+        if (!candles.isEmpty()) {
+            return toHistoryFromCandles(candles);
+        }
         return getHistory(symbol, days);
     }
 
@@ -174,9 +211,28 @@ public class MarketPriceQueryService {
         Map<String, List<CandlePointResponse>> series = new LinkedHashMap<>();
 
         for (String symbol : symbols) {
-            List<MarketPriceHistory> rows =
-                    repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
-
+            if (type == MarketType.FX) {
+                List<CandlePointResponse> fxCandles = toFxCandles(symbol, start.toLocalDate(), end.toLocalDate());
+                if (!fxCandles.isEmpty()) {
+                    series.put(symbol, fxCandles);
+                    continue;
+                }
+            }
+            if (type == MarketType.CRYPTO) {
+                List<CandlePointResponse> cryptoCandles = toCryptoCandles(symbol, start.toLocalDate(), end.toLocalDate());
+                if (!cryptoCandles.isEmpty()) {
+                    series.put(symbol, cryptoCandles);
+                    continue;
+                }
+            }
+            if (type == MarketType.EQUITY) {
+                List<CandlePointResponse> equityCandles = toEquityCandles(symbol, start.toLocalDate(), end.toLocalDate());
+                if (!equityCandles.isEmpty()) {
+                    series.put(symbol, equityCandles);
+                    continue;
+                }
+            }
+            List<MarketPriceHistory> rows = repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
             series.put(symbol, toDailyCandles(rows));
         }
 
@@ -277,6 +333,70 @@ public class MarketPriceQueryService {
         return candles;
     }
 
+    private List<MarketPriceHistoryResponse> toHistoryFromCandles(List<CandlePointResponse> candles) {
+        return candles.stream()
+                .map(c -> new MarketPriceHistoryResponse(
+                        c.c(),
+                        c.c(),
+                        c.t(),
+                        "SYSTEM",
+                        c.t(),
+                        DataQualityFlag.EXACT
+                ))
+                .toList();
+    }
+
+    private List<CandlePointResponse> toEquityCandles(String symbol, LocalDate from, LocalDate to) {
+        List<EquityDailyCandle> rows = equityDailyCandleRepository.findBySymbolAndAsOfBetweenOrderByAsOfAsc(symbol, from, to);
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+        return rows.stream()
+                .map(row -> new CandlePointResponse(
+                        row.getAsOf().atStartOfDay(),
+                        row.getOpenPrice(),
+                        row.getHighPrice(),
+                        row.getLowPrice(),
+                        row.getClosePrice(),
+                        row.getVolume()
+                ))
+                .toList();
+    }
+
+    private List<CandlePointResponse> toCryptoCandles(String symbol, LocalDate from, LocalDate to) {
+        List<CryptoDailyCandle> rows = cryptoDailyCandleRepository.findBySymbolAndAsOfBetweenOrderByAsOfAsc(symbol, from, to);
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+        return rows.stream()
+                .map(row -> new CandlePointResponse(
+                        row.getAsOf().atStartOfDay(),
+                        row.getOpenPrice(),
+                        row.getHighPrice(),
+                        row.getLowPrice(),
+                        row.getClosePrice(),
+                        row.getVolume()
+                ))
+                .toList();
+    }
+
+    private List<CandlePointResponse> toFxCandles(String symbol, LocalDate from, LocalDate to) {
+        List<FxDailyCandle> rows = fxDailyCandleRepository.findBySymbolAndAsOfBetweenOrderByAsOfAsc(symbol, from, to);
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+        return rows.stream()
+                .map(row -> new CandlePointResponse(
+                        row.getAsOf().atStartOfDay(),
+                        row.getOpenPrice(),
+                        row.getHighPrice(),
+                        row.getLowPrice(),
+                        row.getClosePrice(),
+                        row.getVolume()
+                ))
+                .toList();
+    }
+
     private BigDecimal mid(MarketPriceHistory row) {
         return row.getBuyPrice()
                 .add(row.getSellPrice())
@@ -334,7 +454,15 @@ public class MarketPriceQueryService {
         List<MarketPriceHistory> rows =
                 repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
 
-        List<CandlePointResponse> candles = toDailyCandles(rows);
+        List<CandlePointResponse> candles = switch (type) {
+            case EQUITY -> toEquityCandles(symbol, start.toLocalDate(), end.toLocalDate());
+            case CRYPTO -> toCryptoCandles(symbol, start.toLocalDate(), end.toLocalDate());
+            case FX -> toFxCandles(symbol, start.toLocalDate(), end.toLocalDate());
+            default -> List.of();
+        };
+        if (candles.isEmpty()) {
+            candles = toDailyCandles(rows);
+        }
         if (candles.isEmpty()) {
             throw new InvalidRequestException("Gosterge hesaplamak icin en az 1 gunluk veri gerekli.");
         }
