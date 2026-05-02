@@ -6,6 +6,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -59,4 +65,45 @@ public class CoinGeckoClient {
         }
         return Map.of();
     }
+
+    public List<OhlcPoint> fetchDailyOhlc(String coinId, int days) {
+        int safeDays = Math.max(1, Math.min(days, 365));
+        String url = baseUrl + "/coins/" + coinId + "/ohlc?vs_currency=usd&days=" + safeDays;
+        try {
+            @SuppressWarnings("unchecked")
+            List<List<Number>> rows = restTemplate.getForObject(url, List.class);
+            if (rows == null || rows.isEmpty()) {
+                return List.of();
+            }
+            List<OhlcPoint> out = new ArrayList<>();
+            for (List<Number> row : rows) {
+                if (row == null || row.size() < 5) {
+                    continue;
+                }
+                long epochMs = row.get(0).longValue();
+                BigDecimal open = BigDecimal.valueOf(row.get(1).doubleValue());
+                BigDecimal high = BigDecimal.valueOf(row.get(2).doubleValue());
+                BigDecimal low = BigDecimal.valueOf(row.get(3).doubleValue());
+                BigDecimal close = BigDecimal.valueOf(row.get(4).doubleValue());
+                if (open.signum() <= 0 || high.signum() <= 0 || low.signum() <= 0 || close.signum() <= 0) {
+                    continue;
+                }
+                LocalDate day = Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()).toLocalDate();
+                out.add(new OhlcPoint(day, open, high, low, close, null));
+            }
+            return out;
+        } catch (Exception ex) {
+            log.warn("[COINGECKO] OHLC fetch failed coinId={} days={} reason={}", coinId, safeDays, ex.getMessage());
+            return List.of();
+        }
+    }
+
+    public record OhlcPoint(
+            LocalDate day,
+            BigDecimal open,
+            BigDecimal high,
+            BigDecimal low,
+            BigDecimal close,
+            BigDecimal volume
+    ) {}
 }

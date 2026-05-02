@@ -18,4 +18,10 @@ public class EquityMarketScheduler {
         log.info("[SCHEDULER] Fetching equity quotes from FinHub");
         equityPriceIngestService.fetchAndSaveEquityQuotes();
     }
+
+    @Scheduled(cron = "${app.equity.history-incremental-cron:0 30 2 * * *}")
+    public void fetchEquityDailyHistoryIncremental() {
+        log.info("[SCHEDULER] Fetching equity daily history incrementally");
+        equityPriceIngestService.fetchAndSaveIncrementalDailyHistory();
+    }
 }

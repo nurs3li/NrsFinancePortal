@@ -12,6 +12,8 @@ public class DataSourcesProperties {
     private Tcmb tcmb = new Tcmb();
     private CoinGecko coingecko = new CoinGecko();
     private FinHub finhub = new FinHub();
+    private Stooq stooq = new Stooq();
+    private Yahoo yahoo = new Yahoo();
 
     @Data
     public static class Tcmb {
@@ -27,5 +29,16 @@ public class DataSourcesProperties {
     public static class FinHub {
         private String url;
         private String apiKey;
+    }
+
+    @Data
+    public static class Stooq {
+        private String url;
+        private String apiKey;
+    }
+
+    @Data
+    public static class Yahoo {
+        private String url;
     }
 }

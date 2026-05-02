@@ -96,6 +96,31 @@ public class FinHubClient {
     }
 
     /**
+     * Finnhub stock candles.
+     * GET /stock/candle?symbol=...&resolution=D&from=...&to=...&token=...
+     */
+    public Mono<FinHubCandleDto> fetchDailyCandles(String symbol, long fromEpochSec, long toEpochSec) {
+        String apiKey = dataSourcesProperties.getFinhub().getApiKey();
+        if (apiKey == null || apiKey.isBlank() || apiKey.equals("your-api-key-here")) {
+            log.warn("[FINHUB] API key not configured, skipping candle fetch");
+            return Mono.empty();
+        }
+        return webClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/stock/candle")
+                        .queryParam("symbol", symbol)
+                        .queryParam("resolution", "D")
+                        .queryParam("from", fromEpochSec)
+                        .queryParam("to", toEpochSec)
+                        .queryParam("token", apiKey)
+                        .build())
+                .retrieve()
+                .bodyToMono(FinHubCandleDto.class)
+                .doOnError(error -> log.error("[FINHUB] Candle fetch failed for {}: {}", symbol, error.getMessage()))
+                .onErrorResume(e -> Mono.empty());
+    }
+
+    /**
      * FinHub Company Profile 2 API.
      * GET /stock/profile2?symbol=...&token=...
      */

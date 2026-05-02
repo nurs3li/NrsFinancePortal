@@ -9,3 +9,11 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v4-market-price-latest-index.yaml
+  - include:
+      file: db/changelog/v5-viop-hybrid-fields.yaml
+  - include:
+      file: db/changelog/v6-equity-daily-candle.yaml
+  - include:
+      file: db/changelog/v7-crypto-daily-candle.yaml
+  - include:
+      file: db/changelog/v8-fx-daily-candle.yaml
