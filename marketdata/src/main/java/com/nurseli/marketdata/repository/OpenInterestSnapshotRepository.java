@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface OpenInterestSnapshotRepository extends JpaRepository<OpenInterestSnapshot, Long> {
     List<OpenInterestSnapshot> findByContractCodeOrderByAsOfAsc(String contractCode);
     Optional<OpenInterestSnapshot> findTopByContractCodeOrderByAsOfDesc(String contractCode);
+    boolean existsByContractCodeAndAsOf(String contractCode, java.time.LocalDateTime asOf);
 }

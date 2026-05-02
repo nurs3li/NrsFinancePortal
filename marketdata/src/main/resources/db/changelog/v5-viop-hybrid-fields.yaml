@@ -1,0 +1,33 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-viop-hybrid-fields
+      author: codex
+      changes:
+        - addColumn:
+            tableName: derivative_snapshot
+            columns:
+              - column:
+                  name: basis
+                  type: NUMERIC(19,6)
+              - column:
+                  name: maintenance_margin
+                  type: NUMERIC(19,6)
+              - column:
+                  name: days_to_expiry
+                  type: INTEGER
+              - column:
+                  name: data_quality
+                  type: VARCHAR(16)
+              - column:
+                  name: price_source
+                  type: VARCHAR(32)
+              - column:
+                  name: price_latency_ms
+                  type: BIGINT
+        - addColumn:
+            tableName: open_interest_snapshot
+            columns:
+              - column:
+                  name: daily_volume
+                  type: BIGINT
+

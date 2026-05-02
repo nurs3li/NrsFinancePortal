@@ -24,6 +24,24 @@ public class DerivativeSnapshot {
     @Column(nullable = false, length = 24)
     private String source;
 
+    @Column(precision = 19, scale = 6)
+    private BigDecimal basis;
+
+    @Column(precision = 19, scale = 6)
+    private BigDecimal maintenanceMargin;
+
+    @Column
+    private Integer daysToExpiry;
+
+    @Column(length = 16)
+    private String dataQuality;
+
+    @Column(length = 32)
+    private String priceSource;
+
+    @Column
+    private Long priceLatencyMs;
+
     @Column(nullable = false)
     private LocalDateTime asOf;
 
@@ -36,6 +54,18 @@ public class DerivativeSnapshot {
     public void setTheoreticalSpot(BigDecimal theoreticalSpot) { this.theoreticalSpot = theoreticalSpot; }
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
+    public BigDecimal getBasis() { return basis; }
+    public void setBasis(BigDecimal basis) { this.basis = basis; }
+    public BigDecimal getMaintenanceMargin() { return maintenanceMargin; }
+    public void setMaintenanceMargin(BigDecimal maintenanceMargin) { this.maintenanceMargin = maintenanceMargin; }
+    public Integer getDaysToExpiry() { return daysToExpiry; }
+    public void setDaysToExpiry(Integer daysToExpiry) { this.daysToExpiry = daysToExpiry; }
+    public String getDataQuality() { return dataQuality; }
+    public void setDataQuality(String dataQuality) { this.dataQuality = dataQuality; }
+    public String getPriceSource() { return priceSource; }
+    public void setPriceSource(String priceSource) { this.priceSource = priceSource; }
+    public Long getPriceLatencyMs() { return priceLatencyMs; }
+    public void setPriceLatencyMs(Long priceLatencyMs) { this.priceLatencyMs = priceLatencyMs; }
     public LocalDateTime getAsOf() { return asOf; }
     public void setAsOf(LocalDateTime asOf) { this.asOf = asOf; }
 }
