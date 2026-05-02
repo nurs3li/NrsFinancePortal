@@ -55,10 +55,20 @@ type Props = {
     onNewsSelect?: (marker: NewsMarkerLite | null) => void;
 };
 
-function toDayTime(value: string): Time {
+function toChartTime(value: string): Time {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value.slice(0, 10) as Time;
+    const hasClock = /T\d{2}:\d{2}:\d{2}/.test(value);
+    if (hasClock) {
+        return Math.floor(d.getTime() / 1000) as Time;
+    }
     return d.toISOString().slice(0, 10) as Time;
+}
+function chartTimeToDayKey(value: Time): string {
+    if (typeof value === 'number') {
+        return new Date(value * 1000).toISOString().slice(0, 10);
+    }
+    return String(value).slice(0, 10);
 }
 function toDayKey(value: string): string {
     const d = new Date(value);
@@ -97,10 +107,21 @@ export function MarketTerminalChart({
         return m;
     }, [newsMarkers]);
 
-    const sortedCandles = useMemo(
-        () => [...candles].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()),
-        [candles]
-    );
+    const sortedCandles = useMemo(() => {
+        const byTime = new Map<string, CandleVM>();
+        [...candles]
+            .filter(
+                (c) =>
+                    Number.isFinite(c.open) &&
+                    Number.isFinite(c.high) &&
+                    Number.isFinite(c.low) &&
+                    Number.isFinite(c.close) &&
+                    c.close > 0
+            )
+            .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
+            .forEach((c) => byTime.set(String(toChartTime(c.time)), c));
+        return [...byTime.values()];
+    }, [candles]);
     const candleCount = sortedCandles.length;
     const compactBars = candleCount <= 6;
 
@@ -141,7 +162,7 @@ export function MarketTerminalChart({
         });
 
         const candleData: CandlestickData[] = sortedCandles.map((c) => ({
-            time: toDayTime(c.time),
+            time: toChartTime(c.time),
             open: c.open,
             high: c.high,
             low: c.low,
@@ -163,7 +184,7 @@ export function MarketTerminalChart({
         });
         volumeSeries.setData(
             sortedCandles.map((c) => ({
-                time: toDayTime(c.time),
+                time: toChartTime(c.time),
                 value: Number(c.volume ?? 0),
                 color: c.close >= c.open ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)',
             }))
@@ -171,7 +192,7 @@ export function MarketTerminalChart({
         candleSeries.setMarkers(
             markers.map((m) => ({
                 ...m,
-                time: toDayTime(m.time),
+                time: toChartTime(m.time),
             }))
         );
 
@@ -185,7 +206,7 @@ export function MarketTerminalChart({
                 priceLineVisible: false,
                 lastValueVisible: false,
             });
-            ma7Series.setData(ma7.map((p) => ({ time: toDayTime(p.time), value: p.value })));
+            ma7Series.setData(ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })));
 
             ma21Series = chart.addLineSeries({
                 color: '#f59e0b',
@@ -193,7 +214,7 @@ export function MarketTerminalChart({
                 priceLineVisible: false,
                 lastValueVisible: false,
             });
-            ma21Series.setData(ma21.map((p) => ({ time: toDayTime(p.time), value: p.value })));
+            ma21Series.setData(ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })));
         }
 
         chart.subscribeCrosshairMove((param) => {
@@ -210,7 +231,7 @@ export function MarketTerminalChart({
                 setHoverNews(null);
                 return;
             }
-            const day = String(param.time).slice(0, 10);
+            const day = chartTimeToDayKey(param.time);
             setHoverNews(newsByDay.get(day) ?? null);
             setHoverData({
                 time: String(param.time),
@@ -223,7 +244,7 @@ export function MarketTerminalChart({
 
         chart.subscribeClick((param) => {
             if (!param?.time || !onNewsSelect) return;
-            const day = String(param.time).slice(0, 10);
+            const day = chartTimeToDayKey(param.time);
             onNewsSelect(newsByDay.get(day) ?? null);
         });
 
@@ -244,6 +265,9 @@ export function MarketTerminalChart({
     }
     if (!sortedCandles.length) {
         return <div className="terminal-chart-empty">`{symbol}` için mum verisi bulunamadı.</div>;
+    }
+    if (sortedCandles.length < 2) {
+        return <div className="terminal-chart-empty">`{symbol}` için mum grafik için en az 2 veri noktası gerekli.</div>;
     }
 
     return (

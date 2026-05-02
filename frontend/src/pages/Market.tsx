@@ -335,6 +335,8 @@ function newsCategoryForMarket(category: MarketCategory): string {
     if (category === 'EQUITY') return 'STOCK';
     if (category === 'CRYPTO') return 'CRYPTO';
     if (category === 'FX') return 'FOREX';
+    if (category === 'FUTURES') return 'VIOP';
+    if (category === 'BOND') return 'BOND';
     return 'GENERAL';
 }
 
@@ -534,6 +536,20 @@ export function Market() {
                     });
                 }
             });
+            viopContracts.forEach((contract) => {
+                const key = normalizeSymbolKey(contract.contractCode);
+                if (!key || merged.has(key)) {
+                    return;
+                }
+                merged.set(key, {
+                    contractCode: key,
+                    expiryDate: contract.expiry,
+                    price: 0,
+                    basis: 0,
+                    annualizedBasisPct: 0,
+                    openInterest: 0,
+                });
+            });
             return [...merged.values()]
                 .map((v) => {
                     const pct = v.price ? (Number(v.basis ?? 0) / Number(v.price)) * 100 : 0;
@@ -622,7 +638,7 @@ export function Market() {
                 });
             });
         return [...unique.values()].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
-    }, [activeCategory, dashboard, viopLatest, debtLatest, debtHistoryByIsin, fxSpreadMap]);
+    }, [activeCategory, dashboard, viopLatest, viopContracts, debtLatest, debtHistoryByIsin, fxSpreadMap]);
 
     useEffect(() => {
         if (!instruments.length) {
@@ -702,12 +718,21 @@ export function Market() {
     const { data: viopHistory = [], isLoading: loadingViopHistory } = useQuery({
         queryKey: ['market', 'viop-history', selectedSymbol, days],
         enabled: activeCategory === 'FUTURES' && Boolean(selectedSymbol),
-        queryFn: () =>
-            marketClient
+        queryFn: async () => {
+            const primary = await marketClient
                 .get<ViopSnapshot[]>('/api/market/viop/history', {
                     params: { contract: selectedSymbol, days },
                 })
-                .then((r) => r.data),
+                .then((r) => r.data);
+            if (primary.length > 0 || days >= 365) {
+                return primary;
+            }
+            return marketClient
+                .get<ViopSnapshot[]>('/api/market/viop/history', {
+                    params: { contract: selectedSymbol, days: 365 },
+                })
+                .then((r) => r.data);
+        },
         refetchInterval: 15_000,
     });
     const { data: viopOiHistory = [] } = useQuery({
@@ -736,7 +761,9 @@ export function Market() {
 
     const candles = useMemo(() => {
         if (activeCategory === 'FUTURES') {
-            const sorted = [...viopHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
+            const sorted = [...viopHistory]
+                .filter((x) => Number(x.price ?? 0) > 0)
+                .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
             return sorted.map((x, idx) => {
                 const close = Number(x.price ?? 0);
                 const prev = idx > 0 ? Number(sorted[idx - 1]?.price ?? close) : close;
@@ -797,8 +824,16 @@ export function Market() {
     }, [activeCategory, debtHistory]);
     const viopLinePoints = useMemo(() => {
         if (activeCategory !== 'FUTURES') return [];
-        const sorted = [...viopHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
-        return sorted.map((x) => ({
+        const sorted = [...viopHistory]
+            .filter((x) => Number(x.price ?? 0) > 0)
+            .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
+        const dailyLast = new Map<string, ViopSnapshot>();
+        sorted.forEach((x) => {
+            const dayKey = String(x.asOf ?? '').slice(0, 10);
+            if (!dayKey) return;
+            dailyLast.set(dayKey, x);
+        });
+        return [...dailyLast.values()].map((x) => ({
             time: x.asOf ?? new Date().toISOString(),
             price: Number(x.price ?? 0),
             basis: Number(x.basis ?? 0),

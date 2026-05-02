@@ -28,16 +28,34 @@ type Props = {
     tokens: ThemeSlice;
 };
 
-function toDayTime(value: string): Time {
+function toChartTime(value: string): Time {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value.slice(0, 10) as Time;
+    const hasClock = /T\d{2}:\d{2}:\d{2}/.test(value);
+    if (hasClock) {
+        return Math.floor(d.getTime() / 1000) as Time;
+    }
     return d.toISOString().slice(0, 10) as Time;
+}
+
+function chartTimeKey(value: Time): string {
+    if (typeof value === 'number') {
+        return new Date(value * 1000).toISOString();
+    }
+    return String(value);
 }
 
 export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timeframeLabel, trendLabel, tokens }: Props) {
     const chartRef = useRef<HTMLDivElement>(null);
     const [hover, setHover] = useState<ViopPoint | null>(null);
-    const sorted = useMemo(() => [...points].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()), [points]);
+    const sorted = useMemo(() => {
+        const byTime = new Map<string, ViopPoint>();
+        [...points]
+            .filter((p) => Number.isFinite(p.price) && p.price > 0)
+            .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
+            .forEach((p) => byTime.set(chartTimeKey(toChartTime(p.time)), p));
+        return [...byTime.values()];
+    }, [points]);
     const limitedData = sorted.length > 0 && sorted.length < 5;
 
     useEffect(() => {
@@ -69,17 +87,27 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
 
         const priceArea = chart.addAreaSeries({
             lineColor: '#38bdf8',
-            topColor: 'rgba(56,189,248,0.35)',
-            bottomColor: 'rgba(56,189,248,0.06)',
-            lineWidth: 2,
+            topColor: 'rgba(56,189,248,0.45)',
+            bottomColor: 'rgba(56,189,248,0.12)',
+            lineWidth: 3,
             priceLineVisible: false,
             lastValueVisible: true,
         });
-        priceArea.setData(
-            sorted
-                .filter((p) => Number.isFinite(p.price) && p.price > 0)
-                .map((p) => ({ time: toDayTime(p.time), value: p.price }))
-        );
+        const priceData = sorted
+            .filter((p) => Number.isFinite(p.price) && p.price > 0)
+            .map((p) => ({ time: toChartTime(p.time), value: p.price }));
+        priceArea.setData(priceData);
+
+        const priceLine = chart.addLineSeries({
+            color: '#0ea5e9',
+            lineWidth: 3,
+            pointMarkersVisible: true,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 4,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        });
+        priceLine.setData(priceData);
 
         if (showMa) {
             const ma7Series = chart.addLineSeries({
@@ -88,7 +116,7 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                 priceLineVisible: false,
                 lastValueVisible: false,
             });
-            ma7Series.setData(ma7.map((p) => ({ time: toDayTime(p.time), value: p.value })));
+            ma7Series.setData(ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })));
 
             const ma21Series = chart.addLineSeries({
                 color: '#f59e0b',
@@ -96,7 +124,7 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                 priceLineVisible: false,
                 lastValueVisible: false,
             });
-            ma21Series.setData(ma21.map((p) => ({ time: toDayTime(p.time), value: p.value })));
+            ma21Series.setData(ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })));
         }
 
         const oiHistogram = chart.addHistogramSeries({
@@ -111,7 +139,7 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
         });
         oiHistogram.setData(
             sorted.map((p) => ({
-                time: toDayTime(p.time),
+                time: toChartTime(p.time),
                 value: Number(p.openInterest ?? 0),
                 color: 'rgba(148,163,184,0.2)',
             }))
@@ -122,8 +150,8 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                 setHover(null);
                 return;
             }
-            const day = String(param.time).slice(0, 10);
-            const row = sorted.find((p) => toDayTime(p.time) === day);
+            const key = chartTimeKey(param.time);
+            const row = sorted.find((p) => chartTimeKey(toChartTime(p.time)) === key);
             setHover(row ?? null);
         });
 
@@ -141,6 +169,9 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
     }
     if (!sorted.length) {
         return <div className="terminal-chart-empty">VİOP veri noktası bulunamadı.</div>;
+    }
+    if (sorted.length < 2) {
+        return <div className="terminal-chart-empty">Bu kontrat için çizim yapacak yeterli VİOP geçmişi yok (en az 2 nokta gerekli).</div>;
     }
 
     return (
