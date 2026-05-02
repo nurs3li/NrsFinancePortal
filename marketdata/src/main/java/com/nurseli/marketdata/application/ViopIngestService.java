@@ -3,11 +3,13 @@ package com.nurseli.marketdata.application;
 import com.nurseli.marketdata.domain.derivatives.DerivativeContract;
 import com.nurseli.marketdata.domain.derivatives.DerivativeSnapshot;
 import com.nurseli.marketdata.domain.derivatives.OpenInterestSnapshot;
+import com.nurseli.marketdata.config.ViopHybridProperties;
 import com.nurseli.marketdata.infrastructure.bist.BistViopClient;
 import com.nurseli.marketdata.repository.DerivativeContractRepository;
 import com.nurseli.marketdata.repository.DerivativeSnapshotRepository;
 import com.nurseli.marketdata.repository.OpenInterestSnapshotRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,15 +19,29 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ViopIngestService {
 
     private final DerivativeContractRepository contractRepository;
     private final DerivativeSnapshotRepository snapshotRepository;
     private final OpenInterestSnapshotRepository openInterestSnapshotRepository;
     private final BistViopClient bistViopClient;
+    private final ViopHybridProperties viopHybridProperties;
+    private final ViopHybridAggregationService viopHybridAggregationService;
+    private final ViopContractParser viopContractParser;
+    private final ViopTickerCacheService viopTickerCacheService;
+    private final ViopVolatilityAlertPublisher viopVolatilityAlertPublisher;
 
     @Transactional
     public void ingestLatest() {
+        if (viopHybridProperties.isEnabled()) {
+            ingestHybrid();
+            return;
+        }
+        ingestLegacy();
+    }
+
+    private void ingestLegacy() {
         List<SeedContract> realRows = bistViopClient.fetchLatest().stream()
                 .map(r -> new SeedContract(
                         r.contractCode(),
@@ -75,8 +91,72 @@ public class ViopIngestService {
             OpenInterestSnapshot oi = new OpenInterestSnapshot();
             oi.setContractCode(contract.getContractCode());
             oi.setOpenInterest(s.openInterest());
+            oi.setDailyVolume(null);
             oi.setAsOf(now);
             openInterestSnapshotRepository.save(oi);
+        }
+    }
+
+    private void ingestHybrid() {
+        List<ViopHybridAggregationService.HybridViopRow> rows = viopHybridAggregationService.fetchLatest();
+        if (rows.isEmpty()) {
+            log.warn("[VIOP_HYBRID] No merged row produced; fallback to legacy ingest");
+            ingestLegacy();
+            return;
+        }
+        for (ViopHybridAggregationService.HybridViopRow row : rows) {
+            String contractCode = row.contractCode();
+            if (contractCode == null || contractCode.isBlank()) {
+                continue;
+            }
+            String normalizedExpiry = viopContractParser.inferExpiryFromContractCode(contractCode, row.expiry());
+            DerivativeContract contract = contractRepository.findByContractCode(contractCode)
+                    .orElseGet(() -> {
+                        DerivativeContract c = new DerivativeContract();
+                        c.setContractCode(contractCode);
+                        c.setUnderlying(row.underlying() == null || row.underlying().isBlank() ? "UNKNOWN" : row.underlying());
+                        c.setExpiry(normalizedExpiry == null ? "2099-12-31" : normalizedExpiry);
+                        c.setType(row.type() == null || row.type().isBlank() ? "FUTURES" : row.type());
+                        return contractRepository.save(c);
+                    });
+
+            Long previousOi = openInterestSnapshotRepository.findTopByContractCodeOrderByAsOfDesc(contractCode)
+                    .map(OpenInterestSnapshot::getOpenInterest)
+                    .orElse(null);
+
+            DerivativeSnapshot snapshot = new DerivativeSnapshot();
+            snapshot.setContractCode(contractCode);
+            snapshot.setPrice(row.price() == null ? BigDecimal.ZERO : row.price());
+            snapshot.setTheoreticalSpot(row.spot() == null ? BigDecimal.ZERO : row.spot());
+            snapshot.setBasis(row.basis());
+            snapshot.setMaintenanceMargin(row.maintenanceMargin());
+            snapshot.setDaysToExpiry(row.daysToExpiry());
+            snapshot.setDataQuality(row.quality());
+            snapshot.setPriceSource(row.priceSource());
+            snapshot.setPriceLatencyMs(row.priceLatencyMs());
+            snapshot.setSource(row.source() == null ? "VIOP_HYBRID" : row.source());
+            snapshot.setAsOf(row.asOf() == null ? LocalDateTime.now() : row.asOf());
+            snapshotRepository.save(snapshot);
+
+            OpenInterestSnapshot oi = new OpenInterestSnapshot();
+            oi.setContractCode(contractCode);
+            oi.setOpenInterest(row.openInterest() == null ? 0L : row.openInterest());
+            oi.setDailyVolume(row.dailyVolume());
+            oi.setAsOf(row.asOf() == null ? LocalDateTime.now() : row.asOf());
+            openInterestSnapshotRepository.save(oi);
+
+            viopTickerCacheService.cache(row);
+            publishOpenInterestSurgeIfNeeded(contractCode, previousOi, oi.getOpenInterest());
+        }
+    }
+
+    private void publishOpenInterestSurgeIfNeeded(String contractCode, Long previousOi, Long latestOi) {
+        if (previousOi == null || previousOi <= 0 || latestOi == null || latestOi <= previousOi) {
+            return;
+        }
+        double pctChange = ((double) (latestOi - previousOi) / previousOi) * 100.0;
+        if (pctChange >= viopHybridProperties.getOpenInterestSurgeThresholdPct()) {
+            viopVolatilityAlertPublisher.publishOpenInterestSurge(contractCode, previousOi, latestOi, pctChange);
         }
     }
 
