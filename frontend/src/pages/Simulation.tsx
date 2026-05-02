@@ -13,6 +13,7 @@ import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { Trash2 } from 'lucide-react';
 import './TerminalPages.css';
+import { fetchSimulationSymbolsByType } from '../services/marketDataService';
 
 type AssetType = 'CRYPTO' | 'FX' | 'FUND' | 'METAL' | 'STOCK';
 
@@ -62,31 +63,27 @@ type SimulationResultItem = {
 type SortMode = 'LATEST' | 'PNL_DESC' | 'PNL_ASC' | 'PNL_PCT_DESC' | 'PNL_PCT_ASC' | 'NAME_ASC';
 type BuyPriceMode = 'SYSTEM' | 'MANUAL';
 
-type MarketOverview = {
-    doviz?: Record<string, { buyPrice?: number; sellPrice?: number; source?: string }>;
-    metals?: Record<string, { buyPrice?: number; source?: string }>;
-    crypto?: Record<string, { buyPrice?: number; source?: string }>;
-    funds?: Record<string, { buyPrice?: number; source?: string }>;
-    stocks?: Record<string, { buyPrice?: number; source?: string }>;
-    timestamp?: string;
-};
-
 function unwrapData<T>(res: any): T {
     return (res?.data?.data ?? res?.data) as T;
 }
 
-function getOverviewKey(type: AssetType): keyof MarketOverview {
-    switch (type) {
-        case 'CRYPTO': return 'crypto';
-        case 'FX': return 'doviz';
-        case 'METAL': return 'metals';
-        case 'FUND': return 'funds';
-        case 'STOCK': return 'stocks';
-        default: return 'crypto';
-    }
+const LINE_COLORS = ['#c0c0c0', '#d9d9d9', '#aeb4c4', '#94a3b8', '#e2e8f0', '#f8fafc', '#22d3ee', '#7dd3fc'];
+
+function sourceLabel(source: string): string {
+    const s = String(source ?? '').toUpperCase();
+    if (s === 'SYSTEM_HISTORY') return 'Sistem Gecmis Fiyati';
+    if (s === 'SYSTEM_LATEST_FALLBACK') return 'Sistem Son Fiyat Fallback';
+    if (s === 'USER_INPUT') return 'Kullanici Manuel Fiyati';
+    return source || 'Sistem';
 }
 
-const LINE_COLORS = ['#c0c0c0', '#d9d9d9', '#aeb4c4', '#94a3b8', '#e2e8f0', '#f8fafc', '#22d3ee', '#7dd3fc'];
+function qualityLabel(quality: string): string {
+    const q = String(quality ?? '').toUpperCase();
+    if (q === 'EXACT') return 'EXACT (Secilen gun)';
+    if (q === 'PREVIOUS_DAY') return 'PREVIOUS_DAY (Onceki uygun gun)';
+    if (q === 'FALLBACK') return 'FALLBACK (En erken/mevcut nokta)';
+    return quality || 'BILINMIYOR';
+}
 
 export function Simulation() {
     const { tokens } = useTheme();
@@ -97,7 +94,7 @@ export function Simulation() {
     const [buyPriceMode, setBuyPriceMode] = useState<BuyPriceMode>('SYSTEM');
     const [manualBuyPrice, setManualBuyPrice] = useState('');
 
-    const [overview, setOverview] = useState<MarketOverview | null>(null);
+    const [symbolOptions, setSymbolOptions] = useState<string[]>([]);
     const [overviewLoading, setOverviewLoading] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -106,20 +103,11 @@ export function Simulation() {
 
     useEffect(() => {
         setOverviewLoading(true);
-        financeClient
-            .get('/api/market/overview')
-            .then((res) => setOverview(unwrapData<MarketOverview>(res)))
-            .catch(() => setOverview(null))
+        fetchSimulationSymbolsByType(type)
+            .then((rows) => setSymbolOptions(rows))
+            .catch(() => setSymbolOptions([]))
             .finally(() => setOverviewLoading(false));
-    }, []);
-
-    const symbolOptions = useMemo(() => {
-        if (!overview) return [] as string[];
-        const key = getOverviewKey(type);
-        const map = overview[key];
-        if (!map || typeof map !== 'object') return [] as string[];
-        return Object.keys(map).filter((k) => map[k] != null);
-    }, [overview, type]);
+    }, [type]);
 
     useEffect(() => {
         if (symbolOptions.length > 0 && !symbolOptions.includes(symbol)) {
@@ -331,6 +319,9 @@ export function Simulation() {
             <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 16 }}>
                 Çoklu simülasyon ekle, varlıkları karşılaştır, kümülatif getiri eğrilerini aynı grafikte takip et.
             </p>
+            <div style={{ ...cardStyle, marginBottom: 12, fontSize: '0.8125rem', color: tokens.textMuted }}>
+                Simülasyon hesapları TRY bazında yapılır. USD bazlı varlıklarda geçmiş fiyatlar simülasyon sırasında USDTRY ile normalize edilir.
+            </div>
 
             <div
                 className="tp-card"
@@ -373,7 +364,7 @@ export function Simulation() {
                                 {symbolOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                             </select>
                         ) : (
-                            <input value={symbol} onChange={(e) => setSymbol(e.target.value)} style={inputStyle} />
+                            <div style={{ ...inputStyle, color: tokens.textMuted }}>Bu varlık türü için kayıtlı sembol yok.</div>
                         )}
                     </label>
 
@@ -566,7 +557,7 @@ export function Simulation() {
                                             </span>
                                         </td>
                                         <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                            <div style={{ fontSize: '0.8rem' }}>{r.buyPriceSource}</div>
+                                            <div style={{ fontSize: '0.8rem' }}>{sourceLabel(r.buyPriceSource)}</div>
                                             <div style={{ color: tokens.textMuted, fontSize: '0.75rem' }}>{new Date(r.historicalPriceDate).toLocaleDateString('tr-TR')}</div>
                                             <span
                                                 style={{
@@ -580,7 +571,7 @@ export function Simulation() {
                                                     color: r.qualityFlag === 'EXACT' ? '#22c55e' : r.qualityFlag === 'PREVIOUS_DAY' ? '#f59e0b' : '#ef4444',
                                                 }}
                                             >
-                                                {r.qualityFlag}
+                                                {qualityLabel(r.qualityFlag)}
                                             </span>
                                         </td>
                                         <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
