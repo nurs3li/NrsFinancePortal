@@ -1,8 +1,10 @@
 package com.nurseli.marketdata.application;
 
 import com.nurseli.marketdata.domain.price.CryptoSymbolMapping;
+import com.nurseli.marketdata.domain.price.CryptoDailyCandle;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.infrastructure.coingecko.CoinGeckoClient;
+import com.nurseli.marketdata.repository.CryptoDailyCandleRepository;
 import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,7 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -21,6 +25,7 @@ public class CryptoPriceIngestService {
 
     private final CoinGeckoClient coinGeckoClient;
     private final MarketPriceHistoryRepository repository;
+    private final CryptoDailyCandleRepository cryptoDailyCandleRepository;
 
     @Transactional
     @CacheEvict(
@@ -66,5 +71,84 @@ public class CryptoPriceIngestService {
             repository.save(entity);
             log.info("[CRYPTO] Saved {}", symbol);
         });
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
+    public void fetchAndSaveHistoryBackfill(int periodDays) {
+        int days = Math.max(7, Math.min(periodDays, 365));
+        for (Map.Entry<String, String> entry : CryptoSymbolMapping.SYMBOL_TO_ID.entrySet()) {
+            String symbol = entry.getKey();
+            String coinId = entry.getValue();
+            try {
+                List<CoinGeckoClient.OhlcPoint> points = coinGeckoClient.fetchDailyOhlc(coinId, days);
+                if (points.isEmpty()) {
+                    sleepQuietly(1100);
+                    points = coinGeckoClient.fetchDailyOhlc(coinId, days);
+                }
+                int inserted = 0;
+                for (CoinGeckoClient.OhlcPoint p : points) {
+                    if (cryptoDailyCandleRepository.existsBySymbolAndAsOf(symbol, p.day())) {
+                        continue;
+                    }
+                    CryptoDailyCandle candle = new CryptoDailyCandle();
+                    candle.setSymbol(symbol);
+                    candle.setAsOf(p.day());
+                    candle.setOpenPrice(p.open());
+                    candle.setHighPrice(p.high());
+                    candle.setLowPrice(p.low());
+                    candle.setClosePrice(p.close());
+                    candle.setVolume(p.volume());
+                    candle.setSource("COINGECKO_OHLC");
+                    cryptoDailyCandleRepository.save(candle);
+                    inserted++;
+                }
+                log.info("[CRYPTO_HISTORY] symbol={} coinId={} points={} inserted={}", symbol, coinId, points.size(), inserted);
+                sleepQuietly(1100);
+            } catch (Exception ex) {
+                log.warn("[CRYPTO_HISTORY] failed symbol={} coinId={} reason={}", symbol, coinId, ex.getMessage());
+            }
+        }
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
+    public void fetchAndSaveIncrementalDailyHistory() {
+        LocalDate today = LocalDate.now();
+        for (Map.Entry<String, String> entry : CryptoSymbolMapping.SYMBOL_TO_ID.entrySet()) {
+            String symbol = entry.getKey();
+            String coinId = entry.getValue();
+            try {
+                List<CoinGeckoClient.OhlcPoint> points = coinGeckoClient.fetchDailyOhlc(coinId, 7);
+                for (CoinGeckoClient.OhlcPoint p : points) {
+                    if (!p.day().isAfter(today.minusDays(8)) || p.day().isAfter(today)) {
+                        continue;
+                    }
+                    if (cryptoDailyCandleRepository.existsBySymbolAndAsOf(symbol, p.day())) {
+                        continue;
+                    }
+                    CryptoDailyCandle candle = new CryptoDailyCandle();
+                    candle.setSymbol(symbol);
+                    candle.setAsOf(p.day());
+                    candle.setOpenPrice(p.open());
+                    candle.setHighPrice(p.high());
+                    candle.setLowPrice(p.low());
+                    candle.setClosePrice(p.close());
+                    candle.setVolume(p.volume());
+                    candle.setSource("COINGECKO_OHLC");
+                    cryptoDailyCandleRepository.save(candle);
+                }
+            } catch (Exception ex) {
+                log.debug("[CRYPTO_HISTORY] incremental failed symbol={} reason={}", symbol, ex.getMessage());
+            }
+        }
+    }
+
+    private void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

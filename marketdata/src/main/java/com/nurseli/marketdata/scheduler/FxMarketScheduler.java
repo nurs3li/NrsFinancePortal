@@ -32,5 +32,10 @@ public class FxMarketScheduler {
         } catch (Exception ex) {
             log.warn("[SCHEDULER] EVDS ingest failed. reason={}", ex.getMessage());
         }
+        try {
+            ingestService.fetchAndSaveFxHistoryIncremental();
+        } catch (Exception ex) {
+            log.debug("[SCHEDULER] FX OHLC incremental failed. reason={}", ex.getMessage());
+        }
     }
 }

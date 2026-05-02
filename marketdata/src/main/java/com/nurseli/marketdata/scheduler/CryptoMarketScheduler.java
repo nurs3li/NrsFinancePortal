@@ -21,4 +21,10 @@ public class CryptoMarketScheduler {
         log.info("[SCHEDULER] Fetching crypto prices from CoinGecko");
         ingestService.fetchAndSaveCryptoPrices();
     }
+
+    @Scheduled(cron = "${app.crypto.history-incremental-cron:0 45 2 * * *}")
+    public void fetchCryptoDailyHistoryIncremental() {
+        log.info("[SCHEDULER] Fetching incremental crypto OHLC history");
+        ingestService.fetchAndSaveIncrementalDailyHistory();
+    }
 }

@@ -1,7 +1,10 @@
 package com.nurseli.marketdata.application;
 
 import com.nurseli.marketdata.infrastructure.tcmb.TcmbClient;
+import com.nurseli.marketdata.infrastructure.yahoo.YahooChartClient;
+import com.nurseli.marketdata.domain.price.FxDailyCandle;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
+import com.nurseli.marketdata.repository.FxDailyCandleRepository;
 import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
@@ -9,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -17,6 +21,8 @@ public class MarketPriceIngestService {
     private final TcmbClient tcmbClient;
     private final MarketPriceHistoryRepository repository;
     private final TcmbFxSnapshotCache tcmbFxSnapshotCache;
+    private final YahooChartClient yahooChartClient;
+    private final FxDailyCandleRepository fxDailyCandleRepository;
 
     /**
      * Yeni FX verisi geldiğinde:
@@ -44,5 +50,38 @@ public class MarketPriceIngestService {
 
             repository.save(entity);
         });
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
+    public void fetchAndSaveFxHistoryBackfill(int periodDays) {
+        String range = periodDays >= 730 ? "2y" : "1y";
+        List<String> symbols = List.of("USDTRY", "EURTRY", "GBPTRY");
+        for (String symbol : symbols) {
+            List<YahooChartClient.YahooDailyBar> bars = yahooChartClient.fetchDailyBars(symbol, range);
+            int inserted = 0;
+            for (YahooChartClient.YahooDailyBar bar : bars) {
+                if (fxDailyCandleRepository.existsBySymbolAndAsOf(symbol, bar.day())) {
+                    continue;
+                }
+                FxDailyCandle candle = new FxDailyCandle();
+                candle.setSymbol(symbol);
+                candle.setAsOf(bar.day());
+                candle.setOpenPrice(bar.open());
+                candle.setHighPrice(bar.high());
+                candle.setLowPrice(bar.low());
+                candle.setClosePrice(bar.close());
+                candle.setVolume(bar.volume());
+                candle.setSource("YAHOO_FX_OHLC");
+                fxDailyCandleRepository.save(candle);
+                inserted++;
+            }
+        }
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
+    public void fetchAndSaveFxHistoryIncremental() {
+        fetchAndSaveFxHistoryBackfill(365);
     }
 }
