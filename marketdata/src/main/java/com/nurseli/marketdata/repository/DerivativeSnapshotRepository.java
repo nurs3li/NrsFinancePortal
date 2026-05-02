@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface DerivativeSnapshotRepository extends JpaRepository<DerivativeSnapshot, Long> {
     List<DerivativeSnapshot> findByContractCodeOrderByAsOfAsc(String contractCode);
     Optional<DerivativeSnapshot> findTopByContractCodeOrderByAsOfDesc(String contractCode);
+    boolean existsByContractCodeAndAsOf(String contractCode, java.time.LocalDateTime asOf);
 }

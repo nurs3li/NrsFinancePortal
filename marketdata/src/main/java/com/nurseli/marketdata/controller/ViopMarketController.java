@@ -1,6 +1,7 @@
 package com.nurseli.marketdata.controller;
 
 import com.nurseli.marketdata.api.dto.ViopContractResponse;
+import com.nurseli.marketdata.api.dto.ViopMarketWatchResponse;
 import com.nurseli.marketdata.api.dto.ViopSnapshotResponse;
 import com.nurseli.marketdata.application.ViopQueryService;
 import lombok.RequiredArgsConstructor;
@@ -41,5 +42,10 @@ public class ViopMarketController {
             @RequestParam(defaultValue = "7") int days
     ) {
         return viopQueryService.oiHistory(contract, days);
+    }
+
+    @GetMapping("/market-watch")
+    public ViopMarketWatchResponse marketWatch() {
+        return viopQueryService.marketWatch();
     }
 }

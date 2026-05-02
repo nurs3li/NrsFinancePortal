@@ -29,5 +29,7 @@ public class EvdsProperties {
         private String maturityDate;
         private String dirtyPriceSeries;
         private String yieldSeries;
+        private java.math.BigDecimal dirtyPriceScale = java.math.BigDecimal.ONE;
+        private java.math.BigDecimal yieldScale = java.math.BigDecimal.ONE;
     }
 }

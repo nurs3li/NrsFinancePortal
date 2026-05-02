@@ -17,6 +17,9 @@ public class OpenInterestSnapshot {
     @Column(nullable = false)
     private Long openInterest;
 
+    @Column
+    private Long dailyVolume;
+
     @Column(nullable = false)
     private LocalDateTime asOf;
 
@@ -25,6 +28,8 @@ public class OpenInterestSnapshot {
     public void setContractCode(String contractCode) { this.contractCode = contractCode; }
     public Long getOpenInterest() { return openInterest; }
     public void setOpenInterest(Long openInterest) { this.openInterest = openInterest; }
+    public Long getDailyVolume() { return dailyVolume; }
+    public void setDailyVolume(Long dailyVolume) { this.dailyVolume = dailyVolume; }
     public LocalDateTime getAsOf() { return asOf; }
     public void setAsOf(LocalDateTime asOf) { this.asOf = asOf; }
 }

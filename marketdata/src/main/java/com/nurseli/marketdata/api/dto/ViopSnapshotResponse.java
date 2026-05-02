@@ -14,7 +14,12 @@ public record ViopSnapshotResponse(
         BigDecimal marginRequirement,
         String longShortIndicator,
         Long openInterest,
+        Long dailyVolume,
         String oiPriceRegime,
         String source,
-        LocalDateTime asOf
+        LocalDateTime asOf,
+        Integer daysToExpiry,
+        String dataQuality,
+        String priceSource,
+        Long priceLatencyMs
 ) {}

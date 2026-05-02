@@ -8,6 +8,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { formatAssetLabel } from '../lib/assetBranding';
 import { MarketFinvizTreemap, type TreemapTile } from '../components/market/MarketFinvizTreemap';
 import { MarketTerminalChart } from '../components/market/MarketTerminalChart';
+import { BondTerminalChart } from '../components/market/BondTerminalChart';
+import { ViopTerminalChart } from '../components/market/ViopTerminalChart';
 import { MarketCompareLwChart } from '../components/market/MarketCompareLwChart';
 import { usePolling } from '../hooks/usePolling';
 import './MarketTerminal.css';
@@ -100,6 +102,7 @@ type NewsMarkerVm = {
 };
 type LiveTick = { category: MarketCategory; symbol: string; price: number; changePercent: number; volume: number };
 type LivePayload = { ts: string; ticks: LiveTick[] };
+type DebtHistoryByIsin = Record<string, DebtSnapshot[]>;
 
 const RANGE_TO_DAYS: Record<'1D' | '1W' | '1M' | '1Y', number> = {
     '1D': 1,
@@ -367,6 +370,8 @@ export function Market() {
     const [range, setRange] = useState<'1D' | '1W' | '1M' | '1Y'>('1M');
     const [showMa, setShowMa] = useState(true);
     const [showRsi, setShowRsi] = useState(true);
+    const [bondChartMode, setBondChartMode] = useState<'DUAL' | 'CANDLE'>('DUAL');
+    const [viopChartMode, setViopChartMode] = useState<'LINE' | 'CANDLE'>('LINE');
     const [hoverTile, setHoverTile] = useState<TreemapTile | null>(null);
     const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down'>>({});
     const prevPricesRef = useRef<Record<string, number>>({});
@@ -420,6 +425,25 @@ export function Market() {
     const { data: debtCatalog = [] } = useQuery({
         queryKey: ['market', 'debt', 'catalog', 'terminal'],
         queryFn: () => marketClient.get<DebtInstrument[]>('/api/market/debt/catalog').then((r) => r.data),
+        refetchInterval: 60_000,
+    });
+    const { data: debtHistoryByIsin = {} } = useQuery({
+        queryKey: ['market', 'debt', 'history-by-isin', 'terminal', range, debtCatalog.length],
+        enabled: activeCategory === 'BOND' && debtCatalog.length > 0,
+        queryFn: async () => {
+            const uniq = [...new Set(debtCatalog.map((d) => normalizeSymbolKey(d.isin)).filter(Boolean))];
+            const entries = await Promise.all(
+                uniq.map(async (isin) => {
+                    const rows = await marketClient
+                        .get<DebtSnapshot[]>('/api/market/debt/history', {
+                            params: { isin, days: Math.max(180, RANGE_TO_DAYS[range]) },
+                        })
+                        .then((r) => r.data);
+                    return [isin, rows] as const;
+                })
+            );
+            return Object.fromEntries(entries) as DebtHistoryByIsin;
+        },
         refetchInterval: 60_000,
     });
 
@@ -530,12 +554,9 @@ export function Market() {
         }
         if (activeCategory === 'BOND') {
             const merged = new Map<string, DebtSnapshot>();
-            const historyByIsin = new Map<string, DebtSnapshot[]>();
             debtLatest.forEach((d) => {
                 const key = normalizeSymbolKey(d?.isin);
                 if (!key) return;
-                if (!historyByIsin.has(key)) historyByIsin.set(key, []);
-                historyByIsin.get(key)!.push(d);
                 const prev = merged.get(key);
                 if (!prev) {
                     merged.set(key, d);
@@ -545,16 +566,22 @@ export function Market() {
                 const nextTs = new Date(d.asOf ?? 0).getTime();
                 if (nextTs >= prevTs) merged.set(key, d);
             });
-            historyByIsin.forEach((list) => {
-                list.sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
-            });
             return [...merged.values()]
                 .map((d) => {
                     const symbol = normalizeSymbolKey(d.isin);
-                    const history = historyByIsin.get(symbol) ?? [];
-                    const prev = history.length > 1 ? Number(history[history.length - 2]?.dirtyPrice ?? 0) : 0;
-                    const current = Number(d.dirtyPrice ?? 0);
-                    const changePercent = prev > 0 && Number.isFinite(current) ? ((current - prev) / prev) * 100 : 0;
+                    const history = [...(debtHistoryByIsin[symbol] ?? [])].sort(
+                        (a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime()
+                    );
+                    const validHistoryPrices = history
+                        .map((row) => Number(row?.dirtyPrice))
+                        .filter((price) => Number.isFinite(price) && price > 0);
+                    const currentFromLatest = Number(d.dirtyPrice ?? Number.NaN);
+                    const current =
+                        Number.isFinite(currentFromLatest) && currentFromLatest > 0
+                            ? currentFromLatest
+                            : (validHistoryPrices.at(-1) ?? 0);
+                    const prev = validHistoryPrices.length > 1 ? validHistoryPrices[validHistoryPrices.length - 2] : 0;
+                    const changePercent = prev > 0 && current > 0 ? ((current - prev) / prev) * 100 : 0;
                     return {
                         symbol,
                         category: 'BOND' as const,
@@ -562,7 +589,7 @@ export function Market() {
                         changePercent,
                         trend: changePercent >= 0 ? ('UP' as const) : ('DOWN' as const),
                         metrics: { yield: Number(d.yieldPct ?? 0) },
-                        volume: d.synthetic ? null : current * 100,
+                        volume: d.synthetic || current <= 0 ? null : current * 100,
                     };
                 })
                 .sort((a, b) => b.price - a.price);
@@ -595,7 +622,7 @@ export function Market() {
                 });
             });
         return [...unique.values()].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
-    }, [activeCategory, dashboard, viopLatest, debtLatest, fxSpreadMap]);
+    }, [activeCategory, dashboard, viopLatest, debtLatest, debtHistoryByIsin, fxSpreadMap]);
 
     useEffect(() => {
         if (!instruments.length) {
@@ -734,7 +761,7 @@ export function Market() {
                     high: Math.max(prev, close),
                     low: Math.min(prev, close),
                     close,
-                    volume: 0,
+                    volume: close > 0 ? close * 100 : 0,
                 };
             });
         }
@@ -756,6 +783,29 @@ export function Market() {
             return { time: p.t, open: prev, high: Math.max(prev, close), low: Math.min(prev, close), close, volume: 0 };
         });
     }, [activeCategory, viopHistory, debtHistory, batchData, indicatorData, selectedSymbol]);
+    const bondDualPoints = useMemo(() => {
+        if (activeCategory !== 'BOND') return [];
+        const sorted = [...debtHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
+        return sorted
+            .map((x) => ({
+                time: x.asOf ?? new Date().toISOString(),
+                price: Number(x.dirtyPrice ?? 0),
+                yieldPct: Number(x.yieldPct ?? 0),
+                volume: Number(x.dirtyPrice ?? 0) > 0 ? Number(x.dirtyPrice ?? 0) * 100 : 0,
+            }))
+            .filter((x) => Number.isFinite(x.price) && x.price > 0);
+    }, [activeCategory, debtHistory]);
+    const viopLinePoints = useMemo(() => {
+        if (activeCategory !== 'FUTURES') return [];
+        const sorted = [...viopHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
+        return sorted.map((x) => ({
+            time: x.asOf ?? new Date().toISOString(),
+            price: Number(x.price ?? 0),
+            basis: Number(x.basis ?? 0),
+            annualizedBasisPct: Number(x.annualizedBasisPct ?? 0),
+            openInterest: Number(x.openInterest ?? 0),
+        }));
+    }, [activeCategory, viopHistory]);
 
     const ma7 = useMemo(() => {
         if (indicatorData?.ma?.['7']?.length) {
@@ -1391,6 +1441,42 @@ export function Market() {
                                         </button>
                                     ))}
                                 </div>
+                                {activeCategory === 'BOND' ? (
+                                    <div className="terminal-btn-row">
+                                        <button
+                                            type="button"
+                                            className={`terminal-btn ${bondChartMode === 'DUAL' ? 'active' : ''}`}
+                                            onClick={() => setBondChartMode('DUAL')}
+                                        >
+                                            Tahvil Analiz
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`terminal-btn ${bondChartMode === 'CANDLE' ? 'active' : ''}`}
+                                            onClick={() => setBondChartMode('CANDLE')}
+                                        >
+                                            Detaylı Mum
+                                        </button>
+                                    </div>
+                                ) : null}
+                                {activeCategory === 'FUTURES' ? (
+                                    <div className="terminal-btn-row">
+                                        <button
+                                            type="button"
+                                            className={`terminal-btn ${viopChartMode === 'LINE' ? 'active' : ''}`}
+                                            onClick={() => setViopChartMode('LINE')}
+                                        >
+                                            VİOP Analiz
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`terminal-btn ${viopChartMode === 'CANDLE' ? 'active' : ''}`}
+                                            onClick={() => setViopChartMode('CANDLE')}
+                                        >
+                                            Detaylı Mum
+                                        </button>
+                                    </div>
+                                ) : null}
                                 <div className="terminal-btn-row">
                                     <button type="button" className={`terminal-btn ${showMa ? 'active' : ''}`} onClick={() => setShowMa((v) => !v)}>
                                         MA
@@ -1400,28 +1486,62 @@ export function Market() {
                                     </button>
                                 </div>
                             </div>
-                            <MarketTerminalChart
-                                candles={candles}
-                                ma7={ma7}
-                                ma21={ma21}
-                                rsi14={rsi14}
-                                showMa={showMa}
-                                showRsi={showRsi}
-                                markers={markers}
-                                loading={loadingCandles || loadingIndicators || loadingViopHistory || loadingDebtHistory}
-                                symbol={selectedSymbol}
-                                trendLabel={hero?.trend}
-                                timeframeLabel={range}
-                                newsMarkers={newsMarkers}
-                                onNewsSelect={onNewsMarkerSelect}
-                                tokens={{
-                                    bg: tokens.bg,
-                                    bgCard: tokens.bgCard,
-                                    border: tokens.border,
-                                    text: tokens.text,
-                                    textMuted: tokens.textMuted,
-                                }}
-                            />
+                            {activeCategory === 'BOND' && bondChartMode === 'DUAL' ? (
+                                <BondTerminalChart
+                                    points={bondDualPoints}
+                                    ma7={ma7}
+                                    ma21={ma21}
+                                    showMa={showMa}
+                                    loading={loadingDebtHistory}
+                                    trendLabel={hero?.trend}
+                                    timeframeLabel={range}
+                                    tokens={{
+                                        bgCard: tokens.bgCard,
+                                        border: tokens.border,
+                                        text: tokens.text,
+                                        textMuted: tokens.textMuted,
+                                    }}
+                                />
+                            ) : activeCategory === 'FUTURES' && viopChartMode === 'LINE' ? (
+                                <ViopTerminalChart
+                                    points={viopLinePoints}
+                                    ma7={ma7}
+                                    ma21={ma21}
+                                    showMa={showMa}
+                                    loading={loadingViopHistory}
+                                    trendLabel={hero?.trend}
+                                    timeframeLabel={range}
+                                    tokens={{
+                                        bgCard: tokens.bgCard,
+                                        border: tokens.border,
+                                        text: tokens.text,
+                                        textMuted: tokens.textMuted,
+                                    }}
+                                />
+                            ) : (
+                                <MarketTerminalChart
+                                    candles={candles}
+                                    ma7={ma7}
+                                    ma21={ma21}
+                                    rsi14={rsi14}
+                                    showMa={showMa}
+                                    showRsi={showRsi}
+                                    markers={markers}
+                                    loading={loadingCandles || loadingIndicators || loadingViopHistory || loadingDebtHistory}
+                                    symbol={selectedSymbol}
+                                    trendLabel={hero?.trend}
+                                    timeframeLabel={range}
+                                    newsMarkers={newsMarkers}
+                                    onNewsSelect={onNewsMarkerSelect}
+                                    tokens={{
+                                        bg: tokens.bg,
+                                        bgCard: tokens.bgCard,
+                                        border: tokens.border,
+                                        text: tokens.text,
+                                        textMuted: tokens.textMuted,
+                                    }}
+                                />
+                            )}
                         </div>
 
                         <div className="terminal-card terminal-right-panel">
