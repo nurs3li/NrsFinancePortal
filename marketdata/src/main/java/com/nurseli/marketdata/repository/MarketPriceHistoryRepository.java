@@ -18,6 +18,8 @@ public interface MarketPriceHistoryRepository
     Optional<MarketPriceHistory>
     findTopBySymbolOrderByTimestampDesc(String symbol);
 
+    boolean existsBySymbolAndTimestamp(String symbol, LocalDateTime timestamp);
+
     // =====================================================
     // 🔹 LATEST – ALL SYMBOLS BY SOURCE (CRYPTO / FX / FUND)
     // =====================================================

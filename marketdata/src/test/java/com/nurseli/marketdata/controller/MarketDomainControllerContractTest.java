@@ -52,9 +52,14 @@ class MarketDomainControllerContractTest {
                         new BigDecimal("1488.00"),
                         "LONG",
                         145000L,
+                        25000L,
                         "PRICE_UP_OI_UP",
                         "VIOP_MVP",
-                        LocalDateTime.now()
+                        LocalDateTime.now(),
+                        120,
+                        "EXACT",
+                        "VIOP_PROVIDER",
+                        120L
                 )
         ));
         when(viopQueryService.history("XU0300426", 7)).thenReturn(List.of());
