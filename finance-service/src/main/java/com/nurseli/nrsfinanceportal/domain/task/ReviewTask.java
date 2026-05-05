@@ -54,6 +54,13 @@ public class ReviewTask {
     @Column(name = "sla_escalated_at")
     private Instant slaEscalatedAt;
 
+    /** Keycloak subject (sub) of FM who claimed the task */
+    @Column(name = "assigned_fm_keycloak_id", length = 255)
+    private String assignedFmKeycloakId;
+
+    @Column(name = "claimed_at")
+    private Instant claimedAt;
+
     protected ReviewTask() {}
 
     public Long getId() { return id; }
@@ -69,6 +76,8 @@ public class ReviewTask {
     public Long getCreatedByUserId() { return createdByUserId; }
     public Account getAccount() { return account; }
     public Instant getSlaEscalatedAt() { return slaEscalatedAt; }
+    public String getAssignedFmKeycloakId() { return assignedFmKeycloakId; }
+    public Instant getClaimedAt() { return claimedAt; }
 
     public void setStatus(ReviewTaskStatus status) { this.status = status; }
     public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
@@ -76,6 +85,8 @@ public class ReviewTask {
     public void setAccount(Account account) { this.account = account; }
     public void setAssigneeRole(String assigneeRole) { this.assigneeRole = assigneeRole; }
     public void setSlaEscalatedAt(Instant slaEscalatedAt) { this.slaEscalatedAt = slaEscalatedAt; }
+    public void setAssignedFmKeycloakId(String assignedFmKeycloakId) { this.assignedFmKeycloakId = assignedFmKeycloakId; }
+    public void setClaimedAt(Instant claimedAt) { this.claimedAt = claimedAt; }
 
     public static ReviewTask createSuspiciousReview(Long suspiciousEventId, Long userId, Instant dueAt) {
         ReviewTask t = new ReviewTask();

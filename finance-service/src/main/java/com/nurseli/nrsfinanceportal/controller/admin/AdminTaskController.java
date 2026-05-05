@@ -12,6 +12,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import com.nurseli.nrsfinanceportal.common.dto.FmUserOptionDto;
+
+import java.util.List;
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/admin/tasks")
 @RequiredArgsConstructor
@@ -19,6 +24,11 @@ import org.springframework.web.bind.annotation.*;
 public class AdminTaskController {
 
     private final ReviewTaskService reviewTaskService;
+
+    @GetMapping("/finance-managers")
+    public ResponseEntity<ApiResponse<List<FmUserOptionDto>>> listFinanceManagers() {
+        return ResponseEntity.ok(ApiResponse.success(reviewTaskService.listFinanceManagersForAdmin()));
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<Page<ReviewTaskView>>> getAdminTasks(
@@ -32,10 +42,8 @@ public class AdminTaskController {
     @PatchMapping("/{id}")
     public ResponseEntity<ApiResponse<ReviewTaskView>> patchAdminTask(
             @PathVariable Long id,
-            @RequestBody java.util.Map<String, String> body) {
-        String action = body.get("action");
-        String reason = body.get("reason");
-        ReviewTaskView view = reviewTaskService.executeAdminAction(id, action, reason);
+            @RequestBody Map<String, String> body) {
+        ReviewTaskView view = reviewTaskService.executeAdminTask(id, body);
         return ResponseEntity.ok(ApiResponse.success(view));
     }
     @PostMapping("/backfill-task-accounts")

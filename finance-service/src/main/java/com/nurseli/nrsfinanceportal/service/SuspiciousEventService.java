@@ -43,18 +43,29 @@ public class SuspiciousEventService {
             );
 
             SuspiciousEvent saved = repository.save(e);
-            reviewTaskService.createFromSuspiciousEvent(saved.getId());
+            boolean newInvestigationTask = reviewTaskService.createFromSuspiciousEvent(saved.getId());
 
-            userRepository.findById(event.userId()).ifPresent(u ->
-                    notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
-                            u.getKeycloakUserId(),
-                            "Şüpheli aktivite tespit edildi",
-                            "Hesabınızda olağan dışı bir işlem tespit edildi. Güvenlik incelemesi başlatıldı.",
-                            "SUSPICIOUS_ACTIVITY",
-                            "suspicious_event",
-                            saved.getId()
-                    ))
-            );
+            // Kullanıcıya tek sefer: yeni görev oluştuğunda (zaten açık FM görevi varken tekrar mail gitmesin)
+            if (newInvestigationTask) {
+                userRepository.findById(event.userId()).ifPresent(u ->
+                        notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
+                                u.getKeycloakUserId(),
+                                "Hesabınızda olağan dışı işlem tespiti",
+                                """
+                                        Merhaba,
+
+                                        Olağan dışı işlem örüntüleri tespit edildi; hesabınızda güvenlik incelemesi başlatılmıştır.
+                                        İnceleme tamamlandığında ayrıca bilgilendirileceksiniz.
+
+                                        Saygılarımızla,
+                                        NRS Finance Portal
+                                        """,
+                                "SUSPICIOUS_ACTIVITY",
+                                "suspicious_event",
+                                saved.getId()
+                        ))
+                );
+            }
 
             log.info("[SUSPICIOUS][DB] persisted id={} userId={} txId={} reason={}",
                     saved.getId(), event.userId(), event.transactionId(), event.reason());

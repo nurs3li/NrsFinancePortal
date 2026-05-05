@@ -128,8 +128,11 @@ public class WhaleAlertListener {
             if (count == WHALE_SPIKE_THRESHOLD) {
                 adminNotificationHelper.notifyAdmins(
                         "WHALE_SPIKE",
-                        "Whale alert spike tespit edildi",
-                        "Son 1 saatte " + count + " whale alert tetiklendi. Olağan dışı aktivite olabilir."
+                        "Whale uyarısı yoğunluğu",
+                        "Merhaba,\n\nSon bir saat içinde "
+                                + count
+                                + " adet whale uyarısı tetiklendi. Piyasa veya kullanıcı aktivitesinde olağan dışı yoğunluk olabilir.\n\n"
+                                + "Lütfen Admin panelinden durumu kontrol ediniz.\n\nNRS Finance Portal"
                 );
             }
         }
