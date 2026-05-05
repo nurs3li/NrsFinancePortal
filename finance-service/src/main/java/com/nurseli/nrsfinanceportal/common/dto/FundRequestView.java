@@ -29,6 +29,8 @@ public class FundRequestView {
     private final Long approvedByUserId;
     private final Instant approvedAt;
     private final Instant rejectedAt;
+    private final String assignedFmKeycloakId;
+    private final Instant claimedAt;
     private final Instant createdAt;
 
     public FundRequestView(
@@ -54,6 +56,8 @@ public class FundRequestView {
             Long approvedByUserId,
             Instant approvedAt,
             Instant rejectedAt,
+            String assignedFmKeycloakId,
+            Instant claimedAt,
             Instant createdAt
     ) {
         this.id = id;
@@ -78,6 +82,8 @@ public class FundRequestView {
         this.approvedByUserId = approvedByUserId;
         this.approvedAt = approvedAt;
         this.rejectedAt = rejectedAt;
+        this.assignedFmKeycloakId = assignedFmKeycloakId;
+        this.claimedAt = claimedAt;
         this.createdAt = createdAt;
     }
 
@@ -105,6 +111,8 @@ public class FundRequestView {
                 r.getApprovedByUserId(),
                 r.getApprovedAt(),
                 r.getRejectedAt(),
+                r.getAssignedFmKeycloakId(),
+                r.getClaimedAt(),
                 r.getCreatedAt()
         );
     }
@@ -131,5 +139,7 @@ public class FundRequestView {
     public Long getApprovedByUserId() { return approvedByUserId; }
     public Instant getApprovedAt() { return approvedAt; }
     public Instant getRejectedAt() { return rejectedAt; }
+    public String getAssignedFmKeycloakId() { return assignedFmKeycloakId; }
+    public Instant getClaimedAt() { return claimedAt; }
     public Instant getCreatedAt() { return createdAt; }
 }

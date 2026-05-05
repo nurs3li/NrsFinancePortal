@@ -82,6 +82,12 @@ public class FundRequest {
     @Column(name = "rejected_at")
     private Instant rejectedAt;
 
+    @Column(name = "assigned_fm_keycloak_id", length = 255)
+    private String assignedFmKeycloakId;
+
+    @Column(name = "claimed_at")
+    private Instant claimedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -165,6 +171,30 @@ public class FundRequest {
         this.updatedAt = Instant.now();
     }
 
+    public void claimByFm(String fmKeycloakUserId) {
+        if (this.status != FundRequestStatus.PENDING) {
+            throw new IllegalStateException("Only pending requests can be claimed");
+        }
+        if (fmKeycloakUserId == null || fmKeycloakUserId.isBlank()) {
+            throw new IllegalArgumentException("FM keycloak user id is required");
+        }
+        this.assignedFmKeycloakId = fmKeycloakUserId;
+        this.claimedAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
+    public void assertClaimedBy(String fmKeycloakUserId) {
+        if (this.status != FundRequestStatus.PENDING) {
+            throw new IllegalStateException("Only pending requests can be reviewed");
+        }
+        if (assignedFmKeycloakId == null || assignedFmKeycloakId.isBlank()) {
+            throw new IllegalStateException("Request is not claimed by any FM");
+        }
+        if (!assignedFmKeycloakId.equals(fmKeycloakUserId)) {
+            throw new IllegalStateException("Request is claimed by another FM");
+        }
+    }
+
     public Long getId() { return id; }
     public User getUser() { return user; }
     public Account getAccount() { return account; }
@@ -187,6 +217,8 @@ public class FundRequest {
     public Long getApprovedByUserId() { return approvedByUserId; }
     public Instant getApprovedAt() { return approvedAt; }
     public Instant getRejectedAt() { return rejectedAt; }
+    public String getAssignedFmKeycloakId() { return assignedFmKeycloakId; }
+    public Instant getClaimedAt() { return claimedAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

@@ -9,9 +9,11 @@ import com.nurseli.nrsfinanceportal.domain.fund.FundRequest;
 import com.nurseli.nrsfinanceportal.domain.fund.FundRequestStatus;
 import com.nurseli.nrsfinanceportal.domain.fund.FundRequestType;
 import com.nurseli.nrsfinanceportal.domain.transaction.TransactionType;
+import com.nurseli.nrsfinanceportal.domain.user.Role;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.repository.AccountRepository;
 import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
+import com.nurseli.nrsfinanceportal.integration.sse.TaskPoolSseService;
 import com.nurseli.nrsfinanceportal.repository.FundRequestRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,8 +23,10 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -38,6 +42,7 @@ public class FundRequestService {
     private final TransactionService transactionService;
     private final FundRequestNotificationHelper notificationHelper;
     private final FundRequestRuleProperties ruleProperties;
+    private final TaskPoolSseService taskPoolSseService;
 
     @Transactional
     public FundRequest createMyRequest(FundRequestCreateRequest request) {
@@ -103,7 +108,55 @@ public class FundRequestService {
 
     @Transactional(readOnly = true)
     public List<FundRequest> pendingRequests() {
-        return fundRequestRepository.findByStatusOrderByCreatedAtAsc(FundRequestStatus.PENDING);
+        User fm = currentUserResolver.getOrCreateCurrentUser();
+        if (fm.getRole() != Role.FINANCE_MANAGER) {
+            throw new IllegalStateException("Only FINANCE_MANAGER can list pending fund requests");
+        }
+        String fmSub = fm.getKeycloakUserId();
+        List<FundRequest> unclaimed = fundRequestRepository
+                .findByStatusAndAssignedFmKeycloakIdIsNullOrderByCreatedAtAsc(FundRequestStatus.PENDING);
+        List<FundRequest> mine = fundRequestRepository
+                .findByStatusAndAssignedFmKeycloakIdOrderByCreatedAtAsc(FundRequestStatus.PENDING, fmSub);
+        if (mine.isEmpty()) return unclaimed;
+        java.util.LinkedHashMap<Long, FundRequest> map = new java.util.LinkedHashMap<>();
+        for (FundRequest r : mine) map.put(r.getId(), r);
+        for (FundRequest r : unclaimed) map.putIfAbsent(r.getId(), r);
+        return map.values().stream().toList();
+    }
+
+    @Transactional
+    public FundRequest claimPending(Long requestId) {
+        User fm = currentUserResolver.getOrCreateCurrentUser();
+        if (fm.getRole() != Role.FINANCE_MANAGER) {
+            throw new IllegalStateException("Only FINANCE_MANAGER can claim pending requests");
+        }
+        String fmSub = fm.getKeycloakUserId();
+        int updated = fundRequestRepository.tryClaimByFm(
+                requestId,
+                fmSub,
+                Instant.now(),
+                FundRequestStatus.PENDING
+        );
+        FundRequest current = fundRequestRepository.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Fund request not found"));
+        if (updated == 0) {
+            if (current.getStatus() != FundRequestStatus.PENDING) {
+                throw new IllegalStateException("Fund request already finalized");
+            }
+            if (current.getAssignedFmKeycloakId() != null && !current.getAssignedFmKeycloakId().equals(fmSub)) {
+                throw new IllegalStateException("Fund request is already claimed by another FM");
+            }
+        } else {
+            notifyAfterCommit(
+                    () -> taskPoolSseService.broadcastFm(
+                            Map.ofEntries(
+                                    Map.entry("type", (Object) "FUND_REQUEST_CLAIMED"),
+                                    Map.entry("fundRequestId", requestId)
+                            )
+                    )
+            );
+        }
+        return current;
     }
 
     @Transactional
@@ -112,6 +165,10 @@ public class FundRequestService {
 
         FundRequest request = fundRequestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Fund request not found"));
+
+        if (reviewer.getRole() == Role.FINANCE_MANAGER) {
+            request.assertClaimedBy(reviewer.getKeycloakUserId());
+        }
 
         applyApprovalWithStrictBalanceCheck(request, reviewer.getId(), reviewNote);
 
@@ -122,8 +179,13 @@ public class FundRequestService {
 
     @Transactional
     public FundRequest reject(Long requestId, String reviewNote) {
+        User reviewer = currentUserResolver.getOrCreateCurrentUser();
         FundRequest request = fundRequestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Fund request not found"));
+
+        if (reviewer.getRole() == Role.FINANCE_MANAGER) {
+            request.assertClaimedBy(reviewer.getKeycloakUserId());
+        }
 
         request.reject(reviewNote);
         FundRequest saved = fundRequestRepository.save(request);

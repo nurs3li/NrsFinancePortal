@@ -1,0 +1,22 @@
+databaseChangeLog:
+  - changeSet:
+      id: v20-fund-request-fm-claim
+      author: nurseli
+      changes:
+        - addColumn:
+            tableName: fund_requests
+            columns:
+              - column:
+                  name: assigned_fm_keycloak_id
+                  type: VARCHAR(255)
+                  remarks: Keycloak sub of FM who claimed this request
+              - column:
+                  name: claimed_at
+                  type: TIMESTAMPTZ
+                  remarks: Claim timestamp by FM
+        - createIndex:
+            tableName: fund_requests
+            indexName: idx_fund_requests_pending_claim
+            columns:
+              - column: { name: status }
+              - column: { name: assigned_fm_keycloak_id }

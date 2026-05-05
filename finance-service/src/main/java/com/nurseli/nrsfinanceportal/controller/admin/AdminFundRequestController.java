@@ -18,7 +18,7 @@ public class AdminFundRequestController {
     private final FundRequestService fundRequestService;
 
     @GetMapping("/pending")
-    @PreAuthorize("hasAnyRole('FINANCE_MANAGER','ADMIN')")
+    @PreAuthorize("hasRole('FINANCE_MANAGER')")
     public ApiResponse<List<FundRequestView>> pending() {
         return ApiResponse.success(
                 fundRequestService.pendingRequests()
@@ -28,8 +28,16 @@ public class AdminFundRequestController {
         );
     }
 
+    @PostMapping("/{id}/claim")
+    @PreAuthorize("hasRole('FINANCE_MANAGER')")
+    public ApiResponse<FundRequestView> claim(@PathVariable Long id) {
+        return ApiResponse.success(
+                FundRequestView.from(fundRequestService.claimPending(id))
+        );
+    }
+
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasAnyRole('FINANCE_MANAGER','ADMIN')")
+    @PreAuthorize("hasRole('FINANCE_MANAGER')")
     public ApiResponse<FundRequestView> approve(
             @PathVariable Long id,
             @RequestBody(required = false) FundRequestReviewRequest request
@@ -41,7 +49,7 @@ public class AdminFundRequestController {
     }
 
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasAnyRole('FINANCE_MANAGER','ADMIN')")
+    @PreAuthorize("hasRole('FINANCE_MANAGER')")
     public ApiResponse<FundRequestView> reject(
             @PathVariable Long id,
             @RequestBody(required = false) FundRequestReviewRequest request
