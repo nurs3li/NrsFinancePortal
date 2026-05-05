@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
-import { useCallback } from 'react';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
-type ReviewTaskView = {
+import keycloak from '../auth/keycloak';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8085';
+
+export type ReviewTaskView = {
     id: number;
     type: string;
     referenceId: number;
@@ -16,6 +19,12 @@ type ReviewTaskView = {
     createdAt: string;
     outcome: string | null;
     accountId: number | null;
+    subjectUserId: number | null;
+    subjectUsername: string | null;
+    assignedFmKeycloakId: string | null;
+    claimedAt: string | null;
+    claimState: string;
+    readOnlyHint: string | null;
 };
 
 type PageResponse<T> = {
@@ -26,43 +35,65 @@ type PageResponse<T> = {
     size: number;
 };
 
-/** Tamamlanmış sayılan durumlar – varsayılan listede gizlenir */
-const COMPLETED_STATUSES = ['APPROVED', 'REJECTED'];
+type FmTaskSummary = {
+    poolOpenCount: number;
+    myClaimedOpenCount: number;
+    myCompletedCount: number;
+};
+
+const COMPLETED_STATUSES = ['APPROVED', 'REJECTED', 'FREEZE_REQUESTED'];
 
 const TABS = [
-    { key: 'all', label: 'Tümü', status: undefined, type: undefined, filterHighPriority: false },
-    { key: 'pending', label: 'Bekleyen', status: 'PENDING', type: undefined, filterHighPriority: false },
-    { key: 'high', label: 'Yüksek öncelik', status: undefined, type: undefined, filterHighPriority: true },
-    { key: 'escalated', label: 'Escalated', status: 'ESCALATED', type: undefined, filterHighPriority: false },
+    { key: 'pool', label: 'Açık Görevler (Havuz)', mode: 'pool' as const },
+    { key: 'all', label: 'Tümü', mode: 'me' as const, status: undefined, type: undefined, filterHighPriority: false },
+    { key: 'pending', label: 'Bekleyen', mode: 'me' as const, status: 'PENDING', type: undefined, filterHighPriority: false },
+    { key: 'high', label: 'Yüksek öncelik', mode: 'me' as const, status: undefined, type: undefined, filterHighPriority: true },
+    { key: 'escalated', label: 'Escalated', mode: 'me' as const, status: 'ESCALATED', type: undefined, filterHighPriority: false },
 ] as const;
 
 export function FmTasks() {
     const { tokens } = useTheme();
     const navigate = useNavigate();
     const [tasks, setTasks] = useState<ReviewTaskView[]>([]);
+    const [summary, setSummary] = useState<FmTaskSummary | null>(null);
     const [totalPages, setTotalPages] = useState(0);
     const [totalElements, setTotalElements] = useState(0);
     const [page, setPage] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<typeof TABS[number]['key']>('all');
-    /** Varsayılan: tamamlanan (APPROVED/REJECTED) görevler listede görünmesin */
+    const [activeTab, setActiveTab] = useState<(typeof TABS)[number]['key']>('pool');
     const [hideCompleted, setHideCompleted] = useState(true);
+    const [claimingId, setClaimingId] = useState<number | null>(null);
+    const sseAbortRef = useRef<AbortController | null>(null);
 
     const tabConfig = TABS.find((t) => t.key === activeTab) ?? TABS[0];
+
+    const fetchSummary = useCallback(() => {
+        financeClient
+            .get('/api/tasks/me/summary')
+            .then((res) => {
+                const raw = res.data?.data ?? res.data;
+                setSummary(raw as FmTaskSummary);
+            })
+            .catch(() => setSummary(null));
+    }, []);
 
     const fetchTasks = useCallback(() => {
         setLoading(true);
         const params: Record<string, string | number> = { page, size: 20 };
-        if (tabConfig.status) params.status = tabConfig.status;
-        if (tabConfig.type) params.type = tabConfig.type;
-        financeClient
-            .get('/api/tasks/me', { params })
-            .then((res) => {
+        const isPool = tabConfig.mode === 'pool';
+        if (!isPool) {
+            if (tabConfig.status) params.status = tabConfig.status;
+            if (tabConfig.type) params.type = tabConfig.type;
+        }
+        const req = isPool
+            ? financeClient.get('/api/tasks/pool', { params })
+            : financeClient.get('/api/tasks/me', { params });
+        req.then((res) => {
                 const raw = res.data?.data ?? res.data;
                 const pageData = raw as PageResponse<ReviewTaskView>;
                 let list = pageData?.content ?? [];
-                if (tabConfig.filterHighPriority) {
+                if (tabConfig.mode === 'me' && 'filterHighPriority' in tabConfig && tabConfig.filterHighPriority) {
                     list = list.filter((t) => t.priority === 'HIGH');
                 }
                 if (hideCompleted) {
@@ -70,21 +101,90 @@ export function FmTasks() {
                 }
                 setTasks(list);
                 setTotalPages(pageData?.totalPages ?? 0);
-                setTotalElements(tabConfig.filterHighPriority || hideCompleted ? list.length : (pageData?.totalElements ?? 0));
+                setTotalElements(
+                    (tabConfig.mode === 'me' && 'filterHighPriority' in tabConfig && tabConfig.filterHighPriority) || hideCompleted
+                        ? list.length
+                        : (pageData?.totalElements ?? 0),
+                );
             })
             .catch((err) => {
                 const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Liste alınamadı';
                 setError(msg);
             })
             .finally(() => setLoading(false));
-    }, [page, activeTab, tabConfig.status, tabConfig.type, tabConfig.filterHighPriority, hideCompleted]);
+    }, [page, activeTab, tabConfig, hideCompleted]);
 
     useEffect(() => {
         fetchTasks();
-    }, [fetchTasks]);
+        fetchSummary();
+    }, [fetchTasks, fetchSummary]);
 
-    useRefetchOnFocus(fetchTasks);
-    usePolling(fetchTasks, 60_000);
+    useRefetchOnFocus(() => {
+        fetchTasks();
+        fetchSummary();
+    });
+    usePolling(
+        () => {
+            void fetchTasks();
+            void fetchSummary();
+        },
+        activeTab === 'pool' ? 12_000 : 60_000,
+    );
+
+    useEffect(() => {
+        sseAbortRef.current?.abort();
+        if (activeTab !== 'pool' || !keycloak.token) return;
+        const ac = new AbortController();
+        sseAbortRef.current = ac;
+        const run = async () => {
+            try {
+                const res = await fetch(`${API_BASE}/api/tasks/sse/fm`, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${keycloak.token}`,
+                        Accept: 'text/event-stream',
+                    },
+                    signal: ac.signal,
+                });
+                if (!res.ok || !res.body) return;
+                const reader = res.body.getReader();
+                const dec = new TextDecoder();
+                let buf = '';
+                for (;;) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buf += dec.decode(value, { stream: true });
+                    if (buf.includes('TASK_CLAIMED') || buf.includes('TASK_REMOVED_FROM_POOL') || buf.includes('TASK_FORCE_ASSIGNED')) {
+                        buf = '';
+                        void fetchTasks();
+                        void fetchSummary();
+                    }
+                    if (buf.length > 64_000) buf = buf.slice(-32_000);
+                }
+            } catch {
+                /* abort / network */
+            }
+        };
+        void run();
+        return () => ac.abort();
+    }, [activeTab, fetchTasks, fetchSummary]);
+
+    const claimTask = (e: React.MouseEvent, id: number) => {
+        e.stopPropagation();
+        setClaimingId(id);
+        financeClient
+            .post(`/api/tasks/${id}/claim`)
+            .then(() => {
+                void fetchTasks();
+                void fetchSummary();
+            })
+            .catch((err) => {
+                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Üstlenilemedi';
+                setError(msg);
+            })
+            .finally(() => setClaimingId(null));
+    };
+
     const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
     const titleStyle: React.CSSProperties = { fontSize: '1.75rem', fontWeight: 700, marginBottom: 4 };
     const mutedStyle: React.CSSProperties = { color: tokens.textMuted, fontSize: '0.875rem' };
@@ -106,15 +206,41 @@ export function FmTasks() {
 
     return (
         <div style={pageStyle}>
+            <style>{`
+              @keyframes fmPoolPulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.45; transform: scale(0.92); }
+              }
+            `}</style>
             <h1 style={titleStyle}>Görevler</h1>
-            <p style={mutedStyle}>İnceleme görevleri. Satıra tıklayarak detaya gidin.</p>
+            <p style={mutedStyle}>Görev havuzu ve inceleme görevleri. Satıra tıklayarak detaya gidin.</p>
+
+            {summary && (
+                <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                    <div style={{ padding: '12px 16px', borderRadius: 12, border: `1px solid ${tokens.border}`, background: tokens.bgCard, minWidth: 140 }}>
+                        <div style={{ ...mutedStyle, fontSize: '0.75rem' }}>Havuzda açık</div>
+                        <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{summary.poolOpenCount}</div>
+                    </div>
+                    <div style={{ padding: '12px 16px', borderRadius: 12, border: `1px solid rgba(16,185,129,0.45)`, background: 'linear-gradient(135deg, rgba(16,185,129,0.12), transparent)', minWidth: 140 }}>
+                        <div style={{ ...mutedStyle, fontSize: '0.75rem' }}>Üzerimdeki işler</div>
+                        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#34d399' }}>{summary.myClaimedOpenCount}</div>
+                    </div>
+                    <div style={{ padding: '12px 16px', borderRadius: 12, border: `1px solid ${tokens.border}`, background: tokens.bgCard, minWidth: 140 }}>
+                        <div style={{ ...mutedStyle, fontSize: '0.75rem' }}>Tamamladıklarım</div>
+                        <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{summary.myCompletedCount}</div>
+                    </div>
+                </div>
+            )}
 
             <div style={{ marginTop: 16, marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 {TABS.map((t) => (
                     <button
                         key={t.key}
                         style={tabStyle(activeTab === t.key)}
-                        onClick={() => { setActiveTab(t.key); setPage(0); }}
+                        onClick={() => {
+                            setActiveTab(t.key);
+                            setPage(0);
+                        }}
                     >
                         {t.label}
                     </button>
@@ -123,9 +249,12 @@ export function FmTasks() {
                     <input
                         type="checkbox"
                         checked={hideCompleted}
-                        onChange={(e) => { setHideCompleted(e.target.checked); setPage(0); }}
+                        onChange={(e) => {
+                            setHideCompleted(e.target.checked);
+                            setPage(0);
+                        }}
                     />
-                    <span style={mutedStyle}>Tamamlananları gizle (Onaylanan / Reddedilen)</span>
+                    <span style={mutedStyle}>Tamamlananları gizle (Onaylanan / Reddedilen / Freeze talebi)</span>
                 </label>
             </div>
 
@@ -137,47 +266,162 @@ export function FmTasks() {
                     <div style={{ overflowX: 'auto', border: `1px solid ${tokens.border}`, borderRadius: 12, background: tokens.bgCard }}>
                         <table style={tableStyle}>
                             <thead>
-                            <tr>
-                                <th style={thStyle}>Görev / Referans</th>
-                                <th style={thStyle}>Tip</th>
-                                <th style={thStyle}>Öncelik</th>
-                                <th style={thStyle}>Son tarih</th>
-                                <th style={thStyle}>Durum</th>
-                            </tr>
+                                <tr>
+                                    <th style={thStyle} />
+                                    <th style={thStyle}>Görev / Referans</th>
+                                    <th style={thStyle}>Kullanıcı</th>
+                                    <th style={thStyle}>Kullanıcı ID</th>
+                                    <th style={thStyle}>Tip</th>
+                                    <th style={thStyle}>Öncelik</th>
+                                    <th style={thStyle}>Son tarih</th>
+                                    <th style={thStyle}>Durum</th>
+                                    <th style={thStyle}>İşlem</th>
+                                </tr>
                             </thead>
                             <tbody>
-                            {tasks.length === 0 ? (
-                                <tr><td colSpan={5} style={{ ...tdStyle, color: tokens.textMuted, textAlign: 'center' }}>Görev yok.</td></tr>
-                            ) : (
-                                tasks.map((row) => (
-                                    <tr
-                                        key={row.id}
-                                        style={rowStyle}
-                                        onClick={() => navigate(`/fm/tasks/${row.id}`)}
-                                    >
-                                        <td style={tdStyle}>{row.type} #{row.referenceId}</td>
-                                        <td style={tdStyle}>{row.type}</td>
-                                        <td style={tdStyle}>{row.priority}</td>
-                                        <td style={tdStyle}>{formatDate(row.dueAt)}</td>
-                                        <td style={tdStyle}>{row.status}</td>
+                                {tasks.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={9} style={{ ...tdStyle, color: tokens.textMuted, textAlign: 'center' }}>
+                                            Görev yok.
+                                        </td>
                                     </tr>
-                                ))
-                            )}
+                                ) : (
+                                    tasks.map((row) => {
+                                        const isPoolRow = tabConfig.mode === 'pool';
+                                        const claimedOther = row.claimState === 'OTHER';
+                                        const claimedMine = row.claimState === 'MINE';
+                                        const rowBg = claimedOther ? 'rgba(148,163,184,0.18)' : undefined;
+                                        return (
+                                            <tr
+                                                key={row.id}
+                                                style={{ ...rowStyle, background: rowBg }}
+                                                onClick={() => navigate(`/fm/tasks/${row.id}`)}
+                                            >
+                                                <td style={{ ...tdStyle, width: 36 }}>
+                                                    {row.status === 'PENDING' && row.claimState === 'POOL' && (
+                                                        <span
+                                                            title="Bekliyor"
+                                                            style={{
+                                                                display: 'inline-block',
+                                                                width: 10,
+                                                                height: 10,
+                                                                borderRadius: 999,
+                                                                background: '#ef4444',
+                                                                animation: 'fmPoolPulse 1.2s ease-in-out infinite',
+                                                            }}
+                                                        />
+                                                    )}
+                                                    {row.status === 'CLAIMED' && (
+                                                        <span title="Üstlenildi" style={{ fontSize: '1rem' }}>
+                                                            ⏳
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td style={tdStyle}>
+                                                    {row.type} #{row.referenceId}
+                                                </td>
+                                                <td style={{ ...tdStyle, fontWeight: 600 }}>{row.subjectUsername ?? '–'}</td>
+                                                <td style={tdStyle}>{row.subjectUserId ?? '–'}</td>
+                                                <td style={tdStyle}>{row.type}</td>
+                                                <td style={tdStyle}>{row.priority}</td>
+                                                <td style={tdStyle}>{formatDate(row.dueAt)}</td>
+                                                <td style={tdStyle}>{row.status}</td>
+                                                <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
+                                                    {isPoolRow && row.status === 'PENDING' && row.claimState === 'POOL' && (
+                                                        <button
+                                                            type="button"
+                                                            style={{
+                                                                padding: '8px 16px',
+                                                                borderRadius: 10,
+                                                                border: 'none',
+                                                                fontWeight: 700,
+                                                                cursor: claimingId === row.id ? 'wait' : 'pointer',
+                                                                background: 'linear-gradient(135deg, #059669, #10b981)',
+                                                                color: '#fff',
+                                                                boxShadow: '0 4px 14px rgba(16,185,129,0.35)',
+                                                            }}
+                                                            disabled={claimingId === row.id}
+                                                            onClick={(e) => claimTask(e, row.id)}
+                                                        >
+                                                            {claimingId === row.id ? '…' : 'Üzerime Al'}
+                                                        </button>
+                                                    )}
+                                                    {!isPoolRow && row.status === 'PENDING' && row.claimState === 'POOL' && (
+                                                        <button
+                                                            type="button"
+                                                            style={{
+                                                                padding: '8px 16px',
+                                                                borderRadius: 10,
+                                                                border: 'none',
+                                                                fontWeight: 700,
+                                                                cursor: claimingId === row.id ? 'wait' : 'pointer',
+                                                                background: 'linear-gradient(135deg, #059669, #10b981)',
+                                                                color: '#fff',
+                                                            }}
+                                                            disabled={claimingId === row.id}
+                                                            onClick={(e) => claimTask(e, row.id)}
+                                                        >
+                                                            {claimingId === row.id ? '…' : 'Üzerime Al'}
+                                                        </button>
+                                                    )}
+                                                    {!isPoolRow && claimedMine && (
+                                                        <button
+                                                            type="button"
+                                                            style={{
+                                                                padding: '8px 14px',
+                                                                borderRadius: 10,
+                                                                border: `1px solid ${tokens.accent}`,
+                                                                background: tokens.accent,
+                                                                color: '#fff',
+                                                                fontWeight: 600,
+                                                                cursor: 'pointer',
+                                                            }}
+                                                            onClick={() => navigate(`/fm/tasks/${row.id}`)}
+                                                        >
+                                                            İşleme Başla / Detay
+                                                        </button>
+                                                    )}
+                                                    {!isPoolRow && claimedOther && (
+                                                        <span style={{ color: tokens.textMuted, fontSize: '0.8125rem' }}>Alındı</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
                             </tbody>
                         </table>
                     </div>
                     {totalPages > 1 && (
                         <div style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
                             <button
-                                style={{ padding: '6px 12px', border: `1px solid ${tokens.border}`, borderRadius: 8, background: tokens.bgCard, color: tokens.text, cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.6 : 1 }}
+                                style={{
+                                    padding: '6px 12px',
+                                    border: `1px solid ${tokens.border}`,
+                                    borderRadius: 8,
+                                    background: tokens.bgCard,
+                                    color: tokens.text,
+                                    cursor: page === 0 ? 'not-allowed' : 'pointer',
+                                    opacity: page === 0 ? 0.6 : 1,
+                                }}
                                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                                 disabled={page === 0}
                             >
                                 Önceki
                             </button>
-                            <span style={{ color: tokens.textMuted }}>Sayfa {page + 1} / {totalPages} (toplam {totalElements})</span>
+                            <span style={{ color: tokens.textMuted }}>
+                                Sayfa {page + 1} / {totalPages} (toplam {totalElements})
+                            </span>
                             <button
-                                style={{ padding: '6px 12px', border: `1px solid ${tokens.border}`, borderRadius: 8, background: tokens.bgCard, color: tokens.text, cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer', opacity: page >= totalPages - 1 ? 0.6 : 1 }}
+                                style={{
+                                    padding: '6px 12px',
+                                    border: `1px solid ${tokens.border}`,
+                                    borderRadius: 8,
+                                    background: tokens.bgCard,
+                                    color: tokens.text,
+                                    cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer',
+                                    opacity: page >= totalPages - 1 ? 0.6 : 1,
+                                }}
                                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                                 disabled={page >= totalPages - 1}
                             >

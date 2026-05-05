@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import keycloak from '../auth/keycloak';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8085';
 
 type ReviewTaskView = {
     id: number;
@@ -13,6 +16,8 @@ type ReviewTaskView = {
     createdAt: string;
     outcome: string | null;
     accountId: number | null;
+    subjectUserId: number | null;
+    subjectUsername: string | null;
 };
 
 type PageResponse<T> = {
@@ -54,6 +59,9 @@ export function AdminTasks() {
     const [actionLoading, setActionLoading] = useState<number | null>(null);
     const [reason, setReason] = useState('');
     const [reasonModal, setReasonModal] = useState<{ taskId: number; action: string } | null>(null);
+    const [forceModalTaskId, setForceModalTaskId] = useState<number | null>(null);
+    const [fmOptions, setFmOptions] = useState<{ id: number; username: string; email: string }[]>([]);
+    const [selectedFmId, setSelectedFmId] = useState<string>('');
 
     const [expandedId, setExpandedId] = useState<number | null>(null);
     const [ctxCache, setCtxCache] = useState<Record<number, InvestigationContext>>({});
@@ -82,6 +90,43 @@ export function AdminTasks() {
         fetchTasks();
     }, [page, status]);
 
+    const sseAbortRef = useRef<AbortController | null>(null);
+    useEffect(() => {
+        sseAbortRef.current?.abort();
+        if (!keycloak.token) return;
+        const ac = new AbortController();
+        sseAbortRef.current = ac;
+        (async () => {
+            try {
+                const res = await fetch(`${API_BASE}/api/tasks/sse/admin`, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${keycloak.token}`,
+                        Accept: 'text/event-stream',
+                    },
+                    signal: ac.signal,
+                });
+                if (!res.ok || !res.body) return;
+                const reader = res.body.getReader();
+                const dec = new TextDecoder();
+                let buf = '';
+                for (;;) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buf += dec.decode(value, { stream: true });
+                    if (buf.includes('TASK_ESCALATED_ADMIN')) {
+                        buf = '';
+                        fetchTasks();
+                    }
+                    if (buf.length > 64_000) buf = buf.slice(-32_000);
+                }
+            } catch {
+                /* ignore */
+            }
+        })();
+        return () => ac.abort();
+    }, [page, status]);
+
     const toggleContext = (taskId: number) => {
         if (expandedId === taskId) {
             setExpandedId(null);
@@ -103,13 +148,15 @@ export function AdminTasks() {
             .finally(() => setCtxLoading(null));
     };
 
-    const handleAdminAction = (taskId: number, action: 'FREEZE' | 'REJECT_FREEZE', reasonValue?: string) => {
+    const handleAdminPatch = (taskId: number, body: Record<string, string | undefined>) => {
         setActionLoading(taskId);
         financeClient
-            .patch(`/api/admin/tasks/${taskId}`, { action, reason: reasonValue ?? undefined })
+            .patch(`/api/admin/tasks/${taskId}`, body)
             .then(() => {
                 setReasonModal(null);
                 setReason('');
+                setForceModalTaskId(null);
+                setSelectedFmId('');
                 fetchTasks();
             })
             .catch((err) => {
@@ -119,7 +166,33 @@ export function AdminTasks() {
             .finally(() => setActionLoading(null));
     };
 
-    const openReasonModal = (taskId: number, action: 'FREEZE' | 'REJECT_FREEZE') => {
+    const handleAdminAction = (taskId: number, action: 'FREEZE' | 'REJECT_FREEZE', reasonValue?: string) => {
+        handleAdminPatch(taskId, { action, reason: reasonValue ?? undefined });
+    };
+
+    const openForceModal = (taskId: number) => {
+        setForceModalTaskId(taskId);
+        setSelectedFmId('');
+        financeClient
+            .get('/api/admin/tasks/finance-managers')
+            .then((res) => {
+                const raw = res.data?.data ?? res.data;
+                setFmOptions(Array.isArray(raw) ? raw : []);
+            })
+            .catch(() => setFmOptions([]));
+    };
+
+    const submitForceAssign = () => {
+        if (forceModalTaskId == null || !selectedFmId) return;
+        handleAdminPatch(forceModalTaskId, { action: 'FORCE_ASSIGN_FM', fmUserId: selectedFmId });
+    };
+
+    const isEscalatedInvestigation = (row: ReviewTaskView) =>
+        row.status === 'ESCALATED'
+        && row.assigneeRole === 'ADMIN'
+        && (row.type === 'SUSPICIOUS_REVIEW' || row.type === 'WHALE_REVIEW');
+
+    const openReasonModal = (taskId: number, action: string) => {
         setReasonModal({ taskId, action });
         setReason('');
     };
@@ -139,7 +212,7 @@ export function AdminTasks() {
     const formatMoney = (n: number | null | undefined) => n != null ? `₺${Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '–';
 
     const renderContext = (ctx: InvestigationContext, row: ReviewTaskView) => (
-        <td colSpan={6} style={{ padding: 16, background: tokens.bg, borderBottom: `2px solid ${tokens.accent}` }}>
+        <td colSpan={8} style={{ padding: 16, background: tokens.bg, borderBottom: `2px solid ${tokens.accent}` }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 {/* Kullanıcı */}
                 <div>
@@ -254,7 +327,7 @@ export function AdminTasks() {
             )}
 
             {/* Aksiyon butonları (panel içinde de erişilebilir) */}
-            {!COMPLETED_STATUSES.includes(row.status) && (
+            {!COMPLETED_STATUSES.includes(row.status) && row.type === 'FREEZE_APPROVAL' && (
                 <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${tokens.border}` }}>
                     <button
                         style={btnStyle}
@@ -291,7 +364,6 @@ export function AdminTasks() {
                     <option value="PENDING">PENDING</option>
                     <option value="ESCALATED">ESCALATED</option>
                     <option value="FREEZE_REQUESTED">FREEZE_REQUESTED</option>
-                    <option value="APPROVED">APPROVED</option>
                     <option value="REJECTED">REJECTED</option>
                 </select>
             </div>
@@ -307,6 +379,8 @@ export function AdminTasks() {
                             <th style={thStyle}>ID</th>
                             <th style={thStyle}>Tip</th>
                             <th style={thStyle}>Referans</th>
+                            <th style={thStyle}>Kullanıcı</th>
+                            <th style={thStyle}>Kullanıcı ID</th>
                             <th style={thStyle}>Durum</th>
                             <th style={thStyle}>Son tarih</th>
                             <th style={thStyle}>İşlem</th>
@@ -314,15 +388,27 @@ export function AdminTasks() {
                         </thead>
                         <tbody>
                         {tasks.length === 0 ? (
-                            <tr><td colSpan={6} style={{ ...tdStyle, color: tokens.textMuted, textAlign: 'center' }}>Görev yok.</td></tr>
+                            <tr><td colSpan={8} style={{ ...tdStyle, color: tokens.textMuted, textAlign: 'center' }}>Görev yok.</td></tr>
                         ) : (
-                            tasks.map((row) => (
-                                <>
-                                    <tr key={row.id}>
+                            tasks.map((row) => {
+                                const escalated = row.status === 'ESCALATED';
+                                const rowBg = escalated ? 'rgba(239,68,68,0.18)' : undefined;
+                                return (
+                                <Fragment key={row.id}>
+                                    <tr style={{ background: rowBg }}>
                                         <td style={tdStyle}>{row.id}</td>
                                         <td style={tdStyle}>{row.type}</td>
                                         <td style={tdStyle}>{row.referenceId}</td>
-                                        <td style={tdStyle}>{row.status}</td>
+                                        <td style={{ ...tdStyle, fontWeight: 600 }}>{row.subjectUsername ?? '–'}</td>
+                                        <td style={tdStyle}>{row.subjectUserId ?? '–'}</td>
+                                        <td style={tdStyle}>
+                                            {escalated && (
+                                                <span style={{ marginRight: 6, color: '#ef4444', fontWeight: 800 }} title="Eskale">
+                                                    ⚠
+                                                </span>
+                                            )}
+                                            {row.status}
+                                        </td>
                                         <td style={tdStyle}>{formatDate(row.dueAt)}</td>
                                         <td style={tdStyle}>
                                             <button
@@ -338,7 +424,7 @@ export function AdminTasks() {
                                             >
                                                 {ctxLoading === row.id ? '...' : expandedId === row.id ? 'Kapat ▲' : 'İncele ▼'}
                                             </button>
-                                            {!COMPLETED_STATUSES.includes(row.status) && (
+                                            {!COMPLETED_STATUSES.includes(row.status) && row.type === 'FREEZE_APPROVAL' && (
                                                 <>
                                                     <button
                                                         style={btnStyle}
@@ -359,15 +445,44 @@ export function AdminTasks() {
                                             {COMPLETED_STATUSES.includes(row.status) && (
                                                 <span style={{ color: tokens.textMuted, fontSize: '0.8125rem' }}>{row.outcome ?? row.status}</span>
                                             )}
+                                            {isEscalatedInvestigation(row) && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        style={{ ...btnStyle, borderColor: '#6366f1', color: '#a5b4fc' }}
+                                                        disabled={actionLoading === row.id}
+                                                        onClick={() => openForceModal(row.id)}
+                                                    >
+                                                        Zorla Ata
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        style={{ ...btnStyle, borderColor: '#22c55e', color: '#86efac' }}
+                                                        disabled={actionLoading === row.id}
+                                                        onClick={() => handleAdminPatch(row.id, { action: 'RESOLVE_ESCALATED_CLEAR' })}
+                                                    >
+                                                        Doğrudan Çöz (Temiz)
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        style={{ ...btnStyle, borderColor: '#f97316', color: '#fdba74' }}
+                                                        disabled={actionLoading === row.id}
+                                                        onClick={() => openReasonModal(row.id, 'RESOLVE_ESCALATED_FREEZE')}
+                                                    >
+                                                        Doğrudan Freeze
+                                                    </button>
+                                                </>
+                                            )}
                                         </td>
                                     </tr>
                                     {expandedId === row.id && ctxCache[row.id] && (
-                                        <tr key={`ctx-${row.id}`}>
+                                        <tr>
                                             {renderContext(ctxCache[row.id], row)}
                                         </tr>
                                     )}
-                                </>
-                            ))
+                                </Fragment>
+                            );
+                            })
                         )}
                         </tbody>
                     </table>
@@ -402,8 +517,43 @@ export function AdminTasks() {
                             style={{ width: '100%', padding: 8, marginBottom: 16, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.inputBg, color: tokens.text }}
                         />
                         <div>
-                            <button style={btnStyle} onClick={() => handleAdminAction(reasonModal.taskId, reasonModal.action as 'FREEZE' | 'REJECT_FREEZE', reason)}>Gönder</button>
+                            <button
+                                style={btnStyle}
+                                onClick={() => {
+                                    if (reasonModal.action === 'RESOLVE_ESCALATED_FREEZE') {
+                                        handleAdminPatch(reasonModal.taskId, { action: 'RESOLVE_ESCALATED_FREEZE', reason: reason || undefined });
+                                    } else {
+                                        handleAdminAction(reasonModal.taskId, reasonModal.action as 'FREEZE' | 'REJECT_FREEZE', reason);
+                                    }
+                                }}
+                            >
+                                Gönder
+                            </button>
                             <button style={btnStyle} onClick={() => { setReasonModal(null); setReason(''); }}>İptal</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {forceModalTaskId != null && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div style={{ background: tokens.bgCard, padding: 24, borderRadius: 12, border: `1px solid ${tokens.border}`, minWidth: 360 }}>
+                        <h3 style={{ marginBottom: 16 }}>FM seç — Zorla Ata</h3>
+                        <select
+                            value={selectedFmId}
+                            onChange={(e) => setSelectedFmId(e.target.value)}
+                            style={{ width: '100%', padding: 8, marginBottom: 16, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.inputBg, color: tokens.text }}
+                        >
+                            <option value="">— Seçin —</option>
+                            {fmOptions.map((fm) => (
+                                <option key={fm.id} value={String(fm.id)}>
+                                    {fm.username} ({fm.email})
+                                </option>
+                            ))}
+                        </select>
+                        <div>
+                            <button style={btnStyle} onClick={submitForceAssign} disabled={!selectedFmId}>Ata</button>
+                            <button style={btnStyle} onClick={() => { setForceModalTaskId(null); setSelectedFmId(''); }}>İptal</button>
                         </div>
                     </div>
                 </div>
