@@ -10,12 +10,14 @@ public class UserResponse {
     private final String username;
     private final String email;
     private final String role;
+    private final boolean loginSuspended;
 
-    private UserResponse(Long id, String username, String email, String role) {
+    private UserResponse(Long id, String username, String email, String role, boolean loginSuspended) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.role = role;
+        this.loginSuspended = loginSuspended;
     }
 
     public static UserResponse from(User user) {
@@ -23,7 +25,8 @@ public class UserResponse {
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
-                user.getRole().name()
+                user.getRole().name(),
+                user.isLoginSuspended()
         );
     }
 }

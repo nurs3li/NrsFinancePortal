@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Optional;
 
 @RequiredArgsConstructor
 @Service
@@ -30,6 +32,7 @@ public class CurrentUserResolver {
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
     private final BalanceRepository balanceRepository;
+    private final UserRegistrationNotificationHelper userRegistrationNotificationHelper;
 
     @Transactional
     public User getOrCreateCurrentUser() {
@@ -40,8 +43,14 @@ public class CurrentUserResolver {
         Role jwtRole = jwtIdentityReader.getRealmRole();
         Boolean emailVerified = jwtIdentityReader.getEmailVerified();
 
-        User user = userRepository.findByKeycloakUserId(keycloakUserId)
-                .orElseGet(() -> createNewUser(keycloakUserId, email, username, jwtRole));
+        Optional<User> existing = userRepository.findByKeycloakUserId(keycloakUserId);
+        User user;
+        if (existing.isPresent()) {
+            user = existing.get();
+        } else {
+            user = createNewUser(keycloakUserId, email, username, jwtRole);
+            userRegistrationNotificationHelper.notifyAdminsNewUser(user, Instant.now());
+        }
 
         ensureCashAccount(user);
 

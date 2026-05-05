@@ -16,7 +16,9 @@ type EnvelopeLike = {
 function unwrapEnvelopePayload(payload: unknown): unknown {
     if (!payload || typeof payload !== 'object') return payload;
     const maybe = payload as EnvelopeLike;
-    if (typeof maybe.success === 'boolean' && 'data' in maybe && 'errors' in maybe) {
+    // Only unwrap successful envelopes. On failures, preserve the full envelope
+    // so callers can read errors instead of receiving null data.
+    if (maybe.success === true && 'data' in maybe && 'errors' in maybe) {
         return maybe.data;
     }
     return payload;
@@ -86,7 +88,20 @@ financeClient.interceptors.response.use(
         }
         return r;
     },
-    (err) => handleAuthErrorWithSingleRetry(err)
+    async (err) => {
+        const payload = err?.response?.data;
+        const errs = payload?.errors as Record<string, unknown> | undefined;
+        if (
+            err?.response?.status === 403 &&
+            errs &&
+            typeof errs === 'object' &&
+            errs.error === 'USER_LOGIN_SUSPENDED'
+        ) {
+            await keycloak.logout({ redirectUri: `${window.location.origin}/login?suspended=1` });
+            return Promise.reject(err);
+        }
+        return handleAuthErrorWithSingleRetry(err);
+    }
 );
 
 export const marketClient = axios.create({
