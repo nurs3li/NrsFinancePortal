@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { Ban, Lock, RotateCcw, Settings, Snowflake, Unlock, UserPlus } from 'lucide-react';
 
-type UserRow = { id: number; username: string; email: string; role: string };
+type UserRow = { id: number; username: string; email: string; role: string; loginSuspended?: boolean };
 
 type AdminAccountView = {
     id: number;
@@ -33,9 +34,14 @@ export function AdminUsersAndAccounts() {
     const [loadingAccounts, setLoadingAccounts] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [status, setStatus] = useState<string>('');
-    const [actionLoading, setActionLoading] = useState<number | null>(null);
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [freezeReason, setFreezeReason] = useState('');
     const [freezeModal, setFreezeModal] = useState<number | null>(null);
+    const [suspendLoginModal, setSuspendLoginModal] = useState<number | null>(null);
+    const [suspendLoginReason, setSuspendLoginReason] = useState('');
+    const [showTools, setShowTools] = useState(false);
+
+    const adminUserCount = useMemo(() => users.filter((u) => u.role === 'ADMIN').length, [users]);
 
     useEffect(() => {
         setLoadingUsers(true);
@@ -73,7 +79,7 @@ export function AdminUsersAndAccounts() {
     }, [page, status]);
 
     const handleFreeze = (accountId: number, reason?: string) => {
-        setActionLoading(accountId);
+        setActionLoading(`a:${accountId}`);
         financeClient
             .post(`/api/admin/accounts/${accountId}/freeze`, reason != null ? { reason } : {})
             .then(() => {
@@ -88,8 +94,68 @@ export function AdminUsersAndAccounts() {
             .finally(() => setActionLoading(null));
     };
 
+    const handleSuspendLogin = (userId: number, reason?: string) => {
+        setActionLoading(`u:${userId}`);
+        financeClient
+            .post(`/api/admin/users/${userId}/suspend-login`, reason != null ? { reason } : {})
+            .then(() => {
+                setSuspendLoginModal(null);
+                setSuspendLoginReason('');
+                return financeClient.get('/api/users');
+            })
+            .then((res) => {
+                const raw = res.data?.data ?? res.data;
+                setUsers(Array.isArray(raw) ? raw : []);
+            })
+            .catch((err) => {
+                const msg = err.response?.data?.errors?.message ?? err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Askıya alma başarısız';
+                setError(String(msg));
+            })
+            .finally(() => setActionLoading(null));
+    };
+
+    const handleUnsuspendLogin = (userId: number) => {
+        setActionLoading(`u:${userId}`);
+        financeClient
+            .post(`/api/admin/users/${userId}/unsuspend-login`)
+            .then(() => financeClient.get('/api/users'))
+            .then((res) => {
+                const raw = res.data?.data ?? res.data;
+                setUsers(Array.isArray(raw) ? raw : []);
+            })
+            .catch((err) => {
+                const msg = err.response?.data?.errors?.message ?? err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Askı kaldırma başarısız';
+                setError(String(msg));
+            })
+            .finally(() => setActionLoading(null));
+    };
+
+    const reloadUsers = () =>
+        financeClient.get('/api/users').then((res) => {
+            const raw = res.data?.data ?? res.data;
+            setUsers(Array.isArray(raw) ? raw : []);
+        });
+
+    const handleAssignRealmRole = (userId: number, newRole: string) => {
+        setActionLoading(`r:${userId}`);
+        financeClient
+            .post(`/api/admin/users/${userId}/assign-role`, { role: newRole })
+            .then(() => reloadUsers())
+            .catch((err) => {
+                const msg =
+                    err.response?.data?.errors?.message ??
+                    err.response?.data?.errors?.error ??
+                    err.response?.data?.message ??
+                    err.message ??
+                    'Rol ataması başarısız';
+                setError(String(msg));
+                void reloadUsers().catch(() => undefined);
+            })
+            .finally(() => setActionLoading(null));
+    };
+
     const handleUnfreeze = (accountId: number) => {
-        setActionLoading(accountId);
+        setActionLoading(`a:${accountId}`);
         financeClient
             .post(`/api/admin/accounts/${accountId}/unfreeze`)
             .then(() => fetchAccounts())
@@ -100,22 +166,58 @@ export function AdminUsersAndAccounts() {
             .finally(() => setActionLoading(null));
     };
 
-    const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
+    const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8081';
+    const KEYCLOAK_REALM = import.meta.env.VITE_KEYCLOAK_REALM || 'nrs-finance';
+    const KEYCLOAK_CLIENT_ID = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'nrs-frontend';
+
+    const pageStyle: React.CSSProperties = { padding: 24, background: '#0A192F', color: '#CCD6F6', minHeight: '100%', fontFamily: 'Inter, Roboto, Arial, sans-serif' };
     const titleStyle: React.CSSProperties = { fontSize: '1.75rem', fontWeight: 700, marginBottom: 4 };
-    const sectionTitleStyle: React.CSSProperties = { fontSize: '1.25rem', fontWeight: 600, marginTop: 24, marginBottom: 12 };
-    const mutedStyle: React.CSSProperties = { color: tokens.textMuted, fontSize: '0.875rem' };
-    const cardStyle: React.CSSProperties = { padding: 16, borderRadius: 12, background: tokens.bgCard, border: `1px solid ${tokens.border}` };
+    const sectionTitleStyle: React.CSSProperties = { fontSize: '1.05rem', fontWeight: 600, marginTop: 20, marginBottom: 10, color: '#E6F1FF' };
+    const mutedStyle: React.CSSProperties = { color: '#8892B0', fontSize: '0.84rem' };
+    const cardStyle: React.CSSProperties = { padding: 14, borderRadius: 8, background: 'rgba(17,34,64,0.92)', border: '1px solid rgba(136,146,176,0.35)', boxShadow: '0 8px 22px rgba(2,12,27,0.35)' };
     const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' };
-    const thStyle: React.CSSProperties = { textAlign: 'left', padding: '10px 12px', borderBottom: `2px solid ${tokens.border}`, background: tokens.bgCard };
-    const tdStyle: React.CSSProperties = { padding: '10px 12px', borderBottom: `1px solid ${tokens.border}` };
-    const btnStyle: React.CSSProperties = { padding: '6px 12px', marginRight: 8, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: tokens.text, cursor: 'pointer', fontSize: '0.875rem' };
+    const thStyle: React.CSSProperties = { textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid rgba(136,146,176,0.35)', color: '#8892B0', background: 'transparent', fontSize: '0.8rem' };
+    const tdStyle: React.CSSProperties = { padding: '8px 10px', borderBottom: '1px solid rgba(136,146,176,0.22)' };
+    const btnStyle: React.CSSProperties = { padding: '6px 10px', marginRight: 8, borderRadius: 8, border: '1px solid rgba(136,146,176,0.35)', background: 'rgba(10,25,47,0.65)', color: '#CCD6F6', cursor: 'pointer', fontSize: '0.82rem' };
 
     const formatDate = (s: string | null) => (s ? new Date(s).toLocaleString('tr-TR') : '–');
 
     return (
         <div style={pageStyle}>
             <h1 style={titleStyle}>Kullanıcı & Hesap Yönetimi</h1>
-            <p style={mutedStyle}>Kullanıcı listesi ve hesapları freeze / unfreeze.</p>
+            <p style={mutedStyle}>
+                Hesap bazlı dondurma: yalnızca seçilen hesabın işlemleri (nakit işlemleri) kapatılır. Giriş askısı: kullanıcı Keycloak ile giriş yapamaz — giriş ekranında uyarı gösterilir.
+            </p>
+
+            <div style={{ ...cardStyle, marginTop: 14, marginBottom: 18, position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Settings size={16} color="#64FFDA" />
+                        <strong style={{ color: '#E6F1FF' }}>Admin Tools</strong>
+                    </div>
+                    <button style={{ ...btnStyle, marginRight: 0 }} onClick={() => setShowTools((v) => !v)}>
+                        Araçlar
+                    </button>
+                </div>
+                {showTools && (
+                    <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                            style={btnStyle}
+                            onClick={() => {
+                                const redirectUri = encodeURIComponent(window.location.origin + '/admin/users');
+                                window.open(`${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/registrations?client_id=${KEYCLOAK_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=openid`, '_blank');
+                            }}
+                        >
+                            <UserPlus size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                            Yeni Kullanıcı Ekle
+                        </button>
+                        <button style={btnStyle} onClick={() => alert('Genel limit yönetimi bir sonraki fazda bu panelde açılacak.')}>
+                            <Lock size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                            Genel Limit Tanımla
+                        </button>
+                    </div>
+                )}
+            </div>
 
             {error && <p style={{ color: tokens.error, marginBottom: 16 }}>Hata: {error}</p>}
 
@@ -133,7 +235,8 @@ export function AdminUsersAndAccounts() {
                             <th style={thStyle}>ID</th>
                             <th style={thStyle}>Kullanıcı adı</th>
                             <th style={thStyle}>E-posta</th>
-                            <th style={thStyle}>Rol</th>
+                            <th style={thStyle}>Yetki (Keycloak + DB)</th>
+                            <th style={thStyle}>Giriş (Keycloak)</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -142,7 +245,82 @@ export function AdminUsersAndAccounts() {
                                 <td style={tdStyle}>{u.id}</td>
                                 <td style={tdStyle}>{u.username ?? '—'}</td>
                                 <td style={tdStyle}>{u.email ?? '—'}</td>
-                                <td style={tdStyle}>{u.role}</td>
+                                <td style={tdStyle}>
+                                    {u.role === 'ADMIN' && adminUserCount <= 1 ? (
+                                        <span style={{ color: '#8892B0', fontSize: '0.82rem' }} title="Sistemde tek yönetici varken rol düşürülemez; ADMIN atanamaz">
+                                            ADMIN <span style={{ opacity: 0.85 }}>(sabit)</span>
+                                        </span>
+                                    ) : u.role === 'ADMIN' && adminUserCount > 1 ? (
+                                        <select
+                                            aria-label="Yönetici rolünü düşür"
+                                            defaultValue=""
+                                            disabled={actionLoading === `r:${u.id}`}
+                                            onChange={(e) => {
+                                                const next = e.target.value;
+                                                if (!next) return;
+                                                handleAssignRealmRole(u.id, next);
+                                                e.target.value = '';
+                                            }}
+                                            style={{
+                                                padding: '6px 8px',
+                                                borderRadius: 8,
+                                                border: '1px solid rgba(136,146,176,0.45)',
+                                                background: 'rgba(10,25,47,0.85)',
+                                                color: '#E6F1FF',
+                                                fontSize: '0.82rem',
+                                                minWidth: 180,
+                                            }}
+                                        >
+                                            <option value="">ADMIN → düşürmek için seç…</option>
+                                            <option value="USER">USER</option>
+                                            <option value="FINANCE_MANAGER">FINANCE_MANAGER</option>
+                                        </select>
+                                    ) : (
+                                        <select
+                                            aria-label="Yetki değiştir"
+                                            value={u.role}
+                                            disabled={actionLoading === `r:${u.id}`}
+                                            onChange={(e) => {
+                                                const next = e.target.value;
+                                                if (next === u.role) return;
+                                                handleAssignRealmRole(u.id, next);
+                                            }}
+                                            style={{
+                                                padding: '6px 8px',
+                                                borderRadius: 8,
+                                                border: '1px solid rgba(136,146,176,0.45)',
+                                                background: 'rgba(10,25,47,0.85)',
+                                                color: '#E6F1FF',
+                                                fontSize: '0.82rem',
+                                                minWidth: 160,
+                                            }}
+                                        >
+                                            <option value="USER">USER</option>
+                                            <option value="FINANCE_MANAGER">FINANCE_MANAGER</option>
+                                        </select>
+                                    )}
+                                </td>
+                                <td style={tdStyle}>
+                                    {u.loginSuspended ? (
+                                        <button
+                                            style={{ ...btnStyle, marginRight: 0 }}
+                                            disabled={actionLoading === `u:${u.id}`}
+                                            title="Keycloak girişini yeniden aç"
+                                            onClick={() => handleUnsuspendLogin(u.id)}
+                                        >
+                                            {actionLoading === `u:${u.id}` ? '...' : <><RotateCcw size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Askıyı Kaldır</>}
+                                        </button>
+                                    ) : (
+                                        <button
+                                            style={{ ...btnStyle, marginRight: 0 }}
+                                            disabled={actionLoading === `u:${u.id}`}
+                                            title="Girişi askıya al (Keycloak + oturumlar)"
+                                            onClick={() => setSuspendLoginModal(u.id)}
+                                        >
+                                            {actionLoading === `u:${u.id}` ? '...' : <><Ban size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Askıya Al</>}
+                                        </button>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                         </tbody>
@@ -151,7 +329,7 @@ export function AdminUsersAndAccounts() {
             </div>
 
             {/* Bölüm 2: Hesaplar (freeze/unfreeze) */}
-            <h2 style={sectionTitleStyle}>Hesaplar (Freeze / Unfreeze)</h2>
+            <h2 style={sectionTitleStyle}>Hesaplar (hesap bazlı işlem durdurma)</h2>
             <div style={{ marginBottom: 16 }}>
                 <label style={{ marginRight: 8, color: tokens.textMuted }}>Durum: </label>
                 <select
@@ -166,7 +344,7 @@ export function AdminUsersAndAccounts() {
             </div>
             {loadingAccounts && <p style={mutedStyle}>Yükleniyor...</p>}
             {!loadingAccounts && (
-                <div style={{ overflowX: 'auto', border: `1px solid ${tokens.border}`, borderRadius: 12, background: tokens.bgCard }}>
+                <div style={{ overflowX: 'auto', border: '1px solid rgba(136,146,176,0.35)', borderRadius: 8, background: 'rgba(17,34,64,0.92)' }}>
                     <table style={tableStyle}>
                         <thead>
                         <tr>
@@ -194,12 +372,12 @@ export function AdminUsersAndAccounts() {
                                     </td>
                                     <td style={tdStyle}>
                                         {row.status === 'FROZEN' ? (
-                                            <button style={btnStyle} disabled={actionLoading === row.id} onClick={() => handleUnfreeze(row.id)}>
-                                                {actionLoading === row.id ? '...' : 'Unfreeze'}
+                                            <button style={btnStyle} disabled={actionLoading === `a:${row.id}`} onClick={() => handleUnfreeze(row.id)} title="Hesabı Aç">
+                                                {actionLoading === `a:${row.id}` ? '...' : <><Unlock size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Aç</>}
                                             </button>
                                         ) : (
-                                            <button style={btnStyle} disabled={actionLoading === row.id} onClick={() => setFreezeModal(row.id)}>
-                                                {actionLoading === row.id ? '...' : 'Freeze'}
+                                            <button style={btnStyle} disabled={actionLoading === `a:${row.id}`} onClick={() => setFreezeModal(row.id)} title="Hesabı Dondur">
+                                                {actionLoading === `a:${row.id}` ? '...' : <><Snowflake size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Dondur</>}
                                             </button>
                                         )}
                                     </td>
@@ -221,7 +399,8 @@ export function AdminUsersAndAccounts() {
             {freezeModal != null && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
                     <div style={{ background: tokens.bgCard, padding: 24, borderRadius: 12, border: `1px solid ${tokens.border}`, minWidth: 320 }}>
-                        <h3 style={{ marginBottom: 16 }}>Freeze sebebi (isteğe bağlı)</h3>
+                        <h3 style={{ marginBottom: 16 }}>Hesap dondur — sebep (isteğe bağlı)</h3>
+                        <p style={{ fontSize: '0.82rem', color: tokens.textMuted, marginBottom: 12 }}>Yalnızca bu hesap donar; nakit işlemleri (al/sat vb.) için engel oluşturur. Giriş (Keycloak) açık kalır.</p>
                         <input
                             type="text"
                             value={freezeReason}
@@ -230,8 +409,30 @@ export function AdminUsersAndAccounts() {
                             style={{ width: '100%', padding: 8, marginBottom: 16, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.inputBg ?? tokens.bgCard, color: tokens.text }}
                         />
                         <div>
-                            <button style={btnStyle} onClick={() => handleFreeze(freezeModal, freezeReason || undefined)}>Freeze</button>
+                            <button style={btnStyle} onClick={() => handleFreeze(freezeModal, freezeReason || undefined)}>Dondur</button>
                             <button style={btnStyle} onClick={() => { setFreezeModal(null); setFreezeReason(''); }}>İptal</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {suspendLoginModal != null && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div style={{ background: tokens.bgCard, padding: 24, borderRadius: 12, border: `1px solid ${tokens.border}`, minWidth: 320 }}>
+                        <h3 style={{ marginBottom: 16 }}>Giriş askısı (Keycloak)</h3>
+                        <p style={{ fontSize: '0.82rem', color: tokens.textMuted, marginBottom: 12 }}>
+                            Kullanıcı artık giriş yapamaz; mevcut oturumlarda finance API bloklanır. Keycloak için app.keycloak.admin client kimlik bilgileri gereklidir.
+                        </p>
+                        <input
+                            type="text"
+                            value={suspendLoginReason}
+                            onChange={(e) => setSuspendLoginReason(e.target.value)}
+                            placeholder="Sebep (isteğe bağlı)..."
+                            style={{ width: '100%', padding: 8, marginBottom: 16, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.inputBg ?? tokens.bgCard, color: tokens.text }}
+                        />
+                        <div>
+                            <button style={btnStyle} onClick={() => handleSuspendLogin(suspendLoginModal, suspendLoginReason || undefined)}>Askıya Al</button>
+                            <button style={btnStyle} onClick={() => { setSuspendLoginModal(null); setSuspendLoginReason(''); }}>İptal</button>
                         </div>
                     </div>
                 </div>
