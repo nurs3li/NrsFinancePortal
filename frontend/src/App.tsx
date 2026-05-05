@@ -27,9 +27,7 @@ import { AdminTasks } from './pages/AdminTasks';
 import { AdminUsersAndAccounts } from './pages/AdminUsersAndAccounts';
 import { Notifications } from './pages/Notifications';
 import { AdminSuspicious } from './pages/AdminSuspicious';
-import { AdminSettings } from './pages/AdminSettings';
 import { AdminAudit } from './pages/AdminAudit';
-import { AdminMetrics } from './pages/AdminMetrics';
 
 function App() {
     return (
@@ -171,14 +169,6 @@ function App() {
                                     }
                                 />
                                 <Route
-                                    path="/admin/tasks"
-                                    element={
-                                        <RoleProtectedRoute allowedRoles={['ADMIN']}>
-                                            <AdminTasks />
-                                        </RoleProtectedRoute>
-                                    }
-                                />
-                                <Route
                                     path="/notifications"
                                     element={
                                         <ProtectedRoute>
@@ -210,11 +200,7 @@ function App() {
                                 />
                                 <Route
                                     path="/admin/settings"
-                                    element={
-                                        <RoleProtectedRoute allowedRoles={['ADMIN']}>
-                                            <AdminSettings />
-                                        </RoleProtectedRoute>
-                                    }
+                                    element={<Navigate to="/admin" replace />}
                                 />
                                 <Route
                                     path="/admin/audit"
@@ -226,9 +212,13 @@ function App() {
                                 />
                                 <Route
                                     path="/admin/metrics"
+                                    element={<Navigate to="/admin" replace />}
+                                />
+                                <Route
+                                    path="/admin/tasks"
                                     element={
                                         <RoleProtectedRoute allowedRoles={['ADMIN']}>
-                                            <AdminMetrics />
+                                            <AdminTasks />
                                         </RoleProtectedRoute>
                                     }
                                 />

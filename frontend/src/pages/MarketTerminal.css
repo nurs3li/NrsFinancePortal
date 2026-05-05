@@ -459,6 +459,27 @@
     color: #94a3b8;
 }
 
+.terminal-star-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 6px;
+    color: inherit;
+}
+
+.terminal-star-btn:hover:not(:disabled) {
+    background: var(--terminal-hover-bg);
+}
+
+.terminal-star-btn:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}
+
 @media (max-width: 1300px) {
     .terminal-grid {
         grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);

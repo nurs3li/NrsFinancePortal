@@ -18,7 +18,7 @@ public class TransactionSummaryController {
      * USER → kendi transaction özeti
      */
     @GetMapping("/me")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER','FINANCE_MANAGER','ADMIN')")
     public ApiResponse<TransactionSummaryView> mySummary() {
         return ApiResponse.success(
                 summaryService.getMySummary()

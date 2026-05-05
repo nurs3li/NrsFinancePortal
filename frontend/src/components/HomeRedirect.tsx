@@ -12,7 +12,8 @@ export function HomeRedirect() {
     if (from && from !== '/' && from !== '/dashboard') {
         return <Navigate to={from} replace />;
     }
-    if (role === 'ADMIN') return <Navigate to="/admin/metrics" replace />;
+    if (role === 'ADMIN') return <Navigate to="/admin" replace />;
     if (role === 'FINANCE_MANAGER') return <Navigate to="/fm/tasks" replace />;
+    if (role === 'USER') return <Navigate to="/dashboard" replace />;
     return <Navigate to="/dashboard" replace />;
 }

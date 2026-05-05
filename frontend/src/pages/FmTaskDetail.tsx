@@ -14,6 +14,12 @@ type ReviewTaskView = {
     createdAt: string;
     outcome: string | null;
     accountId: number | null;
+    subjectUserId: number | null;
+    subjectUsername: string | null;
+    assignedFmKeycloakId: string | null;
+    claimedAt: string | null;
+    claimState: string;
+    readOnlyHint: string | null;
 };
 
 type InvestigationContext = {
@@ -49,6 +55,7 @@ export function FmTaskDetail() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [claimLoading, setClaimLoading] = useState(false);
 
     const [ctx, setCtx] = useState<InvestigationContext | null>(null);
     const [ctxLoading, setCtxLoading] = useState(false);
@@ -98,6 +105,19 @@ export function FmTaskDetail() {
                 setError(msg);
             })
             .finally(() => setActionLoading(null));
+    };
+
+    const handleClaim = () => {
+        if (!id) return;
+        setClaimLoading(true);
+        financeClient
+            .post(`/api/tasks/${id}/claim`)
+            .then(() => loadTask())
+            .catch((err) => {
+                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Üstlenilemedi';
+                setError(msg);
+            })
+            .finally(() => setClaimLoading(false));
     };
 
     const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
@@ -151,10 +171,23 @@ export function FmTaskDetail() {
             <p style={mutedStyle}>{task.type} • Referans: {task.referenceId}</p>
 
             {error && <p style={{ color: tokens.error, marginBottom: 16 }}>{error}</p>}
+            {task.readOnlyHint && (
+                <div style={{
+                    marginBottom: 16,
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(148,163,184,0.15)',
+                    border: `1px solid ${tokens.border}`,
+                    fontSize: '0.875rem',
+                }}>
+                    {task.readOnlyHint}
+                </div>
+            )}
 
             <div style={cardStyle}>
                 <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
                     <div><strong>Tip:</strong> {task.type}</div>
+                    <div><strong>Kullanıcı:</strong> {task.subjectUsername ?? '–'} <span style={{ color: tokens.textMuted }}>(ID: {task.subjectUserId ?? '–'})</span></div>
                     <div><strong>Durum:</strong> {task.status}</div>
                     <div><strong>Öncelik:</strong> {task.priority}</div>
                     <div><strong>Son tarih:</strong> {formatDate(task.dueAt)}</div>
@@ -312,6 +345,27 @@ export function FmTaskDetail() {
                     </div>
                 )}
 
+                {!isCompleted && task.assigneeRole === 'FINANCE_MANAGER' && task.status === 'PENDING' && (task.claimState ?? 'POOL') === 'POOL' && (
+                    <div style={{ borderTop: `1px solid ${tokens.border}`, paddingTop: 16, marginTop: 16 }}>
+                        <button
+                            type="button"
+                            style={{
+                                padding: '10px 20px',
+                                borderRadius: 10,
+                                border: 'none',
+                                fontWeight: 700,
+                                cursor: claimLoading ? 'wait' : 'pointer',
+                                background: 'linear-gradient(135deg, #059669, #10b981)',
+                                color: '#fff',
+                            }}
+                            disabled={claimLoading}
+                            onClick={handleClaim}
+                        >
+                            {claimLoading ? '…' : 'Üzerime Al'}
+                        </button>
+                    </div>
+                )}
+
                 {/* Aksiyon butonları */}
                 {isCompleted ? (
                     <div style={{
@@ -326,20 +380,23 @@ export function FmTaskDetail() {
                 ) : (
                     <div style={{ borderTop: `1px solid ${tokens.border}`, paddingTop: 16, marginTop: 16 }}>
                         <div style={{ fontSize: '0.875rem', color: tokens.textMuted, marginBottom: 8 }}>Aksiyon</div>
-                        {ACTIONS.map((a) => (
-                            <button
-                                key={a.key}
-                                style={{
-                                    ...btnStyle,
-                                    opacity: actionLoading === a.key ? 0.7 : 1,
-                                    ...(a.color === 'warning' ? { borderColor: '#e67e22', color: '#e67e22' } : {}),
-                                }}
-                                disabled={!!actionLoading}
-                                onClick={() => handleAction(a.key)}
-                            >
-                                {actionLoading === a.key ? '...' : a.label}
-                            </button>
-                        ))}
+                        {ACTIONS.map((a) => {
+                            const blocked = !!task.readOnlyHint || (task.claimState ?? '') === 'OTHER';
+                            return (
+                                <button
+                                    key={a.key}
+                                    style={{
+                                        ...btnStyle,
+                                        opacity: actionLoading === a.key ? 0.7 : blocked ? 0.45 : 1,
+                                        ...(a.color === 'warning' ? { borderColor: '#e67e22', color: '#e67e22' } : {}),
+                                    }}
+                                    disabled={!!actionLoading || blocked}
+                                    onClick={() => handleAction(a.key)}
+                                >
+                                    {actionLoading === a.key ? '...' : a.label}
+                                </button>
+                            );
+                        })}
                     </div>
                 )}
             </div>

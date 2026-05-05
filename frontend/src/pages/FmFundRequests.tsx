@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { financeClient } from '../api/client';
+import keycloak from '../auth/keycloak';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8085';
 
 type FundRequestType = 'DEPOSIT' | 'WITHDRAWAL';
 type FundRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
@@ -30,6 +33,8 @@ type FundRequestView = {
     approvedByUserId: number | null;
     approvedAt: string | null;
     rejectedAt: string | null;
+    assignedFmKeycloakId: string | null;
+    claimedAt: string | null;
     createdAt: string;
 };
 
@@ -45,10 +50,13 @@ export function FmFundRequests() {
     const [error, setError] = useState<string | null>(null);
 
     const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
+    const [claimingId, setClaimingId] = useState<number | null>(null);
 
     const [rejectModalOpen, setRejectModalOpen] = useState(false);
     const [rejectTargetId, setRejectTargetId] = useState<number | null>(null);
     const [rejectNote, setRejectNote] = useState('');
+
+    const sseAbortRef = useRef<AbortController | null>(null);
 
     const fetchPending = useCallback(() => {
         setLoading(true);
@@ -78,6 +86,43 @@ export function FmFundRequests() {
     useRefetchOnFocus(fetchPending);
     usePolling(fetchPending, 30_000);
 
+    useEffect(() => {
+        sseAbortRef.current?.abort();
+        if (!keycloak.token) return;
+        const ac = new AbortController();
+        sseAbortRef.current = ac;
+        const run = async () => {
+            try {
+                const res = await fetch(`${API_BASE}/api/tasks/sse/fm`, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${keycloak.token}`,
+                        Accept: 'text/event-stream',
+                    },
+                    signal: ac.signal,
+                });
+                if (!res.ok || !res.body) return;
+                const reader = res.body.getReader();
+                const dec = new TextDecoder();
+                let buf = '';
+                for (;;) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buf += dec.decode(value, { stream: true });
+                    if (buf.includes('FUND_REQUEST_CLAIMED')) {
+                        buf = '';
+                        void fetchPending();
+                    }
+                    if (buf.length > 64_000) buf = buf.slice(-32_000);
+                }
+            } catch {
+                /* abort / network */
+            }
+        };
+        void run();
+        return () => ac.abort();
+    }, [fetchPending, keycloak.token]);
+
     const approve = async (id: number) => {
         setActionLoadingId(id);
         try {
@@ -94,6 +139,23 @@ export function FmFundRequests() {
             );
         } finally {
             setActionLoadingId(null);
+        }
+    };
+
+    const claim = async (id: number) => {
+        setClaimingId(id);
+        try {
+            await financeClient.post(`/api/admin/fund-requests/${id}/claim`);
+            await fetchPending();
+        } catch (err: any) {
+            alert(
+                err?.response?.data?.errors?.error ??
+                err?.response?.data?.message ??
+                err?.message ??
+                'Üzerime alma sırasında hata',
+            );
+        } finally {
+            setClaimingId(null);
         }
     };
 
@@ -208,6 +270,20 @@ export function FmFundRequests() {
                                                 >
                                                     {r.status}
                                                 </span>
+                                                {r.claimedAt && (
+                                                    <span
+                                                        style={{
+                                                            borderRadius: 999,
+                                                            padding: '2px 8px',
+                                                            fontSize: '0.75rem',
+                                                            fontWeight: 700,
+                                                            color: '#1f2937',
+                                                            background: '#fef08a',
+                                                        }}
+                                                    >
+                                                        CLAIMED
+                                                    </span>
+                                                )}
                                             </div>
                                             <div style={{ fontWeight: 700 }}>{fmtMoney(r.amount, r.currency)}</div>
                                         </div>
@@ -276,38 +352,59 @@ export function FmFundRequests() {
                                         </div>
 
                                         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                                            <button
-                                                type="button"
-                                                disabled={actionLoadingId === r.id}
-                                                onClick={() => approve(r.id)}
-                                                style={{
-                                                    padding: '6px 10px',
-                                                    borderRadius: 8,
-                                                    border: 'none',
-                                                    cursor: 'pointer',
-                                                    color: '#fff',
-                                                    background: 'linear-gradient(90deg,#16a34a,#22c55e)',
-                                                    opacity: actionLoadingId === r.id ? 0.7 : 1,
-                                                }}
-                                            >
-                                                Onayla
-                                            </button>
-                                            <button
-                                                type="button"
-                                                disabled={actionLoadingId === r.id}
-                                                onClick={() => openRejectModal(r.id)}
-                                                style={{
-                                                    padding: '6px 10px',
-                                                    borderRadius: 8,
-                                                    border: 'none',
-                                                    cursor: 'pointer',
-                                                    color: '#fff',
-                                                    background: 'linear-gradient(90deg,#ef4444,#dc2626)',
-                                                    opacity: actionLoadingId === r.id ? 0.7 : 1,
-                                                }}
-                                            >
-                                                Reddet
-                                            </button>
+                                            {r.claimedAt ? (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        disabled={actionLoadingId === r.id}
+                                                        onClick={() => approve(r.id)}
+                                                        style={{
+                                                            padding: '6px 10px',
+                                                            borderRadius: 8,
+                                                            border: 'none',
+                                                            cursor: 'pointer',
+                                                            color: '#fff',
+                                                            background: 'linear-gradient(90deg,#16a34a,#22c55e)',
+                                                            opacity: actionLoadingId === r.id ? 0.7 : 1,
+                                                        }}
+                                                    >
+                                                        Onayla
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={actionLoadingId === r.id}
+                                                        onClick={() => openRejectModal(r.id)}
+                                                        style={{
+                                                            padding: '6px 10px',
+                                                            borderRadius: 8,
+                                                            border: 'none',
+                                                            cursor: 'pointer',
+                                                            color: '#fff',
+                                                            background: 'linear-gradient(90deg,#ef4444,#dc2626)',
+                                                            opacity: actionLoadingId === r.id ? 0.7 : 1,
+                                                        }}
+                                                    >
+                                                        Reddet
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    disabled={claimingId === r.id}
+                                                    onClick={() => claim(r.id)}
+                                                    style={{
+                                                        padding: '6px 10px',
+                                                        borderRadius: 8,
+                                                        border: 'none',
+                                                        cursor: 'pointer',
+                                                        color: '#fff',
+                                                        background: 'linear-gradient(90deg,#0ea5e9,#2563eb)',
+                                                        opacity: claimingId === r.id ? 0.7 : 1,
+                                                    }}
+                                                >
+                                                    {claimingId === r.id ? '...' : 'Üzerime Al'}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
