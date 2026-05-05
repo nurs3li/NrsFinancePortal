@@ -36,17 +36,31 @@ public class AdminAccountController {
             @RequestBody(required = false) FreezeRequest request) {
         Account account = accountRepository.findById(id)
                 .orElseThrow(() -> new IllegalStateException("Account not found: " + id));
-        account.freeze(Instant.now(), request != null && request.reason() != null ? request.reason() : "Admin freeze");
+        User user = account.getUser();
+        String reason = request != null && request.reason() != null ? request.reason() : "Admin freeze";
+        Instant now = Instant.now();
+        account.freeze(now, reason);
         accountRepository.save(account);
 
-        String sub = account.getUser().getKeycloakUserId();
+        String sub = user.getKeycloakUserId();
+        String freezeBody = """
+                Merhaba,
+
+                Yönetici aksiyonu ile hesabınız güvenlik kapsamında geçici olarak dondurulmuştur.
+
+                Açıklama: %s
+
+                İnceleme süreci tamamlanıncaya kadar işlem yapılamayabilir.
+
+                NRS Finance Portal
+                """.formatted(reason);
         notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
                 sub,
-                "Hesabınız donduruldu",
-                request != null && request.reason() != null ? request.reason() : "Hesabınız yönetici tarafından donduruldu.",
+                "Hesabınız güvenlik nedeniyle donduruldu",
+                freezeBody,
                 "ACCOUNT_FROZEN",
-                "account",
-                account.getId()
+                "user",
+                user.getId()
         ));
 
         return ResponseEntity.ok(ApiResponse.success("OK"));
@@ -56,17 +70,25 @@ public class AdminAccountController {
     public ResponseEntity<ApiResponse<String>> unfreeze(@PathVariable Long id) {
         Account account = accountRepository.findById(id)
                 .orElseThrow(() -> new IllegalStateException("Account not found: " + id));
+        User user = account.getUser();
         account.unfreeze();
         accountRepository.save(account);
 
-        String sub = account.getUser().getKeycloakUserId();
+        String sub = user.getKeycloakUserId();
         notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
                 sub,
-                "Hesabınız tekrar aktif",
-                "Hesabınız yönetici tarafından tekrar aktif hale getirildi.",
+                "Hesabınız tekrar kullanıma açıldı",
+                """
+                        Merhaba,
+
+                        Hesabınız üzerindeki inceleme tamamlanmış ve hesabınız yeniden aktifleştirilmiştir.
+
+                        İyi günler dileriz,
+                        NRS Finance Portal
+                        """,
                 "ACCOUNT_UNFROZEN",
-                "account",
-                account.getId()
+                "user",
+                user.getId()
         ));
 
         return ResponseEntity.ok(ApiResponse.success("OK"));
@@ -89,19 +111,23 @@ public class AdminAccountController {
             @PathVariable Long userId,
             @RequestBody(required = false) FreezeRequest request) {
         String reason = request != null && request.reason() != null ? request.reason() : "Admin freeze (all accounts)";
-        List<Account> accounts = accountRepository.findByUser_Id(userId);
-        Instant at = Instant.now();
-        for (Account a : accounts) {
-            a.freeze(at, reason);
-        }
-        accountRepository.saveAll(accounts);
+        List<Account> accounts = freezeAllAccounts(userId, Instant.now(), reason);
 
         User user = userRepository.findById(userId).orElse(null);
         if (user != null) {
+            String freezeAllBody = """
+                    Merhaba,
+
+                    Yönetici tarafından kullanıcı hesabınıza bağlı tüm hesaplar güvenlik kapsamında dondurulmuştur.
+
+                    Açıklama: %s
+
+                    NRS Finance Portal
+                    """.formatted(reason);
             notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
                     user.getKeycloakUserId(),
-                    "Tüm hesaplarınız donduruldu",
-                    reason,
+                    "Hesaplarınız güvenlik nedeniyle donduruldu",
+                    freezeAllBody,
                     "ACCOUNT_FROZEN",
                     "user",
                     userId
@@ -112,21 +138,40 @@ public class AdminAccountController {
 
     @PostMapping("/by-user/{userId}/unfreeze-all")
     public ResponseEntity<ApiResponse<Integer>> unfreezeAllAccountsForUser(@PathVariable Long userId) {
-        List<Account> accounts = accountRepository.findByUser_Id(userId);
-        accounts.forEach(Account::unfreeze);
-        accountRepository.saveAll(accounts);
+        List<Account> accounts = unfreezeAllAccounts(userId);
 
         User user = userRepository.findById(userId).orElse(null);
         if (user != null) {
             notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
                     user.getKeycloakUserId(),
-                    "Tüm hesaplarınız tekrar aktif",
-                    "Hesaplarınız yönetici tarafından tekrar aktif hale getirildi.",
+                    "Hesaplarınız tekrar kullanıma açıldı",
+                    """
+                            Merhaba,
+
+                            Kullanıcı hesabınıza bağlı tüm hesaplar yönetici tarafından yeniden aktifleştirilmiştir.
+
+                            İyi günler dileriz,
+                            NRS Finance Portal
+                            """,
                     "ACCOUNT_UNFROZEN",
                     "user",
                     userId
             ));
         }
         return ResponseEntity.ok(ApiResponse.success(accounts.size()));
+    }
+
+    private List<Account> freezeAllAccounts(Long userId, Instant at, String reason) {
+        List<Account> accounts = accountRepository.findByUser_Id(userId);
+        for (Account a : accounts) {
+            a.freeze(at, reason);
+        }
+        return accountRepository.saveAll(accounts);
+    }
+
+    private List<Account> unfreezeAllAccounts(Long userId) {
+        List<Account> accounts = accountRepository.findByUser_Id(userId);
+        accounts.forEach(Account::unfreeze);
+        return accountRepository.saveAll(accounts);
     }
 }

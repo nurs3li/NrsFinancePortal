@@ -266,6 +266,8 @@ services:
     ports:
       - "8085:8080"
     depends_on:
+      keycloak:
+        condition: service_started
       postgres:
         condition: service_healthy
       kafka:
@@ -288,6 +290,11 @@ services:
       MARKET_DATA_SERVICE_URL: http://nrs-market-data:8083
       KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      KEYCLOAK_ADMIN_ENABLED: ${KEYCLOAK_ADMIN_ENABLED:-false}
+      KEYCLOAK_ADMIN_SERVER_URL: ${KEYCLOAK_ADMIN_SERVER_URL:-http://nrs-keycloak:8080}
+      KEYCLOAK_ADMIN_REALM: ${KEYCLOAK_ADMIN_REALM:-nrs-finance}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:-}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
     logging:
       driver: "json-file"
       options:

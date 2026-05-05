@@ -32,7 +32,7 @@ public class PortfolioController {
     }
 
     @GetMapping("/manual/me")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER','FINANCE_MANAGER','ADMIN')")
     public ApiResponse<List<ManualPortfolioView>> myManualPositions() {
         return ApiResponse.success(
                 manualPortfolioService.listMine()
@@ -61,7 +61,7 @@ public class PortfolioController {
     }
 
     @GetMapping("/me/unified")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER','FINANCE_MANAGER','ADMIN')")
     public ApiResponse<List<UnifiedPortfolioItemView>> myUnifiedPortfolio() {
         return ApiResponse.success(unifiedPortfolioService.myUnifiedPortfolio());
     }

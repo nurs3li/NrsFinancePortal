@@ -20,7 +20,7 @@ public class PortfolioSnapshotController {
     private final PortfolioSnapshotQueryService portfolioSnapshotQueryService;
 
     @GetMapping("/me")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER','FINANCE_MANAGER','ADMIN')")
     public ApiResponse<List<PortfolioSnapshotPointDto>> mySnapshots(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,

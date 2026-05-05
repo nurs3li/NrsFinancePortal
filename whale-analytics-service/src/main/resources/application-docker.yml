@@ -9,7 +9,7 @@ spring:
     time-zone: Europe/Istanbul
 
   kafka:
-    bootstrap-servers: nrs-kafka:9093   # 🔥 BURASI
+    bootstrap-servers: nrs-kafka:9093
     consumer:
       group-id: whale-detector
       auto-offset-reset: latest
@@ -42,9 +42,9 @@ logging:
 whale:
   thresholds:
     l1:
-      single-tx: 250
+      single-tx: 5.000
       daily-volume: 1000000
-      hourly-count: 1
+      hourly-count: 5
     l2:
       single-tx: 500000
       daily-volume: 5000000
