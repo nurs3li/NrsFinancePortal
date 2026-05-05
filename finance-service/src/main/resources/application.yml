@@ -75,3 +75,10 @@ app:
     require-receipt-for-deposit: true
     require-reference-no-for-deposit: true
     require-iban-for-deposit: true
+  keycloak:
+    admin:
+      enabled: ${KEYCLOAK_ADMIN_ENABLED:false}
+      server-url: ${KEYCLOAK_ADMIN_SERVER_URL:http://localhost:8081}
+      realm: ${KEYCLOAK_ADMIN_REALM:nrs-finance}
+      client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:}
+      client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:}

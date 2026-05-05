@@ -49,3 +49,12 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v17-fund-request-directional-fields.yaml
+
+  - include:
+      file: db/changelog/v18-user-login-suspended.yaml
+
+  - include:
+      file: db/changelog/v19-review-task-pool.yaml
+
+  - include:
+      file: db/changelog/v20-fund-request-fm-claim.yaml

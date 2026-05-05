@@ -13,22 +13,27 @@ public class NotificationChannelPolicyResolver {
             Map.entry("ACCOUNT_FROZEN", DeliveryDecision.IN_APP_AND_EMAIL),
             Map.entry("ACCOUNT_UNFROZEN", DeliveryDecision.IN_APP_AND_EMAIL),
             Map.entry("REVIEW_COMPLETED", DeliveryDecision.IN_APP_ONLY),
+            Map.entry("SUSPICIOUS_ACTIVITY", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("USER_LOGIN_SUSPENDED", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("USER_LOGIN_UNSUSPENDED", DeliveryDecision.IN_APP_AND_EMAIL),
 
             // FM görevleri
             Map.entry("REVIEW_TASK_CREATED", DeliveryDecision.IN_APP_AND_EMAIL),
             Map.entry("REVIEW_TASK_REMINDER", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("REVIEW_TASK_ASSIGNED", DeliveryDecision.IN_APP_AND_EMAIL),
 
             // Admin görevleri / escalation
             Map.entry("FREEZE_APPROVAL_CREATED", DeliveryDecision.IN_APP_AND_EMAIL),
-            Map.entry("REVIEW_TASK_ESCALATED", DeliveryDecision.IN_APP_AND_EMAIL),
+            // finance-service ReviewTaskService ile aynı isim olmalı
+            Map.entry("REVIEW_TASK_ESCALATED_CRITICAL", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("USER_REGISTERED", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("SYSTEM_ERROR", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("WHALE_SPIKE", DeliveryDecision.IN_APP_AND_EMAIL),
 
             // Fund request bildirimleri
             Map.entry("FUND_REQUEST_CREATED", DeliveryDecision.IN_APP_AND_EMAIL),
             Map.entry("FUND_REQUEST_APPROVED", DeliveryDecision.IN_APP_AND_EMAIL),
-            Map.entry("FUND_REQUEST_REJECTED", DeliveryDecision.IN_APP_AND_EMAIL),
-
-            // Whale / sistem uyarıları
-            Map.entry("WHALE_SPIKE", DeliveryDecision.IN_APP_ONLY)
+            Map.entry("FUND_REQUEST_REJECTED", DeliveryDecision.IN_APP_AND_EMAIL)
     );
 
     public DeliveryDecision decide(NotificationRequestedEvent event) {

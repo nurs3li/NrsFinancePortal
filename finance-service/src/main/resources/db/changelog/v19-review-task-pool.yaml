@@ -1,0 +1,23 @@
+databaseChangeLog:
+  - changeSet:
+      id: v19-review-task-pool-columns
+      author: nurseli
+      changes:
+        - addColumn:
+            tableName: review_tasks
+            columns:
+              - column:
+                  name: assigned_fm_keycloak_id
+                  type: VARCHAR(255)
+                  remarks: Keycloak subject (UUID) of FM who claimed the task
+              - column:
+                  name: claimed_at
+                  type: TIMESTAMPTZ
+                  remarks: When the task was claimed by an FM
+        - createIndex:
+            tableName: review_tasks
+            indexName: idx_review_tasks_fm_claim
+            columns:
+              - column: { name: assignee_role }
+              - column: { name: status }
+              - column: { name: assigned_fm_keycloak_id }
