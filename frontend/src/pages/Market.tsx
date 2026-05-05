@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AxiosResponse } from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { financeClient, marketClient } from '../api/client';
@@ -12,6 +12,7 @@ import { BondTerminalChart } from '../components/market/BondTerminalChart';
 import { ViopTerminalChart } from '../components/market/ViopTerminalChart';
 import { MarketCompareLwChart } from '../components/market/MarketCompareLwChart';
 import { usePolling } from '../hooks/usePolling';
+import { Star } from 'lucide-react';
 import './MarketTerminal.css';
 
 type MarketInstrument = {
@@ -87,7 +88,7 @@ type DebtSnapshot = {
 };
 type ViopContract = { contractCode: string; underlying: string; expiry: string; type: string };
 type DebtInstrument = { isin: string; name: string; issuer: string; maturityDate: string };
-type MarketCategory = 'EQUITY' | 'CRYPTO' | 'FX' | 'FUTURES' | 'BOND';
+type MarketCategory = 'EQUITY' | 'CRYPTO' | 'FX' | 'METALS' | 'FUNDS' | 'FUTURES' | 'BOND';
 type CompareRow = { time: string; values: Record<string, number> };
 type NewsTone = 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
 type NewsMarkerVm = {
@@ -114,15 +115,68 @@ const CATEGORY_LABELS: { id: MarketCategory; label: string }[] = [
     { id: 'EQUITY', label: 'Hisse' },
     { id: 'CRYPTO', label: 'Kripto' },
     { id: 'FX', label: 'Döviz' },
+    { id: 'METALS', label: 'Altın' },
+    { id: 'FUNDS', label: 'Fonlar' },
     { id: 'FUTURES', label: 'VİOP' },
     { id: 'BOND', label: 'Tahvil' },
 ];
+
+const STARRED_MAX_FALLBACK = 7;
 
 function heatAssetClassForCategory(category: MarketCategory): string {
     if (category === 'EQUITY') return 'STOCK';
     if (category === 'CRYPTO') return 'CRYPTO';
     if (category === 'FX') return 'FX';
+    if (category === 'METALS') return 'METAL';
+    if (category === 'FUNDS') return 'FUND';
     return '';
+}
+
+function marketKindForCategory(category: MarketCategory): 'EQUITY' | 'CRYPTO' | 'FX' | 'METALS' | 'FUNDS' {
+    if (category === 'EQUITY') return 'EQUITY';
+    if (category === 'CRYPTO') return 'CRYPTO';
+    if (category === 'FX') return 'FX';
+    if (category === 'METALS') return 'METALS';
+    if (category === 'FUNDS') return 'FUNDS';
+    return 'FX';
+}
+
+function findHeatmapTile(dashboard: MarketDashboard, symbol: string, assetClass: string) {
+    const key = normalizeSymbolKey(symbol);
+    return dashboard.heatmapTiles.find((t) => normalizeSymbolKey(t.symbol) === key && t.assetClass === assetClass);
+}
+
+function sparklineClosesFor(dashboard: MarketDashboard | undefined, symbol: string, assetClass: string): number[] {
+    if (!dashboard) return [];
+    const key = normalizeSymbolKey(symbol);
+    const exact = dashboard.sparklines.find((s) => normalizeSymbolKey(s.symbol) === key && s.assetClass === assetClass);
+    if (exact?.closes?.length) return exact.closes;
+    const loose = dashboard.sparklines.find((s) => normalizeSymbolKey(s.symbol) === key);
+    return loose?.closes ?? [];
+}
+
+function resolveListVolume(
+    dashboard: MarketDashboard,
+    symbol: string,
+    assetClass: string,
+    price: number,
+    tile: ReturnType<typeof findHeatmapTile>
+): number | null {
+    const w = tile?.layoutWeight;
+    if (w != null && Number.isFinite(Number(w)) && Number(w) > 0) {
+        return Number(w);
+    }
+    const volRow = dashboard.volatility.find(
+        (v) => normalizeSymbolKey(v.symbol) === normalizeSymbolKey(symbol) && v.assetClass === assetClass
+    );
+    const dv = volRow?.dailyVolatility;
+    if (dv != null && Number.isFinite(Number(dv)) && Number(dv) > 0 && price > 0) {
+        return Number(dv) * price * 100_000;
+    }
+    if (price > 0) {
+        return Math.sqrt(Math.max(price, 1e-6));
+    }
+    return null;
 }
 
 function pickPrice(row: LatestPriceRow): number {
@@ -322,6 +376,8 @@ function calcRelevanceScore(item: NewsItem, key: string, category: MarketCategor
     if (category === 'FX' && matched.includes('MACRO')) return 0.74;
     if (category === 'FUTURES' && matched.includes('FUTURES')) return 0.7;
     if (category === 'BOND' && matched.includes('BOND')) return 0.7;
+    if (category === 'METALS' && matched.includes('MACRO')) return 0.72;
+    if (category === 'FUNDS' && matched.includes('MACRO')) return 0.7;
     return 0.35;
 }
 
@@ -335,6 +391,8 @@ function newsCategoryForMarket(category: MarketCategory): string {
     if (category === 'EQUITY') return 'STOCK';
     if (category === 'CRYPTO') return 'CRYPTO';
     if (category === 'FX') return 'FOREX';
+    if (category === 'METALS') return 'GENERAL';
+    if (category === 'FUNDS') return 'GENERAL';
     if (category === 'FUTURES') return 'VIOP';
     if (category === 'BOND') return 'BOND';
     return 'GENERAL';
@@ -358,6 +416,32 @@ function unwrapData<T>(res: AxiosResponse<T>): T {
         return (body as { data: T }).data;
     }
     return body as T;
+}
+
+type StarredAssetsApiResponse = {
+    maxItems: number;
+    selected: { marketType: string; symbol: string; position: number }[];
+    resolved: { marketType: string; symbol: string; position: number; defaultFilled: boolean }[];
+};
+
+/** Dashboard /api/me/starred-assets ile uyumlu marketType + symbol */
+function rowToStarredApiKey(activeCategory: MarketCategory, symbol: string): { marketType: string; symbol: string } | null {
+    const sym = normalizeSymbolKey(symbol);
+    if (!sym) return null;
+    if (activeCategory === 'EQUITY') return { marketType: 'EQUITY', symbol: sym };
+    if (activeCategory === 'CRYPTO') return { marketType: 'CRYPTO', symbol: sym };
+    if (activeCategory === 'FX') return { marketType: 'FX', symbol: sym };
+    if (activeCategory === 'METALS') {
+        if (sym === 'ALTIN_TRY') return { marketType: 'METALS', symbol: 'XAU_TRY' };
+        return { marketType: 'METALS', symbol: sym };
+    }
+    if (activeCategory === 'FUNDS') return { marketType: 'FUNDS', symbol: sym };
+    return null;
+}
+
+function isStarredResolved(data: StarredAssetsApiResponse | undefined, mt: string, sym: string): boolean {
+    if (!data?.resolved?.length) return false;
+    return data.resolved.some((r) => r.marketType === mt && r.symbol === sym);
 }
 
 export function Market() {
@@ -395,6 +479,48 @@ export function Market() {
             navigate(`/news?${qs.toString()}`);
         },
         [activeCategory, selectedSymbol, navigate]
+    );
+
+    const queryClient = useQueryClient();
+    const { data: starredAssets } = useQuery({
+        queryKey: ['me', 'starred-assets'],
+        queryFn: () => financeClient.get<StarredAssetsApiResponse>('/api/me/starred-assets').then((r) => unwrapData(r)),
+    });
+
+    const starMutation = useMutation({
+        mutationFn: (nextSelected: { marketType: string; symbol: string }[]) =>
+            financeClient.put('/api/me/starred-assets', { selected: nextSelected }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['me', 'starred-assets'] });
+        },
+        onError: (err: unknown) => {
+            const msg = err instanceof Error ? err.message : 'Yıldız güncellenemedi.';
+            window.alert(msg);
+        },
+    });
+
+    const handleStarToggle = useCallback(
+        (e: MouseEvent<HTMLButtonElement>, rowSymbol: string) => {
+            e.stopPropagation();
+            const key = rowToStarredApiKey(activeCategory, rowSymbol);
+            if (!key) return;
+            const pair = `${key.marketType}:${key.symbol}`;
+            const sel = starredAssets?.selected ?? [];
+            const maxItems = starredAssets?.maxItems ?? STARRED_MAX_FALLBACK;
+            const exists = sel.some((s) => `${s.marketType}:${s.symbol}` === pair);
+            let next: { marketType: string; symbol: string }[];
+            if (exists) {
+                next = sel.filter((s) => `${s.marketType}:${s.symbol}` !== pair);
+            } else {
+                if (sel.length >= maxItems) {
+                    window.alert(`En fazla ${maxItems} varlık yıldızlanabilir.`);
+                    return;
+                }
+                next = [...sel, { marketType: key.marketType, symbol: key.symbol }];
+            }
+            starMutation.mutate(next);
+        },
+        [activeCategory, starredAssets, starMutation]
     );
 
     const {
@@ -500,10 +626,10 @@ export function Market() {
         });
         return m;
     }, [viopLatest]);
-    const sparklineMap = useMemo(() => {
-        const m: Record<string, number[]> = {};
-        (dashboard?.sparklines ?? []).forEach((row) => {
-            m[normalizeSymbolKey(row.symbol)] = row.closes ?? [];
+    const volatilityByKey = useMemo(() => {
+        const m: Record<string, number> = {};
+        (dashboard?.volatility ?? []).forEach((v) => {
+            m[`${v.assetClass}:${normalizeSymbolKey(v.symbol)}`] = v.dailyVolatility;
         });
         return m;
     }, [dashboard]);
@@ -616,24 +742,32 @@ export function Market() {
                 ? dashboard.latest.stocks
                 : activeCategory === 'CRYPTO'
                 ? dashboard.latest.crypto
-                : dashboard.latest.doviz;
+                : activeCategory === 'FX'
+                ? dashboard.latest.doviz
+                : activeCategory === 'METALS'
+                ? dashboard.latest.metals
+                : dashboard.latest.funds;
+        const assetClass = heatAssetClassForCategory(activeCategory);
+        if (!assetClass) return [];
         const unique = new Map<string, MarketInstrument>();
         Object.entries(latestMap ?? {})
             .filter(([, row]) => row && row.status !== 'NO_DATA')
             .forEach(([rawSymbol, row]) => {
                 const symbol = normalizeSymbolKey(rawSymbol);
                 if (!symbol) return;
-                const spark = dashboard.sparklines.find((s) => normalizeSymbolKey(s.symbol) === symbol)?.closes ?? [];
-                const volume = dashboard.heatmapTiles.find((t) => normalizeSymbolKey(t.symbol) === symbol)?.layoutWeight;
-                const tileChange = dashboard.heatmapTiles.find((t) => normalizeSymbolKey(t.symbol) === symbol)?.changePercent;
+                const spark = sparklineClosesFor(dashboard, symbol, assetClass);
+                const tile = findHeatmapTile(dashboard, symbol, assetClass);
+                const price = pickPrice(row);
+                const volume = resolveListVolume(dashboard, symbol, assetClass, price, tile);
+                const tileChange = tile?.changePercent;
                 const changePercent = resolveChangePercent(spark, tileChange);
                 unique.set(symbol, {
                     symbol,
                     category: activeCategory,
-                    price: pickPrice(row),
+                    price,
                     changePercent,
                     trend: changePercent >= 0 ? 'UP' : 'DOWN',
-                    volume: volume != null && Number.isFinite(volume) ? Number(volume) : null,
+                    volume,
                     metrics: activeCategory === 'FX' ? { basis: fxSpreadMap[symbol] ?? 0 } : undefined,
                 });
             });
@@ -689,6 +823,10 @@ export function Market() {
             ? 'CRYPTO'
             : activeCategory === 'FX'
             ? 'FX'
+            : activeCategory === 'METALS'
+            ? 'METALS'
+            : activeCategory === 'FUNDS'
+            ? 'FUNDS'
             : null;
 
     const { data: indicatorData, isLoading: loadingIndicators } = useQuery({
@@ -874,7 +1012,6 @@ export function Market() {
                 live && Number.isFinite(Number(live.volume)) && Number(live.volume) > 0
                     ? Number(live.volume)
                     : baseVolume;
-            const spark = sparklineMap[symbolKey] ?? [];
             if (ins.category === 'BOND') {
                 const debtMeta = debtMetaMap[symbolKey];
                 const latestDebt = debtLatestMap[symbolKey];
@@ -886,7 +1023,7 @@ export function Market() {
                     type: 'BOND',
                     typeBadge: 'B',
                     displayName: debtNameMap[symbolKey] ?? symbolKey,
-                    sparkline: spark.length ? spark : [livePrice, livePrice, livePrice],
+                    sparkline: [livePrice, livePrice, livePrice],
                     maturityDate: latestDebt?.maturityDate ?? debtMeta?.maturityDate,
                     daysToMaturity: latestDebt?.daysToMaturity,
                     couponRate: Number(latestDebt?.couponRate ?? 0),
@@ -906,7 +1043,7 @@ export function Market() {
                     type: 'FUTURES',
                     typeBadge: 'V',
                     displayName: contractLabel,
-                    sparkline: spark.length ? spark : [livePrice * 0.99, livePrice, livePrice * 1.01],
+                    sparkline: [livePrice * 0.99, livePrice, livePrice * 1.01],
                     contractMonth: latestViop?.contractMonth ?? toContractMonth(contractLabel),
                     expiryDate: latestViop?.expiryDate,
                     marginRequirement: Number(latestViop?.marginRequirement ?? (ins.price * 0.12).toFixed(2)),
@@ -922,6 +1059,8 @@ export function Market() {
                             : 'NÖTR',
                 };
             }
+            const ac = heatAssetClassForCategory(ins.category);
+            const spark = dashboard && ac ? sparklineClosesFor(dashboard, symbolKey, ac) : [];
             return {
                 ...ins,
                 price: livePrice,
@@ -929,17 +1068,12 @@ export function Market() {
                 volume: liveVolume,
                 type: 'STOCK',
                 typeBadge: 'S',
-                displayName:
-                    activeCategory === 'EQUITY'
-                        ? formatAssetLabel(symbolKey, 'EQUITY')
-                        : activeCategory === 'CRYPTO'
-                        ? formatAssetLabel(symbolKey, 'CRYPTO')
-                        : formatAssetLabel(symbolKey, 'FX'),
+                displayName: formatAssetLabel(symbolKey, marketKindForCategory(ins.category)),
                 sparkline: spark.length ? spark : [livePrice * 0.995, livePrice, livePrice * 1.005],
                 longShort: ins.trend === 'UP' ? 'LONG' : 'SHORT',
             };
         });
-    }, [instruments, sparklineMap, debtMetaMap, debtLatestMap, viopLatestMap, debtNameMap, activeCategory, liveOverrides]);
+    }, [instruments, dashboard, debtMetaMap, debtLatestMap, viopLatestMap, debtNameMap, activeCategory, liveOverrides]);
 
     const filteredInstruments = useMemo(() => {
         const q = searchTerm.trim().toUpperCase();
@@ -1034,6 +1168,12 @@ export function Market() {
             }
             if (activeCategory === 'BOND') {
                 return x.matchedSymbols.includes('BOND');
+            }
+            if (activeCategory === 'METALS') {
+                return hasDirect || x.matchedSymbols.includes('MACRO');
+            }
+            if (activeCategory === 'FUNDS') {
+                return hasDirect || x.matchedSymbols.includes('MACRO');
             }
             return false;
         });
@@ -1334,7 +1474,7 @@ export function Market() {
                                 ? parseViopContractLabel(hero.symbol)
                                 : activeCategory === 'BOND'
                                 ? debtNameMap[hero.symbol] ?? hero.symbol
-                                : formatAssetLabel(hero.symbol, activeCategory === 'EQUITY' ? 'EQUITY' : activeCategory === 'CRYPTO' ? 'CRYPTO' : 'FX')
+                                : formatAssetLabel(hero.symbol, marketKindForCategory(activeCategory))
                             : '—'}
                     </div>
                     <div style={{ fontSize: 12, color: tokens.textMuted }}>{hero?.symbol ?? ''}</div>
@@ -1382,6 +1522,9 @@ export function Market() {
                                 <table className="terminal-data-table">
                                     <thead>
                                         <tr>
+                                            <th aria-label="Yıldız" style={{ width: 36 }}>
+                                                ★
+                                            </th>
                                             <th>Tip</th>
                                             <th>Enstrüman</th>
                                             <th>Fiyat</th>
@@ -1393,10 +1536,15 @@ export function Market() {
                                     <tbody>
                                         {virtualRows.topSpacer > 0 ? (
                                             <tr style={{ height: virtualRows.topSpacer }}>
-                                                <td colSpan={6} />
+                                                <td colSpan={7} />
                                             </tr>
                                         ) : null}
-                                        {virtualRows.rows.map((row) => (
+                                        {virtualRows.rows.map((row) => {
+                                            const sk = rowToStarredApiKey(activeCategory, row.symbol);
+                                            const starFilled = sk
+                                                ? isStarredResolved(starredAssets, sk.marketType, sk.symbol)
+                                                : false;
+                                            return (
                                             <tr
                                                 key={row.symbol}
                                                 className={`${selectedSymbol === row.symbol ? 'active' : ''} ${
@@ -1411,6 +1559,25 @@ export function Market() {
                                                     setIsDetailPanelOpen(true);
                                                 }}
                                             >
+                                                <td style={{ textAlign: 'center', width: 36 }} onClick={(e) => e.stopPropagation()}>
+                                                    {sk ? (
+                                                        <button
+                                                            type="button"
+                                                            className="terminal-star-btn"
+                                                            aria-label={starFilled ? 'Yıldızı kaldır' : 'Dashboard’da göster'}
+                                                            disabled={starMutation.isPending}
+                                                            onClick={(e) => handleStarToggle(e, row.symbol)}
+                                                        >
+                                                            <Star
+                                                                size={14}
+                                                                fill={starFilled ? tokens.accent : 'transparent'}
+                                                                color={starFilled ? tokens.accent : tokens.textMuted}
+                                                            />
+                                                        </button>
+                                                    ) : (
+                                                        <span style={{ color: tokens.textMuted, fontSize: 11 }}>—</span>
+                                                    )}
+                                                </td>
                                                 <td>
                                                     <span className={`instrument-type-badge ${row.type.toLowerCase()}`}>{row.typeBadge}</span>
                                                 </td>
@@ -1435,7 +1602,8 @@ export function Market() {
                                                     </svg>
                                                 </td>
                                             </tr>
-                                        ))}
+                                            );
+                                        })}
                                         {Math.max(0, virtualRows.totalHeight - virtualRows.topSpacer - virtualRows.rows.length * virtualRows.rowHeight) > 0 ? (
                                             <tr
                                                 style={{
@@ -1447,7 +1615,7 @@ export function Market() {
                                                     ),
                                                 }}
                                             >
-                                                <td colSpan={6} />
+                                                <td colSpan={7} />
                                             </tr>
                                         ) : null}
                                     </tbody>
@@ -1610,13 +1778,20 @@ export function Market() {
                                     <div>Grafikteki haber noktasına tıklayınca detay burada açılır.</div>
                                 )}
                             </div>
-                            {activeCategory === 'EQUITY' || activeCategory === 'CRYPTO' || activeCategory === 'FX' ? (
+                            {activeCategory === 'EQUITY' ||
+                            activeCategory === 'CRYPTO' ||
+                            activeCategory === 'FX' ||
+                            activeCategory === 'METALS' ||
+                            activeCategory === 'FUNDS' ? (
                                 <>
                                     <MarketFinvizTreemap
                                         tiles={(dashboard?.heatmapTiles ?? []).filter((tile) => {
                                             if (activeCategory === 'EQUITY') return tile.assetClass === 'STOCK';
                                             if (activeCategory === 'CRYPTO') return tile.assetClass === 'CRYPTO';
-                                            return tile.assetClass === 'FX';
+                                            if (activeCategory === 'FX') return tile.assetClass === 'FX';
+                                            if (activeCategory === 'METALS') return tile.assetClass === 'METAL';
+                                            if (activeCategory === 'FUNDS') return tile.assetClass === 'FUND';
+                                            return false;
                                         })}
                                         borderColor="rgba(71, 85, 105, 0.55)"
                                         panelBg={tokens.bgCard}
@@ -1691,17 +1866,22 @@ export function Market() {
                             {activeCategory === 'FX' ? (
                                 <div className="terminal-mini-list">
                                     <strong style={{ fontSize: 13 }}>Makas / Volatilite</strong>
-                                    {instruments.slice(0, 8).map((ins) => (
-                                        <div key={`fx-metric-${ins.symbol}`} className="terminal-mini-item">
-                                            <span>{ins.symbol}</span>
-                                            <span>
-                                                Makas {(ins.metrics?.basis ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })} · Vol {Math.abs(
-                                                    ins.changePercent
-                                                ).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
-                                                %
-                                            </span>
-                                        </div>
-                                    ))}
+                                    {instruments.slice(0, 8).map((ins) => {
+                                        const vk = `FX:${normalizeSymbolKey(ins.symbol)}`;
+                                        const dv = volatilityByKey[vk];
+                                        const volPct =
+                                            dv != null && Number.isFinite(dv) && dv > 0
+                                                ? (dv * 100).toLocaleString('tr-TR', { maximumFractionDigits: 2 })
+                                                : Math.abs(ins.changePercent).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+                                        return (
+                                            <div key={`fx-metric-${ins.symbol}`} className="terminal-mini-item">
+                                                <span>{ins.symbol}</span>
+                                                <span>
+                                                    Makas {(ins.metrics?.basis ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })} · Vol {volPct}%
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             ) : null}
 
