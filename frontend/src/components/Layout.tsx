@@ -74,39 +74,49 @@ export function Layout() {
 
     const isFm = role === 'FINANCE_MANAGER';
     const isAdmin = role === 'ADMIN';
-    /** Portföy ve İşlem Geçmişi sadece müşteri (USER); personel (Admin/FM) menüde görmesin */
-    const showCustomerPortfolio = !isFm && !isAdmin;
-    /** Dashboard sadece müşteri (USER); Admin/FM görmez */
-    const showDashboard = !isFm && !isAdmin;
-    /** Görevler (FM) sadece FM görsün; Admin sadece Admin Görevler görsün */
-    const showFmTasks = isFm;
-    const navItems = useMemo<NavItem[]>(
-        () => [
-            { key: 'dashboard', to: '/dashboard', label: 'Dashboard', show: showDashboard },
+
+    const navItems = useMemo<NavItem[]>(() => {
+        if (isAdmin) {
+            return [
+                { key: 'market', to: '/market', label: 'Piyasa', show: true },
+                { key: 'news', to: '/news', label: 'Haberler', show: true },
+                { key: 'admin', to: '/admin', label: 'Yönetim Paneli', show: true },
+                { key: 'admin-tasks', to: '/admin/tasks', label: 'Admin Görevler', show: true },
+                { key: 'admin-users', to: '/admin/users', label: 'Kullanıcı Yönetimi', show: true },
+                { key: 'admin-audit', to: '/admin/audit', label: 'Audit Logs', show: true },
+            ];
+        }
+        if (isFm) {
+            return [
+                { key: 'market', to: '/market', label: 'Piyasa', show: true },
+                { key: 'news', to: '/news', label: 'Haberler', show: true },
+                { key: 'fm-tasks', to: '/fm/tasks', label: 'Görevler', show: true },
+                { key: 'fm-funds', to: '/fm/fund-requests', label: 'Para Talepleri', show: true },
+                { key: 'fm-risk', to: '/fm/risk', label: 'Risk Monitor', show: true },
+                { key: 'fm-suspicious', to: '/operasyon/suspicious', label: 'Şüpheli Olaylar', show: true },
+            ];
+        }
+        return [
+            { key: 'dashboard', to: '/dashboard', label: 'Dashboard', show: true },
             { key: 'market', to: '/market', label: 'Piyasa', show: true },
-            { key: 'wallet', to: '/wallet', label: 'Cüzdan', show: showCustomerPortfolio },
-            { key: 'portfolio', to: '/portfolio', label: 'Portföy', show: showCustomerPortfolio },
-            { key: 'simulation', to: '/simulation', label: 'Simülasyon', show: showCustomerPortfolio },
-            { key: 'trade', to: '/trade', label: 'Alım-satım', show: showCustomerPortfolio },
-            { key: 'transactions', to: '/transactions', label: 'İşlem Geçmişi', show: showCustomerPortfolio },
             { key: 'news', to: '/news', label: 'Haberler', show: true },
-            { key: 'fm-tasks', to: '/fm/tasks', label: 'Görevler', show: showFmTasks },
-            { key: 'fm-funds', to: '/fm/fund-requests', label: 'Para Talepleri', show: showFmTasks },
-            { key: 'fm-risk', to: '/fm/risk', label: 'Risk Monitor', show: showFmTasks },
-            { key: 'fm-suspicious', to: '/operasyon/suspicious', label: 'Şüpheli Olaylar', show: showFmTasks },
-            { key: 'admin', to: '/admin', label: 'Yönetim paneli', show: isAdmin },
-            { key: 'admin-tasks', to: '/admin/tasks', label: 'Admin Görevler', show: isAdmin },
-            { key: 'admin-users', to: '/admin/users', label: 'Kullanıcı Yönetimi', show: isAdmin },
-            { key: 'admin-settings', to: '/admin/settings', label: 'Sistem Ayarları', show: isAdmin },
-            { key: 'admin-audit', to: '/admin/audit', label: 'Audit Logs', show: isAdmin },
-            { key: 'admin-metrics', to: '/admin/metrics', label: 'Metrikler', show: isAdmin },
-        ],
-        [showDashboard, showCustomerPortfolio, showFmTasks, isAdmin]
-    );
+            { key: 'portfolio', to: '/portfolio', label: 'Portföy Analizi', show: true },
+            { key: 'adv-market', to: '/market/advanced', label: 'Gelişmiş Raporlar', show: true },
+            { key: 'trade', to: '/trade', label: 'Alım Satım', show: true },
+            { key: 'transactions', to: '/transactions', label: 'İşlem Geçmişi', show: true },
+            { key: 'wallet', to: '/wallet', label: 'Cüzdan', show: true },
+            { key: 'simulation', to: '/simulation', label: 'Simülasyon', show: true },
+        ];
+    }, [isAdmin, isFm]);
     const visibleNavItems = navItems.filter((item) => item.show);
     const activeNavKey = useMemo(() => {
-        const matched = visibleNavItems.find((item) => location.pathname.startsWith(item.to));
-        return matched?.key ?? '';
+        let best: NavItem | undefined;
+        for (const item of visibleNavItems) {
+            if (location.pathname.startsWith(item.to)) {
+                if (!best || item.to.length > best.to.length) best = item;
+            }
+        }
+        return best?.key ?? '';
     }, [location.pathname, visibleNavItems]);
 
     const {
@@ -164,8 +174,8 @@ export function Layout() {
                             key={item.key}
                             data-nav-key={item.key}
                             to={item.to}
-                            className={({ isActive }) =>
-                                `app-header__nav-link ${isActive || location.pathname.startsWith(item.to) ? 'is-active' : ''}`
+                            className={() =>
+                                `app-header__nav-link ${activeNavKey === item.key ? 'is-active' : ''}`
                             }
                             onMouseEnter={(event) => {
                                 setHoveredNavKey(item.key);
@@ -237,7 +247,25 @@ export function Layout() {
                             onClick={() => setIsUserMenuOpen((open) => !open)}
                             onMouseEnter={() => setIsUserMenuOpen(true)}
                         >
-                            <span>{(user?.username ?? user?.email ?? 'testuser')} - {user?.role ?? role ?? 'USER'}</span>
+                            {isFm && (
+                                <span
+                                    title="Finance Manager"
+                                    style={{
+                                        marginRight: 8,
+                                        padding: '3px 9px',
+                                        borderRadius: 999,
+                                        background: 'linear-gradient(135deg, rgba(16,185,129,0.25), rgba(52,211,153,0.12))',
+                                        border: '1px solid rgba(52,211,153,0.45)',
+                                        color: '#a7f3d0',
+                                        fontSize: '0.68rem',
+                                        fontWeight: 700,
+                                        letterSpacing: '0.04em',
+                                    }}
+                                >
+                                    FM
+                                </span>
+                            )}
+                            <span>{(user?.username ?? user?.email ?? 'testuser')} — {role ?? user?.role ?? 'USER'}</span>
                             <ChevronDown size={14} className={isUserMenuOpen ? 'rotated' : ''} />
                         </button>
                         {isUserMenuOpen && (

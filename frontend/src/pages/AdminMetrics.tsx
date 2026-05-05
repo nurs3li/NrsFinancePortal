@@ -46,7 +46,11 @@ export function AdminMetrics() {
         metricsClient
             .get<MetricsApiResponse>('/api/admin/metrics/dashboard')
             .then((res) => {
-                const d = res.data?.data;
+                // metricsClient interceptor may already unwrap envelope -> handle both shapes safely
+                const raw = res.data as DashboardMetricsDto | MetricsApiResponse | null | undefined;
+                const d = raw && typeof raw === 'object' && 'data' in raw
+                    ? (raw as MetricsApiResponse).data
+                    : (raw as DashboardMetricsDto | null | undefined);
                 setMetrics(d ?? null);
             })
             .catch((err) => {
