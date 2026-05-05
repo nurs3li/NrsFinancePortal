@@ -7,17 +7,27 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+
+import com.nurseli.nrsfinanceportal.repository.UserRepository;
 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
+    private final FrozenUserAccessFilter frozenUserAccessFilter;
+    private final UserRepository userRepository;
+
+    public SecurityConfig(FrozenUserAccessFilter frozenUserAccessFilter, UserRepository userRepository) {
+        this.frozenUserAccessFilter = frozenUserAccessFilter;
+        this.userRepository = userRepository;
+    }
 
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(new KeycloakJwtGrantedAuthoritiesConverter());
+        converter.setJwtGrantedAuthoritiesConverter(new JwtRealmAndDbRoleAuthoritiesConverter(userRepository));
         return converter;
     }
 
@@ -37,7 +47,8 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
+                .addFilterAfter(frozenUserAccessFilter, BearerTokenAuthenticationFilter.class);
         return http.build();
     }
 }

@@ -55,6 +55,18 @@ public class User {
     @Column(name = "whale_since")
     private Instant whaleSince;
 
+    /**
+     * Giriş (Keycloak) seviyesinde askıya alındı; mevcut JWT oturumlarını da finance API'de keser.
+     */
+    @Column(name = "login_suspended", nullable = false)
+    private boolean loginSuspended;
+
+    @Column(name = "login_suspended_at")
+    private Instant loginSuspendedAt;
+
+    @Column(name = "login_suspended_reason", length = 500)
+    private String loginSuspendedReason;
+
     // ===================== JPA =====================
 
     protected User() {
@@ -75,6 +87,7 @@ public class User {
         this.emailVerified = false;
         this.whale = false;
         this.whaleLevel = WhaleLevel.NONE;
+        this.loginSuspended = false;
     }
 
     public static User createFromIdentity(String keycloakUserId,
@@ -107,6 +120,30 @@ public class User {
         this.whale = false;
         this.whaleLevel = WhaleLevel.NONE;
         this.whaleSince = null;
+    }
+
+    public void suspendLogin(Instant at, String reason) {
+        this.loginSuspended = true;
+        this.loginSuspendedAt = at;
+        this.loginSuspendedReason = reason != null && !reason.isBlank() ? reason : null;
+    }
+
+    public void unsuspendLogin() {
+        this.loginSuspended = false;
+        this.loginSuspendedAt = null;
+        this.loginSuspendedReason = null;
+    }
+
+    public boolean isLoginSuspended() {
+        return loginSuspended;
+    }
+
+    public Instant getLoginSuspendedAt() {
+        return loginSuspendedAt;
+    }
+
+    public String getLoginSuspendedReason() {
+        return loginSuspendedReason;
     }
 
     public void setRole(Role role) {

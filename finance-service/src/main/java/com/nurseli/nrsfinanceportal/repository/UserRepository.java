@@ -14,6 +14,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByKeycloakUserId(String keycloakUserId);
     List<User> findByRole(Role role);
 
+    long countByRole(Role role);
+
     @Query("""
             SELECT DISTINCT u.id FROM User u
             WHERE EXISTS (SELECT 1 FROM PortfolioAsset pa WHERE pa.user = u)

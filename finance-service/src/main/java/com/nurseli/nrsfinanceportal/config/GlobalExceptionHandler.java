@@ -12,8 +12,10 @@ import org.apache.logging.log4j.ThreadContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
@@ -51,12 +53,36 @@ public class GlobalExceptionHandler {
         return map;
     }
 
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<?>> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
+        String msg = ex.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+                .orElse("Geçersiz istek gövdesi");
+        log.warn("[EXCEPTION] MethodArgumentNotValidException: {}", msg);
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(errorBody(ApiErrorCode.BAD_REQUEST, msg, request)));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<?>> handleBadRequest(IllegalArgumentException ex, HttpServletRequest request) {
         log.warn("[EXCEPTION] IllegalArgumentException: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(errorBody(ApiErrorCode.BAD_REQUEST, ex.getMessage(), request)));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiResponse<?>> handleStatus(ResponseStatusException ex, HttpServletRequest request) {
+        HttpStatus code = HttpStatus.resolve(ex.getStatusCode().value());
+        HttpStatus status = code != null ? code : HttpStatus.INTERNAL_SERVER_ERROR;
+        String reason = ex.getReason();
+        log.warn("[EXCEPTION] ResponseStatusException: {} {}", status.value(), reason);
+        return ResponseEntity
+                .status(status)
+                .body(ApiResponse.error(errorBody(ApiErrorCode.INTERNAL_SERVER_ERROR,
+                        reason != null ? reason : status.getReasonPhrase(), request)));
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -99,12 +125,21 @@ public class GlobalExceptionHandler {
 
             String path = request != null ? request.getRequestURI() : "unknown";
             String msg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
-            String body = "Endpoint: " + path + "\nHata: " + msg;
+            String body = """
+                    Bakım ekibine otomatik bildirim:
+
+                    • Endpoint: %s
+                    • Özet: %s
+
+                    Lütfen sunucu günlüklerinden ayrıntılı iz kontrolü yapınız.
+
+                    NRS Finance Portal
+                    """.formatted(path, msg);
 
             userRepository.findByRole(Role.ADMIN).forEach(admin ->
                     notificationEventKafkaPublisher.publish(new NotificationRequestedEvent(
                             admin.getKeycloakUserId(),
-                            "Sistem hatası tespit edildi",
+                            "Sistem hatası bildirimi",
                             body,
                             "SYSTEM_ERROR",
                             "system",
