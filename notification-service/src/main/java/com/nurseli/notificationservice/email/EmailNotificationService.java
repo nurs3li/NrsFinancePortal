@@ -130,124 +130,36 @@ public class EmailNotificationService {
         }
     }
 
+    /**
+     * finance-service tam konu ve gövde üretir; burada önce olaydaki title/body kullanılır.
+     * Başlık boşsa tip için güvenli varsayılan (eski istemciler / sistem olayları).
+     */
     private String buildSubject(NotificationRequestedEvent event) {
+        if (event.title() != null && !event.title().isBlank()) {
+            return event.title().trim();
+        }
         String type = event.type();
-
-        if ("ACCOUNT_FROZEN".equals(type)) {
-            return "Hesabınız donduruldu";
+        if (type == null) {
+            return "Bildirim";
         }
-        if ("ACCOUNT_UNFROZEN".equals(type)) {
-            return "Hesabınız yeniden kullanıma açıldı";
-        }
-        if ("REVIEW_TASK_CREATED".equals(type)) {
-            return "Yeni inceleme görevi oluşturuldu";
-        }
-        if ("WHALE_SPIKE".equals(type)) {
-            return "Whale alert spike tespit edildi";
-        }
-
-        // Fund request akışı
-        if ("FUND_REQUEST_CREATED".equals(type)) {
-            return "Yeni para talebi inceleme bekliyor";
-        }
-        if ("FUND_REQUEST_APPROVED".equals(type)) {
-            return "Para talebiniz onaylandı";
-        }
-        if ("FUND_REQUEST_REJECTED".equals(type)) {
-            return "Para talebiniz reddedildi";
-        }
-
-        return event.title() != null ? event.title() : "Bildirim";
+        return switch (type) {
+            case "ACCOUNT_FROZEN" -> "Hesabınız güvenlik nedeniyle donduruldu";
+            case "ACCOUNT_UNFROZEN" -> "Hesabınız tekrar kullanıma açıldı";
+            case "REVIEW_TASK_CREATED" -> "Yeni inceleme görevi (havuz)";
+            case "WHALE_SPIKE" -> "Whale uyarısı yoğunluğu";
+            case "FUND_REQUEST_CREATED" -> "Manuel inceleme bekleyen para talebi";
+            case "FUND_REQUEST_APPROVED" -> "Para talebiniz onaylandı";
+            case "FUND_REQUEST_REJECTED" -> "Para talebiniz reddedildi";
+            case "USER_REGISTERED" -> "Yeni kullanıcı kaydı";
+            case "SYSTEM_ERROR" -> "Sistem hatası bildirimi";
+            default -> "Bildirim";
+        };
     }
 
     private String buildBody(NotificationRequestedEvent event) {
-        String type = event.type();
-
-        if ("REVIEW_TASK_CREATED".equals(type)) {
-            StringBuilder sb = new StringBuilder();
-            sb.append("Merhaba,\n\n");
-            sb.append("Size yeni bir inceleme görevi atandı.\n\n");
-            if (event.referenceType() != null && event.referenceId() != null) {
-                sb.append("- Görev tipi: ").append(event.referenceType()).append("\n");
-                sb.append("- Görev ID: ").append(event.referenceId()).append("\n\n");
-            }
-            if (event.body() != null && !event.body().isBlank()) {
-                sb.append(event.body()).append("\n\n");
-            }
-            sb.append("NRS Finance Portal üzerinden görev detaylarını görüntüleyebilirsiniz.\n");
-            sb.append("İyi çalışmalar.\n");
-            return sb.toString();
-        }
-
-        if ("FUND_REQUEST_CREATED".equals(type)) {
-            return buildFundCreatedBody(event);
-        }
-        if ("FUND_REQUEST_APPROVED".equals(type)) {
-            return buildFundApprovedBody(event);
-        }
-        if ("FUND_REQUEST_REJECTED".equals(type)) {
-            return buildFundRejectedBody(event);
-        }
-
-        return event.body() != null ? event.body() : "";
-    }
-
-    private String buildFundCreatedBody(NotificationRequestedEvent event) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Merhaba,\n\n");
-        sb.append("Yeni bir para talebi oluşturuldu ve incelemenizi bekliyor.\n\n");
-
-        if (event.referenceId() != null) {
-            sb.append("- Talep ID: ").append(event.referenceId()).append("\n");
-        }
-        if (event.referenceType() != null && !event.referenceType().isBlank()) {
-            sb.append("- Referans tipi: ").append(event.referenceType()).append("\n");
-        }
-
         if (event.body() != null && !event.body().isBlank()) {
-            sb.append("\nDetay:\n");
-            sb.append(event.body()).append("\n");
+            return event.body();
         }
-
-        sb.append("\nNRS Finance Portal > Finance Manager panelinden talebi onaylayabilir/reddedebilirsiniz.\n");
-        sb.append("İyi çalışmalar.\n");
-        return sb.toString();
-    }
-
-    private String buildFundApprovedBody(NotificationRequestedEvent event) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Merhaba,\n\n");
-        sb.append("Para talebiniz onaylandı.\n");
-
-        if (event.referenceId() != null) {
-            sb.append("- Talep ID: ").append(event.referenceId()).append("\n");
-        }
-
-        if (event.body() != null && !event.body().isBlank()) {
-            sb.append("\nDetay:\n");
-            sb.append(event.body()).append("\n");
-        }
-
-        sb.append("\nİşleminiz tamamlanmıştır.\n");
-        sb.append("NRS Finance Portal üzerinden bakiyenizi kontrol edebilirsiniz.\n");
-        return sb.toString();
-    }
-
-    private String buildFundRejectedBody(NotificationRequestedEvent event) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Merhaba,\n\n");
-        sb.append("Para talebiniz reddedildi.\n");
-
-        if (event.referenceId() != null) {
-            sb.append("- Talep ID: ").append(event.referenceId()).append("\n");
-        }
-
-        if (event.body() != null && !event.body().isBlank()) {
-            sb.append("\nDetay:\n");
-            sb.append(event.body()).append("\n");
-        }
-
-        sb.append("\nGerekirse bilgileri güncelleyip yeni talep oluşturabilirsiniz.\n");
-        return sb.toString();
+        return "";
     }
 }
