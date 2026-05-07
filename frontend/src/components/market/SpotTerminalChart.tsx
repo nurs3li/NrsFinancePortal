@@ -3,64 +3,62 @@ import { createChart } from 'lightweight-charts';
 import type { Time } from 'lightweight-charts';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
-type BondPoint = {
+type CandlePoint = {
     time: string;
-    price: number;
-    yieldPct: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
     volume?: number;
 };
 
-type ThemeSlice = {
-    bgCard: string;
-    border: string;
-    text: string;
-    textMuted: string;
-};
-
 type Props = {
-    points: BondPoint[];
+    title: string;
+    candles: CandlePoint[];
     ma7: { time: string; value: number }[];
     ma21: { time: string; value: number }[];
     showMa: boolean;
     loading: boolean;
-    timeframeLabel?: string;
     trendLabel?: 'UP' | 'DOWN';
-    tokens: ThemeSlice;
+    timeframeLabel?: string;
+    tokens: {
+        bgCard: string;
+        border: string;
+        text: string;
+        textMuted: string;
+    };
 };
 
 function toChartTime(value: string): Time {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value.slice(0, 10) as Time;
     const hasClock = /T\d{2}:\d{2}:\d{2}/.test(value);
-    if (hasClock) {
-        return Math.floor(d.getTime() / 1000) as Time;
-    }
+    if (hasClock) return Math.floor(d.getTime() / 1000) as Time;
     return d.toISOString().slice(0, 10) as Time;
 }
 
 function chartTimeKey(value: Time): string {
-    if (typeof value === 'number') {
-        return new Date(value * 1000).toISOString();
-    }
+    if (typeof value === 'number') return new Date(value * 1000).toISOString();
     return String(value);
 }
 
-export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timeframeLabel, trendLabel, tokens }: Props) {
+export function SpotTerminalChart({ title, candles, ma7, ma21, showMa, loading, trendLabel, timeframeLabel, tokens }: Props) {
     const chartRef = useRef<HTMLDivElement>(null);
-    const [hover, setHover] = useState<{ time: string; price: number; yieldPct: number } | null>(null);
+    const [hover, setHover] = useState<{ close: number } | null>(null);
     const chartHeight = 520;
+
     const sorted = useMemo(() => {
-        const byTime = new Map<string, BondPoint>();
-        [...points]
-            .filter((p) => Number.isFinite(p.price) && p.price > 0)
+        const byTime = new Map<string, CandlePoint>();
+        [...candles]
+            .filter((c) => Number.isFinite(c.close) && c.close > 0)
             .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
-            .forEach((p) => byTime.set(chartTimeKey(toChartTime(p.time)), p));
+            .forEach((c) => byTime.set(chartTimeKey(toChartTime(c.time)), c));
         return [...byTime.values()];
-    }, [points]);
+    }, [candles]);
 
     useEffect(() => {
         const el = chartRef.current;
-        if (!el || loading || !sorted.length) return;
+        if (!el || loading || sorted.length < 2) return;
 
         const chartRange = parseTerminalChartRange(timeframeLabel);
         const widthPx = Math.max(320, el.clientWidth);
@@ -74,11 +72,10 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                 textColor: tokens.text,
             },
             grid: {
-                vertLines: { color: 'rgba(71, 85, 105, 0.25)' },
-                horzLines: { color: 'rgba(71, 85, 105, 0.25)' },
+                vertLines: { color: 'rgba(71, 85, 105, 0.18)' },
+                horzLines: { color: 'rgba(71, 85, 105, 0.18)' },
             },
-            leftPriceScale: { visible: true, borderColor: tokens.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
-            rightPriceScale: { visible: true, borderColor: tokens.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
+            rightPriceScale: { borderColor: tokens.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
             timeScale: {
                 borderColor: tokens.border,
                 timeVisible: true,
@@ -88,46 +85,36 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
             crosshair: { mode: 1 },
         });
 
-        const priceArea = chart.addAreaSeries({
-            priceScaleId: 'left',
-            lineColor: '#0f3d91',
-            topColor: 'rgba(15,61,145,0.45)',
-            bottomColor: 'rgba(15,61,145,0.06)',
+        const closeArea = chart.addAreaSeries({
+            lineColor: '#38bdf8',
+            topColor: 'rgba(56,189,248,0.45)',
+            bottomColor: 'rgba(56,189,248,0.12)',
             lineWidth: 2,
             priceLineVisible: false,
             lastValueVisible: true,
         });
-        priceArea.setData(
-            sorted
-                .filter((p) => Number.isFinite(p.price) && p.price > 0)
-                .map((p) => ({ time: toChartTime(p.time), value: p.price }))
-        );
-
-        const yieldLine = chart.addLineSeries({
-            priceScaleId: 'right',
-            color: '#cbd5e1',
+        const closeLine = chart.addLineSeries({
+            color: '#0ea5e9',
             lineWidth: 2,
+            pointMarkersVisible: true,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 4,
             priceLineVisible: false,
-            lastValueVisible: true,
+            lastValueVisible: false,
         });
-        yieldLine.setData(
-            sorted
-                .filter((p) => Number.isFinite(p.yieldPct))
-                .map((p) => ({ time: toChartTime(p.time), value: p.yieldPct }))
-        );
+        const closeData = sorted.map((p) => ({ time: toChartTime(p.time), value: p.close }));
+        closeArea.setData(closeData);
+        closeLine.setData(closeData);
 
         if (showMa) {
             const ma7Series = chart.addLineSeries({
-                priceScaleId: 'left',
-                color: '#38bdf8',
+                color: '#22c55e',
                 lineWidth: 2,
                 priceLineVisible: false,
                 lastValueVisible: false,
             });
             ma7Series.setData(ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })));
-
             const ma21Series = chart.addLineSeries({
-                priceScaleId: 'left',
                 color: '#f59e0b',
                 lineWidth: 2,
                 priceLineVisible: false,
@@ -135,24 +122,6 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
             });
             ma21Series.setData(ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })));
         }
-
-        const volumeSeries = chart.addHistogramSeries({
-            color: 'rgba(148, 163, 184, 0.25)',
-            priceFormat: { type: 'volume' },
-            priceScaleId: '',
-            lastValueVisible: false,
-            priceLineVisible: false,
-        });
-        volumeSeries.priceScale().applyOptions({
-            scaleMargins: { top: 0.92, bottom: 0 },
-        });
-        volumeSeries.setData(
-            sorted.map((p) => ({
-                time: toChartTime(p.time),
-                value: Number(p.volume ?? 0),
-                color: 'rgba(148,163,184,0.2)',
-            }))
-        );
 
         chart.subscribeCrosshairMove((param) => {
             if (!param?.time) {
@@ -165,11 +134,7 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                 setHover(null);
                 return;
             }
-            setHover({
-                time: key.slice(0, 10),
-                price: row.price,
-                yieldPct: row.yieldPct,
-            });
+            setHover({ close: row.close });
         });
 
         const fit = () => requestAnimationFrame(() => chart.timeScale().fitContent());
@@ -196,36 +161,26 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
         };
     }, [loading, sorted, ma7, ma21, showMa, tokens, timeframeLabel]);
 
-    if (loading) {
-        return <div className="terminal-chart-empty">Grafik yükleniyor...</div>;
-    }
-    if (!sorted.length) {
-        return <div className="terminal-chart-empty">Tahvil fiyat/getiri verisi bulunamadı.</div>;
-    }
-    if (sorted.length < 2) {
-        return <div className="terminal-chart-empty">Tahvil grafik için en az 2 veri noktası gerekli.</div>;
-    }
+    if (loading) return <div className="terminal-chart-empty">Grafik yükleniyor...</div>;
+    if (!sorted.length) return <div className="terminal-chart-empty">Analiz grafiği için veri bulunamadı.</div>;
+    if (sorted.length < 2) return <div className="terminal-chart-empty">Analiz grafiği için en az 2 veri noktası gerekli.</div>;
 
     return (
         <div className="terminal-chart-wrap">
             <div className="terminal-chart-header">
-                <div className="terminal-chart-title">Tahvil Analiz (Fiyat + Getiri)</div>
+                <div className="terminal-chart-title">{title}</div>
                 <div className="terminal-chart-badges">
                     {timeframeLabel ? <span className="terminal-chart-badge">Zaman: {timeframeLabel}</span> : null}
                     {trendLabel ? (
-                        <span className={`terminal-chart-badge ${trendLabel === 'UP' ? 'up' : 'down'}`}>
-                            Trend: {trendLabel}
-                        </span>
+                        <span className={`terminal-chart-badge ${trendLabel === 'UP' ? 'up' : 'down'}`}>Trend: {trendLabel}</span>
                     ) : null}
                 </div>
                 {hover ? (
                     <div className="terminal-ohlc">
-                        <span>Fiyat {hover.price.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</span>
-                        <span>YTM %{hover.yieldPct.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</span>
-                        <span>{hover.time}</span>
+                        <span>Fiyat {hover.close.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</span>
                     </div>
                 ) : (
-                    <div className="terminal-ohlc muted">Fiyat ve getiri için imleci grafik üzerine getir</div>
+                    <div className="terminal-ohlc muted">Fiyat için imleci grafik üzerine getir</div>
                 )}
             </div>
             <div ref={chartRef} style={{ width: '100%', height: chartHeight }} />
