@@ -14,7 +14,9 @@ import java.util.*;
 @RequiredArgsConstructor
 public class UserStarredAssetService {
 
-    private static final int MAX_ITEMS = 7;
+    private static final int MAX_ITEMS = 12;
+    private static final int MAX_MARKET_TYPE_LEN = 24;
+    private static final int MAX_SYMBOL_LEN = 32;
     private static final Set<String> ALLOWED_MARKET_TYPES = Set.of("FX", "METALS", "CRYPTO", "FUNDS", "EQUITY");
     private static final List<StarKey> DEFAULTS = List.of(
             new StarKey("METALS", "XAU_TRY"),
@@ -23,7 +25,12 @@ public class UserStarredAssetService {
             new StarKey("FUNDS", "VWO"),
             new StarKey("EQUITY", "AAPL"),
             new StarKey("EQUITY", "GOOGL"),
-            new StarKey("EQUITY", "TSLA")
+            new StarKey("EQUITY", "TSLA"),
+            new StarKey("CRYPTO", "ETHUSDT"),
+            new StarKey("FX", "EURTRY"),
+            new StarKey("FUNDS", "QQQ"),
+            new StarKey("FUNDS", "SPY"),
+            new StarKey("EQUITY", "MSFT")
     );
 
     private final CurrentUserResolver currentUserResolver;
@@ -40,6 +47,8 @@ public class UserStarredAssetService {
         User user = currentUserResolver.getOrCreateCurrentUser();
         List<StarKey> normalized = normalizeAndValidate(request != null ? request.selected() : List.of());
         userStarredAssetRepository.deleteByUserId(user.getId());
+        // Ensure old rows are physically removed before inserting the new ordered list.
+        userStarredAssetRepository.flush();
 
         int position = 1;
         for (StarKey key : normalized) {
@@ -83,7 +92,7 @@ public class UserStarredAssetService {
 
         LinkedHashSet<StarKey> uniq = new LinkedHashSet<>();
         for (StarredAssetSelectionRequest row : list) {
-            String marketType = row != null && row.marketType() != null ? row.marketType().trim().toUpperCase() : "";
+            String marketType = row != null && row.marketType() != null ? normalizeMarketType(row.marketType()) : "";
             String symbol = row != null && row.symbol() != null ? row.symbol().trim().toUpperCase() : "";
             if (marketType.isBlank() || symbol.isBlank()) {
                 throw new IllegalArgumentException("marketType ve symbol zorunludur.");
@@ -91,12 +100,27 @@ public class UserStarredAssetService {
             if (!ALLOWED_MARKET_TYPES.contains(marketType)) {
                 throw new IllegalArgumentException("Desteklenmeyen marketType: " + marketType);
             }
+            if (marketType.length() > MAX_MARKET_TYPE_LEN) {
+                throw new IllegalArgumentException("marketType uzunluğu gecersiz: " + marketType);
+            }
+            if (symbol.length() > MAX_SYMBOL_LEN) {
+                throw new IllegalArgumentException("symbol uzunluğu gecersiz: " + symbol);
+            }
             uniq.add(new StarKey(marketType, symbol));
             if (uniq.size() > MAX_ITEMS) {
                 throw new IllegalArgumentException("En fazla " + MAX_ITEMS + " varlik secilebilir.");
             }
         }
         return new ArrayList<>(uniq);
+    }
+
+    private String normalizeMarketType(String raw) {
+        String marketType = raw == null ? "" : raw.trim().toUpperCase();
+        return switch (marketType) {
+            case "METAL" -> "METALS";
+            case "FUND" -> "FUNDS";
+            default -> marketType;
+        };
     }
 
     private record StarKey(String marketType, String symbol) {}
