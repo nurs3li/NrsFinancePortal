@@ -108,6 +108,9 @@ public class ViopBackfillRunner implements ApplicationRunner {
             try {
                 String[] values = line.split(delimiter, -1);
                 String contractCode = get(values, headerIndex, "SOZLESME_KODU", "INSTRUMENT_SERIES");
+                if (isHeaderRow(contractCode)) {
+                    continue;
+                }
                 if (contractCode == null || contractCode.isBlank()) {
                     stats.rowErrors++;
                     continue;
@@ -206,6 +209,12 @@ public class ViopBackfillRunner implements ApplicationRunner {
             }
         }
         return null;
+    }
+
+    private boolean isHeaderRow(String contractCode) {
+        if (contractCode == null) return false;
+        String normalized = normalize(contractCode);
+        return "INSTRUMENT_SERIES".equals(normalized) || "SOZLESME_KODU".equals(normalized);
     }
 
     private BigDecimal parseDecimal(String raw) {

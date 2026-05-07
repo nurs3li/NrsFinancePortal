@@ -17,6 +17,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class FundMarketScheduler {
 
+    private static final int FUND_HISTORY_DAYS = 365;
+
     private final FundPriceIngestService service;
     private final EtfProperties etfProperties;
 
@@ -27,6 +29,7 @@ public class FundMarketScheduler {
         List<String> symbols = etfProperties.getSymbols();
         if (symbols != null) {
             symbols.forEach(symbol -> service.ingestForDate(symbol, yesterday));
+            symbols.forEach(symbol -> service.ingestHistory(symbol, FUND_HISTORY_DAYS));
         }
     }
 

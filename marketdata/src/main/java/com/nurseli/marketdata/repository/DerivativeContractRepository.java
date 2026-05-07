@@ -7,4 +7,5 @@ import java.util.Optional;
 
 public interface DerivativeContractRepository extends JpaRepository<DerivativeContract, Long> {
     Optional<DerivativeContract> findByContractCode(String contractCode);
+    void deleteByContractCode(String contractCode);
 }

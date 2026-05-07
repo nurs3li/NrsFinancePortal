@@ -300,7 +300,7 @@ app:
       kafkaTopic: ${VIOP_HYBRID_KAFKA_TOPIC:high-volatility-alert}
       openInterestSurgeThresholdPct: ${VIOP_OI_SURGE_THRESHOLD_PCT:10}
     backfill:
-      enabled: ${VIOP_BACKFILL_ENABLED:false}
+      enabled: ${VIOP_BACKFILL_ENABLED:true}
       dir: ${VIOP_BACKFILL_DIR:artifacts/viop}
       pattern: ${VIOP_BACKFILL_PATTERN:viop_*.csv}
       shutdownOnComplete: ${VIOP_BACKFILL_SHUTDOWN_ON_COMPLETE:false}

@@ -32,6 +32,6 @@ public class MetalMarketController {
             @RequestParam(defaultValue = "XAU_TRY") String symbol,
             @RequestParam(defaultValue = "7") int days
     ) {
-        return queryService.getHistory(symbol, days);
+        return queryService.getMetalHistory(symbol, days);
     }
 }

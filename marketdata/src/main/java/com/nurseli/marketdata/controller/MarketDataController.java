@@ -2,6 +2,8 @@ package com.nurseli.marketdata.controller;
 
 import com.nurseli.marketdata.api.dto.MarketPriceHistoryResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceLatestResponse;
+import com.nurseli.marketdata.api.dto.CandlePointResponse;
+import com.nurseli.marketdata.api.dto.DataQualityFlag;
 import com.nurseli.marketdata.application.MarketPriceQueryService;
 import com.nurseli.marketdata.application.provider.FxProviderFacade;
 import com.nurseli.marketdata.application.provider.ProviderRegistry;
@@ -9,6 +11,7 @@ import com.nurseli.marketdata.application.provider.FxProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -78,15 +81,45 @@ public class MarketDataController {
     ) {
         FxProvider selected = providerRegistry.fxByNameOrCanonical(provider);
         List<MarketPriceHistoryResponse> result = selected.getHistory(symbol, days);
-        if (!result.isEmpty()) {
+        if (result.size() >= 2) {
             return result;
         }
         for (FxProvider fallback : providerRegistry.fxFallbackOrder()) {
             List<MarketPriceHistoryResponse> fallbackHistory = fallback.getHistory(symbol, days);
-            if (!fallbackHistory.isEmpty()) {
+            if (fallbackHistory.size() >= 2) {
                 return fallbackHistory;
             }
         }
-        return queryService.getHistory(symbol, days);
+        List<MarketPriceHistoryResponse> dbHistory = queryService.getHistory(symbol, days);
+        List<MarketPriceHistoryResponse> best = dbHistory.size() > result.size() ? dbHistory : result;
+
+        try {
+            List<CandlePointResponse> candles =
+                    queryService.getBatchHistory("FX", List.of(symbol), days).series().getOrDefault(symbol.toUpperCase(), List.of());
+            List<MarketPriceHistoryResponse> fromCandles = candlesToHistory(candles);
+            if (fromCandles.size() > best.size()) {
+                return fromCandles;
+            }
+        } catch (Exception ignored) {
+            // batch fallback başarısızsa mevcut davranışı koru
+        }
+
+        return best;
+    }
+
+    private static List<MarketPriceHistoryResponse> candlesToHistory(List<CandlePointResponse> candles) {
+        return candles.stream()
+                .map(c -> {
+                    BigDecimal px = c.c();
+                    return new MarketPriceHistoryResponse(
+                            px,
+                            px,
+                            c.t(),
+                            "SYSTEM",
+                            c.t(),
+                            DataQualityFlag.EXACT
+                    );
+                })
+                .toList();
     }
 }

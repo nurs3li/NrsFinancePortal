@@ -49,6 +49,7 @@ public class MarketPriceQueryService {
     private final EquityProperties equityProperties;
     private final EtfProperties etfProperties;
     private final EquityMarketCapService equityMarketCapService;
+    private final MetalPriceIngestService metalPriceIngestService;
 
     public MarketPriceLatestResponse getLatestOrThrow(String symbol) {
         return repository
@@ -132,10 +133,14 @@ public class MarketPriceQueryService {
     }
 
     public List<MarketPriceHistoryResponse> getHistory(String symbol, int days) {
+        if (symbol == null || symbol.isBlank()) {
+            return List.of();
+        }
+        String sym = symbol.trim().toUpperCase();
         LocalDateTime end = LocalDateTime.now();
         LocalDateTime start = end.minusDays(days);
 
-        List<MarketPriceBucketView> buckets = repository.findBucketedHistory(symbol, start, end);
+        List<MarketPriceBucketView> buckets = repository.findBucketedHistory(sym, start, end);
 
         return buckets.stream()
                 .map(b -> new MarketPriceHistoryResponse(
@@ -185,6 +190,34 @@ public class MarketPriceQueryService {
         LocalDateTime end = LocalDateTime.now();
         LocalDateTime start = end.minusDays(days);
         List<CandlePointResponse> candles = toCryptoCandles(symbol, start.toLocalDate(), end.toLocalDate());
+        if (!candles.isEmpty()) {
+            return toHistoryFromCandles(candles);
+        }
+        return getHistory(symbol, days);
+    }
+
+    /**
+     * Altın (XAU_TRY) geçmişi — piyasa batch grafiğiyle aynı kaynak: ham satırlar → günlük mum.
+     * Dakika kovası ({@link #getHistory}) çok büyük seri üretebildiği için simülasyon / uzun aralıkta
+     * tüketici istemcilerde zaman aşımı veya boş yanıt riski vardı.
+     */
+    public List<MarketPriceHistoryResponse> getMetalHistory(String rawSymbol, int days) {
+        if (rawSymbol == null || rawSymbol.isBlank()) {
+            throw new InvalidRequestException("symbol zorunludur.");
+        }
+        String symbol = rawSymbol.trim().toUpperCase();
+        if (!isAllowedSymbol(MarketType.METALS, symbol)) {
+            throw new InvalidRequestException("type=METALS için geçersiz symbol: " + symbol);
+        }
+        if (days <= 0) {
+            return List.of();
+        }
+        metalPriceIngestService.ensureHistoricalBackfill(days);
+        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime start = end.minusDays(days);
+        List<MarketPriceHistory> rows =
+                repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
+        List<CandlePointResponse> candles = toDailyCandles(rows);
         if (!candles.isEmpty()) {
             return toHistoryFromCandles(candles);
         }

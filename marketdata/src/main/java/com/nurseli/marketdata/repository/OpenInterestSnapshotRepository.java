@@ -10,4 +10,5 @@ public interface OpenInterestSnapshotRepository extends JpaRepository<OpenIntere
     List<OpenInterestSnapshot> findByContractCodeOrderByAsOfAsc(String contractCode);
     Optional<OpenInterestSnapshot> findTopByContractCodeOrderByAsOfDesc(String contractCode);
     boolean existsByContractCodeAndAsOf(String contractCode, java.time.LocalDateTime asOf);
+    void deleteByContractCode(String contractCode);
 }
