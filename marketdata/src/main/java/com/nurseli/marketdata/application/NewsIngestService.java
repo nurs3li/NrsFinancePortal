@@ -101,6 +101,36 @@ public class NewsIngestService {
     private NewsCategory classifyCategory(NewsCategory feedCategory, String headline, String summary) {
         String text = ((headline == null ? "" : headline) + " " + (summary == null ? "" : summary))
                 .toLowerCase(Locale.ROOT);
+        if (text.contains("altın")
+                || text.contains("gold")
+                || text.contains("xau")
+                || text.contains("ons")
+                || text.contains("silver")
+                || text.contains("gümüş")
+                || text.contains("brent")
+                || text.contains("crude oil")
+                || text.contains("emtia")
+                || text.contains("commodity")) {
+            return NewsCategory.COMMODITY;
+        }
+        if (text.contains("etf")
+                || text.contains("fund")
+                || text.contains("fon")
+                || text.contains("mutual fund")
+                || text.contains("index fund")
+                || text.contains("exchange traded fund")
+                || text.contains("vanguard")
+                || text.contains("ishares")
+                || text.contains("spy")
+                || text.contains("qqq")
+                || text.contains("voo")
+                || text.contains("vti")
+                || text.contains("iwm")
+                || text.contains("eem")
+                || text.contains("vwo")
+                || text.contains("gld")) {
+            return NewsCategory.FUND;
+        }
         if (text.contains("viop")
                 || text.contains("vadeli")
                 || text.contains("futures")
@@ -126,7 +156,7 @@ public class NewsIngestService {
         if (category == null) return 0;
         return switch (category) {
             case GENERAL -> 0;
-            case FOREX, CRYPTO, STOCK, BOND, COMMODITY -> 1;
+            case FOREX, CRYPTO, STOCK, FUND, BOND, COMMODITY -> 1;
             case VIOP -> 2;
         };
     }
