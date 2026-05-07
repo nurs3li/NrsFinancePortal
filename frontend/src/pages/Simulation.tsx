@@ -192,17 +192,37 @@ export function Simulation() {
         [simulationResults]
     );
 
+    /** Ortak zaman ekseninde her serinin son bilinen kümülatif %-ini taşıyarak çizgilerin kopmamasını sağla */
     const chartData = useMemo(() => {
-        const dateMap = new Map<string, Record<string, number | string>>();
+        if (!visibleResults.length) return [];
+
+        const seriesKeys = visibleResults.map(
+            (res) => `${res.assetType}-${res.assetName}-${res.id.slice(-4)}`,
+        );
+        const dateSet = new Set<string>();
         visibleResults.forEach((res) => {
-            const key = `${res.assetType}-${res.assetName}-${res.id.slice(-4)}`;
-            res.series.forEach((point) => {
-                const row = dateMap.get(point.date) ?? { date: point.date };
-                row[key] = point.cumulativeReturnPct;
-                dateMap.set(point.date, row);
-            });
+            res.series.forEach((p) => dateSet.add(p.date));
         });
-        return [...dateMap.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        const sortedDates = [...dateSet].sort((a, b) => a.localeCompare(b));
+
+        const lastPct: Record<string, number> = {};
+        const rows: Array<Record<string, number | string>> = [];
+
+        for (const date of sortedDates) {
+            const row: Record<string, number | string> = { date };
+            visibleResults.forEach((res, i) => {
+                const key = seriesKeys[i];
+                const pt = res.series.find((p) => p.date === date);
+                if (pt != null) {
+                    lastPct[key] = pt.cumulativeReturnPct;
+                }
+                if (key in lastPct) {
+                    row[key] = lastPct[key];
+                }
+            });
+            rows.push(row);
+        }
+        return rows;
     }, [visibleResults]);
 
     const displayedResults = useMemo(() => {
@@ -453,6 +473,7 @@ export function Simulation() {
                                             stroke={LINE_COLORS[i % LINE_COLORS.length]}
                                             strokeWidth={2}
                                             dot={false}
+                                            connectNulls
                                         />
                                     );
                                 })}
@@ -517,8 +538,15 @@ export function Simulation() {
                                 <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Görünür</th>
                                 <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Varlık</th>
                                 <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Başlangıç</th>
-                                <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Alış</th>
-                                <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Güncel</th>
+                                <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }} title="TRY / birim">
+                                    Alış (birim)
+                                </th>
+                                <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }} title="Güncel birim TRY fiyatı">
+                                    Güncel (birim)
+                                </th>
+                                <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }} title="Başlangıç tutarı + PNL">
+                                    Şu an toplam (TRY)
+                                </th>
                                 <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>PNL</th>
                                 <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Kaynak/Tarih/Kalite</th>
                                 <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>İşlem</th>
@@ -527,7 +555,7 @@ export function Simulation() {
                         <tbody>
                             {displayedResults.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} style={{ padding: 10, color: tokens.textMuted, textAlign: 'center' }}>
+                                    <td colSpan={9} style={{ padding: 10, color: tokens.textMuted, textAlign: 'center' }}>
                                         Henüz simülasyon yok.
                                     </td>
                                 </tr>
@@ -551,6 +579,9 @@ export function Simulation() {
                                         <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.initialAmount)}</td>
                                         <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.buyPrice)}</td>
                                         <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.currentPrice)}</td>
+                                        <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}`, fontWeight: 700 }}>
+                                            {fmtMoney(r.currentValue)}
+                                        </td>
                                         <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
                                             <span style={{ color: r.pnl >= 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>
                                                 {fmtMoney(r.pnl)} ({r.pnlPct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%)
