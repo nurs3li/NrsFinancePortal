@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import type { ISeriesApi, Time, CandlestickData } from 'lightweight-charts';
+import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type CandleVM = {
     time: string;
@@ -16,6 +17,7 @@ type MarkerVM = {
     position: 'aboveBar' | 'belowBar';
     color: string;
     shape: 'circle' | 'square' | 'arrowUp' | 'arrowDown';
+    size?: 1 | 2 | 3;
     text: string;
 };
 
@@ -25,17 +27,6 @@ type ThemeSlice = {
     border: string;
     text: string;
     textMuted: string;
-};
-
-type NewsMarkerLite = {
-    id: string;
-    time: string;
-    tone: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
-    count: number;
-    items: { id: number; title: string; source?: string | null; publishedAt: string }[];
-    matchedSymbols: string[];
-    relevanceScore: number;
-    impact: 'HIGH' | 'MEDIUM' | 'LOW';
 };
 
 type Props = {
@@ -51,8 +42,6 @@ type Props = {
     symbol: string;
     trendLabel?: 'UP' | 'DOWN';
     timeframeLabel?: string;
-    newsMarkers?: NewsMarkerLite[];
-    onNewsSelect?: (marker: NewsMarkerLite | null) => void;
 };
 
 function toChartTime(value: string): Time {
@@ -64,23 +53,6 @@ function toChartTime(value: string): Time {
     }
     return d.toISOString().slice(0, 10) as Time;
 }
-function chartTimeToDayKey(value: Time): string {
-    if (typeof value === 'number') {
-        return new Date(value * 1000).toISOString().slice(0, 10);
-    }
-    return String(value).slice(0, 10);
-}
-function toDayKey(value: string): string {
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value.slice(0, 10);
-    return d.toISOString().slice(0, 10);
-}
-function impactLabel(level: 'HIGH' | 'MEDIUM' | 'LOW'): string {
-    if (level === 'HIGH') return 'Yüksek';
-    if (level === 'MEDIUM') return 'Orta';
-    return 'Düşük';
-}
-
 export function MarketTerminalChart({
     candles,
     ma7,
@@ -94,19 +66,10 @@ export function MarketTerminalChart({
     symbol,
     trendLabel,
     timeframeLabel,
-    newsMarkers = [],
-    onNewsSelect,
 }: Props) {
     const wrapRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<HTMLDivElement>(null);
     const [hoverData, setHoverData] = useState<CandleVM | null>(null);
-    const [hoverNews, setHoverNews] = useState<NewsMarkerLite | null>(null);
-    const newsByDay = useMemo(() => {
-        const m = new Map<string, NewsMarkerLite>();
-        newsMarkers.forEach((n) => m.set(toDayKey(n.time), n));
-        return m;
-    }, [newsMarkers]);
-
     const sortedCandles = useMemo(() => {
         const byTime = new Map<string, CandleVM>();
         [...candles]
@@ -122,16 +85,19 @@ export function MarketTerminalChart({
             .forEach((c) => byTime.set(String(toChartTime(c.time)), c));
         return [...byTime.values()];
     }, [candles]);
-    const candleCount = sortedCandles.length;
-    const compactBars = candleCount <= 6;
+    const chartHeight = 520;
 
     useEffect(() => {
         const el = chartRef.current;
         if (!el || loading || !sortedCandles.length) return;
 
+        const chartRange = parseTerminalChartRange(timeframeLabel);
+        const widthPx = Math.max(320, el.clientWidth);
+        const tsLay = computeTerminalTimeScaleLayout(widthPx, sortedCandles.length, chartRange);
+
         const chart = createChart(el, {
-            width: el.clientWidth,
-            height: 430,
+            width: widthPx,
+            height: chartHeight,
             layout: {
                 background: { color: tokens.bgCard },
                 textColor: tokens.text,
@@ -140,14 +106,12 @@ export function MarketTerminalChart({
                 vertLines: { color: 'rgba(71, 85, 105, 0.3)' },
                 horzLines: { color: 'rgba(71, 85, 105, 0.3)' },
             },
-            rightPriceScale: { borderColor: tokens.border },
+            rightPriceScale: { borderColor: tokens.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
             timeScale: {
                 borderColor: tokens.border,
                 timeVisible: true,
                 secondsVisible: false,
-                barSpacing: compactBars ? 10 : 6,
-                minBarSpacing: compactBars ? 8 : 4,
-                rightOffset: compactBars ? 10 : 2,
+                ...tsLay,
             },
             crosshair: { mode: 1 },
         });
@@ -169,26 +133,6 @@ export function MarketTerminalChart({
             close: c.close,
         }));
         candleSeries.setData(candleData);
-        const volumeSeries = chart.addHistogramSeries({
-            color: 'rgba(56, 189, 248, 0.35)',
-            priceFormat: { type: 'volume' },
-            priceScaleId: '',
-            lastValueVisible: false,
-            priceLineVisible: false,
-        });
-        volumeSeries.priceScale().applyOptions({
-            scaleMargins: {
-                top: compactBars ? 0.9 : 0.84,
-                bottom: 0,
-            },
-        });
-        volumeSeries.setData(
-            sortedCandles.map((c) => ({
-                time: toChartTime(c.time),
-                value: Number(c.volume ?? 0),
-                color: c.close >= c.open ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)',
-            }))
-        );
         candleSeries.setMarkers(
             markers.map((m) => ({
                 ...m,
@@ -220,7 +164,6 @@ export function MarketTerminalChart({
         chart.subscribeCrosshairMove((param) => {
             if (!param?.time) {
                 setHoverData(null);
-                setHoverNews(null);
                 return;
             }
             const ohlc = param.seriesData.get(candleSeries) as
@@ -228,11 +171,8 @@ export function MarketTerminalChart({
                 | undefined;
             if (!ohlc) {
                 setHoverData(null);
-                setHoverNews(null);
                 return;
             }
-            const day = chartTimeToDayKey(param.time);
-            setHoverNews(newsByDay.get(day) ?? null);
             setHoverData({
                 time: String(param.time),
                 open: Number(ohlc.open),
@@ -242,14 +182,23 @@ export function MarketTerminalChart({
             });
         });
 
-        chart.subscribeClick((param) => {
-            if (!param?.time || !onNewsSelect) return;
-            const day = chartTimeToDayKey(param.time);
-            onNewsSelect(newsByDay.get(day) ?? null);
-        });
+        const fit = () => requestAnimationFrame(() => chart.timeScale().fitContent());
+        fit();
 
-        chart.timeScale().fitContent();
-        const onResize = () => chart.applyOptions({ width: el.clientWidth });
+        const onResize = () => {
+            const w = Math.max(320, el.clientWidth);
+            const lay = computeTerminalTimeScaleLayout(w, sortedCandles.length, chartRange);
+            chart.applyOptions({
+                width: w,
+                timeScale: {
+                    borderColor: tokens.border,
+                    timeVisible: true,
+                    secondsVisible: false,
+                    ...lay,
+                },
+            });
+            fit();
+        };
         window.addEventListener('resize', onResize);
 
         return () => {
@@ -258,7 +207,7 @@ export function MarketTerminalChart({
             ma21Series = null;
             chart.remove();
         };
-    }, [loading, sortedCandles, markers, showMa, ma7, ma21, tokens, newsByDay, onNewsSelect, compactBars]);
+    }, [loading, sortedCandles, markers, showMa, ma7, ma21, tokens, timeframeLabel]);
 
     if (loading) {
         return <div className="terminal-chart-empty">Grafik yükleniyor...</div>;
@@ -293,19 +242,7 @@ export function MarketTerminalChart({
                     <div className="terminal-ohlc muted">OHLC için imleci grafik üzerine getir</div>
                 )}
             </div>
-            {hoverNews ? (
-                <div className="terminal-news-tooltip">
-                    <div style={{ fontWeight: 700 }}>
-                        {hoverNews.tone === 'POSITIVE' ? 'Olumlu Haber' : hoverNews.tone === 'NEGATIVE' ? 'Negatif Haber' : 'Nötr Haber'}
-                    </div>
-                    <div>{hoverNews.items[0]?.title ?? '—'}</div>
-                    <div>
-                        {new Date(hoverNews.time).toLocaleString('tr-TR')} · {hoverNews.items[0]?.source ?? 'Kaynak yok'}
-                    </div>
-                    <div>Etki: {impactLabel(hoverNews.impact)}</div>
-                </div>
-            ) : null}
-            <div ref={chartRef} style={{ width: '100%', height: 430 }} />
+            <div ref={chartRef} style={{ width: '100%', height: chartHeight }} />
             {showRsi ? (
                 <div className="terminal-rsi">
                 <div className="terminal-rsi-head">RSI (14)</div>

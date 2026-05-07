@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createChart } from 'lightweight-charts';
 import type { ISeriesApi, Time } from 'lightweight-charts';
+import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type Row = { time: string; values: Record<string, number> };
 
@@ -18,6 +19,8 @@ type Props = {
     lineWidthBySymbol: Record<string, number>;
     tokens: ThemeSlice;
     height?: number;
+    /** Market terminal ile aynı 1D/1W/1M/1Y — eksen sıkılığını buna göre ayarlar */
+    timeframeLabel?: string;
 };
 
 function lineWidthClamp(n: number): 1 | 2 | 3 | 4 {
@@ -32,6 +35,7 @@ export function MarketCompareLwChart({
     lineWidthBySymbol,
     tokens,
     height = 300,
+    timeframeLabel,
 }: Props) {
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -39,8 +43,12 @@ export function MarketCompareLwChart({
         const el = containerRef.current;
         if (!el || symbols.length < 2 || !rows.length) return;
 
+        const chartRange = parseTerminalChartRange(timeframeLabel);
+        const widthPx = Math.max(320, el.clientWidth);
+        const tsLay = computeTerminalTimeScaleLayout(widthPx, rows.length, chartRange);
+
         const chart = createChart(el, {
-            width: el.clientWidth,
+            width: widthPx,
             height,
             layout: {
                 background: { color: tokens.bgCard },
@@ -51,7 +59,12 @@ export function MarketCompareLwChart({
                 horzLines: { color: tokens.border },
             },
             rightPriceScale: { borderColor: tokens.border },
-            timeScale: { borderColor: tokens.border },
+            timeScale: {
+                borderColor: tokens.border,
+                timeVisible: true,
+                secondsVisible: false,
+                ...tsLay,
+            },
             crosshair: { mode: 1 },
         });
 
@@ -75,7 +88,8 @@ export function MarketCompareLwChart({
             seriesList.push(line);
         });
 
-        chart.timeScale().fitContent();
+        const fit = () => requestAnimationFrame(() => chart.timeScale().fitContent());
+        fit();
 
         chart.subscribeCrosshairMove((param) => {
             seriesList.forEach((s, idx) => {
@@ -89,7 +103,18 @@ export function MarketCompareLwChart({
         });
 
         const onResize = () => {
-            chart.applyOptions({ width: el.clientWidth });
+            const w = Math.max(320, el.clientWidth);
+            const lay = computeTerminalTimeScaleLayout(w, rows.length, chartRange);
+            chart.applyOptions({
+                width: w,
+                timeScale: {
+                    borderColor: tokens.border,
+                    timeVisible: true,
+                    secondsVisible: false,
+                    ...lay,
+                },
+            });
+            fit();
         };
         window.addEventListener('resize', onResize);
 
@@ -97,7 +122,7 @@ export function MarketCompareLwChart({
             window.removeEventListener('resize', onResize);
             chart.remove();
         };
-    }, [rows, symbols, colors, lineWidthBySymbol, tokens, height]);
+    }, [rows, symbols, colors, lineWidthBySymbol, tokens, height, timeframeLabel]);
 
     if (symbols.length < 2 || !rows.length) {
         return null;

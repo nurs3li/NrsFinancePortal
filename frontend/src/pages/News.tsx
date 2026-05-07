@@ -23,6 +23,8 @@ const CATEGORIES = [
     { value: '', label: 'Tümü' },
     { value: 'GENERAL', label: 'Genel' },
     { value: 'FOREX', label: 'Döviz' },
+    { value: 'COMMODITY', label: 'Altın' },
+    { value: 'FUND', label: 'Fonlar' },
     { value: 'CRYPTO', label: 'Kripto' },
     { value: 'STOCK', label: 'Hisse' },
     { value: 'VIOP', label: 'VİOP' },
