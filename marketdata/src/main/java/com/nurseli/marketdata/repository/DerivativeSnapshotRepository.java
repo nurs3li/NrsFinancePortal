@@ -10,4 +10,5 @@ public interface DerivativeSnapshotRepository extends JpaRepository<DerivativeSn
     List<DerivativeSnapshot> findByContractCodeOrderByAsOfAsc(String contractCode);
     Optional<DerivativeSnapshot> findTopByContractCodeOrderByAsOfDesc(String contractCode);
     boolean existsByContractCodeAndAsOf(String contractCode, java.time.LocalDateTime asOf);
+    void deleteByContractCode(String contractCode);
 }

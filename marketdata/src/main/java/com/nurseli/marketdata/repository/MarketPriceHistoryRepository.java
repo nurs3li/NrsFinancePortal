@@ -17,6 +17,8 @@ public interface MarketPriceHistoryRepository
     // =====================================================
     Optional<MarketPriceHistory>
     findTopBySymbolOrderByTimestampDesc(String symbol);
+    Optional<MarketPriceHistory>
+    findTopBySymbolOrderByTimestampAsc(String symbol);
 
     boolean existsBySymbolAndTimestamp(String symbol, LocalDateTime timestamp);
 
@@ -75,6 +77,19 @@ public interface MarketPriceHistoryRepository
           AND m.timestamp < :end
     """)
     boolean existsForDay(
+            @Param("symbol") String symbol,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query("""
+        SELECT COUNT(m)
+        FROM MarketPriceHistory m
+        WHERE m.symbol = :symbol
+          AND m.timestamp >= :start
+          AND m.timestamp < :end
+    """)
+    long countForDay(
             @Param("symbol") String symbol,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
