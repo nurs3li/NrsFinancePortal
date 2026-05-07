@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 public class MarketDashboardService {
 
     private static final int HISTORY_DAYS = 14;
+    /** FX / kripto / emtia / fon: kısa pencerede tek nokta kalırsa sparkline ve % için yeniden dene */
+    private static final int HISTORY_DAYS_LONG = 90;
     private static final int SPARKLINE_POINTS = 24;
     private static final String MODE_EQUITY_FINVIZ = "EQUITY_FINVIZ";
     private static final String MODE_MULTI_ASSET = "MULTI_ASSET";
@@ -102,7 +104,7 @@ public class MarketDashboardService {
             String equityWeightMode = hasMarketCap ? WEIGHT_MARKET_CAP : WEIGHT_EQUAL;
             String sector = EQUITY_SECTOR.getOrDefault(symbol, "EQUITY");
             String industry = EQUITY_INDUSTRY.getOrDefault(symbol, "OTHER");
-            List<MarketPriceHistoryDto> raw = fetchHistory(AssetType.STOCK, symbol);
+            List<MarketPriceHistoryDto> raw = fetchHistory(AssetType.STOCK, symbol, HISTORY_DAYS);
             List<BigDecimal> closes = midClosesSorted(raw);
 
             if (closes.size() >= 2) {
@@ -166,8 +168,16 @@ public class MarketDashboardService {
             List<HeatmapTileEntry> heatmapTiles
     ) {
         for (String symbol : symbols) {
-            List<MarketPriceHistoryDto> raw = fetchHistory(type, symbol);
+            List<MarketPriceHistoryDto> raw = fetchHistory(type, symbol, HISTORY_DAYS);
             List<BigDecimal> closes = midClosesSorted(raw);
+            if (closes.size() < 2 && type != AssetType.STOCK) {
+                List<MarketPriceHistoryDto> longer = fetchHistory(type, symbol, HISTORY_DAYS_LONG);
+                List<BigDecimal> longCloses = midClosesSorted(longer);
+                if (longCloses.size() > closes.size()) {
+                    raw = longer;
+                    closes = longCloses;
+                }
+            }
             BigDecimal px = latestPrice(latest, type, symbol);
             double weight = layoutWeight(px);
             String sector = sectorFor(assetClass, symbol);
@@ -270,9 +280,9 @@ public class MarketDashboardService {
         return Math.sqrt(Math.max(p, 1e-6));
     }
 
-    private List<MarketPriceHistoryDto> fetchHistory(AssetType type, String symbol) {
+    private List<MarketPriceHistoryDto> fetchHistory(AssetType type, String symbol, int days) {
         try {
-            List<MarketPriceHistoryDto> list = marketDataClient.getHistory(type, symbol, HISTORY_DAYS);
+            List<MarketPriceHistoryDto> list = marketDataClient.getHistory(type, symbol, days);
             return list != null ? list : List.of();
         } catch (Exception ignored) {
             return List.of();
