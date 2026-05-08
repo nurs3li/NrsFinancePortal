@@ -6,9 +6,11 @@ import com.nurseli.nrsfinanceportal.common.dto.PortfolioPerformanceDto;
 import com.nurseli.nrsfinanceportal.domain.account.Account;
 import com.nurseli.nrsfinanceportal.domain.account.AccountType;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
+import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.repository.AccountRepository;
 import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
 import com.nurseli.nrsfinanceportal.repository.TradeRepository;
+import com.nurseli.nrsfinanceportal.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -33,8 +35,13 @@ public class DashboardSummaryService {
     private final AccountRepository accountRepository;
     private final BalanceRepository balanceRepository;
     private final TradeRepository tradeRepository;
+    private final UserRepository userRepository;
 
     public DashboardSummaryResponse getSummary(Long userId) {
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return emptySummary();
+        }
 
         /* ======================
            Demo account & balance – yoksa boş özet (ADMIN/FINANCE_MANAGER vb.)
@@ -71,7 +78,7 @@ public class DashboardSummaryService {
         /* ======================
            Portfolio — birleşik (TRADE + MANUAL), /api/portfolio/performance ile aynı mantık
            ====================== */
-        PortfolioPerformanceDto performance = portfolioPerformanceService.myPerformance();
+        PortfolioPerformanceDto performance = portfolioPerformanceService.performanceForUser(user);
         var portfolio = buildPortfolioSummary(performance);
 
         /* ======================

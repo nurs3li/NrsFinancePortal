@@ -4,6 +4,7 @@ import keycloak from '../auth/keycloak';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
+import { useLanguage } from '../i18n/LanguageContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8085';
 
@@ -44,6 +45,7 @@ function unwrapData<T>(res: any): T {
 
 export function FmFundRequests() {
     const { tokens } = useTheme();
+    const { t, lang } = useLanguage();
 
     const [items, setItems] = useState<FundRequestView[]>([]);
     const [loading, setLoading] = useState(true);
@@ -55,6 +57,30 @@ export function FmFundRequests() {
     const [rejectModalOpen, setRejectModalOpen] = useState(false);
     const [rejectTargetId, setRejectTargetId] = useState<number | null>(null);
     const [rejectNote, setRejectNote] = useState('');
+
+    const openReceipt = async (receiptFileId?: string | null, receiptFileUrl?: string | null) => {
+        const idFromUrl =
+            receiptFileUrl?.split('/receipts/')[1]?.split('?')[0]?.trim() || null;
+        const receiptId = (receiptFileId || idFromUrl || '').trim();
+        if (!receiptId) return;
+        try {
+            const res = await financeClient.get<ArrayBuffer>(`/api/fund-requests/receipts/${receiptId}`, {
+                responseType: 'arraybuffer',
+            });
+            const ct = (res.headers?.['content-type'] as string) || 'application/octet-stream';
+            const blob = new Blob([res.data], { type: ct });
+            const objectUrl = URL.createObjectURL(blob);
+            window.open(objectUrl, '_blank', 'noopener,noreferrer');
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+        } catch (err: any) {
+            alert(
+                err?.response?.data?.errors?.error ??
+                    err?.response?.data?.message ??
+                    err?.message ??
+                    t('wallet.receiptOpenFailed', 'Dekont görüntülenemedi')
+            );
+        }
+    };
 
     const sseAbortRef = useRef<AbortController | null>(null);
 
@@ -73,7 +99,7 @@ export function FmFundRequests() {
                     err.response?.data?.errors?.error ??
                     err.response?.data?.message ??
                     err.message ??
-                    'Liste alınamadı';
+                    t('admin.listLoadFailed', 'Liste alınamadı');
                 setError(msg);
             })
             .finally(() => setLoading(false));
@@ -127,7 +153,7 @@ export function FmFundRequests() {
         setActionLoadingId(id);
         try {
             await financeClient.post(`/api/admin/fund-requests/${id}/approve`, {
-                reviewNote: 'Frontend üzerinden onaylandı',
+                reviewNote: t('fm.approvedFromFrontend', 'Frontend üzerinden onaylandı'),
             });
             await fetchPending();
         } catch (err: any) {
@@ -135,7 +161,7 @@ export function FmFundRequests() {
                 err?.response?.data?.errors?.error ??
                     err?.response?.data?.message ??
                     err?.message ??
-                    'Onay sırasında hata'
+                    t('fm.approveError', 'Onay sırasında hata')
             );
         } finally {
             setActionLoadingId(null);
@@ -152,7 +178,7 @@ export function FmFundRequests() {
                 err?.response?.data?.errors?.error ??
                 err?.response?.data?.message ??
                 err?.message ??
-                'Üzerime alma sırasında hata',
+                t('fm.claimError', 'Üzerime alma sırasında hata'),
             );
         } finally {
             setClaimingId(null);
@@ -171,7 +197,7 @@ export function FmFundRequests() {
 
         try {
             await financeClient.post(`/api/admin/fund-requests/${rejectTargetId}/reject`, {
-                reviewNote: rejectNote?.trim() || 'Frontend üzerinden reddedildi',
+                reviewNote: rejectNote?.trim() || t('fm.rejectedFromFrontend', 'Frontend üzerinden reddedildi'),
             });
             setRejectModalOpen(false);
             setRejectTargetId(null);
@@ -182,7 +208,7 @@ export function FmFundRequests() {
                 err?.response?.data?.errors?.error ??
                     err?.response?.data?.message ??
                     err?.message ??
-                    'Red sırasında hata'
+                    t('fm.rejectError', 'Red sırasında hata')
             );
         } finally {
             setActionLoadingId(null);
@@ -213,16 +239,13 @@ export function FmFundRequests() {
         fontSize: '0.75rem',
         fontWeight: 600,
         color: '#fff',
-        background:
-            type === 'DEPOSIT'
-                ? 'linear-gradient(90deg, #16a34a, #22c55e)'
-                : 'linear-gradient(90deg, #f59e0b, #f97316)',
+        background: type === 'DEPOSIT' ? tokens.accentGradient : '#f59e0b',
     });
 
     const statusBadgeStyle = (status: FundRequestStatus): React.CSSProperties => {
-        if (status === 'APPROVED') return { color: '#166534', background: '#dcfce7' };
-        if (status === 'REJECTED') return { color: '#991b1b', background: '#fee2e2' };
-        if (status === 'PENDING') return { color: '#92400e', background: '#fef3c7' };
+        if (status === 'APPROVED') return { color: '#fff', background: tokens.success };
+        if (status === 'REJECTED') return { color: '#fff', background: tokens.error };
+        if (status === 'PENDING') return { color: '#111827', background: '#facc15' };
         return { color: tokens.textMuted, background: tokens.inputBg };
     };
 
@@ -230,12 +253,12 @@ export function FmFundRequests() {
         <div style={pageStyle}>
             <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>Para Talepleri</h1>
             <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 16 }}>
-                Finance Manager onay/reddet ekranı. Yalnızca PENDING talepler listelenir.
+                {t('fm.fundRequestsSubtitle', 'Finance Manager onay/reddet ekranı. Yalnızca PENDING talepler listelenir.')}
             </p>
 
             <div style={cardStyle}>
-                {loading && <p style={{ color: tokens.textMuted }}>Yükleniyor...</p>}
-                {error && <p style={{ color: tokens.error }}>Hata: {error}</p>}
+                {loading && <p style={{ color: tokens.textMuted }}>{t('common.loading', 'Yükleniyor...')}</p>}
+                {error && <p style={{ color: tokens.error }}>{t('news.errorPrefix', 'Hata')}: {error}</p>}
 
                 {!loading && !error && (
                     <div>
@@ -277,8 +300,8 @@ export function FmFundRequests() {
                                                             padding: '2px 8px',
                                                             fontSize: '0.75rem',
                                                             fontWeight: 700,
-                                                            color: '#1f2937',
-                                                            background: '#fef08a',
+                                                            color: tokens.text,
+                                                            background: tokens.bg,
                                                         }}
                                                     >
                                                         CLAIMED
@@ -318,9 +341,19 @@ export function FmFundRequests() {
                                                     <div>
                                                         <div style={{ color: tokens.textMuted }}>Dekont</div>
                                                         {r.receiptFileUrl ? (
-                                                            <a href={r.receiptFileUrl} target="_blank" rel="noreferrer" style={{ color: tokens.accent }}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => void openReceipt(r.receiptFileId, r.receiptFileUrl)}
+                                                                style={{
+                                                                    border: 'none',
+                                                                    background: 'transparent',
+                                                                    color: tokens.accent,
+                                                                    padding: 0,
+                                                                    cursor: 'pointer',
+                                                                }}
+                                                            >
                                                                 Dekontu Aç
-                                                            </a>
+                                                            </button>
                                                         ) : (
                                                             <span>-</span>
                                                         )}
@@ -347,7 +380,7 @@ export function FmFundRequests() {
                                                 <div>{r.requestNote || '-'}</div>
                                             </div>
                                             <div style={{ gridColumn: '1 / -1', color: tokens.textMuted, fontSize: '0.8rem' }}>
-                                                Oluşturulma: {new Date(r.createdAt).toLocaleString('tr-TR')}
+                                                {t('admin.createdAt', 'Oluşturulma')}: {new Date(r.createdAt).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR')}
                                             </div>
                                         </div>
 
@@ -364,7 +397,7 @@ export function FmFundRequests() {
                                                             border: 'none',
                                                             cursor: 'pointer',
                                                             color: '#fff',
-                                                            background: 'linear-gradient(90deg,#16a34a,#22c55e)',
+                                                            background: tokens.accentGradient,
                                                             opacity: actionLoadingId === r.id ? 0.7 : 1,
                                                         }}
                                                     >
@@ -380,7 +413,7 @@ export function FmFundRequests() {
                                                             border: 'none',
                                                             cursor: 'pointer',
                                                             color: '#fff',
-                                                            background: 'linear-gradient(90deg,#ef4444,#dc2626)',
+                                                            background: tokens.error,
                                                             opacity: actionLoadingId === r.id ? 0.7 : 1,
                                                         }}
                                                     >
@@ -398,11 +431,11 @@ export function FmFundRequests() {
                                                         border: 'none',
                                                         cursor: 'pointer',
                                                         color: '#fff',
-                                                        background: 'linear-gradient(90deg,#0ea5e9,#2563eb)',
+                                                        background: tokens.accentGradient,
                                                         opacity: claimingId === r.id ? 0.7 : 1,
                                                     }}
                                                 >
-                                                    {claimingId === r.id ? '...' : 'Üzerime Al'}
+                                                    {claimingId === r.id ? '...' : t('fm.claimMine', 'Üzerime Al')}
                                                 </button>
                                             )}
                                         </div>
@@ -419,7 +452,7 @@ export function FmFundRequests() {
                     style={{
                         position: 'fixed',
                         inset: 0,
-                        background: 'rgba(0,0,0,0.45)',
+                        background: 'rgba(0,0,0,0.35)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -477,7 +510,7 @@ export function FmFundRequests() {
                                     padding: '8px 12px',
                                     borderRadius: 8,
                                     border: 'none',
-                                    background: 'linear-gradient(90deg,#ef4444,#dc2626)',
+                                    background: tokens.error,
                                     color: '#fff',
                                     cursor: 'pointer',
                                 }}

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 
 type ReviewTaskView = {
     id: number;
@@ -43,14 +44,15 @@ type InvestigationContext = {
 const COMPLETED_STATUSES = ['APPROVED', 'REJECTED', 'FREEZE_REQUESTED'];
 
 const ACTIONS = [
-    { key: 'APPROVE', label: 'Onayla (Temiz)', color: undefined },
-    { key: 'SUGGEST_FREEZE', label: 'Freeze Öner', color: 'warning' },
+    { key: 'APPROVE', labelKey: 'fm.approveClean', fallback: 'Onayla (Temiz)', color: undefined },
+    { key: 'SUGGEST_FREEZE', labelKey: 'fm.suggestFreeze', fallback: 'Freeze Öner', color: 'warning' },
 ] as const;
 
 export function FmTaskDetail() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { tokens } = useTheme();
+    const { t, lang } = useLanguage();
     const [task, setTask] = useState<ReviewTaskView | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export function FmTaskDetail() {
                 setTask(raw as ReviewTaskView);
             })
             .catch((err) => {
-                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Görev alınamadı';
+                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? t('fm.taskLoadFailed', 'Görev alınamadı');
                 setError(msg);
             })
             .finally(() => setLoading(false));
@@ -90,7 +92,7 @@ export function FmTaskDetail() {
                 setCtx(raw as InvestigationContext);
                 setCtxOpen(true);
             })
-            .catch(() => setError('İnceleme verisi yüklenemedi'))
+            .catch(() => setError(t('admin.reviewLoadFailed', 'İnceleme verisi yüklenemedi')))
             .finally(() => setCtxLoading(false));
     };
 
@@ -101,7 +103,7 @@ export function FmTaskDetail() {
             .patch(`/api/tasks/${id}`, { action, accountId: task?.accountId ?? undefined })
             .then(() => { loadTask(); })
             .catch((err) => {
-                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'İşlem başarısız';
+                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? t('admin.actionFailed', 'İşlem başarısız');
                 setError(msg);
             })
             .finally(() => setActionLoading(null));
@@ -114,7 +116,7 @@ export function FmTaskDetail() {
             .post(`/api/tasks/${id}/claim`)
             .then(() => loadTask())
             .catch((err) => {
-                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Üstlenilemedi';
+                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? t('fm.claimFailed', 'Üstlenilemedi');
                 setError(msg);
             })
             .finally(() => setClaimLoading(false));
@@ -130,32 +132,32 @@ export function FmTaskDetail() {
     const thStyle: React.CSSProperties = { textAlign: 'left' as const, padding: '6px 10px', borderBottom: `1px solid ${tokens.border}`, color: tokens.textMuted, fontWeight: 600 };
     const tdStyle: React.CSSProperties = { padding: '6px 10px', borderBottom: `1px solid ${tokens.border}` };
 
-    const formatDate = (s: string | null) => (s ? new Date(s).toLocaleString('tr-TR') : '–');
-    const formatMoney = (n: number | null | undefined) => n != null ? `₺${Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '–';
+    const formatDate = (s: string | null) => (s ? new Date(s).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR') : '–');
+    const formatMoney = (n: number | null | undefined) => n != null ? `₺${Number(n).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR', { minimumFractionDigits: 2 })}` : '–';
 
     if (loading) {
         return (
             <div style={pageStyle}>
-                <h1 style={titleStyle}>Görev detayı</h1>
-                <p style={mutedStyle}>Yükleniyor...</p>
+                <h1 style={titleStyle}>{t('fm.taskDetail', 'Görev detayı')}</h1>
+                <p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p>
             </div>
         );
     }
     if (error && !task) {
         return (
             <div style={pageStyle}>
-                <h1 style={titleStyle}>Görev detayı</h1>
-                <p style={{ color: tokens.error }}>Hata: {error}</p>
-                <button style={btnStyle} onClick={() => navigate('/fm/tasks')}>← Listeye dön</button>
+                <h1 style={titleStyle}>{t('fm.taskDetail', 'Görev detayı')}</h1>
+                <p style={{ color: tokens.error }}>{t('news.errorPrefix', 'Hata')}: {error}</p>
+                <button style={btnStyle} onClick={() => navigate('/fm/tasks')}>{t('common.backToList', '← Listeye dön')}</button>
             </div>
         );
     }
     if (!task) {
         return (
             <div style={pageStyle}>
-                <h1 style={titleStyle}>Görev detayı</h1>
-                <p style={mutedStyle}>Görev bulunamadı.</p>
-                <button style={btnStyle} onClick={() => navigate('/fm/tasks')}>← Listeye dön</button>
+                <h1 style={titleStyle}>{t('fm.taskDetail', 'Görev detayı')}</h1>
+                <p style={mutedStyle}>{t('fm.taskNotFound', 'Görev bulunamadı.')}</p>
+                <button style={btnStyle} onClick={() => navigate('/fm/tasks')}>{t('common.backToList', '← Listeye dön')}</button>
             </div>
         );
     }
@@ -165,7 +167,7 @@ export function FmTaskDetail() {
     return (
         <div style={pageStyle}>
             <div style={{ marginBottom: 16 }}>
-                <button style={btnStyle} onClick={() => navigate('/fm/tasks')}>← Listeye dön</button>
+                <button style={btnStyle} onClick={() => navigate('/fm/tasks')}>{t('common.backToList', '← Listeye dön')}</button>
             </div>
             <h1 style={titleStyle}>Görev #{task.id}</h1>
             <p style={mutedStyle}>{task.type} • Referans: {task.referenceId}</p>
@@ -209,7 +211,7 @@ export function FmTaskDetail() {
                         onClick={() => ctxOpen ? setCtxOpen(false) : loadContext()}
                         disabled={ctxLoading}
                     >
-                        {ctxLoading ? 'Yükleniyor...' : ctxOpen ? 'İncelemeyi Kapat ▲' : 'İncele ▼'}
+                        {ctxLoading ? t('common.loading', 'Yükleniyor...') : ctxOpen ? t('fm.closeReview', 'İncelemeyi Kapat ▲') : t('admin.inspect', 'İncele ▼')}
                     </button>
                 </div>
 
@@ -226,7 +228,7 @@ export function FmTaskDetail() {
                                 <div>
                                     <strong>Whale:</strong>{' '}
                                     {ctx.user.whale ? (
-                                        <span style={{ color: '#e74c3c', fontWeight: 600 }}>{ctx.user.whaleLevel}</span>
+                                        <span style={{ color: tokens.error, fontWeight: 600 }}>{ctx.user.whaleLevel}</span>
                                     ) : (
                                         <span style={{ color: tokens.textMuted }}>Hayır</span>
                                     )}
@@ -244,7 +246,7 @@ export function FmTaskDetail() {
                                     <strong>Durum:</strong>{' '}
                                     <span style={{
                                         fontWeight: 600,
-                                        color: ctx.account.status === 'FROZEN' ? '#e74c3c' : '#27ae60',
+                                        color: ctx.account.status === 'FROZEN' ? tokens.error : tokens.success,
                                     }}>
                                         {ctx.account.status}
                                     </span>
@@ -262,9 +264,9 @@ export function FmTaskDetail() {
                         {ctx.suspiciousEvent && (
                             <>
                                 <div style={sectionTitle}>Şüpheli Olay Detayı</div>
-                                <div style={{ ...cardStyle, background: tokens.bg, borderLeft: '3px solid #e74c3c' }}>
+                                <div style={{ ...cardStyle, background: tokens.bg, borderLeft: `3px solid ${tokens.error}` }}>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: '0.875rem' }}>
-                                        <div><strong>Sebep:</strong> <span style={{ color: '#e74c3c', fontWeight: 600 }}>{ctx.suspiciousEvent.reason}</span></div>
+                                        <div><strong>Sebep:</strong> <span style={{ color: tokens.error, fontWeight: 600 }}>{ctx.suspiciousEvent.reason}</span></div>
                                         <div><strong>Tarih:</strong> {formatDate(ctx.suspiciousEvent.occurredAt)}</div>
                                         <div><strong>İşlem tutarı:</strong> {formatMoney(ctx.suspiciousEvent.amount)}</div>
                                         <div><strong>Penceredeki işlem sayısı:</strong> {ctx.suspiciousEvent.countInWindow ?? '–'}</div>
@@ -326,8 +328,8 @@ export function FmTaskDetail() {
                                                     <td style={{
                                                         ...tdStyle,
                                                         fontWeight: 600,
-                                                        color: tx.type === 'DEPOSIT' ? '#27ae60'
-                                                            : tx.type === 'WITHDRAW' ? '#e74c3c'
+                                                        color: tx.type === 'DEPOSIT' ? tokens.success
+                                                            : tx.type === 'WITHDRAW' ? tokens.error
                                                             : tokens.text,
                                                     }}>
                                                         {tx.type}
@@ -355,13 +357,13 @@ export function FmTaskDetail() {
                                 border: 'none',
                                 fontWeight: 700,
                                 cursor: claimLoading ? 'wait' : 'pointer',
-                                background: 'linear-gradient(135deg, #059669, #10b981)',
+                                background: tokens.accentGradient,
                                 color: '#fff',
                             }}
                             disabled={claimLoading}
                             onClick={handleClaim}
                         >
-                            {claimLoading ? '…' : 'Üzerime Al'}
+                            {claimLoading ? '…' : t('fm.claimMine', 'Üzerime Al')}
                         </button>
                     </div>
                 )}
@@ -375,11 +377,11 @@ export function FmTaskDetail() {
                         color: tokens.textMuted,
                         fontSize: '0.875rem',
                     }}>
-                        Bu görev tamamlanmış: <strong>{task.outcome ?? task.status}</strong>
+                        {t('fm.taskCompleted', 'Bu görev tamamlanmış')}: <strong>{task.outcome ?? task.status}</strong>
                     </div>
                 ) : (
                     <div style={{ borderTop: `1px solid ${tokens.border}`, paddingTop: 16, marginTop: 16 }}>
-                        <div style={{ fontSize: '0.875rem', color: tokens.textMuted, marginBottom: 8 }}>Aksiyon</div>
+                        <div style={{ fontSize: '0.875rem', color: tokens.textMuted, marginBottom: 8 }}>{t('fm.action', 'Aksiyon')}</div>
                         {ACTIONS.map((a) => {
                             const blocked = !!task.readOnlyHint || (task.claimState ?? '') === 'OTHER';
                             return (
@@ -388,12 +390,12 @@ export function FmTaskDetail() {
                                     style={{
                                         ...btnStyle,
                                         opacity: actionLoading === a.key ? 0.7 : blocked ? 0.45 : 1,
-                                        ...(a.color === 'warning' ? { borderColor: '#e67e22', color: '#e67e22' } : {}),
+                                        ...(a.color === 'warning' ? { borderColor: '#f59e0b', color: '#f59e0b' } : {}),
                                     }}
                                     disabled={!!actionLoading || blocked}
                                     onClick={() => handleAction(a.key)}
                                 >
-                                    {actionLoading === a.key ? '...' : a.label}
+                                    {actionLoading === a.key ? '...' : t(a.labelKey, a.fallback)}
                                 </button>
                             );
                         })}

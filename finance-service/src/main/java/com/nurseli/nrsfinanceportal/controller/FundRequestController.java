@@ -55,7 +55,7 @@ public class FundRequestController {
     }
 
     @GetMapping("/receipts/{receiptId}")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER','FINANCE_MANAGER','ADMIN')")
     public ResponseEntity<Resource> getReceipt(@PathVariable String receiptId) {
         FundReceiptStorageService.StoredReceipt receipt = fundReceiptStorageService.load(receiptId);
         return ResponseEntity.ok()

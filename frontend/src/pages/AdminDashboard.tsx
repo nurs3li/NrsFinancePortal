@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { financeClient, metricsClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import { Activity, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
@@ -28,6 +29,7 @@ const COLORS = ['#64FFDA', '#22c55e', '#38bdf8', '#8892B0', '#eab308', '#f97316'
 
 export function AdminDashboard() {
     const { tokens } = useTheme();
+    const { t, lang } = useLanguage();
     const [metrics, setMetrics] = useState<DashboardMetricsDto | null>(null);
     const [recentEvents, setRecentEvents] = useState<SuspiciousRow[]>([]);
     const [loading, setLoading] = useState(true);
@@ -47,51 +49,51 @@ export function AdminDashboard() {
                 const eventsRaw = eventsRes.data?.data ?? eventsRes.data;
                 setRecentEvents(Array.isArray(eventsRaw) ? eventsRaw.slice(0, 5) : []);
             })
-            .catch((err) => setError(err.response?.data?.message ?? err.message ?? 'Yönetim paneli verisi yüklenemedi'))
+            .catch((err) => setError(err.response?.data?.message ?? err.message ?? t('admin.dashboardLoadFailed', 'Yönetim paneli verisi yüklenemedi')))
             .finally(() => setLoading(false));
     }, []);
 
     const pageStyle: React.CSSProperties = {
         padding: 24,
-        background: '#0A192F',
-        color: '#CCD6F6',
+        background: tokens.bg,
+        color: tokens.text,
         minHeight: '100%',
         fontFamily: 'Inter, Roboto, Arial, sans-serif',
     };
     const panelStyle: React.CSSProperties = {
-        background: 'rgba(17,34,64,0.92)',
-        border: '1px solid rgba(136,146,176,0.35)',
+        background: tokens.bgCard,
+        border: `1px solid ${tokens.border}`,
         borderRadius: 8,
-        boxShadow: '0 8px 22px rgba(2,12,27,0.35)',
+        boxShadow: '0 8px 22px rgba(0,0,0,0.12)',
         padding: 16,
     };
-    const titleStyle: React.CSSProperties = { fontSize: '1.6rem', fontWeight: 700, marginBottom: 4, color: '#E6F1FF' };
-    const mutedStyle: React.CSSProperties = { color: '#8892B0', fontSize: '0.875rem' };
+    const titleStyle: React.CSSProperties = { fontSize: '1.6rem', fontWeight: 700, marginBottom: 4, color: tokens.text };
+    const mutedStyle: React.CSSProperties = { color: tokens.textMuted, fontSize: '0.875rem' };
     const tooltipStyle = {
-        background: '#112240',
-        border: '1px solid rgba(136,146,176,0.35)',
+        background: tokens.bgCard,
+        border: `1px solid ${tokens.border}`,
         borderRadius: 8,
         fontSize: 12,
-        color: '#CCD6F6',
+        color: tokens.text,
     };
 
     const kpis = useMemo(() => ([
-        { label: 'Toplam Trade', value: metrics?.totalTrades ?? 0, Icon: Activity, color: '#64FFDA' },
-        { label: 'Whale Uyarıları', value: metrics?.totalWhaleAlerts ?? 0, Icon: AlertTriangle, color: '#22c55e' },
-        { label: 'Şüpheli Olaylar', value: metrics?.totalSuspiciousEvents ?? 0, Icon: ShieldAlert, color: '#f59e0b' },
-    ]), [metrics]);
+        { label: t('admin.totalTrade', 'Toplam Trade'), value: metrics?.totalTrades ?? 0, Icon: Activity, color: '#64FFDA' },
+        { label: t('admin.whaleAlerts', 'Whale Uyarıları'), value: metrics?.totalWhaleAlerts ?? 0, Icon: AlertTriangle, color: '#22c55e' },
+        { label: t('admin.suspiciousEvents', 'Şüpheli Olaylar'), value: metrics?.totalSuspiciousEvents ?? 0, Icon: ShieldAlert, color: '#f59e0b' },
+    ]), [metrics, t]);
 
     if (loading) {
-        return <div style={pageStyle}><h1 style={titleStyle}>Yönetim Paneli</h1><p style={mutedStyle}>Yükleniyor...</p></div>;
+        return <div style={pageStyle}><h1 style={titleStyle}>{t('nav.admin', 'Yönetim Paneli')}</h1><p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p></div>;
     }
     if (error) {
-        return <div style={pageStyle}><h1 style={titleStyle}>Yönetim Paneli</h1><p style={{ ...mutedStyle, color: tokens.error }}>Hata: {error}</p></div>;
+        return <div style={pageStyle}><h1 style={titleStyle}>{t('nav.admin', 'Yönetim Paneli')}</h1><p style={{ ...mutedStyle, color: tokens.error }}>{t('news.errorPrefix', 'Hata')}: {error}</p></div>;
     }
 
     return (
         <div style={pageStyle}>
-            <h1 style={titleStyle}>Yönetim Paneli</h1>
-            <p style={{ ...mutedStyle, marginBottom: 18 }}>Back-office operasyonlarının canlı özeti ve hızlı aksiyon alanı.</p>
+            <h1 style={titleStyle}>{t('nav.admin', 'Yönetim Paneli')}</h1>
+            <p style={{ ...mutedStyle, marginBottom: 18 }}>{t('admin.dashboardSubtitle', 'Back-office operasyonlarının canlı özeti ve hızlı aksiyon alanı.')}</p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginBottom: 16 }}>
                 {kpis.map((kpi) => (
@@ -101,7 +103,7 @@ export function AdminDashboard() {
                             <kpi.Icon size={16} color={kpi.color} />
                         </div>
                         <div style={{ fontSize: '1.7rem', marginTop: 8, fontWeight: 700, color: kpi.color }}>
-                            {kpi.value.toLocaleString('tr-TR')}
+                            {kpi.value.toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR')}
                         </div>
                     </div>
                 ))}
@@ -109,7 +111,7 @@ export function AdminDashboard() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                 <div style={panelStyle}>
-                    <h2 style={{ marginTop: 0, fontSize: '1rem', color: '#E6F1FF' }}>Sembol Dağılımı</h2>
+                    <h2 style={{ marginTop: 0, fontSize: '1rem', color: tokens.text }}>Sembol Dağılımı</h2>
                     <div style={{ width: '100%', height: 280 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
@@ -124,13 +126,13 @@ export function AdminDashboard() {
                 </div>
 
                 <div style={panelStyle}>
-                    <h2 style={{ marginTop: 0, fontSize: '1rem', color: '#E6F1FF' }}>En Çok İşlem Gören Semboller</h2>
+                    <h2 style={{ marginTop: 0, fontSize: '1rem', color: tokens.text }}>En Çok İşlem Gören Semboller</h2>
                     <div style={{ width: '100%', height: 280 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={metrics?.topSymbols ?? []} layout="vertical" margin={{ top: 8, right: 16, left: 56, bottom: 8 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(136,146,176,0.22)" />
-                                <XAxis type="number" tick={{ fill: '#8892B0', fontSize: 11 }} />
-                                <YAxis type="category" dataKey="symbol" tick={{ fill: '#CCD6F6', fontSize: 11 }} width={56} />
+                                <CartesianGrid strokeDasharray="3 3" stroke={tokens.border} />
+                                <XAxis type="number" tick={{ fill: tokens.textMuted, fontSize: 11 }} />
+                                <YAxis type="category" dataKey="symbol" tick={{ fill: tokens.text, fontSize: 11 }} width={56} />
                                 <Tooltip contentStyle={tooltipStyle} />
                                 <Bar dataKey="count" fill="#64FFDA" radius={[0, 4, 4, 0]} />
                             </BarChart>
@@ -141,22 +143,22 @@ export function AdminDashboard() {
             </div>
 
             <div style={panelStyle}>
-                <h2 style={{ marginTop: 0, fontSize: '1rem', color: '#E6F1FF' }}>Son Hareketler</h2>
+                <h2 style={{ marginTop: 0, fontSize: '1rem', color: tokens.text }}>Son Hareketler</h2>
                 {recentEvents.length === 0 ? (
                     <p style={mutedStyle}>Kayıt bulunamadı.</p>
                 ) : (
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
                         <thead>
-                        <tr style={{ borderBottom: '1px solid rgba(136,146,176,0.35)' }}>
-                            <th style={{ textAlign: 'left', padding: '8px 6px', color: '#8892B0' }}>Kullanıcı</th>
-                            <th style={{ textAlign: 'left', padding: '8px 6px', color: '#8892B0' }}>Sebep</th>
-                            <th style={{ textAlign: 'right', padding: '8px 6px', color: '#8892B0' }}>Tutar</th>
-                            <th style={{ textAlign: 'right', padding: '8px 6px', color: '#8892B0' }}>Zaman</th>
+                        <tr style={{ borderBottom: `1px solid ${tokens.border}` }}>
+                            <th style={{ textAlign: 'left', padding: '8px 6px', color: tokens.textMuted }}>Kullanıcı</th>
+                            <th style={{ textAlign: 'left', padding: '8px 6px', color: tokens.textMuted }}>Sebep</th>
+                            <th style={{ textAlign: 'right', padding: '8px 6px', color: tokens.textMuted }}>Tutar</th>
+                            <th style={{ textAlign: 'right', padding: '8px 6px', color: tokens.textMuted }}>Zaman</th>
                         </tr>
                         </thead>
                         <tbody>
                         {recentEvents.map((row, idx) => (
-                            <tr key={`${row.userId}-${idx}`} style={{ borderBottom: '1px solid rgba(136,146,176,0.2)' }}>
+                            <tr key={`${row.userId}-${idx}`} style={{ borderBottom: `1px solid ${tokens.tableBorder}` }}>
                                 <td style={{ padding: '8px 6px' }}>{row.email ?? row.username ?? `Kullanıcı#${row.userId}`}</td>
                                 <td style={{ padding: '8px 6px' }}>{row.reason}</td>
                                 <td style={{ padding: '8px 6px', textAlign: 'right' }}>₺{Number(row.amount).toLocaleString('tr-TR')}</td>

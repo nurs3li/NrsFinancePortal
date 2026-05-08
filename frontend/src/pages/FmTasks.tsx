@@ -5,6 +5,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 import keycloak from '../auth/keycloak';
+import { useLanguage } from '../i18n/LanguageContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8085';
 
@@ -44,15 +45,16 @@ type FmTaskSummary = {
 const COMPLETED_STATUSES = ['APPROVED', 'REJECTED', 'FREEZE_REQUESTED'];
 
 const TABS = [
-    { key: 'pool', label: 'Açık Görevler (Havuz)', mode: 'pool' as const },
-    { key: 'all', label: 'Tümü', mode: 'me' as const, status: undefined, type: undefined, filterHighPriority: false },
-    { key: 'pending', label: 'Bekleyen', mode: 'me' as const, status: 'PENDING', type: undefined, filterHighPriority: false },
-    { key: 'high', label: 'Yüksek öncelik', mode: 'me' as const, status: undefined, type: undefined, filterHighPriority: true },
-    { key: 'escalated', label: 'Escalated', mode: 'me' as const, status: 'ESCALATED', type: undefined, filterHighPriority: false },
+    { key: 'pool', labelKey: 'fm.tabs.pool', fallback: 'Açık Görevler (Havuz)', mode: 'pool' as const },
+    { key: 'all', labelKey: 'fm.tabs.all', fallback: 'Tümü', mode: 'me' as const, status: undefined, type: undefined, filterHighPriority: false },
+    { key: 'pending', labelKey: 'fm.tabs.pending', fallback: 'Bekleyen', mode: 'me' as const, status: 'PENDING', type: undefined, filterHighPriority: false },
+    { key: 'high', labelKey: 'fm.tabs.high', fallback: 'Yüksek öncelik', mode: 'me' as const, status: undefined, type: undefined, filterHighPriority: true },
+    { key: 'escalated', labelKey: 'fm.tabs.escalated', fallback: 'Escalated', mode: 'me' as const, status: 'ESCALATED', type: undefined, filterHighPriority: false },
 ] as const;
 
 export function FmTasks() {
     const { tokens } = useTheme();
+    const { t } = useLanguage();
     const navigate = useNavigate();
     const [tasks, setTasks] = useState<ReviewTaskView[]>([]);
     const [summary, setSummary] = useState<FmTaskSummary | null>(null);
@@ -108,11 +110,11 @@ export function FmTasks() {
                 );
             })
             .catch((err) => {
-                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Liste alınamadı';
+                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? t('admin.listLoadFailed', 'Liste alınamadı');
                 setError(msg);
             })
             .finally(() => setLoading(false));
-    }, [page, activeTab, tabConfig, hideCompleted]);
+    }, [page, activeTab, tabConfig, hideCompleted, t]);
 
     useEffect(() => {
         fetchTasks();
@@ -179,7 +181,7 @@ export function FmTasks() {
                 void fetchSummary();
             })
             .catch((err) => {
-                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Üstlenilemedi';
+                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? t('fm.claimFailed', 'Üstlenilemedi');
                 setError(msg);
             })
             .finally(() => setClaimingId(null));
@@ -212,8 +214,8 @@ export function FmTasks() {
                 50% { opacity: 0.45; transform: scale(0.92); }
               }
             `}</style>
-            <h1 style={titleStyle}>Görevler</h1>
-            <p style={mutedStyle}>Görev havuzu ve inceleme görevleri. Satıra tıklayarak detaya gidin.</p>
+            <h1 style={titleStyle}>{t('nav.tasks', 'Görevler')}</h1>
+            <p style={mutedStyle}>{t('fm.tasksSubtitle', 'Görev havuzu ve inceleme görevleri. Satıra tıklayarak detaya gidin.')}</p>
 
             {summary && (
                 <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -221,9 +223,9 @@ export function FmTasks() {
                         <div style={{ ...mutedStyle, fontSize: '0.75rem' }}>Havuzda açık</div>
                         <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>{summary.poolOpenCount}</div>
                     </div>
-                    <div style={{ padding: '12px 16px', borderRadius: 12, border: `1px solid rgba(16,185,129,0.45)`, background: 'linear-gradient(135deg, rgba(16,185,129,0.12), transparent)', minWidth: 140 }}>
+                    <div style={{ padding: '12px 16px', borderRadius: 12, border: `1px solid ${tokens.border}`, background: tokens.bgCard, minWidth: 140 }}>
                         <div style={{ ...mutedStyle, fontSize: '0.75rem' }}>Üzerimdeki işler</div>
-                        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#34d399' }}>{summary.myClaimedOpenCount}</div>
+                        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: tokens.accent }}>{summary.myClaimedOpenCount}</div>
                     </div>
                     <div style={{ padding: '12px 16px', borderRadius: 12, border: `1px solid ${tokens.border}`, background: tokens.bgCard, minWidth: 140 }}>
                         <div style={{ ...mutedStyle, fontSize: '0.75rem' }}>Tamamladıklarım</div>
@@ -233,16 +235,16 @@ export function FmTasks() {
             )}
 
             <div style={{ marginTop: 16, marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                {TABS.map((t) => (
+                {TABS.map((tab) => (
                     <button
-                        key={t.key}
-                        style={tabStyle(activeTab === t.key)}
+                        key={tab.key}
+                        style={tabStyle(activeTab === tab.key)}
                         onClick={() => {
-                            setActiveTab(t.key);
+                            setActiveTab(tab.key);
                             setPage(0);
                         }}
                     >
-                        {t.label}
+                        {t(tab.labelKey, tab.fallback)}
                     </button>
                 ))}
                 <label style={{ marginLeft: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
@@ -254,12 +256,12 @@ export function FmTasks() {
                             setPage(0);
                         }}
                     />
-                    <span style={mutedStyle}>Tamamlananları gizle (Onaylanan / Reddedilen / Freeze talebi)</span>
+                    <span style={mutedStyle}>{t('fm.hideCompleted', 'Tamamlananları gizle (Onaylanan / Reddedilen / Freeze talebi)')}</span>
                 </label>
             </div>
 
-            {loading && <p style={mutedStyle}>Yükleniyor...</p>}
-            {error && <p style={{ color: tokens.error, marginBottom: 16 }}>Hata: {error}</p>}
+            {loading && <p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p>}
+            {error && <p style={{ color: tokens.error, marginBottom: 16 }}>{t('news.errorPrefix', 'Hata')}: {error}</p>}
 
             {!loading && !error && (
                 <>
@@ -268,21 +270,21 @@ export function FmTasks() {
                             <thead>
                                 <tr>
                                     <th style={thStyle} />
-                                    <th style={thStyle}>Görev / Referans</th>
-                                    <th style={thStyle}>Kullanıcı</th>
-                                    <th style={thStyle}>Kullanıcı ID</th>
-                                    <th style={thStyle}>Tip</th>
-                                    <th style={thStyle}>Öncelik</th>
-                                    <th style={thStyle}>Son tarih</th>
-                                    <th style={thStyle}>Durum</th>
-                                    <th style={thStyle}>İşlem</th>
+                                    <th style={thStyle}>{t('fm.taskReference', 'Görev / Referans')}</th>
+                                    <th style={thStyle}>{t('admin.user', 'Kullanıcı')}</th>
+                                    <th style={thStyle}>{t('fm.userId', 'Kullanıcı ID')}</th>
+                                    <th style={thStyle}>{t('fm.type', 'Tip')}</th>
+                                    <th style={thStyle}>{t('fm.priority', 'Öncelik')}</th>
+                                    <th style={thStyle}>{t('fm.dueDate', 'Son tarih')}</th>
+                                    <th style={thStyle}>{t('wallet.status', 'Durum')}</th>
+                                    <th style={thStyle}>{t('fm.action', 'İşlem')}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {tasks.length === 0 ? (
                                     <tr>
                                         <td colSpan={9} style={{ ...tdStyle, color: tokens.textMuted, textAlign: 'center' }}>
-                                            Görev yok.
+                                            {t('admin.noTasks', 'Görev yok.')}
                                         </td>
                                     </tr>
                                 ) : (
@@ -290,7 +292,7 @@ export function FmTasks() {
                                         const isPoolRow = tabConfig.mode === 'pool';
                                         const claimedOther = row.claimState === 'OTHER';
                                         const claimedMine = row.claimState === 'MINE';
-                                        const rowBg = claimedOther ? 'rgba(148,163,184,0.18)' : undefined;
+                                        const rowBg = claimedOther ? tokens.bg : undefined;
                                         return (
                                             <tr
                                                 key={row.id}
@@ -300,19 +302,19 @@ export function FmTasks() {
                                                 <td style={{ ...tdStyle, width: 36 }}>
                                                     {row.status === 'PENDING' && row.claimState === 'POOL' && (
                                                         <span
-                                                            title="Bekliyor"
+                                                            title={t('fm.pending', 'Bekliyor')}
                                                             style={{
                                                                 display: 'inline-block',
                                                                 width: 10,
                                                                 height: 10,
                                                                 borderRadius: 999,
-                                                                background: '#ef4444',
+                                                                background: tokens.error,
                                                                 animation: 'fmPoolPulse 1.2s ease-in-out infinite',
                                                             }}
                                                         />
                                                     )}
                                                     {row.status === 'CLAIMED' && (
-                                                        <span title="Üstlenildi" style={{ fontSize: '1rem' }}>
+                                                        <span title={t('fm.claimed', 'Üstlenildi')} style={{ fontSize: '1rem' }}>
                                                             ⏳
                                                         </span>
                                                     )}
@@ -336,14 +338,14 @@ export function FmTasks() {
                                                                 border: 'none',
                                                                 fontWeight: 700,
                                                                 cursor: claimingId === row.id ? 'wait' : 'pointer',
-                                                                background: 'linear-gradient(135deg, #059669, #10b981)',
+                                                                background: tokens.accentGradient,
                                                                 color: '#fff',
-                                                                boxShadow: '0 4px 14px rgba(16,185,129,0.35)',
+                                                                boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
                                                             }}
                                                             disabled={claimingId === row.id}
                                                             onClick={(e) => claimTask(e, row.id)}
                                                         >
-                                                            {claimingId === row.id ? '…' : 'Üzerime Al'}
+                                                            {claimingId === row.id ? '…' : t('fm.claimMine', 'Üzerime Al')}
                                                         </button>
                                                     )}
                                                     {!isPoolRow && row.status === 'PENDING' && row.claimState === 'POOL' && (
@@ -355,13 +357,13 @@ export function FmTasks() {
                                                                 border: 'none',
                                                                 fontWeight: 700,
                                                                 cursor: claimingId === row.id ? 'wait' : 'pointer',
-                                                                background: 'linear-gradient(135deg, #059669, #10b981)',
+                                                                background: tokens.accentGradient,
                                                                 color: '#fff',
                                                             }}
                                                             disabled={claimingId === row.id}
                                                             onClick={(e) => claimTask(e, row.id)}
                                                         >
-                                                            {claimingId === row.id ? '…' : 'Üzerime Al'}
+                                                            {claimingId === row.id ? '…' : t('fm.claimMine', 'Üzerime Al')}
                                                         </button>
                                                     )}
                                                     {!isPoolRow && claimedMine && (
@@ -378,11 +380,11 @@ export function FmTasks() {
                                                             }}
                                                             onClick={() => navigate(`/fm/tasks/${row.id}`)}
                                                         >
-                                                            İşleme Başla / Detay
+                                                            {t('fm.startOrDetail', 'İşleme Başla / Detay')}
                                                         </button>
                                                     )}
                                                     {!isPoolRow && claimedOther && (
-                                                        <span style={{ color: tokens.textMuted, fontSize: '0.8125rem' }}>Alındı</span>
+                                                        <span style={{ color: tokens.textMuted, fontSize: '0.8125rem' }}>{t('fm.taken', 'Alındı')}</span>
                                                     )}
                                                 </td>
                                             </tr>
@@ -407,7 +409,7 @@ export function FmTasks() {
                                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                                 disabled={page === 0}
                             >
-                                Önceki
+                                {t('news.prev', 'Önceki')}
                             </button>
                             <span style={{ color: tokens.textMuted }}>
                                 Sayfa {page + 1} / {totalPages} (toplam {totalElements})
@@ -425,7 +427,7 @@ export function FmTasks() {
                                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                                 disabled={page >= totalPages - 1}
                             >
-                                Sonraki
+                                {t('news.next', 'Sonraki')}
                             </button>
                         </div>
                     )}
