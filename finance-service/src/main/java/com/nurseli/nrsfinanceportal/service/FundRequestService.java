@@ -34,6 +34,7 @@ import java.util.Map;
 public class FundRequestService {
 
     private static final String AUTO_APPROVE_NOTE = "AUTO_APPROVED_BY_RULE";
+    private static final java.util.regex.Pattern TR_IBAN_PATTERN = java.util.regex.Pattern.compile("^TR\\d{24}$");
 
     private final FundRequestRepository fundRequestRepository;
     private final AccountRepository accountRepository;
@@ -351,6 +352,10 @@ public class FundRequestService {
         if (request.getType() == FundRequestType.WITHDRAWAL) {
             if (!hasText(request.getDestinationIban())) {
                 throw new IllegalArgumentException("Withdrawal request requires destination iban");
+            }
+            String iban = request.getDestinationIban().replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
+            if (!TR_IBAN_PATTERN.matcher(iban).matches()) {
+                throw new IllegalArgumentException("Invalid iban. It must start with TR and contain 24 digits");
             }
             if (!hasText(request.getDestinationAccountHolder())) {
                 throw new IllegalArgumentException("Withdrawal request requires destination account holder");

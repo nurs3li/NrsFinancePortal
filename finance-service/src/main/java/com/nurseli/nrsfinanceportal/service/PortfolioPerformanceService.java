@@ -28,58 +28,12 @@ public class PortfolioPerformanceService {
 
     @Transactional(readOnly = true)
     public PortfolioPerformanceDto myPerformance() {
-        List<UnifiedPortfolioItemView> portfolio = unifiedPortfolioService.myUnifiedPortfolio();
-        LatestPricingSnapshot pricing = marketDataClient.loadLatestPricing();
-        List<PerformanceItemDto> items = new ArrayList<>();
+        return computePerformance(unifiedPortfolioService.myUnifiedPortfolio());
+    }
 
-        BigDecimal totalCost = BigDecimal.ZERO;
-        BigDecimal totalCurrentValue = BigDecimal.ZERO;
-
-        for (UnifiedPortfolioItemView p : portfolio) {
-            AssetType type = AssetType.valueOf(p.getType());
-            BigDecimal quantity = nz(p.getQuantity());
-            BigDecimal avgBuy = nz(p.getAvgBuyPrice());
-
-            BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, p.getSymbol(), pricing));
-            BigDecimal cost = avgBuy.multiply(quantity);
-            BigDecimal currentValue = currentPrice.multiply(quantity);
-            BigDecimal pnl = currentValue.subtract(cost);
-
-            BigDecimal pnlPct = cost.signum() == 0
-                    ? BigDecimal.ZERO
-                    : pnl.divide(cost, 6, RoundingMode.HALF_UP).multiply(HUNDRED);
-
-            items.add(new PerformanceItemDto(
-                    p.getSource(),
-                    p.getType(),
-                    p.getSymbol(),
-                    quantity,
-                    avgBuy,
-                    currentPrice,
-                    "TRY",
-                    cost,
-                    currentValue,
-                    pnl,
-                    pnlPct,
-                    p.getManualPositionId()
-            ));
-
-            totalCost = totalCost.add(cost);
-            totalCurrentValue = totalCurrentValue.add(currentValue);
-        }
-
-        BigDecimal totalPnl = totalCurrentValue.subtract(totalCost);
-        BigDecimal totalPnlPct = totalCost.signum() == 0
-                ? BigDecimal.ZERO
-                : totalPnl.divide(totalCost, 6, RoundingMode.HALF_UP).multiply(HUNDRED);
-
-        return new PortfolioPerformanceDto(
-                totalCost,
-                totalCurrentValue,
-                totalPnl,
-                totalPnlPct,
-                items
-        );
+    @Transactional(readOnly = true)
+    public PortfolioPerformanceDto performanceForUser(User user) {
+        return computePerformance(unifiedPortfolioService.unifiedForUser(user));
     }
 
     /**
@@ -133,5 +87,59 @@ public class PortfolioPerformanceService {
 
     private BigDecimal nz(BigDecimal v) {
         return v == null ? BigDecimal.ZERO : v;
+    }
+
+    private PortfolioPerformanceDto computePerformance(List<UnifiedPortfolioItemView> portfolio) {
+        LatestPricingSnapshot pricing = marketDataClient.loadLatestPricing();
+        List<PerformanceItemDto> items = new ArrayList<>();
+
+        BigDecimal totalCost = BigDecimal.ZERO;
+        BigDecimal totalCurrentValue = BigDecimal.ZERO;
+
+        for (UnifiedPortfolioItemView p : portfolio) {
+            AssetType type = AssetType.valueOf(p.getType());
+            BigDecimal quantity = nz(p.getQuantity());
+            BigDecimal avgBuy = nz(p.getAvgBuyPrice());
+
+            BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, p.getSymbol(), pricing));
+            BigDecimal cost = avgBuy.multiply(quantity);
+            BigDecimal currentValue = currentPrice.multiply(quantity);
+            BigDecimal pnl = currentValue.subtract(cost);
+
+            BigDecimal pnlPct = cost.signum() == 0
+                    ? BigDecimal.ZERO
+                    : pnl.divide(cost, 6, RoundingMode.HALF_UP).multiply(HUNDRED);
+
+            items.add(new PerformanceItemDto(
+                    p.getSource(),
+                    p.getType(),
+                    p.getSymbol(),
+                    quantity,
+                    avgBuy,
+                    currentPrice,
+                    "TRY",
+                    cost,
+                    currentValue,
+                    pnl,
+                    pnlPct,
+                    p.getManualPositionId()
+            ));
+
+            totalCost = totalCost.add(cost);
+            totalCurrentValue = totalCurrentValue.add(currentValue);
+        }
+
+        BigDecimal totalPnl = totalCurrentValue.subtract(totalCost);
+        BigDecimal totalPnlPct = totalCost.signum() == 0
+                ? BigDecimal.ZERO
+                : totalPnl.divide(totalCost, 6, RoundingMode.HALF_UP).multiply(HUNDRED);
+
+        return new PortfolioPerformanceDto(
+                totalCost,
+                totalCurrentValue,
+                totalPnl,
+                totalPnlPct,
+                items
+        );
     }
 }
