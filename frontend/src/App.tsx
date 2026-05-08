@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
+import { LanguageProvider } from './i18n/LanguageContext';
 import { QueryProvider } from './providers/QueryProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ProtectedRoute } from './auth/ProtectedRoute';
@@ -31,10 +32,11 @@ import { AdminAudit } from './pages/AdminAudit';
 function App() {
     return (
         <ThemeProvider>
-            <ErrorBoundary>
-                <AuthProvider>
-                    <QueryProvider>
-                    <BrowserRouter>
+            <LanguageProvider>
+                <ErrorBoundary>
+                    <AuthProvider>
+                        <QueryProvider>
+                        <BrowserRouter>
                         <Routes>
                             <Route path="/" element={<HomeRedirect />} />
                             <Route path="/login" element={<Login />} />
@@ -224,10 +226,11 @@ function App() {
                             </Route>
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
-                    </BrowserRouter>
-                    </QueryProvider>
-                </AuthProvider>
-            </ErrorBoundary>
+                        </BrowserRouter>
+                        </QueryProvider>
+                    </AuthProvider>
+                </ErrorBoundary>
+            </LanguageProvider>
         </ThemeProvider>
     );
 }

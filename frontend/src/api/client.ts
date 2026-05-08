@@ -26,6 +26,15 @@ function unwrapEnvelopePayload(payload: unknown): unknown {
 
 let loginRedirectInFlight = false;
 
+function getPreferredAppLang(): string {
+    if (typeof window === 'undefined') return 'tr';
+    const fromApp = window.localStorage.getItem('app.lang');
+    if (fromApp && fromApp.trim()) return fromApp.trim();
+    const fromLegacy = window.localStorage.getItem('app.newsLang');
+    if (fromLegacy && fromLegacy.trim()) return fromLegacy.trim();
+    return 'tr';
+}
+
 async function handleAuthErrorWithSingleRetry(err: any): Promise<any> {
     const status = err?.response?.status;
     const originalRequest = err?.config as (Record<string, any> & { headers?: Record<string, any> }) | undefined;
@@ -75,6 +84,9 @@ export const financeClient = axios.create({
 });
 
 financeClient.interceptors.request.use((config) => {
+    config.headers = config.headers ?? {};
+    const lang = getPreferredAppLang();
+    if (lang) config.headers['Accept-Language'] = lang;
     if (keycloak.authenticated && keycloak.token) {
         config.headers.Authorization = `Bearer ${keycloak.token}`;
     }
@@ -112,6 +124,11 @@ export const marketClient = axios.create({
 
 marketClient.interceptors.request.use((config) => {
     const requestPath = String(config.url ?? '');
+    config.headers = config.headers ?? {};
+    const lang = getPreferredAppLang();
+    if (lang) {
+        config.headers['Accept-Language'] = lang;
+    }
     const isPublicMarketRead =
         config.method?.toLowerCase() === 'get' &&
         (requestPath.startsWith('/api/news') || requestPath.startsWith('/api/market/'));
@@ -139,6 +156,9 @@ export const metricsClient = axios.create({
 });
 
 metricsClient.interceptors.request.use((config) => {
+    config.headers = config.headers ?? {};
+    const lang = getPreferredAppLang();
+    if (lang) config.headers['Accept-Language'] = lang;
     if (keycloak.authenticated && keycloak.token) {
         config.headers.Authorization = `Bearer ${keycloak.token}`;
     }
@@ -159,6 +179,9 @@ export const notificationClient = axios.create({
 });
 
 notificationClient.interceptors.request.use((config) => {
+    config.headers = config.headers ?? {};
+    const lang = getPreferredAppLang();
+    if (lang) config.headers['Accept-Language'] = lang;
     if (keycloak.authenticated && keycloak.token) {
         config.headers.Authorization = `Bearer ${keycloak.token}`;
     }
