@@ -1,5 +1,7 @@
 package com.nurseli.nrsfinanceportal.controller;
 
+import com.nurseli.nrsfinanceportal.common.dto.RiskMonitorUserResponse;
+import com.nurseli.nrsfinanceportal.common.dto.RiskMonitorUserDetailResponse;
 import com.nurseli.nrsfinanceportal.common.dto.WhaleTimelineResponse;
 import com.nurseli.nrsfinanceportal.domain.whale.WhaleHistory;
 import com.nurseli.nrsfinanceportal.service.WhaleTimelineService;
@@ -19,6 +21,18 @@ public class WhaleTimelineController {
     @GetMapping("/{userId}/timeline")
     public List<WhaleTimelineResponse> timeline(@PathVariable Long userId) {
         return service.getTimeline(userId);
+    }
+
+    @PreAuthorize("hasAnyRole('FINANCE_MANAGER', 'ADMIN')")
+    @GetMapping("/monitor/users")
+    public List<RiskMonitorUserResponse> monitorUsers() {
+        return service.getRiskMonitorUsers();
+    }
+
+    @PreAuthorize("hasAnyRole('FINANCE_MANAGER', 'ADMIN')")
+    @GetMapping("/monitor/users/{userId}/detail")
+    public RiskMonitorUserDetailResponse monitorUserDetail(@PathVariable Long userId) {
+        return service.getRiskMonitorUserDetail(userId);
     }
 
 }
