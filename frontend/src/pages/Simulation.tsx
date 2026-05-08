@@ -14,6 +14,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { Trash2 } from 'lucide-react';
 import './TerminalPages.css';
 import { fetchSimulationSymbolsByType } from '../services/marketDataService';
+import { useLanguage } from '../i18n/LanguageContext';
 
 type AssetType = 'CRYPTO' | 'FX' | 'FUND' | 'METAL' | 'STOCK';
 
@@ -87,6 +88,7 @@ function qualityLabel(quality: string): string {
 
 export function Simulation() {
     const { tokens } = useTheme();
+    const { t } = useLanguage();
     const [type, setType] = useState<AssetType>('CRYPTO');
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [amount, setAmount] = useState('5000');
@@ -120,18 +122,18 @@ export function Simulation() {
     const calculateSimulationFromService = async (): Promise<SimulationResultItem> => {
         const parsedAmount = Number(amount);
         if (!parsedAmount || parsedAmount <= 0) {
-            throw new Error('Tutar sıfırdan büyük olmalı.');
+            throw new Error(t('wallet.amountPositive', 'Tutar sıfırdan büyük olmalı.'));
         }
         if (!symbol.trim()) {
-            throw new Error('Lütfen bir sembol seçin.');
+            throw new Error(t('simulation.selectSymbol', 'Lütfen bir sembol seçin.'));
         }
         if (!buyDate) {
-            throw new Error('Lütfen alım tarihi girin.');
+            throw new Error(t('simulation.enterBuyDate', 'Lütfen alım tarihi girin.'));
         }
 
         const parsedManualBuyPrice = Number(manualBuyPrice);
         if (buyPriceMode === 'MANUAL' && (!parsedManualBuyPrice || parsedManualBuyPrice <= 0)) {
-            throw new Error('Manuel alış fiyatı sıfırdan büyük olmalı.');
+            throw new Error(t('simulation.manualPricePositive', 'Manuel alış fiyatı sıfırdan büyük olmalı.'));
         }
 
         const res = await financeClient.get('/api/simulation', {
@@ -180,7 +182,7 @@ export function Simulation() {
                 err?.response?.data?.errors?.error ??
                 err?.response?.data?.message ??
                 err?.message ??
-                'Simülasyon hatası';
+                t('simulation.error', 'Simülasyon hatası');
             setError(msg);
         } finally {
             setLoading(false);
@@ -335,7 +337,7 @@ export function Simulation() {
             }
             className="terminal-pages-root"
         >
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>Portföy Analiz Aracı</h1>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>{t('simulation.title', 'Portföy Analiz Aracı')}</h1>
             <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 16 }}>
                 Çoklu simülasyon ekle, varlıkları karşılaştır, kümülatif getiri eğrilerini aynı grafikte takip et.
             </p>
@@ -365,7 +367,7 @@ export function Simulation() {
                     }}
                 >
                     <label style={{ fontSize: '0.875rem' }}>
-                        Varlık Türü
+                        {t('simulation.assetType', 'Varlık Türü')}
                         <select value={type} onChange={(e) => setType(e.target.value as AssetType)} style={inputStyle}>
                             <option value="CRYPTO">CRYPTO</option>
                             <option value="FX">FX</option>
@@ -378,23 +380,23 @@ export function Simulation() {
                     <label style={{ fontSize: '0.875rem' }}>
                         Sembol
                         {overviewLoading ? (
-                            <div style={{ ...inputStyle, color: tokens.textMuted }}>Yükleniyor...</div>
+                            <div style={{ ...inputStyle, color: tokens.textMuted }}>{t('common.loading', 'Yükleniyor...')}</div>
                         ) : symbolOptions.length > 0 ? (
                             <select value={symbol} onChange={(e) => setSymbol(e.target.value)} style={inputStyle}>
                                 {symbolOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                             </select>
                         ) : (
-                            <div style={{ ...inputStyle, color: tokens.textMuted }}>Bu varlık türü için kayıtlı sembol yok.</div>
+                            <div style={{ ...inputStyle, color: tokens.textMuted }}>{t('simulation.noSymbolForType', 'Bu varlık türü için kayıtlı sembol yok.')}</div>
                         )}
                     </label>
 
                     <label style={{ fontSize: '0.875rem' }}>
-                        Başlangıç Tutarı (TRY)
+                        {t('simulation.initialAmountTry', 'Başlangıç Tutarı (TRY)')}
                         <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} style={inputStyle} />
                     </label>
 
                     <label style={{ fontSize: '0.875rem' }}>
-                        Alım Tarihi
+                        {t('simulation.buyDate', 'Alım Tarihi')}
                         <input type="date" value={buyDate} onChange={(e) => setBuyDate(e.target.value)} style={inputStyle} />
                     </label>
 
@@ -435,7 +437,7 @@ export function Simulation() {
                             minHeight: 40,
                         }}
                     >
-                        {loading ? 'Ekleniyor...' : 'Simüle Et ve Listeye Ekle'}
+                        {loading ? t('simulation.adding', 'Ekleniyor...') : t('simulation.simulateAndAdd', 'Simüle Et ve Listeye Ekle')}
                     </button>
                 </form>
             </div>
@@ -443,7 +445,7 @@ export function Simulation() {
             {error && <div style={{ ...cardStyle, borderColor: tokens.error, color: tokens.error, marginBottom: 16 }}>Hata: {error}</div>}
 
             <div className="tp-card" style={{ ...cardStyle, marginBottom: 16 }}>
-                <h2 style={{ marginTop: 0, marginBottom: 10, fontSize: '1rem' }}>Karşılaştırmalı Performans Grafiği</h2>
+                <h2 style={{ marginTop: 0, marginBottom: 10, fontSize: '1rem' }}>{t('simulation.performanceChart', 'Karşılaştırmalı Performans Grafiği')}</h2>
                 <div style={{ color: tokens.textMuted, fontSize: '0.8125rem', marginBottom: 12 }}>
                     Kümülatif getiri (%) — parlak lacivert/silver tema
                 </div>
@@ -494,7 +496,7 @@ export function Simulation() {
                         marginBottom: 12,
                     }}
                 >
-                    <h2 style={{ margin: 0, fontSize: '1rem' }}>Simülasyon Listesi</h2>
+                    <h2 style={{ margin: 0, fontSize: '1rem' }}>{t('simulation.list', 'Simülasyon Listesi')}</h2>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <select
                             value={sortMode}

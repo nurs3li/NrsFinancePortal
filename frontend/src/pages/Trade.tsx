@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { AxiosResponse } from 'axios';
 import { financeClient, marketClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import { useSearchParams } from 'react-router-dom';
 import {
     TEMPLATE_THEME,
@@ -95,6 +96,7 @@ const TRADE_CATEGORIES: {
 
 export function Trade() {
     const { tokens } = useTheme();
+    const { t } = useLanguage();
     const [searchParams] = useSearchParams();
 
     const [category, setCategory] = useState<TradeCategory>('CRYPTO');
@@ -440,16 +442,16 @@ export function Trade() {
                     {restrictionToast}
                 </div>
             ) : null}
-            <h1 style={titleStyle}>Alim ve Satim</h1>
-            <p style={mutedStyle}>Enstruman sablonu, varlik sinifi ve sembol hiyerarsisi ile profesyonel emir akisi.</p>
+            <h1 style={titleStyle}>{t('trade.title', 'Alim ve Satim')}</h1>
+            <p style={mutedStyle}>{t('trade.subtitle', 'Enstruman sablonu, varlik sinifi ve sembol hiyerarsisi ile profesyonel emir akisi.')}</p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(0, 2fr)', gap: 24, marginBottom: 32 }}>
                 <div style={{ ...cardStyle, border: `1px solid ${templateTheme.border}`, background: templateTheme.bg }}>
-                    <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 6 }}>Emir Formu</h2>
+                    <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 6 }}>{t('trade.orderForm', 'Emir Formu')}</h2>
                     <div style={{ fontSize: '0.75rem', color: tokens.textMuted, marginBottom: 14 }}>{templateTheme.chip} templatine uygun varliklar listelenir.</div>
                     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <label style={{ fontSize: '0.875rem' }}>
-                            Varlik Kategorisi
+                            {t('trade.assetCategory', 'Varlik Kategorisi')}
                             <div
                                 style={{
                                     marginTop: 6,
@@ -479,14 +481,14 @@ export function Trade() {
                             </div>
                         </label>
                         <label style={{ fontSize: '0.875rem' }}>
-                            Sembol
+                            {t('trade.symbol', 'Sembol')}
                             <div style={{ fontSize: '0.75rem', color: tokens.textMuted, marginTop: 4 }}>
                                 Manuel sembol yazma kapali. Sisteminizdeki {selectedCategory.label} varliklari dropdown ile secilir.
                             </div>
                             {symbolPoolLoading ? (
-                                <div style={{ ...inputStyle, color: tokens.textMuted }}>Yukleniyor...</div>
+                                <div style={{ ...inputStyle, color: tokens.textMuted }}>{t('common.loading', 'Yukleniyor...')}</div>
                             ) : symbolPool.length === 0 ? (
-                                <div style={{ ...inputStyle, color: tokens.textMuted }}>Bu secim icin sembol bulunamadi.</div>
+                                <div style={{ ...inputStyle, color: tokens.textMuted }}>{t('trade.noSymbolsForSelection', 'Bu secim icin sembol bulunamadi.')}</div>
                             ) : (
                                 <select value={tradeSymbol} onChange={(e) => setSymbol(e.target.value)} style={inputStyle}>
                                     {symbolPool.map((s) => (
@@ -496,7 +498,7 @@ export function Trade() {
                             )}
                         </label>
                         <label style={{ fontSize: '0.875rem' }}>
-                            Yon
+                            {t('trade.side', 'Yon')}
                             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                                 <button type="button" onClick={() => setTradeType('BUY')} style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: tradeType === 'BUY' ? `2px solid ${tokens.success}` : `1px solid ${tokens.border}`, background: tradeType === 'BUY' ? 'rgba(34, 197, 94, 0.15)' : tokens.bgCard, color: tradeType === 'BUY' ? tokens.success : tokens.text, cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500 }}>
                                     Al (AL)
@@ -507,7 +509,7 @@ export function Trade() {
                             </div>
                         </label>
                         <label style={{ fontSize: '0.875rem' }}>
-                            Miktar ({selectedCategory.quantityLabel})
+                            {t('trade.quantity', 'Miktar')} ({selectedCategory.quantityLabel})
                             <input
                                 type="number"
                                 step={selectedCategory.quantityMode === 'INTEGER' ? '1' : '0.0001'}
@@ -519,7 +521,7 @@ export function Trade() {
                         </label>
                         {templateType === 'SPOT' ? (
                             <label style={{ fontSize: '0.875rem' }}>
-                                Limit Fiyat (opsiyonel)
+                                {t('trade.limitPriceOptional', 'Limit Fiyat (opsiyonel)')}
                                 <input type="number" step="0.0001" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} style={inputStyle} />
                             </label>
                         ) : null}
@@ -595,7 +597,7 @@ export function Trade() {
                         ) : null}
                         {submitError && <div style={{ color: tokens.error, fontSize: '0.8125rem' }}>{submitError}</div>}
                         <button type="submit" disabled={submitting || symbolPool.length === 0} style={{ marginTop: 8, padding: '10px 0', borderRadius: 8, border: 'none', background: tradeType === 'BUY' ? 'linear-gradient(90deg,#16a34a,#22c55e)' : 'linear-gradient(90deg,#f97316,#fb923c)', color: '#fff', fontWeight: 600, fontSize: '0.9375rem', cursor: submitting ? 'default' : 'pointer' }}>
-                            {submitting ? 'Gonderiliyor...' : 'Emri gonder'}
+                            {submitting ? t('common.submitting', 'Gonderiliyor...') : t('trade.submitOrder', 'Emri gonder')}
                         </button>
                     </form>
                     {lastTrade && (
@@ -608,9 +610,9 @@ export function Trade() {
                 </div>
 
                 <div style={cardStyle}>
-                    <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>Gecmis Islemler</h2>
+                    <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>{t('trade.history', 'Gecmis Islemler')}</h2>
                     {historyError && <div style={{ color: tokens.error, marginBottom: 8, fontSize: '0.8125rem' }}>{historyError}</div>}
-                    {historyLoading && <p style={mutedStyle}>Yukleniyor...</p>}
+                    {historyLoading && <p style={mutedStyle}>{t('common.loading', 'Yukleniyor...')}</p>}
                     {history && history.content.length === 0 && !historyLoading && <p style={mutedStyle}>Henuz islem yok.</p>}
                     {history && history.content.length > 0 && (
                         <>
@@ -618,9 +620,9 @@ export function Trade() {
                                 <thead>
                                 <tr style={{ borderBottom: `2px solid ${tokens.border}` }}>
                                     <th style={{ textAlign: 'left', padding: 10 }}>Tarih</th>
-                                    <th style={{ textAlign: 'left', padding: 10 }}>Sembol</th>
+                                    <th style={{ textAlign: 'left', padding: 10 }}>{t('trade.symbol', 'Sembol')}</th>
                                     <th style={{ textAlign: 'left', padding: 10 }}>Tur</th>
-                                    <th style={{ textAlign: 'right', padding: 10 }}>Miktar</th>
+                                    <th style={{ textAlign: 'right', padding: 10 }}>{t('trade.quantity', 'Miktar')}</th>
                                     <th style={{ textAlign: 'right', padding: 10 }}>Toplam (TRY)</th>
                                     <th style={{ textAlign: 'right', padding: 10 }}>Islem sonrasi bakiye</th>
                                 </tr>
@@ -647,11 +649,11 @@ export function Trade() {
                             {history.totalElements > history.size && (
                                 <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem' }}>
                                     <button type="button" disabled={historyPage === 0} onClick={() => setHistoryPage((p) => p - 1)} style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: tokens.text, cursor: historyPage === 0 ? 'default' : 'pointer', opacity: historyPage === 0 ? 0.6 : 1 }}>
-                                        Onceki
+                                        {t('news.prev', 'Önceki')}
                                     </button>
                                     <span style={{ color: tokens.textMuted }}>Sayfa {history.number + 1} / {Math.ceil(history.totalElements / history.size)}</span>
                                     <button type="button" disabled={(history.number + 1) * history.size >= history.totalElements} onClick={() => setHistoryPage((p) => p + 1)} style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: tokens.text, cursor: (history.number + 1) * history.size >= history.totalElements ? 'default' : 'pointer', opacity: (history.number + 1) * history.size >= history.totalElements ? 0.6 : 1 }}>
-                                        Sonraki
+                                        {t('news.next', 'Sonraki')}
                                     </button>
                                 </div>
                             )}
