@@ -206,6 +206,11 @@ market:
 
 
 app:
+  translation:
+    enabled: ${APP_TRANSLATION_ENABLED:true}
+    provider: ${APP_TRANSLATION_PROVIDER:googlefree}
+    base-url: ${APP_TRANSLATION_BASE_URL:http://localhost:5000}
+    timeout-ms: ${APP_TRANSLATION_TIMEOUT_MS:2500}
   data-sources:
     tcmb:
       url: https://www.tcmb.gov.tr/kurlar/today.xml
@@ -214,6 +219,7 @@ app:
     finhub:
       url: https://finnhub.io/api/v1
       api-key: ${FINHUB_API_KEY:your-api-key-here}  # Environment variable'dan oku, yoksa default
+      candle-enabled: ${FINHUB_CANDLE_ENABLED:false}
     stooq:
       url: ${STOOQ_BASE_URL:https://stooq.com}
       api-key: ${STOOQ_API_KEY:}
@@ -284,6 +290,7 @@ app:
       canonical: FINHUB
       fallback-order: []
   viop:
+    live-ingest-enabled: ${APP_VIOP_LIVE_INGEST_ENABLED:false}
     hybrid:
       enabled: false
       bistBulletinEnabled: false

@@ -24,15 +24,17 @@ public class NewsController {
     public Page<NewsResponse> getAllNews(
             @RequestParam(required = false) NewsCategory category,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false") boolean detail,
+            @RequestHeader(value = "Accept-Language", required = false) String lang
     ) {
         Pageable pageable = PageRequest.of(page, size);
 
         if (category != null) {
-            return newsQueryService.getNewsByCategory(category, pageable);
+            return newsQueryService.getNewsByCategory(category, pageable, lang, detail);
         }
 
-        return newsQueryService.getAllNews(pageable);
+        return newsQueryService.getAllNews(pageable, lang, detail);
     }
 
     /**
@@ -40,7 +42,10 @@ public class NewsController {
      * Tek haber detayı
      */
     @GetMapping("/{id}")
-    public NewsResponse getNewsById(@PathVariable Long id) {
-        return newsQueryService.getNewsById(id);
+    public NewsResponse getNewsById(
+            @PathVariable Long id,
+            @RequestHeader(value = "Accept-Language", required = false) String lang
+    ) {
+        return newsQueryService.getNewsById(id, lang);
     }
 }

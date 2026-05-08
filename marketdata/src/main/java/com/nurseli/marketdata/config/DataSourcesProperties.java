@@ -29,6 +29,7 @@ public class DataSourcesProperties {
     public static class FinHub {
         private String url;
         private String apiKey;
+        private boolean candleEnabled = true;
     }
 
     @Data
