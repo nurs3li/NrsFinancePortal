@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 
@@ -26,6 +27,7 @@ type UserGroup = {
 
 export function AdminSuspicious() {
     const { tokens } = useTheme();
+    const { t, lang } = useLanguage();
     const [events, setEvents] = useState<SuspiciousRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -39,7 +41,7 @@ export function AdminSuspicious() {
                 const raw = res.data?.data ?? res.data;
                 setEvents(Array.isArray(raw) ? raw : []);
             })
-            .catch((err) => setError(err.response?.data?.message ?? err.message ?? 'Yüklenemedi'))
+            .catch((err) => setError(err.response?.data?.message ?? err.message ?? t('common.loadingFailed', 'Yüklenemedi')))
             .finally(() => setLoading(false));
     }, []);
 
@@ -101,26 +103,26 @@ export function AdminSuspicious() {
     if (error) {
         return (
             <div style={pageStyle}>
-                <h1 style={titleStyle}>Şüpheli Olaylar</h1>
-                <p style={{ ...mutedStyle, color: tokens.error }}>Hata: {error}</p>
+                <h1 style={titleStyle}>{t('nav.suspiciousEvents', 'Şüpheli Olaylar')}</h1>
+                <p style={{ ...mutedStyle, color: tokens.error }}>{t('news.errorPrefix', 'Hata')}: {error}</p>
             </div>
         );
     }
 
     return (
         <div style={pageStyle}>
-            <h1 style={titleStyle}>Şüpheli Olaylar</h1>
+            <h1 style={titleStyle}>{t('nav.suspiciousEvents', 'Şüpheli Olaylar')}</h1>
             <p style={mutedStyle}>
-                Şüpheli işlem uyarıları, kullanıcıya göre gruplu. Satıra tıklayınca kullanıcının detaylı olay listesi açılır.
+                {t('admin.suspiciousSubtitle', 'Şüpheli işlem uyarıları, kullanıcıya göre gruplu. Satıra tıklayınca kullanıcının detaylı olay listesi açılır.')}
             </p>
 
             {loading ? (
                 <div style={cardStyle}>
-                    <p style={mutedStyle}>Yükleniyor...</p>
+                    <p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p>
                 </div>
             ) : groups.length === 0 ? (
                 <div style={cardStyle}>
-                    <p style={mutedStyle}>Kayıt yok.</p>
+                    <p style={mutedStyle}>{t('admin.noRecords', 'Kayıt yok.')}</p>
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -128,7 +130,7 @@ export function AdminSuspicious() {
                         const isOpen = expandedUserIds.has(group.userId);
                         const latest = group.events[0];
                         const headerLabel =
-                            (group.username ?? `Kullanıcı`) +
+                            (group.username ?? t('admin.user', 'Kullanıcı')) +
                             ` (ID: ${group.userId}` +
                             (group.email ? `, ${group.email}` : '') +
                             ')';
@@ -152,7 +154,7 @@ export function AdminSuspicious() {
                                     <div>
                                         <div style={{ fontSize: '1.05rem', fontWeight: 600 }}>{headerLabel}</div>
                                         <div style={mutedStyle}>
-                                            {group.events.length} olay • Son: {latest && new Date(latest.occurredAt).toLocaleString('tr-TR')}
+                                            {group.events.length} {t('admin.events', 'olay')} • {t('admin.last', 'Son')}: {latest && new Date(latest.occurredAt).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR')}
                                         </div>
                                     </div>
                                     <div style={{ fontSize: '1.25rem' }}>{isOpen ? '▾' : '▸'}</div>
@@ -163,9 +165,9 @@ export function AdminSuspicious() {
                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                                             <thead>
                                             <tr style={{ borderBottom: `2px solid ${tokens.border}` }}>
-                                                <th style={{ textAlign: 'left', padding: 8 }}>Sebep</th>
-                                                <th style={{ textAlign: 'right', padding: 8 }}>Tutar</th>
-                                                <th style={{ textAlign: 'left', padding: 8 }}>Tarih</th>
+                                                <th style={{ textAlign: 'left', padding: 8 }}>{t('admin.reason', 'Sebep')}</th>
+                                                <th style={{ textAlign: 'right', padding: 8 }}>{t('transactions.amount', 'Tutar')}</th>
+                                                <th style={{ textAlign: 'left', padding: 8 }}>{t('news.date', 'Tarih')}</th>
                                             </tr>
                                             </thead>
                                             <tbody>
@@ -173,10 +175,10 @@ export function AdminSuspicious() {
                                                 <tr key={i} style={{ borderBottom: `1px solid ${tokens.border}` }}>
                                                     <td style={{ padding: 8 }}>{e.reason}</td>
                                                     <td style={{ padding: 8, textAlign: 'right' }}>
-                                                        ₺{Number(e.amount).toLocaleString('tr-TR')}
+                                                        ₺{Number(e.amount).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR')}
                                                     </td>
                                                     <td style={{ padding: 8 }}>
-                                                        {new Date(e.occurredAt).toLocaleString('tr-TR')}
+                                                        {new Date(e.occurredAt).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR')}
                                                     </td>
                                                 </tr>
                                             ))}
