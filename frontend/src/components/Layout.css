@@ -235,6 +235,26 @@
   font-size: 0.82rem;
 }
 
+.header-dropdown__lang-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--header-border);
+  font-size: 0.8rem;
+}
+
+.header-dropdown__lang-select {
+  min-width: 112px;
+  border: 1px solid var(--header-border);
+  border-radius: 8px;
+  background: var(--header-card);
+  color: var(--header-card-text);
+  padding: 4px 8px;
+  font-size: 0.8rem;
+}
+
 .theme-switch-icons {
   display: inline-flex;
   align-items: center;

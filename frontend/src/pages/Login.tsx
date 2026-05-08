@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 
 function decodeOAuthHint(raw: string | null): string | null {
     if (!raw) return null;
@@ -17,10 +18,10 @@ function mapLoginOAuthError(error: string | null, description: string | null): s
     const err = decodeOAuthHint(error) ?? '';
     const blob = `${desc} ${err}`.toLowerCase();
     if (blob.includes('disabled') || blob.includes('account_disabled') || blob.includes('inactive')) {
-        return 'Hesabınız askıya alındı. Erişim için destek ile iletişime geçin.';
+        return 'Your account is suspended. Please contact support for access.';
     }
     if (blob.includes('temporarily_disabled')) {
-        return 'Hesabınız geçici olarak devre dışı. Lütfen daha sonra deneyin veya destek ile iletişime geçin.';
+        return 'Your account is temporarily disabled. Please try later or contact support.';
     }
     if (err || desc) {
         return desc || err || null;
@@ -46,6 +47,7 @@ const KEYCLOAK_CLIENT_ID = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'nrs-front
 export function Login() {
     const { isAuthenticated, login, ready, role } = useAuth();
     const { tokens } = useTheme();
+    const { t } = useLanguage();
     const navigate = useNavigate();
     const location = useLocation();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -73,7 +75,7 @@ export function Login() {
         if (fromOAuth) {
             setLoginError(fromOAuth);
         } else if (suspendedBanner === '1') {
-            setLoginError('Hesabınız askıya alındı. Erişim için destek ile iletişime geçin.');
+            setLoginError(t('login.suspended', 'Hesabınız askıya alındı. Erişim için destek ile iletişime geçin.'));
         }
         if (fromOAuth || suspendedBanner === '1') {
             setSearchParams({}, { replace: true });
@@ -81,7 +83,7 @@ export function Login() {
                 window.history.replaceState(null, '', window.location.pathname + window.location.search);
             }
         }
-    }, [ready, suspendedBanner, setSearchParams]);
+    }, [ready, suspendedBanner, setSearchParams, t]);
 
     const goToRegister = () => {
         const redirectUri = encodeURIComponent(window.location.origin + '/');
@@ -92,7 +94,7 @@ export function Login() {
     if (!ready) {
         return (
             <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: tokens.bg, color: tokens.text }}>
-                <span style={{ fontSize: '0.9375rem', color: tokens.textMuted }}>Yükleniyor...</span>
+                <span style={{ fontSize: '0.9375rem', color: tokens.textMuted }}>{t('common.loading', 'Yükleniyor...')}</span>
             </div>
         );
     }
@@ -111,9 +113,9 @@ export function Login() {
                 color: tokens.text,
             }}
         >
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 8 }}>Giriş</h1>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 8 }}>{t('login.title', 'Giriş')}</h1>
             <p style={{ fontSize: '0.9375rem', color: tokens.textMuted, marginBottom: 24 }}>
-                Finans portalına erişmek için Keycloak ile giriş yapın veya yeni hesap oluşturun.
+                {t('login.subtitle', 'Finans portalına erişmek için Keycloak ile giriş yapın veya yeni hesap oluşturun.')}
             </p>
             {loginError && (
                 <div
@@ -147,10 +149,10 @@ export function Login() {
                     cursor: 'pointer',
                 }}
             >
-                Keycloak ile Giriş
+                {t('login.keycloak', 'Keycloak ile Giriş')}
             </button>
             <p style={{ fontSize: '0.875rem', color: tokens.textMuted, marginTop: 16 }}>
-                Hesabınız yok mu?
+                {t('login.noAccount', 'Hesabınız yok mu?')}
             </p>
             <button
                 type="button"
@@ -167,7 +169,7 @@ export function Login() {
                     cursor: 'pointer',
                 }}
             >
-                Kayıt ol
+                {t('login.register', 'Kayıt ol')}
             </button>
         </div>
     );

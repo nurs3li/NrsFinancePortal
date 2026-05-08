@@ -17,6 +17,7 @@ import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 import { ChevronDown, Info, Pencil, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import './TerminalPages.css';
+import { useLanguage } from '../i18n/LanguageContext';
 
 type AssetType = 'STOCK' | 'CRYPTO' | 'FX' | 'METAL' | 'FUND';
 
@@ -179,6 +180,7 @@ function aggregatePnlByAsset(
 
 export function Portfolio() {
     const { tokens } = useTheme();
+    const { t } = useLanguage();
     const [infoOpen, setInfoOpen] = useState(false);
 
     const [unifiedItems, setUnifiedItems] = useState<UnifiedPortfolioItem[]>([]);
@@ -219,7 +221,7 @@ export function Portfolio() {
                     err.response?.data?.errors?.error ??
                     err.response?.data?.message ??
                     err.message ??
-                    'Portföy verisi alınamadı';
+                    t('portfolio.loadFailed', 'Portföy verisi alınamadı');
                 setError(msg);
             })
             .finally(() => {
@@ -324,7 +326,7 @@ export function Portfolio() {
                 err?.response?.data?.errors?.error ??
                     err?.response?.data?.message ??
                     err?.message ??
-                    'Manuel pozisyon kaydedilemedi'
+                    t('portfolio.manualSaveFailed', 'Manuel pozisyon kaydedilemedi')
             );
         } finally {
             setSavingManual(false);
@@ -388,8 +390,8 @@ export function Portfolio() {
     if (loading) {
         return (
             <div style={pageStyle}>
-                <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Portföy</h1>
-                <p style={{ color: tokens.textMuted }}>Yükleniyor...</p>
+                <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{t('nav.portfolio', 'Portföy')}</h1>
+                <p style={{ color: tokens.textMuted }}>{t('common.loading', 'Yükleniyor...')}</p>
             </div>
         );
     }
@@ -397,7 +399,7 @@ export function Portfolio() {
     if (error) {
         return (
             <div style={pageStyle}>
-                <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Portföy</h1>
+                <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{t('nav.portfolio', 'Portföy')}</h1>
                 <p style={{ color: tokens.error }}>Hata: {error}</p>
             </div>
         );
@@ -419,7 +421,7 @@ export function Portfolio() {
             }
             className="terminal-pages-root"
         >
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>Portföylerim</h1>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>{t('portfolio.myPortfolios', 'Portföylerim')}</h1>
             <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 8 }}>
                 Trade + manuel giriş birleşik görünüm ve performans özeti.
             </p>
@@ -491,7 +493,7 @@ export function Portfolio() {
             </div>
 
             <div style={{ ...cardStyle, marginBottom: 16 }}>
-                <h2 style={{ margin: '0 0 6px 0', fontSize: '1rem' }}>Portföy dağılımı (TRY)</h2>
+                <h2 style={{ margin: '0 0 6px 0', fontSize: '1rem' }}>{t('portfolio.distributionTry', 'Portföy dağılımı (TRY)')}</h2>
                 <p style={{ margin: '0 0 14px 0', fontSize: '0.8125rem', color: tokens.textMuted }}>
                     Güncel değer üzerinden varlık sınıfı (döviz, kripto, fon, …) oranları — üç ayrı görünüm.
                 </p>
@@ -739,7 +741,7 @@ export function Portfolio() {
                 }}
             >
                 <div style={cardStyle}>
-                    <h2 style={{ marginTop: 0, marginBottom: 12, fontSize: '1rem' }}>Birleşik Varlık Listesi</h2>
+                    <h2 style={{ marginTop: 0, marginBottom: 12, fontSize: '1rem' }}>{t('portfolio.combinedAssetList', 'Birleşik Varlık Listesi')}</h2>
 
                     <div style={{ overflowX: 'auto' }}>
                         <table className="tp-table">
@@ -826,7 +828,7 @@ export function Portfolio() {
 
                 <div style={cardStyle}>
                     <h2 style={{ marginTop: 0, marginBottom: 12, fontSize: '1rem' }}>
-                        {editingManualId != null ? 'Manuel pozisyonu düzenle' : 'Manuel pozisyon ekle'}
+                        {editingManualId != null ? t('portfolio.editManualPosition', 'Manuel pozisyonu düzenle') : t('portfolio.addManualPosition', 'Manuel pozisyon ekle')}
                     </h2>
 
                     <form onSubmit={saveManual} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -844,7 +846,7 @@ export function Portfolio() {
                         <label style={{ fontSize: '0.875rem' }}>
                             Sembol
                             {loading || overviewLoading ? (
-                                <div style={{ ...inputStyle, color: tokens.textMuted }}>Yükleniyor...</div>
+                                <div style={{ ...inputStyle, color: tokens.textMuted }}>{t('common.loading', 'Yükleniyor...')}</div>
                             ) : symbolOptions.length === 0 ? (
                                 <div style={{ ...inputStyle, color: tokens.textMuted }}>Bu tür için sembol yok.</div>
                             ) : (
@@ -898,7 +900,7 @@ export function Portfolio() {
                                     opacity: savingManual ? 0.7 : 1,
                                 }}
                             >
-                                {savingManual ? 'Kaydediliyor...' : editingManualId != null ? 'Güncelle' : 'Pozisyon ekle'}
+                                {savingManual ? t('portfolio.saving', 'Kaydediliyor...') : editingManualId != null ? t('common.update', 'Güncelle') : t('portfolio.addPosition', 'Pozisyon ekle')}
                             </button>
                             {editingManualId != null ? (
                                 <button
@@ -915,7 +917,7 @@ export function Portfolio() {
                                         cursor: savingManual ? 'default' : 'pointer',
                                     }}
                                 >
-                                    İptal
+                                    {t('common.cancel', 'İptal')}
                                 </button>
                             ) : null}
                         </div>

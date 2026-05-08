@@ -72,12 +72,12 @@ app:
     order-form-v2-enabled: true
   rate-limit:
     enabled: true
-    max-requests-per-minute: 20
+    max-requests-per-minute: 40
     window-sec: 60
   suspicious:
     enabled: true
-    max-transactions-per-minute: 1
-    high-amount-threshold: 100
+    max-transactions-per-minute: 8
+    high-amount-threshold: 40000
   fund-request:
     auto-approval-enabled: true
     deposit-auto-approve-limit-try: 50000

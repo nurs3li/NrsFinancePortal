@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { notificationClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
+import { useLanguage } from '../i18n/LanguageContext';
 
 type NotificationItem = {
     id: number;
@@ -26,6 +27,7 @@ type PageResponse = {
 
 export function Notifications() {
     const { tokens } = useTheme();
+    const { t, lang } = useLanguage();
     const [items, setItems] = useState<NotificationItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -33,24 +35,30 @@ export function Notifications() {
     const [totalPages, setTotalPages] = useState(0);
     const [totalElements, setTotalElements] = useState(0);
     const size = 20;
-    const [unreadOnly, setUnreadOnly] = useState(false);
+    const [unreadOnly, setUnreadOnly] = useState(true);
 
     const fetchNotifications = useCallback(() => {
         setLoading(true);
         setError(null);
         notificationClient
             .get<PageResponse>('/api/notifications/me', {
-                params: { page, size, unreadOnly },
+                params: { page, size, unreadOnly, sort: ['lastOccurredAt,desc', 'createdAt,desc'] },
             })
             .then((res) => {
                 const data = res.data;
                 const content = data?.content ?? [];
-                setItems(Array.isArray(content) ? content : []);
+                const normalized = Array.isArray(content) ? content : [];
+                const sorted = [...normalized].sort((a, b) => {
+                    const aTs = new Date(a.lastOccurredAt ?? a.createdAt ?? 0).getTime();
+                    const bTs = new Date(b.lastOccurredAt ?? b.createdAt ?? 0).getTime();
+                    return bTs - aTs;
+                });
+                setItems(sorted);
                 setTotalPages(data?.totalPages ?? 0);
                 setTotalElements(data?.totalElements ?? 0);
             })
             .catch((err) => {
-                setError(err.response?.data?.message ?? err.message ?? 'Bildirimler yüklenemedi');
+                setError(err.response?.data?.message ?? err.message ?? t('notifications.loadFailed', 'Bildirimler yüklenemedi'));
             })
             .finally(() => setLoading(false));
     }, [page, unreadOnly]);
@@ -88,7 +96,7 @@ export function Notifications() {
     if (error) {
         return (
             <div style={pageStyle}>
-                <h1 style={titleStyle}>🔔 Bildirimler</h1>
+                <h1 style={titleStyle}>🔔 {t('notifications.title', 'Bildirimler')}</h1>
                 <p style={{ ...mutedStyle, color: tokens.error }}>{error}</p>
             </div>
         );
@@ -96,7 +104,7 @@ export function Notifications() {
 
     return (
         <div style={pageStyle}>
-            <h1 style={titleStyle}>🔔 Bildirimler</h1>
+            <h1 style={titleStyle}>🔔 {t('notifications.title', 'Bildirimler')}</h1>
             <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.875rem' }}>
                     <input
@@ -104,17 +112,17 @@ export function Notifications() {
                         checked={unreadOnly}
                         onChange={(e) => { setUnreadOnly(e.target.checked); setPage(0); }}
                     />
-                    Sadece okunmamış
+                    {t('notifications.unreadOnly', 'Sadece okunmamış')}
                 </label>
                 <span style={mutedStyle}>
-                    Toplam {totalElements} bildirim
+                    {t('notifications.total', 'Toplam')} {totalElements} {t('notifications.item', 'bildirim')}
                 </span>
             </div>
 
             {loading ? (
-                <p style={mutedStyle}>Yükleniyor…</p>
+                <p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p>
             ) : items.length === 0 ? (
-                <p style={mutedStyle}>Bildirim yok.</p>
+                <p style={mutedStyle}>{t('notifications.empty', 'Bildirim yok.')}</p>
             ) : (
                 <>
                     {items.map((n) => (
@@ -146,11 +154,11 @@ export function Notifications() {
                                     </div>
                                     {n.body && <p style={{ ...mutedStyle, marginTop: 4, marginBottom: 0 }}>{n.body}</p>}
                                 </div>
-                                {!n.readAt && <span style={{ fontSize: '0.75rem', color: tokens.accent }}>Yeni</span>}
+                                {!n.readAt && <span style={{ fontSize: '0.75rem', color: tokens.accent }}>{t('notifications.new', 'Yeni')}</span>}
                             </div>
                             <p style={{ ...mutedStyle, fontSize: '0.75rem', marginTop: 8, marginBottom: 0 }}>
-                                {n.type} · {new Date(n.lastOccurredAt ?? n.createdAt).toLocaleString('tr-TR')}
-                                {n.occurrenceCount > 1 && ` · ilk: ${new Date(n.createdAt).toLocaleString('tr-TR')}`}
+                                {n.type} · {new Date(n.lastOccurredAt ?? n.createdAt).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR')}
+                                {n.occurrenceCount > 1 && ` · ${t('notifications.first', 'ilk')}: ${new Date(n.createdAt).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR')}`}
                             </p>
                         </div>
                     ))}
@@ -169,10 +177,10 @@ export function Notifications() {
                                     cursor: page <= 0 ? 'not-allowed' : 'pointer',
                                 }}
                             >
-                                Önceki
+                                {t('news.prev', 'Önceki')}
                             </button>
                             <span style={mutedStyle}>
-                                Sayfa {page + 1} / {totalPages}
+                                {t('news.page', 'Sayfa')} {page + 1} / {totalPages}
                             </span>
                             <button
                                 type="button"
@@ -187,7 +195,7 @@ export function Notifications() {
                                     cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer',
                                 }}
                             >
-                                Sonraki
+                                {t('news.next', 'Sonraki')}
                             </button>
                         </div>
                     )}

@@ -3,6 +3,7 @@ import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
+import { useLanguage } from '../i18n/LanguageContext';
 type TransactionRow = {
     id: number;
     accountId: number;
@@ -33,6 +34,7 @@ function toISOEndOfDay(date: Date): string {
 
 export function Transactions() {
     const { tokens } = useTheme();
+    const { t, lang } = useLanguage();
     const [items, setItems] = useState<TransactionRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export function Transactions() {
                 setTotalPages(typeof total === 'number' ? Math.max(0, total - 1) : 0);
             })
             .catch((err) => {
-                setError(err.response?.data?.message ?? err.message ?? 'Yüklenemedi');
+                setError(err.response?.data?.message ?? err.message ?? t('common.loadingFailed', 'Yüklenemedi'));
             })
             .finally(() => setLoading(false));
     }, [page, startDate, endDate]);
@@ -90,19 +92,19 @@ export function Transactions() {
     if (error) {
         return (
             <div style={pageStyle}>
-                <h1 style={titleStyle}>İşlem Geçmişi</h1>
-                <p style={{ ...mutedStyle, color: tokens.error }}>Hata: {error}</p>
+                <h1 style={titleStyle}>{t('nav.transactions', 'İşlem Geçmişi')}</h1>
+                <p style={{ ...mutedStyle, color: tokens.error }}>{t('news.errorPrefix', 'Hata')}: {error}</p>
             </div>
         );
     }
 
     return (
         <div style={pageStyle}>
-            <h1 style={titleStyle}>İşlem Geçmişi</h1>
-            <p style={mutedStyle}>Son işlemleriniz. Tarih aralığı seçerek filtreleyebilirsiniz.</p>
+            <h1 style={titleStyle}>{t('nav.transactions', 'İşlem Geçmişi')}</h1>
+            <p style={mutedStyle}>{t('transactions.subtitle', 'Son işlemleriniz. Tarih aralığı seçerek filtreleyebilirsiniz.')}</p>
             <div style={{ ...cardStyle, marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={mutedStyle}>Başlangıç</span>
+                    <span style={mutedStyle}>{t('transactions.start', 'Başlangıç')}</span>
                     <input
                         type="date"
                         value={startDate}
@@ -111,7 +113,7 @@ export function Transactions() {
                     />
                 </label>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={mutedStyle}>Bitiş</span>
+                    <span style={mutedStyle}>{t('transactions.end', 'Bitiş')}</span>
                     <input
                         type="date"
                         value={endDate}
@@ -131,7 +133,7 @@ export function Transactions() {
                         cursor: 'pointer',
                     }}
                 >
-                    Filtrele
+                    {t('common.filter', 'Filtrele')}
                 </button>
                 {(startDate || endDate) && (
                     <button
@@ -146,30 +148,30 @@ export function Transactions() {
                             cursor: 'pointer',
                         }}
                     >
-                        Temizle
+                        {t('common.clear', 'Temizle')}
                     </button>
                 )}
             </div>
             <div style={cardStyle}>
                 {loading ? (
-                    <p style={mutedStyle}>Yükleniyor...</p>
+                    <p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p>
                 ) : items.length === 0 ? (
-                    <p style={mutedStyle}>Henüz işlem yok.</p>
+                    <p style={mutedStyle}>{t('transactions.empty', 'Henüz işlem yok.')}</p>
                 ) : (
                     <>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                             <thead>
                             <tr style={{ borderBottom: `2px solid ${tokens.border}` }}>
-                                <th style={{ textAlign: 'left', padding: 8 }}>Tarih</th>
-                                <th style={{ textAlign: 'left', padding: 8 }}>Tür</th>
-                                <th style={{ textAlign: 'right', padding: 8 }}>Tutar</th>
-                                <th style={{ textAlign: 'right', padding: 8 }}>Bakiye (sonra)</th>
+                                <th style={{ textAlign: 'left', padding: 8 }}>{t('news.date', 'Tarih')}</th>
+                                <th style={{ textAlign: 'left', padding: 8 }}>{t('transactions.type', 'Tür')}</th>
+                                <th style={{ textAlign: 'right', padding: 8 }}>{t('transactions.amount', 'Tutar')}</th>
+                                <th style={{ textAlign: 'right', padding: 8 }}>{t('transactions.balanceAfter', 'Bakiye (sonra)')}</th>
                             </tr>
                             </thead>
                             <tbody>
                             {items.map((tx) => (
                                 <tr key={tx.id} style={{ borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                    <td style={{ padding: 8 }}>{new Date(tx.createdAt).toLocaleString('tr-TR')}</td>
+                                    <td style={{ padding: 8 }}>{new Date(tx.createdAt).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR')}</td>
                                     <td style={{ padding: 8 }}>{tx.type}</td>
                                     <td style={{ padding: 8, textAlign: 'right' }}>₺{Number(tx.amount).toLocaleString('tr-TR')}</td>
                                     <td style={{ padding: 8, textAlign: 'right' }}>₺{Number(tx.balanceAfter).toLocaleString('tr-TR')}</td>
@@ -185,16 +187,16 @@ export function Transactions() {
                                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                                     style={{ padding: '6px 12px', cursor: page <= 0 ? 'not-allowed' : 'pointer', opacity: page <= 0 ? 0.5 : 1 }}
                                 >
-                                    Önceki
+                                    {t('news.prev', 'Önceki')}
                                 </button>
-                                <span style={mutedStyle}>Sayfa {page + 1} / {totalPages + 1}</span>
+                                <span style={mutedStyle}>{t('news.page', 'Sayfa')} {page + 1} / {totalPages + 1}</span>
                                 <button
                                     type="button"
                                     disabled={page >= totalPages}
                                     onClick={() => setPage((p) => p + 1)}
                                     style={{ padding: '6px 12px', cursor: page >= totalPages ? 'not-allowed' : 'pointer', opacity: page >= totalPages ? 0.5 : 1 }}
                                 >
-                                    Sonraki
+                                    {t('news.next', 'Sonraki')}
                                 </button>
                             </div>
                         )}

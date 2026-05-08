@@ -1,6 +1,7 @@
 import { Outlet, Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
 import { notificationClient } from '../api/client';
 import { Bell, ChevronDown, Landmark, LogOut, Moon, Sun } from 'lucide-react';
@@ -22,6 +23,7 @@ export function Layout() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [dropdownItems, setDropdownItems] = useState<{ id: number; title: string; readAt: string | null; type: string }[]>([]);
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+    const { lang, setLang, t } = useLanguage();
     const notificationRef = useRef<HTMLDivElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
     const navRef = useRef<HTMLDivElement>(null);
@@ -71,6 +73,7 @@ export function Layout() {
         logout();
         navigate('/');
     };
+    const handleNewsLangChange = (value: string) => setLang(value === 'en' ? 'en' : 'tr');
 
     const isFm = role === 'FINANCE_MANAGER';
     const isAdmin = role === 'ADMIN';
@@ -78,35 +81,35 @@ export function Layout() {
     const navItems = useMemo<NavItem[]>(() => {
         if (isAdmin) {
             return [
-                { key: 'market', to: '/market', label: 'Piyasa', show: true },
-                { key: 'news', to: '/news', label: 'Haberler', show: true },
-                { key: 'admin', to: '/admin', label: 'Yönetim Paneli', show: true },
-                { key: 'admin-tasks', to: '/admin/tasks', label: 'Admin Görevler', show: true },
-                { key: 'admin-users', to: '/admin/users', label: 'Kullanıcı Yönetimi', show: true },
-                { key: 'admin-audit', to: '/admin/audit', label: 'Audit Logs', show: true },
+                { key: 'market', to: '/market', label: t('nav.market', 'Piyasa'), show: true },
+                { key: 'news', to: '/news', label: t('nav.news', 'Haberler'), show: true },
+                { key: 'admin', to: '/admin', label: t('nav.admin', 'Yönetim Paneli'), show: true },
+                { key: 'admin-tasks', to: '/admin/tasks', label: t('nav.adminTasks', 'Admin Görevler'), show: true },
+                { key: 'admin-users', to: '/admin/users', label: t('nav.userManagement', 'Kullanıcı Yönetimi'), show: true },
+                { key: 'admin-audit', to: '/admin/audit', label: t('nav.auditLogs', 'Audit Logs'), show: true },
             ];
         }
         if (isFm) {
             return [
-                { key: 'market', to: '/market', label: 'Piyasa', show: true },
-                { key: 'news', to: '/news', label: 'Haberler', show: true },
-                { key: 'fm-tasks', to: '/fm/tasks', label: 'Görevler', show: true },
-                { key: 'fm-funds', to: '/fm/fund-requests', label: 'Para Talepleri', show: true },
-                { key: 'fm-risk', to: '/fm/risk', label: 'Risk Monitor', show: true },
-                { key: 'fm-suspicious', to: '/operasyon/suspicious', label: 'Şüpheli Olaylar', show: true },
+                { key: 'market', to: '/market', label: t('nav.market', 'Piyasa'), show: true },
+                { key: 'news', to: '/news', label: t('nav.news', 'Haberler'), show: true },
+                { key: 'fm-tasks', to: '/fm/tasks', label: t('nav.tasks', 'Görevler'), show: true },
+                { key: 'fm-funds', to: '/fm/fund-requests', label: t('nav.fundRequests', 'Para Talepleri'), show: true },
+                { key: 'fm-risk', to: '/fm/risk', label: t('nav.riskMonitor', 'Risk Monitor'), show: true },
+                { key: 'fm-suspicious', to: '/operasyon/suspicious', label: t('nav.suspiciousEvents', 'Şüpheli Olaylar'), show: true },
             ];
         }
         return [
-            { key: 'dashboard', to: '/dashboard', label: 'Dashboard', show: true },
-            { key: 'market', to: '/market', label: 'Piyasa', show: true },
-            { key: 'news', to: '/news', label: 'Haberler', show: true },
-            { key: 'portfolio', to: '/portfolio', label: 'Portföy Analizi', show: true },
-            { key: 'trade', to: '/trade', label: 'Alım Satım', show: true },
-            { key: 'transactions', to: '/transactions', label: 'İşlem Geçmişi', show: true },
-            { key: 'wallet', to: '/wallet', label: 'Cüzdan', show: true },
-            { key: 'simulation', to: '/simulation', label: 'Simülasyon', show: true },
+            { key: 'dashboard', to: '/dashboard', label: t('nav.dashboard', 'Dashboard'), show: true },
+            { key: 'market', to: '/market', label: t('nav.market', 'Piyasa'), show: true },
+            { key: 'news', to: '/news', label: t('nav.news', 'Haberler'), show: true },
+            { key: 'portfolio', to: '/portfolio', label: t('nav.portfolio', 'Portföy Analizi'), show: true },
+            { key: 'trade', to: '/trade', label: t('nav.trade', 'Alım Satım'), show: true },
+            { key: 'transactions', to: '/transactions', label: t('nav.transactions', 'İşlem Geçmişi'), show: true },
+            { key: 'wallet', to: '/wallet', label: t('nav.wallet', 'Cüzdan'), show: true },
+            { key: 'simulation', to: '/simulation', label: t('nav.simulation', 'Simülasyon'), show: true },
         ];
-    }, [isAdmin, isFm]);
+    }, [isAdmin, isFm, t]);
     const visibleNavItems = navItems.filter((item) => item.show);
     const activeNavKey = useMemo(() => {
         let best: NavItem | undefined;
@@ -281,8 +284,19 @@ export function Layout() {
                                         <Sun size={14} className={theme === 'light' ? 'is-active' : ''} />
                                         <Moon size={14} className={theme === 'dark' ? 'is-active' : ''} />
                                     </span>
-                                    <span>{theme === 'light' ? 'Açık Tema' : 'Koyu Tema'}</span>
+                                    <span>{theme === 'light' ? t('theme.light', 'Açık Tema') : t('theme.dark', 'Koyu Tema')}</span>
                                 </button>
+                                <div className="header-dropdown__lang-row">
+                                    <span>{t('lang.newsLanguage', 'Haber Dili')}</span>
+                                    <select
+                                        className="header-dropdown__lang-select"
+                                        value={lang}
+                                        onChange={(e) => handleNewsLangChange(e.target.value)}
+                                    >
+                                        <option value="tr">{t('lang.turkish', 'Türkçe')}</option>
+                                        <option value="en">{t('lang.english', 'English')}</option>
+                                    </select>
+                                </div>
                             </div>
                         )}
                     </div>

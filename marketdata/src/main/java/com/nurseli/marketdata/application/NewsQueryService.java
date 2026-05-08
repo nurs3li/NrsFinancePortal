@@ -14,28 +14,39 @@ import org.springframework.stereotype.Service;
 public class NewsQueryService {
 
     private final NewsRepository newsRepository;
+    private final TranslationService translationService;
 
-    public Page<NewsResponse> getAllNews(Pageable pageable) {
+    public Page<NewsResponse> getAllNews(Pageable pageable, String lang, boolean detail) {
         return newsRepository.findAllByOrderByPublishedAtDesc(pageable)
-                .map(this::toResponse);
+                .map(news -> toResponse(news, lang, detail));
     }
 
-    public Page<NewsResponse> getNewsByCategory(NewsCategory category, Pageable pageable) {
+    public Page<NewsResponse> getNewsByCategory(NewsCategory category, Pageable pageable, String lang, boolean detail) {
         return newsRepository.findByCategoryOrderByPublishedAtDesc(category, pageable)
-                .map(this::toResponse);
+                .map(news -> toResponse(news, lang, detail));
     }
 
-    public NewsResponse getNewsById(Long id) {
+    public NewsResponse getNewsById(Long id, String lang) {
         News news = newsRepository.findById(id)
                 .orElseThrow(() -> new IllegalStateException("News not found with id: " + id));
-        return toResponse(news);
+        return toResponse(news, lang, true);
     }
 
-    private NewsResponse toResponse(News news) {
+    private NewsResponse toResponse(News news, String lang, boolean detail) {
+        String titleTr = null;
+        String contentTr = null;
+        if (lang != null && lang.toLowerCase().startsWith("tr")) {
+            titleTr = translationService.translate(news.getTitle());
+            if (detail) {
+                contentTr = translationService.translate(news.getSummary());
+            }
+        }
         return new NewsResponse(
                 news.getId(),
                 news.getTitle(),
+                titleTr,
                 news.getSummary(),
+                contentTr,
                 news.getSource(),
                 news.getUrl(),
                 news.getCategory(),

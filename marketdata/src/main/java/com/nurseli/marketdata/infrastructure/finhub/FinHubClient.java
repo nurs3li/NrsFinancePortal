@@ -100,6 +100,9 @@ public class FinHubClient {
      * GET /stock/candle?symbol=...&resolution=D&from=...&to=...&token=...
      */
     public Mono<FinHubCandleDto> fetchDailyCandles(String symbol, long fromEpochSec, long toEpochSec) {
+        if (!dataSourcesProperties.getFinhub().isCandleEnabled()) {
+            return Mono.empty();
+        }
         String apiKey = dataSourcesProperties.getFinhub().getApiKey();
         if (apiKey == null || apiKey.isBlank() || apiKey.equals("your-api-key-here")) {
             log.warn("[FINHUB] API key not configured, skipping candle fetch");
