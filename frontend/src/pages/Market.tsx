@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { financeClient, marketClient } from '../api/client';
 import type { LatestPriceRow, MarketDashboard } from '../components/market/marketTypes';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import { formatAssetLabel, getDynamicLogoUrl } from '../lib/assetBranding';
 import { AssetLogo } from '../components/AssetLogo';
 import { MarketFinvizTreemap, type TreemapTile } from '../components/market/MarketFinvizTreemap';
@@ -428,6 +429,7 @@ function isStarredResolved(data: StarredAssetsApiResponse | undefined, mt: strin
 
 export function Market() {
     const { theme, tokens } = useTheme();
+    const { t } = useLanguage();
     const navigate = useNavigate();
     const [activeCategory, setActiveCategory] = useState<MarketCategory>('EQUITY');
     const [showUsdInTry, setShowUsdInTry] = useState(false);
@@ -589,6 +591,16 @@ export function Market() {
                   boxSizing: 'border-box',
               }
             : undefined;
+    const leftPanelStyle: CSSProperties | undefined =
+        activeCategory === 'FUTURES' || activeCategory === 'BOND'
+            ? {
+                  height: 'clamp(620px, calc(100dvh - 210px), 860px)',
+                  maxHeight: 'clamp(620px, calc(100dvh - 210px), 860px)',
+                  minHeight: 0,
+                  overflow: 'hidden',
+                  boxSizing: 'border-box',
+              }
+            : sideRailBoxStyle;
 
     useEffect(() => {
         return () => {
@@ -616,24 +628,63 @@ export function Market() {
     const { data: viopLatest = [] } = useQuery({
         queryKey: ['market', 'viop', 'latest', 'terminal'],
         queryFn: () => marketClient.get<ViopSnapshot[]>('/api/market/viop/latest').then((r) => r.data),
-        refetchInterval: 15_000,
+        refetchInterval: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        staleTime: Infinity,
     });
     const { data: viopContracts = [] } = useQuery({
         queryKey: ['market', 'viop', 'contracts', 'terminal'],
         queryFn: () => marketClient.get<ViopContract[]>('/api/market/viop/contracts').then((r) => r.data),
-        refetchInterval: 60_000,
+        refetchInterval: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        staleTime: Infinity,
     });
-    const { data: viopLatestFromHistory = {} } = useQuery({
-        queryKey: ['market', 'viop', 'history-latest', 'terminal', range, viopContracts.length, viopLatest.length],
-        enabled: activeCategory === 'FUTURES' && viopLatest.length === 0 && viopContracts.length > 0,
+    const viopRangeDays = RANGE_TO_DAYS[range];
+    const { data: viopHistoryChangeMap = {} } = useQuery({
+        queryKey: ['market', 'viop', 'history-change-map', 'terminal', range, viopContracts.length],
+        enabled: activeCategory === 'FUTURES' && viopContracts.length > 0,
         queryFn: async () => {
-            const contracts = [...new Set(viopContracts.map((c) => normalizeSymbolKey(c.contractCode)).filter(Boolean))].slice(0, 120);
+            const contracts = [...new Set(viopContracts.map((c) => normalizeSymbolKey(c.contractCode)).filter(Boolean))];
             const entries = await Promise.all(
                 contracts.map(async (contract) => {
                     try {
                         const rows = await marketClient
                             .get<ViopSnapshot[]>('/api/market/viop/history', {
-                                params: { contract, days: Math.max(RANGE_TO_DAYS[range], 365) },
+                                params: { contract, days: Math.max(viopRangeDays, 365) },
+                            })
+                            .then((r) => r.data);
+                        const sorted = [...(rows ?? [])]
+                            .filter((x) => Number(x?.price ?? 0) > 0)
+                            .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
+                        const first = Number(sorted[0]?.price ?? Number.NaN);
+                        const last = Number(sorted[sorted.length - 1]?.price ?? Number.NaN);
+                        const pct = first > 0 && Number.isFinite(last) ? ((last - first) / first) * 100 : Number.NaN;
+                        return [contract, pct] as const;
+                    } catch {
+                        return [contract, Number.NaN] as const;
+                    }
+                })
+            );
+            return Object.fromEntries(entries) as Record<string, number>;
+        },
+        refetchInterval: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        staleTime: Infinity,
+    });
+    const { data: viopLatestFromHistory = {} } = useQuery({
+        queryKey: ['market', 'viop', 'history-latest', 'terminal', range, viopContracts.length, viopLatest.length],
+        enabled: activeCategory === 'FUTURES' && viopLatest.length === 0 && viopContracts.length > 0,
+        queryFn: async () => {
+            const contracts = [...new Set(viopContracts.map((c) => normalizeSymbolKey(c.contractCode)).filter(Boolean))];
+            const entries = await Promise.all(
+                contracts.map(async (contract) => {
+                    try {
+                        const rows = await marketClient
+                            .get<ViopSnapshot[]>('/api/market/viop/history', {
+                                params: { contract, days: Math.max(viopRangeDays, 365) },
                             })
                             .then((r) => r.data);
                         const latest = [...(rows ?? [])]
@@ -650,7 +701,8 @@ export function Market() {
         },
         refetchInterval: false,
         refetchOnWindowFocus: false,
-        staleTime: 10 * 60 * 1000,
+        refetchOnReconnect: false,
+        staleTime: Infinity,
     });
 
     const { data: debtLatest = [] } = useQuery({
@@ -752,9 +804,12 @@ export function Market() {
             });
             return [...merged.values()]
                 .map((v) => {
-                    const pct = v.price ? (Number(v.basis ?? 0) / Number(v.price)) * 100 : 0;
+                    const symbol = normalizeSymbolKey(v.contractCode);
+                    const pctByHistory = Number(viopHistoryChangeMap[symbol]);
+                    const pctFallback = v.price ? (Number(v.basis ?? 0) / Number(v.price)) * 100 : 0;
+                    const pct = Number.isFinite(pctByHistory) ? pctByHistory : pctFallback;
                     return {
-                        symbol: normalizeSymbolKey(v.contractCode),
+                        symbol,
                         category: 'FUTURES' as const,
                         price: Number(v.price ?? 0),
                         changePercent: Number.isFinite(pct) ? pct : 0,
@@ -854,7 +909,7 @@ export function Market() {
                 });
             });
         return [...unique.values()].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
-    }, [activeCategory, dashboard, viopLatest, viopLatestFromHistory, viopContracts, debtLatest, debtHistoryByIsin, fxSpreadMap]);
+    }, [activeCategory, dashboard, viopLatest, viopLatestFromHistory, viopHistoryChangeMap, viopContracts, debtLatest, debtHistoryByIsin, fxSpreadMap]);
 
     useEffect(() => {
         if (!instruments.length) {
@@ -998,7 +1053,10 @@ export function Market() {
                 return batch;
             }
         },
-        refetchInterval: 15_000,
+        refetchInterval: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        staleTime: Infinity,
     });
 
     const { data: viopHistory = [], isLoading: loadingViopHistory } = useQuery({
@@ -1030,7 +1088,10 @@ export function Market() {
                     params: { contract: selectedSymbol, days },
                 })
                 .then((r) => r.data),
-        refetchInterval: 15_000,
+        refetchInterval: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        staleTime: Infinity,
     });
 
     const { data: debtHistory = [], isLoading: loadingDebtHistory } = useQuery({
@@ -1419,9 +1480,27 @@ export function Market() {
         [instruments]
     );
     const futuresHighestCarry = useMemo(
-        () => [...instruments].sort((a, b) => Number(b.metrics?.yield ?? 0) - Number(a.metrics?.yield ?? 0)).slice(0, 5),
+        () =>
+            [...instruments]
+                .map((ins) => {
+                    const yieldVal = Number(ins.metrics?.yield);
+                    const basisVal = Number(ins.metrics?.basis);
+                    const fallback = Number.isFinite(basisVal) && ins.price > 0 ? (basisVal / ins.price) * 100 : Number.NaN;
+                    const carry = Number.isFinite(yieldVal) ? yieldVal : fallback;
+                    return { symbol: ins.symbol, carry };
+                })
+                .filter((x) => Number.isFinite(x.carry))
+                .sort((a, b) => b.carry - a.carry)
+                .slice(0, 5),
         [instruments]
     );
+
+    const formatCarry = useCallback((value: number) => {
+        if (!Number.isFinite(value)) return '—';
+        const abs = Math.abs(value);
+        if (abs > 0 && abs < 0.01) return value < 0 ? '-<0,01' : '<0,01';
+        return value.toLocaleString('tr-TR', { maximumFractionDigits: 4 });
+    }, []);
 
     const cryptoDominance = useMemo(() => {
         if (activeCategory !== 'CRYPTO' || !dashboard) return [] as { symbol: string; dominancePct: number }[];
@@ -1579,6 +1658,27 @@ export function Market() {
     }, []);
 
     const errMsg = dashboardError instanceof Error ? dashboardError.message : '';
+    const categoryLabel = useCallback(
+        (id: MarketCategory) => {
+            const key =
+                id === 'EQUITY'
+                    ? 'category.equity'
+                    : id === 'CRYPTO'
+                    ? 'category.crypto'
+                    : id === 'FX'
+                    ? 'category.fx'
+                    : id === 'METALS'
+                    ? 'category.metals'
+                    : id === 'FUNDS'
+                    ? 'category.funds'
+                    : id === 'FUTURES'
+                    ? 'category.futures'
+                    : 'category.bond';
+            const fallback = CATEGORY_LABELS.find((c) => c.id === id)?.label ?? id;
+            return t(key, fallback);
+        },
+        [t]
+    );
     const terminalVars = useMemo(
         () =>
             ({
@@ -1599,14 +1699,14 @@ export function Market() {
     );
 
     if (errMsg) {
-        return <div className="terminal-page">Piyasa terminali hatası: {errMsg}</div>;
+        return <div className="terminal-page">{t('market.pageError', 'Piyasa terminali hatası')}: {errMsg}</div>;
     }
 
     return (
         <div className="terminal-page" style={terminalVars}>
             <div className="terminal-hero">
                 <div>
-                    <div style={{ fontSize: 12, color: tokens.textMuted, marginBottom: 2 }}>Seçili Enstrüman</div>
+                    <div style={{ fontSize: 12, color: tokens.textMuted, marginBottom: 2 }}>{t('market.selectedInstrument', 'Seçili Enstrüman')}</div>
                     <div style={{ fontSize: 22, fontWeight: 700 }}>
                         {hero
                             ? activeCategory === 'FUTURES'
@@ -1659,11 +1759,16 @@ export function Market() {
             </div>
 
             {loadingDashboard ? (
-                <div className="terminal-card">Piyasa terminali yükleniyor...</div>
+                <div className="terminal-card">{t('market.loading', 'Piyasa terminali yükleniyor...')}</div>
             ) : (
                 <>
                     <div className="terminal-grid">
-                        <div className="terminal-card terminal-left-panel" style={sideRailBoxStyle}>
+                        <div
+                            className={`terminal-card terminal-left-panel ${
+                                activeCategory === 'FUTURES' || activeCategory === 'BOND' ? 'is-compact' : ''
+                            }`}
+                            style={leftPanelStyle}
+                        >
                             <div
                                 style={{
                                     display: 'flex',
@@ -1673,20 +1778,20 @@ export function Market() {
                                     marginBottom: 10,
                                 }}
                             >
-                                <div style={{ fontWeight: 700 }}>Piyasa Listesi</div>
+                                <div style={{ fontWeight: 700 }}>{t('market.marketList', 'Piyasa Listesi')}</div>
                                 {activeCategory === 'EQUITY' || activeCategory === 'CRYPTO' ? (
                                     <button
                                         type="button"
                                         className={`terminal-btn ${showUsdInTry ? 'active' : ''}`}
                                         onClick={() => setShowUsdInTry((v) => !v)}
                                     >
-                                        {showUsdInTry ? 'USD göster' : 'TL’ye çevir'}
+                                        {showUsdInTry ? t('market.showUsd', 'USD göster') : t('market.convertTry', 'TL’ye çevir')}
                                     </button>
                                 ) : null}
                             </div>
                             <input
                                 className="terminal-search"
-                                placeholder="Sembol / enstrüman ara"
+                                placeholder={t('market.searchPlaceholder', 'Sembol / enstrüman ara')}
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
@@ -1699,10 +1804,10 @@ export function Market() {
                                             <th aria-label="Yıldız" style={{ width: 36 }}>
                                                 ★
                                             </th>
-                                            <th>Enstrüman</th>
-                                            <th>Fiyat</th>
+                                            <th>{t('market.instrument', 'Enstrüman')}</th>
+                                            <th>{t('market.price', 'Fiyat')}</th>
                                             <th>%</th>
-                                            <th>Trend</th>
+                                            <th>{t('market.trend', 'Trend')}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1855,7 +1960,7 @@ export function Market() {
                                         className={`terminal-btn ${activeCategory === cat.id ? 'active' : ''}`}
                                         onClick={() => setActiveCategory(cat.id)}
                                     >
-                                        {cat.label}
+                                        {categoryLabel(cat.id)}
                                     </button>
                                 ))}
                             </div>
@@ -1874,14 +1979,14 @@ export function Market() {
                                             className={`terminal-btn ${bondChartMode === 'DUAL' ? 'active' : ''}`}
                                             onClick={() => setBondChartMode('DUAL')}
                                         >
-                                            Tahvil Analiz
+                                            {t('market.bondAnalysis', 'Tahvil Analiz')}
                                         </button>
                                         <button
                                             type="button"
                                             className={`terminal-btn ${bondChartMode === 'CANDLE' ? 'active' : ''}`}
                                             onClick={() => setBondChartMode('CANDLE')}
                                         >
-                                            Detaylı Mum
+                                            {t('market.detailedCandle', 'Detaylı Mum')}
                                         </button>
                                     </div>
                                 ) : null}
@@ -1892,14 +1997,14 @@ export function Market() {
                                             className={`terminal-btn ${viopChartMode === 'LINE' ? 'active' : ''}`}
                                             onClick={() => setViopChartMode('LINE')}
                                         >
-                                            VİOP Analiz
+                                            {t('market.viopAnalysis', 'VİOP Analiz')}
                                         </button>
                                         <button
                                             type="button"
                                             className={`terminal-btn ${viopChartMode === 'CANDLE' ? 'active' : ''}`}
                                             onClick={() => setViopChartMode('CANDLE')}
                                         >
-                                            Detaylı Mum
+                                            {t('market.detailedCandle', 'Detaylı Mum')}
                                         </button>
                                     </div>
                                 ) : null}
@@ -1910,14 +2015,14 @@ export function Market() {
                                             className={`terminal-btn ${spotChartMode === 'ANALYSIS' ? 'active' : ''}`}
                                             onClick={() => setSpotChartMode('ANALYSIS')}
                                         >
-                                            Piyasa Analiz
+                                            {t('market.marketAnalysis', 'Piyasa Analiz')}
                                         </button>
                                         <button
                                             type="button"
                                             className={`terminal-btn ${spotChartMode === 'CANDLE' ? 'active' : ''}`}
                                             onClick={() => setSpotChartMode('CANDLE')}
                                         >
-                                            Detaylı Mum
+                                            {t('market.detailedCandle', 'Detaylı Mum')}
                                         </button>
                                     </div>
                                 ) : null}
@@ -1964,7 +2069,7 @@ export function Market() {
                                 />
                             ) : activeCategory !== 'FUTURES' && activeCategory !== 'BOND' && spotChartMode === 'ANALYSIS' ? (
                                 <SpotTerminalChart
-                                    title={`${CATEGORY_LABELS.find((c) => c.id === activeCategory)?.label ?? 'Piyasa'} Analiz`}
+                                    title={`${categoryLabel(activeCategory)} ${t('market.marketAnalysis', 'Piyasa Analiz')}`}
                                     candles={candles}
                                     ma7={ma7}
                                     ma21={ma21}
@@ -2004,8 +2109,8 @@ export function Market() {
                         </div>
                         <div className="terminal-card terminal-center-comparison">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                <strong style={{ fontSize: 14 }}>Karşılaştırma Grafiği (Baz 100)</strong>
-                                <div style={{ fontSize: 12, color: '#94a3b8' }}>Aynı kategoriden 2-4 sembol seç</div>
+                                <strong style={{ fontSize: 14 }}>{t('market.comparisonChart', 'Karşılaştırma Grafiği (Baz 100)')}</strong>
+                                <div style={{ fontSize: 12, color: '#94a3b8' }}>{t('market.select2to4', 'Aynı kategoriden 2-4 sembol seç')}</div>
                             </div>
                             {marketType ? <div className="terminal-compare-selector">
                                 {instruments.slice(0, 12).map((ins) => {
@@ -2030,16 +2135,16 @@ export function Market() {
                             </div> : null}
                             {!marketType && activeCategory !== 'FUTURES' ? (
                                 <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
-                                    Tahvil kategorisinde karşılaştırma grafiği yerine üstteki ana chart kullanılır.
+                                    {t('market.compareBondInfo', 'Tahvil kategorisinde karşılaştırma grafiği yerine üstteki ana chart kullanılır.')}
                                 </div>
                             ) : null}
                             {loadingCompare ? (
                                 <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
-                                    Karşılaştırma yükleniyor...
+                                    {t('market.compareLoading', 'Karşılaştırma yükleniyor...')}
                                 </div>
                             ) : compareRows.length === 0 ? (
                                 <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
-                                    Karşılaştırma için en az iki sembol seçin.
+                                    {t('market.comparePickTwo', 'Karşılaştırma için en az iki sembol seçin.')}
                                 </div>
                             ) : (
                                 <div style={{ marginTop: 10 }}>
@@ -2063,7 +2168,7 @@ export function Market() {
                         </div>
 
                         <div className="terminal-card terminal-right-panel" style={sideRailBoxStyle}>
-                            <div style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}>Piyasa İçgörü</div>
+                            <div style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}>{t('market.marketInsights', 'Piyasa İçgörü')}</div>
                             <div className="terminal-right-panel-scroll">
                             {activeCategory === 'EQUITY' ||
                             activeCategory === 'CRYPTO' ||
@@ -2089,7 +2194,7 @@ export function Market() {
                                     </div>
                                     <div style={{ marginTop: 8 }}>
                                         <button type="button" className="terminal-btn" onClick={() => navigate('/market/heatmap')}>
-                                            Detaylı ısı haritası
+                                            {t('market.detailedHeatmap', 'Detaylı ısı haritası')}
                                         </button>
                                     </div>
                                     <div className="terminal-heatmap-detail">
@@ -2099,13 +2204,13 @@ export function Market() {
                                                     <strong>{hoverTile.symbol}</strong> · {hoverTile.assetClass}
                                                 </div>
                                                 <div>
-                                                    Değişim: {hoverTile.changePercent >= 0 ? '+' : ''}
+                                                    {t('market.change', 'Değişim')}: {hoverTile.changePercent >= 0 ? '+' : ''}
                                                     {hoverTile.changePercent.toFixed(2)}%
                                                 </div>
-                                                <div>Sektör: {hoverTile.sector}</div>
+                                                <div>{t('market.sector', 'Sektör')}: {hoverTile.sector}</div>
                                             </>
                                         ) : (
-                                            <div>Detay için ısı haritasında bir alana gelin.</div>
+                                            <div>{t('market.heatmapHoverPrompt', 'Detay için ısı haritasında bir alana gelin.')}</div>
                                         )}
                                     </div>
                                 </>
@@ -2127,7 +2232,7 @@ export function Market() {
                                     {futuresHighestCarry.map((v) => (
                                         <div key={`carry-${v.symbol}`} className="terminal-mini-item">
                                             <span>{parseViopContractLabel(v.symbol)}</span>
-                                            <span>%{Number(v.metrics?.yield ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
+                                            <span>%{formatCarry(v.carry)}</span>
                                         </div>
                                     ))}
                                     {futuresHeaderMetrics ? (
@@ -2168,14 +2273,14 @@ export function Market() {
                             ) : null}
 
                             {activeCategory !== 'FUTURES' ? <div className="terminal-mini-list">
-                                <strong style={{ fontSize: 13 }}>En Çok Yükselenler</strong>
+                                <strong style={{ fontSize: 13 }}>{t('market.topGainers', 'En Çok Yükselenler')}</strong>
                                 {topGainers.map((r) => (
                                     <div key={`g-${r.symbol}`} className="terminal-mini-item">
                                         <span>{r.symbol}</span>
                                         <span style={{ color: '#22c55e' }}>+{r.changePercent.toFixed(2)}%</span>
                                     </div>
                                 ))}
-                                <strong style={{ fontSize: 13, marginTop: 4 }}>En Çok Düşenler</strong>
+                                <strong style={{ fontSize: 13, marginTop: 4 }}>{t('market.topLosers', 'En Çok Düşenler')}</strong>
                                 {topLosers.map((r) => (
                                     <div key={`l-${r.symbol}`} className="terminal-mini-item">
                                         <span>{r.symbol}</span>
@@ -2195,8 +2300,8 @@ export function Market() {
                     </div>
 
                     <div style={{ marginTop: 8, display: 'flex', gap: 12, fontSize: 11, color: '#94a3b8' }}>
-                        <span>VİOP kontrat: {viopContracts.length}</span>
-                        <span>Tahvil enstrüman: {debtCatalog.length}</span>
+                        <span>{t('market.viopContracts', 'VİOP kontrat')}: {viopContracts.length}</span>
+                        <span>{t('market.bondInstruments', 'Tahvil enstrüman')}: {debtCatalog.length}</span>
                     </div>
                 </>
             )}

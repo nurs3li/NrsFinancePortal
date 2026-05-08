@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { marketClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import DOMPurify from 'dompurify';
 import { useSearchParams } from 'react-router-dom';
 import './News.css';
@@ -8,7 +9,9 @@ import './News.css';
 type NewsItem = {
     id: number;
     title: string;
+    titleTr?: string | null;
     summary: string | null;
+    contentTr?: string | null;
     content?: string | null;
     source: string | null;
     url: string | null;
@@ -33,6 +36,7 @@ const CATEGORIES = [
 
 export function News() {
     const { tokens } = useTheme();
+    const { lang, t } = useLanguage();
     const [searchParams] = useSearchParams();
     const focusId = Number(searchParams.get('focus') ?? 0);
     const queryCategory = searchParams.get('category') ?? '';
@@ -40,8 +44,11 @@ export function News() {
     const [category, setCategory] = useState('');
     const [pageNum, setPageNum] = useState(0);
     const [selected, setSelected] = useState<NewsItem | null>(null);
+    const [detailLoading, setDetailLoading] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const preferTurkish = lang === 'tr';
+    const uiLocale = lang === 'en' ? 'en-US' : 'tr-TR';
 
     useEffect(() => {
         if (!queryCategory) return;
@@ -86,7 +93,7 @@ export function News() {
 
     useEffect(() => {
         setLoading(true);
-        const params: { page: number; size: number; category?: string } = { page: pageNum, size: 10 };
+        const params: { page: number; size: number; detail: boolean; category?: string } = { page: pageNum, size: 10, detail: false };
         if (category) params.category = category;
         marketClient
             .get<NewsPage>('/api/news', { params })
@@ -95,19 +102,28 @@ export function News() {
             .finally(() => setLoading(false));
     }, [category, pageNum]);
 
+    const loadNewsDetail = (id: number, optimisticItem?: NewsItem) => {
+        if (optimisticItem) {
+            setSelected(optimisticItem);
+        }
+        setDetailLoading(true);
+        marketClient
+            .get<NewsItem>(`/api/news/${id}`)
+            .then((res) => setSelected(res.data))
+            .catch(() => {
+                // Detay açılamazsa liste deneyimini bozma.
+            })
+            .finally(() => setDetailLoading(false));
+    };
+
     useEffect(() => {
         if (!focusId || !page) return;
         const found = page.content.find((n) => n.id === focusId);
         if (found) {
-            setSelected(found);
+            loadNewsDetail(found.id, found);
             return;
         }
-        marketClient
-            .get<NewsItem>(`/api/news/${focusId}`)
-            .then((res) => setSelected(res.data))
-            .catch(() => {
-                // Odak haberi bulunamazsa mevcut akışı bozma.
-            });
+        loadNewsDetail(focusId);
     }, [focusId, page]);
 
     const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
@@ -118,14 +134,14 @@ export function News() {
         return (
             <div style={pageStyle}>
                 <h1 style={titleStyle}>Haberler</h1>
-                <p style={{ ...mutedStyle, color: tokens.error }}>Hata: {error}</p>
+                <p style={{ ...mutedStyle, color: tokens.error }}>{t('news.errorPrefix', 'Hata')}: {error}</p>
             </div>
         );
     }
 
     return (
         <div style={pageStyle}>
-            <h1 style={titleStyle}>Haberler</h1>
+            <h1 style={titleStyle}>{t('news.title', 'Haberler')}</h1>
             <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {CATEGORIES.map((c) => (
                     <button
@@ -149,13 +165,13 @@ export function News() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
                 <div>
-                    {loading && <p style={mutedStyle}>Yükleniyor...</p>}
-                    {page?.content?.length === 0 && <p style={mutedStyle}>Haber yok.</p>}
+                    {loading && <p style={mutedStyle}>{t('news.loading', 'Yükleniyor...')}</p>}
+                    {page?.content?.length === 0 && <p style={mutedStyle}>{t('news.empty', 'Haber yok.')}</p>}
                     <ul style={{ listStyle: 'none', padding: 0 }}>
                         {page?.content?.map((item) => (
                             <li
                                 key={item.id}
-                                onClick={() => setSelected(item)}
+                                onClick={() => loadNewsDetail(item.id, item)}
                                 style={{
                                     padding: 12,
                                     marginBottom: 8,
@@ -165,9 +181,11 @@ export function News() {
                                     background: tokens.bgCard,
                                 }}
                             >
-                                <strong style={{ fontSize: '0.9375rem' }}>{item.title}</strong>
+                                <strong style={{ fontSize: '0.9375rem' }}>
+                                    {preferTurkish && item.titleTr ? item.titleTr : item.title}
+                                </strong>
                                 <div style={{ fontSize: '0.75rem', color: tokens.textMuted, marginTop: 4 }}>
-                                    {item.source} · {new Date(item.publishedAt).toLocaleString('tr-TR')}
+                                    {item.source} · {new Date(item.publishedAt).toLocaleString(uiLocale)}
                                 </div>
                             </li>
                         ))}
@@ -180,42 +198,50 @@ export function News() {
                                 onClick={() => setPageNum((p) => p - 1)}
                                 style={{ padding: '6px 12px', background: tokens.bgCard, color: tokens.text, border: `1px solid ${tokens.border}`, borderRadius: 8, cursor: pageNum === 0 ? 'default' : 'pointer' }}
                             >
-                                Önceki
+                                {t('news.prev', 'Önceki')}
                             </button>
-                            <span style={{ color: tokens.textMuted }}>Sayfa {page.number + 1} / {Math.ceil(page.totalElements / page.size)}</span>
+                            <span style={{ color: tokens.textMuted }}>
+                                {t('news.page', 'Sayfa')} {page.number + 1} / {Math.ceil(page.totalElements / page.size)}
+                            </span>
                             <button
                                 type="button"
                                 disabled={(page.number + 1) * page.size >= page.totalElements}
                                 onClick={() => setPageNum((p) => p + 1)}
                                 style={{ padding: '6px 12px', background: tokens.bgCard, color: tokens.text, border: `1px solid ${tokens.border}`, borderRadius: 8, cursor: (page.number + 1) * page.size >= page.totalElements ? 'default' : 'pointer' }}
                             >
-                                Sonraki
+                                {t('news.next', 'Sonraki')}
                             </button>
                         </div>
                     )}
                 </div>
                 <div>
-                    {selected ? (
+                    {detailLoading ? (
+                        <p style={{ color: tokens.textMuted }}>{t('news.loading', 'Yükleniyor...')}</p>
+                    ) : selected ? (
                         <div style={{ padding: 16, border: `1px solid ${tokens.border}`, borderRadius: 8, background: tokens.bgCard }} className="news-detail-card">
-                            <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: 8 }}>{selected.title}</h2>
+                            <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: 8 }}>
+                                {preferTurkish && selected.titleTr ? selected.titleTr : selected.title}
+                            </h2>
                             <div className="news-detail-meta">
-                                <span><strong>Kaynak:</strong> {selected.source ?? 'Bilinmiyor'}</span>
-                                <span><strong>Tarih:</strong> {new Date(selected.publishedAt).toLocaleString('tr-TR')}</span>
+                                <span><strong>{t('news.source', 'Kaynak')}:</strong> {selected.source ?? 'Unknown'}</span>
+                                <span><strong>{t('news.date', 'Tarih')}:</strong> {new Date(selected.publishedAt).toLocaleString(uiLocale)}</span>
                             </div>
                             <div
                                 className="content-container"
                                 dangerouslySetInnerHTML={{
-                                    __html: extractReadableNewsBody(selected.content ?? selected.summary),
+                                    __html: extractReadableNewsBody(
+                                        (preferTurkish ? selected.contentTr : null) ?? selected.content ?? selected.summary
+                                    ),
                                 }}
                             />
                             {selected.url && (
                                 <a href={selected.url} target="_blank" rel="noreferrer" className="news-source-button">
-                                    Kaynağa git
+                                    {t('news.goToSource', 'Kaynağa git')}
                                 </a>
                             )}
                         </div>
                     ) : (
-                        <p style={{ color: tokens.textMuted }}>Detay için listeden bir haber seçin.</p>
+                        <p style={{ color: tokens.textMuted }}>{t('news.selectPrompt', 'Detay için listeden bir haber seçin.')}</p>
                     )}
                 </div>
             </div>

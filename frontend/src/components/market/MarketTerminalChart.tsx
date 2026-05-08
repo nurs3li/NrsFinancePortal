@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
-import type { ISeriesApi, Time, CandlestickData } from 'lightweight-charts';
+import type { Time, CandlestickData, LogicalRange } from 'lightweight-charts';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type CandleVM = {
@@ -67,8 +67,16 @@ export function MarketTerminalChart({
     trendLabel,
     timeframeLabel,
 }: Props) {
-    const wrapRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<HTMLDivElement>(null);
+    const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null);
+    const candleSeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addCandlestickSeries']> | null>(null);
+    const ma7SeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+    const ma21SeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+    const logicalRangeRef = useRef<LogicalRange | null>(null);
+    const hasInitialFitRef = useRef(false);
+    const candleByTimeRef = useRef<Record<string, CandleVM>>({});
+    const barCountRef = useRef(0);
+    const rangeRef = useRef(parseTerminalChartRange(timeframeLabel));
     const [hoverData, setHoverData] = useState<CandleVM | null>(null);
     const sortedCandles = useMemo(() => {
         const byTime = new Map<string, CandleVM>();
@@ -89,12 +97,8 @@ export function MarketTerminalChart({
 
     useEffect(() => {
         const el = chartRef.current;
-        if (!el || loading || !sortedCandles.length) return;
-
-        const chartRange = parseTerminalChartRange(timeframeLabel);
+        if (!el || chartApiRef.current) return;
         const widthPx = Math.max(320, el.clientWidth);
-        const tsLay = computeTerminalTimeScaleLayout(widthPx, sortedCandles.length, chartRange);
-
         const chart = createChart(el, {
             width: widthPx,
             height: chartHeight,
@@ -111,10 +115,15 @@ export function MarketTerminalChart({
                 borderColor: tokens.border,
                 timeVisible: true,
                 secondsVisible: false,
-                ...tsLay,
+                lockVisibleTimeRangeOnResize: true,
+                rightOffset: 0,
+                fixLeftEdge: true,
+                fixRightEdge: true,
+                shiftVisibleRangeOnNewBar: false,
             },
             crosshair: { mode: 1 },
         });
+        chartApiRef.current = chart;
 
         const candleSeries = chart.addCandlestickSeries({
             upColor: '#22c55e',
@@ -124,6 +133,80 @@ export function MarketTerminalChart({
             borderVisible: false,
             priceLineVisible: false,
         });
+        candleSeriesRef.current = candleSeries;
+
+        const ma7Series = chart.addLineSeries({
+            color: '#38bdf8',
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        });
+        ma7SeriesRef.current = ma7Series;
+
+        const ma21Series = chart.addLineSeries({
+            color: '#f59e0b',
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        });
+        ma21SeriesRef.current = ma21Series;
+
+        chart.subscribeCrosshairMove((param) => {
+            if (!param?.time) {
+                setHoverData(null);
+                return;
+            }
+            const key = String(param.time);
+            const row = candleByTimeRef.current[key];
+            setHoverData(row ?? null);
+        });
+        chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+            if (range) logicalRangeRef.current = range;
+        });
+
+        const onResize = () => {
+            const w = Math.max(320, el.clientWidth);
+            const lay = computeTerminalTimeScaleLayout(w, Math.max(2, barCountRef.current), rangeRef.current);
+            chart.applyOptions({
+                width: w,
+                timeScale: {
+                    borderColor: tokens.border,
+                    timeVisible: true,
+                    secondsVisible: false,
+                    lockVisibleTimeRangeOnResize: true,
+                    ...lay,
+                    rightOffset: 0,
+                    fixLeftEdge: true,
+                    fixRightEdge: true,
+                    shiftVisibleRangeOnNewBar: false,
+                },
+            });
+            if (logicalRangeRef.current) {
+                chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
+            }
+        };
+        window.addEventListener('resize', onResize);
+        return () => {
+            window.removeEventListener('resize', onResize);
+            chart.remove();
+            chartApiRef.current = null;
+            candleSeriesRef.current = null;
+            ma7SeriesRef.current = null;
+            ma21SeriesRef.current = null;
+            hasInitialFitRef.current = false;
+        };
+    }, [tokens, timeframeLabel]);
+
+    useEffect(() => {
+        const chart = chartApiRef.current;
+        const candleSeries = candleSeriesRef.current;
+        if (!chart || !candleSeries || loading || !sortedCandles.length) return;
+
+        const chartRange = parseTerminalChartRange(timeframeLabel);
+        const widthPx = Math.max(320, chartRef.current?.clientWidth ?? 320);
+        const tsLay = computeTerminalTimeScaleLayout(widthPx, sortedCandles.length, chartRange);
+        rangeRef.current = chartRange;
+        barCountRef.current = sortedCandles.length;
 
         const candleData: CandlestickData[] = sortedCandles.map((c) => ({
             time: toChartTime(c.time),
@@ -132,6 +215,12 @@ export function MarketTerminalChart({
             low: c.low,
             close: c.close,
         }));
+        const byTime: Record<string, CandleVM> = {};
+        sortedCandles.forEach((c) => {
+            byTime[String(toChartTime(c.time))] = c;
+        });
+        candleByTimeRef.current = byTime;
+
         candleSeries.setData(candleData);
         candleSeries.setMarkers(
             markers.map((m) => ({
@@ -139,74 +228,34 @@ export function MarketTerminalChart({
                 time: toChartTime(m.time),
             }))
         );
+        ma7SeriesRef.current?.setData(showMa ? ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+        ma21SeriesRef.current?.setData(showMa ? ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
 
-        let ma7Series: ISeriesApi<'Line'> | null = null;
-        let ma21Series: ISeriesApi<'Line'> | null = null;
-
-        if (showMa) {
-            ma7Series = chart.addLineSeries({
-                color: '#38bdf8',
-                lineWidth: 2,
-                priceLineVisible: false,
-                lastValueVisible: false,
-            });
-            ma7Series.setData(ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })));
-
-            ma21Series = chart.addLineSeries({
-                color: '#f59e0b',
-                lineWidth: 2,
-                priceLineVisible: false,
-                lastValueVisible: false,
-            });
-            ma21Series.setData(ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })));
-        }
-
-        chart.subscribeCrosshairMove((param) => {
-            if (!param?.time) {
-                setHoverData(null);
-                return;
-            }
-            const ohlc = param.seriesData.get(candleSeries) as
-                | { open: number; high: number; low: number; close: number }
-                | undefined;
-            if (!ohlc) {
-                setHoverData(null);
-                return;
-            }
-            setHoverData({
-                time: String(param.time),
-                open: Number(ohlc.open),
-                high: Number(ohlc.high),
-                low: Number(ohlc.low),
-                close: Number(ohlc.close),
-            });
+        chart.applyOptions({
+            timeScale: {
+                borderColor: tokens.border,
+                timeVisible: true,
+                secondsVisible: false,
+                lockVisibleTimeRangeOnResize: true,
+                ...tsLay,
+                rightOffset: 0,
+                fixLeftEdge: true,
+                fixRightEdge: true,
+                shiftVisibleRangeOnNewBar: false,
+            },
         });
 
-        const fit = () => requestAnimationFrame(() => chart.timeScale().fitContent());
-        fit();
-
-        const onResize = () => {
-            const w = Math.max(320, el.clientWidth);
-            const lay = computeTerminalTimeScaleLayout(w, sortedCandles.length, chartRange);
-            chart.applyOptions({
-                width: w,
-                timeScale: {
-                    borderColor: tokens.border,
-                    timeVisible: true,
-                    secondsVisible: false,
-                    ...lay,
-                },
+        if (!hasInitialFitRef.current) {
+            hasInitialFitRef.current = true;
+            requestAnimationFrame(() => {
+                chart.timeScale().fitContent();
+                logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
             });
-            fit();
-        };
-        window.addEventListener('resize', onResize);
-
-        return () => {
-            window.removeEventListener('resize', onResize);
-            ma7Series = null;
-            ma21Series = null;
-            chart.remove();
-        };
+            return;
+        }
+        if (logicalRangeRef.current) {
+            chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
+        }
     }, [loading, sortedCandles, markers, showMa, ma7, ma21, tokens, timeframeLabel]);
 
     if (loading) {
@@ -220,7 +269,7 @@ export function MarketTerminalChart({
     }
 
     return (
-        <div ref={wrapRef} className="terminal-chart-wrap">
+        <div className="terminal-chart-wrap">
             <div className="terminal-chart-header">
                 <div className="terminal-chart-title">Mum Grafik</div>
                 <div className="terminal-chart-badges">

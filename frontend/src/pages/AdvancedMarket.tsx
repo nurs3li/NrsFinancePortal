@@ -18,6 +18,7 @@ import {
 } from 'recharts';
 import { marketClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 
 type TabId = 'doviz' | 'crypto' | 'metals' | 'funds' | 'equity';
 
@@ -105,6 +106,7 @@ function getTabFromType(type?: string | null): TabId | null {
 
 export function AdvancedMarket() {
     const { tokens } = useTheme();
+    const { t } = useLanguage();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
 
@@ -390,7 +392,7 @@ export function AdvancedMarket() {
                     chartRef.current.timeScale().fitContent();
                 }
             })
-            .catch((e) => setError(e?.message ?? 'Grafik verisi yüklenemedi'))
+            .catch((e) => setError(e?.message ?? t('advanced.chartLoadFailed', 'Grafik verisi yüklenemedi')))
             .finally(() => setLoading(false));
     }, [activeTab, selectedSymbol, days, fetchBatchHistory, fetchIndicators]);
 
@@ -458,12 +460,12 @@ export function AdvancedMarket() {
         <div style={pageStyle}>
             <div style={titleStyle}>
                 <button type="button" onClick={() => navigate('/market')} style={backButtonStyle}>
-                    ← Piyasa özeti
+                    {t('advanced.backToMarketSummary', '← Piyasa özeti')}
                 </button>
-                <span>Gelişmiş Piyasa Grafiği</span>
+                <span>{t('advanced.title', 'Gelişmiş Piyasa Grafiği')}</span>
             </div>
             <p style={mutedStyle}>
-                Mum grafik, hareketli ortalama (MA 7/30/90) ve karşılaştırma — TradingView benzeri deneyim.
+                {t('advanced.subtitle', 'Mum grafik, hareketli ortalama (MA 7/30/90) ve karşılaştırma — TradingView benzeri deneyim.')}
             </p>
 
             <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
@@ -498,7 +500,7 @@ export function AdvancedMarket() {
                 </h2>
                 <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                     <label style={{ fontSize: '0.875rem' }}>
-                        Sembol:
+                        {t('trade.symbol', 'Sembol')}:
                         <select
                             value={selectedSymbol}
                             onChange={(e) => setSelectedSymbol(e.target.value)}
@@ -520,7 +522,7 @@ export function AdvancedMarket() {
                         </select>
                     </label>
                     <label style={{ fontSize: '0.875rem' }}>
-                        Dönem:
+                        {t('advanced.period', 'Dönem')}:
                         <select
                             value={days}
                             onChange={(e) => setDays(Number(e.target.value))}
@@ -536,7 +538,7 @@ export function AdvancedMarket() {
                         >
                             {DAYS_OPTIONS.map((d) => (
                                 <option key={d} value={d}>
-                                    Son {d} gün
+                                    {t('advanced.lastDays', 'Son')} {d} {t('dashboard.days', 'gün')}
                                 </option>
                             ))}
                         </select>
@@ -573,7 +575,7 @@ export function AdvancedMarket() {
                 )}
 
                 {error && <p style={{ ...mutedStyle, color: tokens.error }}>{error}</p>}
-                {loading && !error && <p style={mutedStyle}>Grafik yükleniyor...</p>}
+                {loading && !error && <p style={mutedStyle}>{t('advanced.chartLoading', 'Grafik yükleniyor...')}</p>}
 
                 <div
                     ref={containerRef}
@@ -590,10 +592,10 @@ export function AdvancedMarket() {
 
             <div style={cardStyle}>
                 <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>
-                    Karşılaştırma (baz 100)
+                    {t('market.comparisonChart', 'Karşılaştırma Grafiği (Baz 100)')}
                 </h2>
                 <p style={{ ...mutedStyle, marginBottom: 12 }}>
-                    Aynı kategoriden 2–4 sembol seçin; ilk gün 100 kabul edilir.
+                    {t('advanced.compareHint', 'Aynı kategoriden 2–4 sembol seçin; ilk gün 100 kabul edilir.')}
                 </p>
                 <div style={{ marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                     {symbolsForTab.slice(0, 12).map((sym) => (
@@ -618,9 +620,9 @@ export function AdvancedMarket() {
                         </label>
                     ))}
                 </div>
-                {loadingCompare && <p style={mutedStyle}>Yükleniyor...</p>}
+                {loadingCompare && <p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p>}
                 {!loadingCompare && compareData.length === 0 && (
-                    <p style={mutedStyle}>En az 2 sembol seçin.</p>
+                    <p style={mutedStyle}>{t('market.comparePickTwo', 'Karşılaştırma için en az iki sembol seçin.')}</p>
                 )}
                 {!loadingCompare && compareData.length > 0 && (
                     <div style={{ width: '100%', height: 280 }}>
