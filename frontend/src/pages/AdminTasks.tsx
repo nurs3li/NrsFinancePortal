@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import keycloak from '../auth/keycloak';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8085';
@@ -50,6 +51,7 @@ const COMPLETED_STATUSES = ['APPROVED', 'REJECTED'];
 
 export function AdminTasks() {
     const { tokens } = useTheme();
+    const { t } = useLanguage();
     const [tasks, setTasks] = useState<ReviewTaskView[]>([]);
     const [totalPages, setTotalPages] = useState(0);
     const [page, setPage] = useState(0);
@@ -80,7 +82,7 @@ export function AdminTasks() {
                 setTotalPages(pageData?.totalPages ?? 0);
             })
             .catch((err) => {
-                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Liste alınamadı';
+                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? t('admin.listLoadFailed', 'Liste alınamadı');
                 setError(msg);
             })
             .finally(() => setLoading(false));
@@ -144,7 +146,7 @@ export function AdminTasks() {
                 setCtxCache((prev) => ({ ...prev, [taskId]: raw as InvestigationContext }));
                 setExpandedId(taskId);
             })
-            .catch(() => setError('İnceleme verisi yüklenemedi'))
+            .catch(() => setError(t('admin.reviewLoadFailed', 'İnceleme verisi yüklenemedi')))
             .finally(() => setCtxLoading(null));
     };
 
@@ -160,7 +162,7 @@ export function AdminTasks() {
                 fetchTasks();
             })
             .catch((err) => {
-                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'İşlem başarısız';
+                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? t('admin.actionFailed', 'İşlem başarısız');
                 setError(msg);
             })
             .finally(() => setActionLoading(null));
@@ -223,7 +225,7 @@ export function AdminTasks() {
                         <div>
                             <strong>Whale:</strong>{' '}
                             {ctx.user.whale
-                                ? <span style={{ color: '#e74c3c', fontWeight: 600 }}>{ctx.user.whaleLevel}</span>
+                                ? <span style={{ color: tokens.error, fontWeight: 600 }}>{ctx.user.whaleLevel}</span>
                                 : <span style={{ color: tokens.textMuted }}>Hayır</span>}
                         </div>
                     </div>
@@ -235,7 +237,7 @@ export function AdminTasks() {
                         <div><strong>Hesap:</strong> #{ctx.account.id} ({ctx.account.type})</div>
                         <div>
                             <strong>Durum:</strong>{' '}
-                            <span style={{ fontWeight: 600, color: ctx.account.status === 'FROZEN' ? '#e74c3c' : '#27ae60' }}>
+                            <span style={{ fontWeight: 600, color: ctx.account.status === 'FROZEN' ? tokens.error : tokens.success }}>
                                 {ctx.account.status}
                             </span>
                         </div>
@@ -250,10 +252,10 @@ export function AdminTasks() {
                     <div style={sectionTitle}>Şüpheli Olay Detayı</div>
                     <div style={{
                         padding: 10, borderRadius: 8, background: tokens.bgCard,
-                        border: `1px solid ${tokens.border}`, borderLeft: '3px solid #e74c3c',
+                        border: `1px solid ${tokens.border}`, borderLeft: `3px solid ${tokens.error}`,
                         fontSize: '0.8125rem', display: 'flex', flexWrap: 'wrap', gap: 16,
                     }}>
-                        <span><strong>Sebep:</strong> <span style={{ color: '#e74c3c', fontWeight: 600 }}>{ctx.suspiciousEvent.reason}</span></span>
+                        <span><strong>Sebep:</strong> <span style={{ color: tokens.error, fontWeight: 600 }}>{ctx.suspiciousEvent.reason}</span></span>
                         <span><strong>Tutar:</strong> {formatMoney(ctx.suspiciousEvent.amount)}</span>
                         <span><strong>Pencere:</strong> {ctx.suspiciousEvent.countInWindow ?? '–'} işlem</span>
                         <span><strong>Eşik tutar:</strong> {formatMoney(ctx.suspiciousEvent.thresholdAmount)}</span>
@@ -313,7 +315,7 @@ export function AdminTasks() {
                                         <td style={innerTdStyle}>{tx.id}</td>
                                         <td style={{
                                             ...innerTdStyle, fontWeight: 600,
-                                            color: tx.type === 'DEPOSIT' ? '#27ae60' : tx.type === 'WITHDRAW' ? '#e74c3c' : tokens.text,
+                                            color: tx.type === 'DEPOSIT' ? tokens.success : tx.type === 'WITHDRAW' ? tokens.error : tokens.text,
                                         }}>{tx.type}</td>
                                         <td style={innerTdStyle}>{formatMoney(tx.amount)}</td>
                                         <td style={innerTdStyle}>{formatMoney(tx.balanceAfter)}</td>
@@ -350,17 +352,17 @@ export function AdminTasks() {
 
     return (
         <div style={pageStyle}>
-            <h1 style={titleStyle}>Admin Görevler</h1>
-            <p style={mutedStyle}>Freeze talepleri ve escalation görevleri.</p>
+            <h1 style={titleStyle}>{t('nav.adminTasks', 'Admin Görevler')}</h1>
+            <p style={mutedStyle}>{t('admin.tasksSubtitle', 'Freeze talepleri ve escalation görevleri.')}</p>
 
             <div style={{ marginTop: 16, marginBottom: 16 }}>
-                <label style={{ marginRight: 8, color: tokens.textMuted }}>Durum: </label>
+                <label style={{ marginRight: 8, color: tokens.textMuted }}>{t('wallet.status', 'Durum')}: </label>
                 <select
                     style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: tokens.text }}
                     value={status}
                     onChange={(e) => { setStatus(e.target.value); setPage(0); }}
                 >
-                    <option value="">Tümü</option>
+                    <option value="">{t('admin.all', 'Tümü')}</option>
                     <option value="PENDING">PENDING</option>
                     <option value="ESCALATED">ESCALATED</option>
                     <option value="FREEZE_REQUESTED">FREEZE_REQUESTED</option>
@@ -368,8 +370,8 @@ export function AdminTasks() {
                 </select>
             </div>
 
-            {error && <p style={{ color: tokens.error, marginBottom: 16 }}>Hata: {error}</p>}
-            {loading && <p style={mutedStyle}>Yükleniyor...</p>}
+            {error && <p style={{ color: tokens.error, marginBottom: 16 }}>{t('news.errorPrefix', 'Hata')}: {error}</p>}
+            {loading && <p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p>}
 
             {!loading && (
                 <div style={{ overflowX: 'auto', border: `1px solid ${tokens.border}`, borderRadius: 12, background: tokens.bgCard }}>
@@ -388,11 +390,11 @@ export function AdminTasks() {
                         </thead>
                         <tbody>
                         {tasks.length === 0 ? (
-                            <tr><td colSpan={8} style={{ ...tdStyle, color: tokens.textMuted, textAlign: 'center' }}>Görev yok.</td></tr>
+                            <tr><td colSpan={8} style={{ ...tdStyle, color: tokens.textMuted, textAlign: 'center' }}>{t('admin.noTasks', 'Görev yok.')}</td></tr>
                         ) : (
                             tasks.map((row) => {
                                 const escalated = row.status === 'ESCALATED';
-                                const rowBg = escalated ? 'rgba(239,68,68,0.18)' : undefined;
+                                const rowBg = escalated ? tokens.bg : undefined;
                                 return (
                                 <Fragment key={row.id}>
                                     <tr style={{ background: rowBg }}>
@@ -403,7 +405,7 @@ export function AdminTasks() {
                                         <td style={tdStyle}>{row.subjectUserId ?? '–'}</td>
                                         <td style={tdStyle}>
                                             {escalated && (
-                                                <span style={{ marginRight: 6, color: '#ef4444', fontWeight: 800 }} title="Eskale">
+                                                <span style={{ marginRight: 6, color: tokens.error, fontWeight: 800 }} title="Eskale">
                                                     ⚠
                                                 </span>
                                             )}
@@ -422,7 +424,7 @@ export function AdminTasks() {
                                                 disabled={ctxLoading === row.id}
                                                 onClick={() => toggleContext(row.id)}
                                             >
-                                                {ctxLoading === row.id ? '...' : expandedId === row.id ? 'Kapat ▲' : 'İncele ▼'}
+                                                {ctxLoading === row.id ? '...' : expandedId === row.id ? t('admin.close', 'Kapat ▲') : t('admin.inspect', 'İncele ▼')}
                                             </button>
                                             {!COMPLETED_STATUSES.includes(row.status) && row.type === 'FREEZE_APPROVAL' && (
                                                 <>
@@ -449,7 +451,7 @@ export function AdminTasks() {
                                                 <>
                                                     <button
                                                         type="button"
-                                                        style={{ ...btnStyle, borderColor: '#6366f1', color: '#a5b4fc' }}
+                                                        style={{ ...btnStyle, borderColor: tokens.accent, color: tokens.accent }}
                                                         disabled={actionLoading === row.id}
                                                         onClick={() => openForceModal(row.id)}
                                                     >
@@ -457,7 +459,7 @@ export function AdminTasks() {
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        style={{ ...btnStyle, borderColor: '#22c55e', color: '#86efac' }}
+                                                        style={{ ...btnStyle, borderColor: tokens.success, color: tokens.success }}
                                                         disabled={actionLoading === row.id}
                                                         onClick={() => handleAdminPatch(row.id, { action: 'RESOLVE_ESCALATED_CLEAR' })}
                                                     >
@@ -465,7 +467,7 @@ export function AdminTasks() {
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        style={{ ...btnStyle, borderColor: '#f97316', color: '#fdba74' }}
+                                                        style={{ ...btnStyle, borderColor: '#f59e0b', color: '#f59e0b' }}
                                                         disabled={actionLoading === row.id}
                                                         onClick={() => openReasonModal(row.id, 'RESOLVE_ESCALATED_FREEZE')}
                                                     >
@@ -495,20 +497,20 @@ export function AdminTasks() {
                         style={{ ...btnStyle, opacity: page === 0 ? 0.6 : 1 }}
                         onClick={() => setPage((p) => Math.max(0, p - 1))}
                         disabled={page === 0}
-                    >Önceki</button>
+                    >{t('news.prev', 'Önceki')}</button>
                     <span style={{ color: tokens.textMuted }}>Sayfa {page + 1} / {totalPages}</span>
                     <button
                         style={{ ...btnStyle, opacity: page >= totalPages - 1 ? 0.6 : 1 }}
                         onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                         disabled={page >= totalPages - 1}
-                    >Sonraki</button>
+                    >{t('news.next', 'Sonraki')}</button>
                 </div>
             )}
 
             {reasonModal && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
                     <div style={{ background: tokens.bgCard, padding: 24, borderRadius: 12, border: `1px solid ${tokens.border}`, minWidth: 320 }}>
-                        <h3 style={{ marginBottom: 16 }}>Sebep (isteğe bağlı)</h3>
+                        <h3 style={{ marginBottom: 16 }}>{t('admin.reasonOptional', 'Sebep (isteğe bağlı)')}</h3>
                         <input
                             type="text"
                             value={reason}
@@ -527,9 +529,9 @@ export function AdminTasks() {
                                     }
                                 }}
                             >
-                                Gönder
+                                {t('admin.send', 'Gönder')}
                             </button>
-                            <button style={btnStyle} onClick={() => { setReasonModal(null); setReason(''); }}>İptal</button>
+                            <button style={btnStyle} onClick={() => { setReasonModal(null); setReason(''); }}>{t('common.cancel', 'İptal')}</button>
                         </div>
                     </div>
                 </div>
@@ -538,13 +540,13 @@ export function AdminTasks() {
             {forceModalTaskId != null && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
                     <div style={{ background: tokens.bgCard, padding: 24, borderRadius: 12, border: `1px solid ${tokens.border}`, minWidth: 360 }}>
-                        <h3 style={{ marginBottom: 16 }}>FM seç — Zorla Ata</h3>
+                        <h3 style={{ marginBottom: 16 }}>{t('admin.forceAssignTitle', 'FM seç — Zorla Ata')}</h3>
                         <select
                             value={selectedFmId}
                             onChange={(e) => setSelectedFmId(e.target.value)}
                             style={{ width: '100%', padding: 8, marginBottom: 16, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.inputBg, color: tokens.text }}
                         >
-                            <option value="">— Seçin —</option>
+                            <option value="">— {t('admin.select', 'Seçin')} —</option>
                             {fmOptions.map((fm) => (
                                 <option key={fm.id} value={String(fm.id)}>
                                     {fm.username} ({fm.email})
@@ -553,7 +555,7 @@ export function AdminTasks() {
                         </select>
                         <div>
                             <button style={btnStyle} onClick={submitForceAssign} disabled={!selectedFmId}>Ata</button>
-                            <button style={btnStyle} onClick={() => { setForceModalTaskId(null); setSelectedFmId(''); }}>İptal</button>
+                            <button style={btnStyle} onClick={() => { setForceModalTaskId(null); setSelectedFmId(''); }}>{t('common.cancel', 'İptal')}</button>
                         </div>
                     </div>
                 </div>

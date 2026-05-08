@@ -5,6 +5,7 @@ import { financeClient, marketClient } from '../api/client';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import { Coins, DollarSign, TrendingUp, type LucideIcon } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatAssetLabel, getDynamicLogoUrl, type MarketType } from '../lib/assetBranding';
@@ -125,6 +126,7 @@ const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
 export function Dashboard() {
     const navigate = useNavigate();
     const { theme, tokens } = useTheme();
+    const { t } = useLanguage();
     const [summary, setSummary] = useState<SummaryResponse | null>(null);
     const [balancePoints, setBalancePoints] = useState<BalancePoint[]>([]);
     const [selectedFilter, setSelectedFilter] = useState<TimeFilter>('1A');
@@ -377,7 +379,7 @@ export function Dashboard() {
         return (
             <div className="saas-dashboard" style={dashboardVars}>
                 <div className="dashboard-headline">
-                    <h1 className="dashboard-title">Dashboard</h1>
+                    <h1 className="dashboard-title">{t('nav.dashboard', 'Dashboard')}</h1>
                 </div>
                 <div className="dashboard-kpi-grid">
                     {Array.from({ length: 4 }).map((_, i) => (
@@ -432,16 +434,16 @@ export function Dashboard() {
     if (error) {
         return (
             <div className="saas-dashboard" style={dashboardVars}>
-                <h1 className="dashboard-title">Dashboard</h1>
-                <p className="dashboard-error">Hata: {error}</p>
+                <h1 className="dashboard-title">{t('nav.dashboard', 'Dashboard')}</h1>
+                <p className="dashboard-error">{t('news.errorPrefix', 'Hata')}: {error}</p>
             </div>
         );
     }
     if (!summary) {
         return (
             <div className="saas-dashboard" style={dashboardVars}>
-                <h1 className="dashboard-title">Dashboard</h1>
-                <p className="dashboard-muted">Özet verisi bulunamadı.</p>
+                <h1 className="dashboard-title">{t('nav.dashboard', 'Dashboard')}</h1>
+                <p className="dashboard-muted">{t('dashboard.summaryMissing', 'Özet verisi bulunamadı.')}</p>
             </div>
         );
     }
@@ -452,12 +454,12 @@ export function Dashboard() {
             style={dashboardVars}
         >
             <div className="dashboard-headline">
-                <h1 className="dashboard-title">Dashboard</h1>
+                <h1 className="dashboard-title">{t('nav.dashboard', 'Dashboard')}</h1>
             </div>
 
             <div className="dashboard-kpi-grid">
                 <div className="dashboard-card">
-                    <p className="kpi-label">Toplam portföy değeri</p>
+                    <p className="kpi-label">{t('dashboard.totalPortfolioValue', 'Toplam portföy değeri')}</p>
                     <p className="kpi-value">{formatMoney(totalPortfolio)}</p>
                     <p className="kpi-subtext">
                         Balina etkisi skoru:{' '}
@@ -465,7 +467,7 @@ export function Dashboard() {
                     </p>
                 </div>
                 <div className="dashboard-card">
-                    <p className="kpi-label">Nakit (TRY)</p>
+                    <p className="kpi-label">{t('dashboard.cashTry', 'Nakit (TRY)')}</p>
                     <p className="kpi-value">{formatMoney(totalCash)}</p>
                 </div>
                 <div className="dashboard-card">
@@ -532,7 +534,7 @@ export function Dashboard() {
 
             <div className="dashboard-bottom-grid">
                 <div className="dashboard-card">
-                    <h2 className="section-title">Yıldızlanan varlıklar</h2>
+                    <h2 className="section-title">{t('dashboard.starredAssets', 'Yıldızlanan varlıklar')}</h2>
                     <div className="assets-table">
                         {starAssets.map((asset) => {
                             const logoUrl = getDynamicLogoUrl(asset.code, asset.marketType);
@@ -677,7 +679,7 @@ export function Dashboard() {
                 </div>
 
                 <div className="dashboard-card">
-                    <h2 className="section-title">En Son Haberler</h2>
+                    <h2 className="section-title">{t('dashboard.latestNews', 'En Son Haberler')}</h2>
                     <div className="news-list">
                         {latestNews.length === 0 ? (
                             <p className="dashboard-muted">Haber verisi bulunamadı.</p>

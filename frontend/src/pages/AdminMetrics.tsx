@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { metricsClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import {
     BarChart,
     Bar,
@@ -38,6 +39,7 @@ const tooltipAdetFormatter = ((value: number) => [String(value), 'Adet']) as nev
 
 export function AdminMetrics() {
     const { tokens } = useTheme();
+    const { t } = useLanguage();
     const [metrics, setMetrics] = useState<DashboardMetricsDto | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export function AdminMetrics() {
                 setMetrics(d ?? null);
             })
             .catch((err) => {
-                setError(err.response?.data?.message ?? err.message ?? 'Metrikler yüklenemedi');
+                setError(err.response?.data?.message ?? err.message ?? t('admin.metricsLoadFailed', 'Metrikler yüklenemedi'));
             })
             .finally(() => setLoading(false));
     }, []);
@@ -80,8 +82,8 @@ export function AdminMetrics() {
     if (error) {
         return (
             <div style={pageStyle}>
-                <h1 style={titleStyle}>Metrik Dashboard</h1>
-                <p style={{ ...mutedStyle, color: tokens.error }}>Hata: {error}</p>
+                <h1 style={titleStyle}>{t('admin.metricsTitle', 'Metrik Dashboard')}</h1>
+                <p style={{ ...mutedStyle, color: tokens.error }}>{t('news.errorPrefix', 'Hata')}: {error}</p>
             </div>
         );
     }
@@ -89,8 +91,8 @@ export function AdminMetrics() {
     if (loading) {
         return (
             <div style={pageStyle}>
-                <h1 style={titleStyle}>Metrik Dashboard</h1>
-                <p style={mutedStyle}>Yükleniyor...</p>
+                <h1 style={titleStyle}>{t('admin.metricsTitle', 'Metrik Dashboard')}</h1>
+                <p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p>
             </div>
         );
     }
@@ -98,8 +100,8 @@ export function AdminMetrics() {
     if (!metrics) {
         return (
             <div style={pageStyle}>
-                <h1 style={titleStyle}>Metrik Dashboard</h1>
-                <p style={mutedStyle}>Veri yok.</p>
+                <h1 style={titleStyle}>{t('admin.metricsTitle', 'Metrik Dashboard')}</h1>
+                <p style={mutedStyle}>{t('admin.noData', 'Veri yok.')}</p>
             </div>
         );
     }
@@ -112,7 +114,7 @@ export function AdminMetrics() {
 
     return (
         <div style={pageStyle}>
-            <h1 style={titleStyle}>Metrik Dashboard</h1>
+            <h1 style={titleStyle}>{t('admin.metricsTitle', 'Metrik Dashboard')}</h1>
             <p style={{ ...mutedStyle, marginBottom: 24 }}>Trade, whale ve şüpheli olay özeti (Metrics Service).</p>
 
             {/* KPI kartları */}

@@ -224,6 +224,22 @@ public class ReviewTaskService {
     }
 
     @Transactional(readOnly = true)
+    public FmTaskSummaryDto getFmTaskSummaryForManager(User manager) {
+        if (manager == null || manager.getRole() != Role.FINANCE_MANAGER || manager.getKeycloakUserId() == null) {
+            return new FmTaskSummaryDto(0, 0, 0);
+        }
+        String sub = manager.getKeycloakUserId();
+        long pool = reviewTaskRepository.countByAssigneeRoleAndStatusAndAssignedFmKeycloakIdIsNull(
+                "FINANCE_MANAGER", ReviewTaskStatus.PENDING);
+        long mineOpen = reviewTaskRepository.countByAssigneeRoleAndAssignedFmKeycloakIdAndStatus(
+                "FINANCE_MANAGER", sub, ReviewTaskStatus.CLAIMED);
+        long mineDone = reviewTaskRepository.countByAssigneeRoleAndAssignedFmKeycloakIdAndStatusIn(
+                "FINANCE_MANAGER", sub,
+                List.of(ReviewTaskStatus.APPROVED, ReviewTaskStatus.REJECTED, ReviewTaskStatus.FREEZE_REQUESTED));
+        return new FmTaskSummaryDto(pool, mineOpen, mineDone);
+    }
+
+    @Transactional(readOnly = true)
     public List<FmUserOptionDto> listFinanceManagersForAdmin() {
         return userRepository.findByRole(Role.FINANCE_MANAGER).stream()
                 .map(FmUserOptionDto::from)
