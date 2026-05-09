@@ -44,6 +44,11 @@ public class JwtRealmAndDbRoleAuthoritiesConverter implements Converter<Jwt, Col
         }
         userRepository.findByKeycloakUserId(sub)
                 .ifPresent(user -> authorities.add(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
+        if (!hasAnyAppRole(authorities)) {
+            // New Keycloak users may arrive without mapped realm role in first token.
+            // Keep first-login flow working by granting baseline USER authority.
+            authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
+        }
         return authorities;
     }
 
