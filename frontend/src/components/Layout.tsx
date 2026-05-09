@@ -4,7 +4,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
 import { notificationClient } from '../api/client';
-import { Bell, ChevronDown, Landmark, LogOut, Moon, Sun } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, Moon, Sun } from 'lucide-react';
+import { NrsBrandLockup } from './NrsBrandLockup';
 import { useHeaderInteractions } from './header';
 import './Layout.css';
 
@@ -37,7 +38,13 @@ export function Layout() {
 
     const fetchDropdownNotifications = useCallback(() => {
         if (!isAuthenticated) return;
-        notificationClient.get<{ content: { id: number; title: string; readAt: string | null; type: string }[] }>('/api/notifications/me', { params: { size: 10 } })
+        notificationClient.get<{ content: { id: number; title: string; readAt: string | null; type: string }[] }>('/api/notifications/me', {
+            params: {
+                size: 10,
+                unreadOnly: true,
+                sort: ['lastOccurredAt,desc', 'createdAt,desc'],
+            },
+        })
             .then((res) => setDropdownItems(res.data?.content ?? []))
             .catch(() => setDropdownItems([]));
     }, [isAuthenticated]);
@@ -71,7 +78,6 @@ export function Layout() {
     };
     const handleLogout = () => {
         logout();
-        navigate('/');
     };
     const handleNewsLangChange = (value: string) => setLang(value === 'en' ? 'en' : 'tr');
 
@@ -154,9 +160,8 @@ export function Layout() {
         >
             <header className={`app-header ${isScrolled ? 'is-scrolled' : ''}`}>
                 <div className="app-header__left">
-                    <Link to="/" className="app-header__logo">
-                        <Landmark size={16} />
-                        <span>NRS Finance Portal</span>
+                    <Link to="/" className="app-header__logo" aria-label="NRS Finance Portal">
+                        <NrsBrandLockup />
                     </Link>
                 </div>
 
@@ -269,33 +274,52 @@ export function Layout() {
                                     FM
                                 </span>
                             )}
-                            <span>{(user?.username ?? user?.email ?? 'testuser')} — {role ?? user?.role ?? 'USER'}</span>
+                            <span>{(user?.username ?? user?.email ?? '—')} — {role ?? user?.role ?? 'USER'}</span>
                             <ChevronDown size={14} className={isUserMenuOpen ? 'rotated' : ''} />
                         </button>
                         {isUserMenuOpen && (
                             <div className="header-dropdown header-dropdown--user">
-                                <button
-                                    type="button"
-                                    className="header-dropdown__action"
-                                    onClick={toggleTheme}
-                                    title="Tema değiştir"
-                                >
-                                    <span className="theme-switch-icons">
-                                        <Sun size={14} className={theme === 'light' ? 'is-active' : ''} />
-                                        <Moon size={14} className={theme === 'dark' ? 'is-active' : ''} />
-                                    </span>
-                                    <span>{theme === 'light' ? t('theme.light', 'Açık Tema') : t('theme.dark', 'Koyu Tema')}</span>
-                                </button>
-                                <div className="header-dropdown__lang-row">
-                                    <span>{t('lang.newsLanguage', 'Haber Dili')}</span>
-                                    <select
-                                        className="header-dropdown__lang-select"
-                                        value={lang}
-                                        onChange={(e) => handleNewsLangChange(e.target.value)}
-                                    >
-                                        <option value="tr">{t('lang.turkish', 'Türkçe')}</option>
-                                        <option value="en">{t('lang.english', 'English')}</option>
-                                    </select>
+                                <div className="header-quick-switch">
+                                    <div className="header-quick-switch__theme">
+                                        <button
+                                            type="button"
+                                            className={`header-quick-switch__icon-btn ${theme === 'light' ? 'is-active' : ''}`}
+                                            onClick={() => {
+                                                if (theme !== 'light') toggleTheme();
+                                            }}
+                                            title={t('theme.light', 'Açık Tema')}
+                                        >
+                                            <Sun size={16} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`header-quick-switch__icon-btn ${theme === 'dark' ? 'is-active' : ''}`}
+                                            onClick={() => {
+                                                if (theme !== 'dark') toggleTheme();
+                                            }}
+                                            title={t('theme.dark', 'Koyu Tema')}
+                                        >
+                                            <Moon size={16} />
+                                        </button>
+                                    </div>
+                                    <div className="header-quick-switch__lang">
+                                        <button
+                                            type="button"
+                                            className={`header-quick-switch__lang-btn ${lang === 'tr' ? 'is-active' : ''}`}
+                                            onClick={() => handleNewsLangChange('tr')}
+                                        >
+                                            {t('lang.turkish', 'Türkçe')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`header-quick-switch__lang-btn ${lang === 'en' ? 'is-active' : ''}`}
+                                            onClick={() => handleNewsLangChange('en')}
+                                        >
+                                            {t('lang.english', 'English')}
+                                        </button>
+                                        <span className="header-quick-switch__divider" />
+                                        <ChevronDown size={18} className="header-quick-switch__caret" />
+                                    </div>
                                 </div>
                             </div>
                         )}

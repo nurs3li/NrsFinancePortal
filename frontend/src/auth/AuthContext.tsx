@@ -48,11 +48,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const login = useCallback(() => {
-        keycloak.login({ locale: 'tr' });
+        // Force credential chooser instead of silently reusing stale SSO user.
+        keycloak.login({ locale: 'tr', prompt: 'login' });
     }, []);
 
     const logout = useCallback(() => {
-        keycloak.logout();
+        // End Keycloak SSO session and return to landing (/).
+        keycloak.logout({ redirectUri: `${window.location.origin}/` });
         setUser(null);
         setJwtRealmRoles([]);
     }, []);
