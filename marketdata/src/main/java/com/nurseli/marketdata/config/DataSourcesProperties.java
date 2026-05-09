@@ -22,7 +22,17 @@ public class DataSourcesProperties {
 
     @Data
     public static class CoinGecko {
+        /**
+         * Ücretsiz: https://api.coingecko.com/api/v3 — Pro: https://pro-api.coingecko.com/api/v3
+         */
         private String url;
+        /**
+         * CoinGecko Pro/Demo anahtarı. Boşsa ücretsiz kotaya düşer; OHLC yoğun backfill'de 429 sık görülür.
+         */
+        private String apiKey = "";
+        private int connectTimeoutMs = 3000;
+        /** OHLC gibi büyük yanıtlar için okuma süresi */
+        private int readTimeoutMs = 15000;
     }
 
     @Data

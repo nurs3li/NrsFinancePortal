@@ -31,9 +31,12 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<Map<String, Object>> handleNotFound(IllegalStateException ex, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException ex, HttpServletRequest request) {
         log.warn("[EXCEPTION] IllegalStateException: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorBody(ex.getMessage(), request));
+        HttpStatus status = ex.getMessage() != null && ex.getMessage().contains("Gmail OAuth")
+                ? HttpStatus.BAD_GATEWAY
+                : HttpStatus.NOT_FOUND;
+        return ResponseEntity.status(status).body(errorBody(ex.getMessage(), request));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

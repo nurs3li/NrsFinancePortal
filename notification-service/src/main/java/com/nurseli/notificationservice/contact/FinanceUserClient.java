@@ -4,8 +4,10 @@ import com.nurseli.notificationservice.security.S2SAccessTokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 @Component
 @RequiredArgsConstructor
@@ -24,8 +26,15 @@ public class FinanceUserClient {
         return webClient.get()
                 .uri(financeBaseUrl + "/internal/users/by-sub/{sub}", sub)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
-                .retrieve()
-                .bodyToMono(FinanceUserInfoResponse.class)
+                .exchangeToMono(resp -> {
+                    if (resp.statusCode() == HttpStatus.NOT_FOUND) {
+                        return Mono.empty();
+                    }
+                    if (resp.statusCode().isError()) {
+                        return resp.createException().flatMap(Mono::error);
+                    }
+                    return resp.bodyToMono(FinanceUserInfoResponse.class);
+                })
                 .block();
     }
 }

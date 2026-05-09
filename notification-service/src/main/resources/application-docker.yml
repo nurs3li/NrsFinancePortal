@@ -79,6 +79,9 @@ gmail:
 
 notification:
   test-email: ${NOTIFICATION_TEST_EMAIL:}
+  email:
+    # Docker: Keycloak doğrulaması DB'ye gecikmeli yansıyabilir; işlem e-postaları kesilmesin.
+    require-finance-email-verified: ${NOTIFICATION_EMAIL_REQUIRE_FINANCE_VERIFIED:false}
 
 keycloak:
   auth-server-url: http://nrs-keycloak:8080

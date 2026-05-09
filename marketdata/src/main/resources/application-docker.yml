@@ -230,6 +230,9 @@ app:
       url: https://www.tcmb.gov.tr/kurlar/today.xml
     coingecko:
       url: https://api.coingecko.com/api/v3
+      api-key: ${COINGECKO_API_KEY:}
+      connect-timeout-ms: 3000
+      read-timeout-ms: 15000
     finhub:
       url: https://finnhub.io/api/v1
       api-key: ${FINHUB_API_KEY:your-api-key-here}
@@ -264,6 +267,8 @@ app:
       enabled: ${CRYPTO_HISTORY_BACKFILL_ENABLED:false}
       periodDays: ${CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS:365}
       shutdownOnComplete: ${CRYPTO_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
+      delayMsBetweenCoins: ${CRYPTO_HISTORY_BACKFILL_DELAY_MS:4500}
+      skipSymbolIfCandleCountAtLeast: ${CRYPTO_HISTORY_BACKFILL_SKIP_IF_COUNT:340}
   fx:
     history-backfill:
       enabled: ${FX_HISTORY_BACKFILL_ENABLED:false}
@@ -305,7 +310,7 @@ app:
       kafkaTopic: ${VIOP_HYBRID_KAFKA_TOPIC:high-volatility-alert}
       openInterestSurgeThresholdPct: ${VIOP_OI_SURGE_THRESHOLD_PCT:10}
     backfill:
-      enabled: ${VIOP_BACKFILL_ENABLED:true}
+      enabled: ${VIOP_BACKFILL_ENABLED:false}
       dir: ${VIOP_BACKFILL_DIR:artifacts/viop}
       pattern: ${VIOP_BACKFILL_PATTERN:viop_*.csv}
       shutdownOnComplete: ${VIOP_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
