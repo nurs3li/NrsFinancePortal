@@ -5,6 +5,10 @@ spring:
   application:
     name: finance-service
 
+  mvc:
+    async:
+      request-timeout: 31m
+
   jackson:
     time-zone: Europe/Istanbul
 
@@ -68,6 +72,8 @@ market-data:
   response-timeout-ms: 20000
 
 app:
+  notification:
+    base-url: ${NOTIFICATION_SERVICE_URL:http://nrs-notification:8089}
   trade:
     order-form-v2-enabled: true
   rate-limit:
@@ -82,8 +88,6 @@ app:
     auto-approval-enabled: true
     deposit-auto-approve-limit-try: 50000
     withdrawal-auto-approve-limit-try: 3000
-    require-receipt-for-deposit: true
-    require-reference-no-for-deposit: true
     require-iban-for-deposit: true
   keycloak:
     admin:
@@ -92,3 +96,29 @@ app:
       realm: ${KEYCLOAK_ADMIN_REALM:nrs-finance}
       client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:}
       client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:}
+    security:
+      otp-enforcement-enabled: ${KEYCLOAK_SECURITY_OTP_ENFORCEMENT_ENABLED:false}
+      # Docker: .env'de true yapın veya docker-compose varsayılanına güvenin (env satırı yoksa açık)
+      remember-me-enforcement-enabled: ${KEYCLOAK_SECURITY_REMEMBER_ME_ENFORCEMENT_ENABLED:true}
+      enforced-roles: ${KEYCLOAK_SECURITY_ENFORCED_ROLES:ADMIN,FINANCE_MANAGER}
+      required-action: ${KEYCLOAK_SECURITY_REQUIRED_ACTION:CONFIGURE_TOTP}
+      remember-me: ${KEYCLOAK_SECURITY_REMEMBER_ME:true}
+      sso-idle: ${KEYCLOAK_SECURITY_SSO_IDLE:PT30M}
+      sso-max: ${KEYCLOAK_SECURITY_SSO_MAX:PT8H}
+      access-token-lifespan: ${KEYCLOAK_SECURITY_ACCESS_TOKEN_LIFESPAN:PT5M}
+      client-session-idle: ${KEYCLOAK_SECURITY_CLIENT_SESSION_IDLE:PT30M}
+      client-session-max: ${KEYCLOAK_SECURITY_CLIENT_SESSION_MAX:PT8H}
+      reconcile-cron: ${KEYCLOAK_SECURITY_RECONCILE_CRON:0 0 */6 * * *}
+  observability:
+    enabled: ${APP_OBSERVABILITY_ENABLED:true}
+    open-search:
+      base-url: ${APP_OBSERVABILITY_OPENSEARCH_BASE_URL:http://nrs-opensearch:9200}
+      index-pattern: application-logs-*
+      request-timeout-ms: 15000
+    tempo:
+      base-url: ${APP_OBSERVABILITY_TEMPO_BASE_URL:http://nrs-tempo:3200}
+      request-timeout-ms: 12000
+    grafana:
+      public-base-url: ${APP_OBSERVABILITY_GRAFANA_PUBLIC_BASE_URL:http://localhost:3001}
+      org-id: ${APP_OBSERVABILITY_GRAFANA_ORG_ID:1}
+      tempo-datasource-uid: ${APP_OBSERVABILITY_GRAFANA_TEMPO_UID:nrs-tempo}
