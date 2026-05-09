@@ -1,6 +1,7 @@
 package com.nurseli.nrsfinanceportal.logging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nurseli.nrsfinanceportal.config.AuditContextMdcKeys;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -81,6 +82,8 @@ public class KafkaLogAppender extends AbstractAppender {
             if (ctx != null && ctx.containsKey("correlationId")) {
                 doc.put("correlationId", ctx.getValue("correlationId"));
             }
+            putTraceIds(ctx, doc);
+            putAuditFields(ctx, doc);
 
             ThrowableProxy tp = event.getThrownProxy();
             if (tp != null) {
@@ -94,6 +97,38 @@ public class KafkaLogAppender extends AbstractAppender {
             // Kafka'ya yazamazsak sessizce geç - log döngüsü oluşmasın
         }
     }
+    /** Micrometer OTel: trace_id / span_id; alternatif anahtarlar için geriye dönük uyumluluk */
+    private static void putTraceIds(ReadOnlyStringMap ctx, Map<String, Object> doc) {
+        if (ctx == null) return;
+        String tid = firstCtx(ctx, "trace_id", "traceId");
+        String sid = firstCtx(ctx, "span_id", "spanId");
+        if (tid != null && !tid.isBlank()) doc.put("traceId", tid);
+        if (sid != null && !sid.isBlank()) doc.put("spanId", sid);
+    }
+
+    private static void putAuditFields(ReadOnlyStringMap ctx, Map<String, Object> doc) {
+        if (ctx == null) return;
+        String uid = firstCtx(ctx, AuditContextMdcKeys.USER_ID);
+        String at = firstCtx(ctx, AuditContextMdcKeys.ACTION_TYPE);
+        String un = firstCtx(ctx, AuditContextMdcKeys.USERNAME);
+        if (uid != null && !uid.isBlank()) doc.put(AuditContextMdcKeys.USER_ID, uid);
+        if (at != null && !at.isBlank()) doc.put(AuditContextMdcKeys.ACTION_TYPE, at);
+        if (un != null && !un.isBlank()) doc.put(AuditContextMdcKeys.USERNAME, un);
+    }
+
+    private static String firstCtx(ReadOnlyStringMap ctx, String... keys) {
+        for (String k : keys) {
+            if (ctx.containsKey(k)) {
+                Object v = ctx.getValue(k);
+                if (v != null) {
+                    String s = v.toString();
+                    if (!s.isBlank()) return s;
+                }
+            }
+        }
+        return null;
+    }
+
     private String formatTimestamp(org.apache.logging.log4j.core.time.Instant instant) {
         if (instant == null) return null;
         try {

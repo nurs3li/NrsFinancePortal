@@ -103,6 +103,12 @@ services:
     image: prom/prometheus:latest
     container_name: nrs-prometheus
     restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-remote-write-receiver"
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
@@ -122,6 +128,7 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -138,6 +145,8 @@ services:
     container_name: nrs-tempo
     restart: unless-stopped
     command: ["-config.file=/etc/tempo.yaml"]
+    depends_on:
+      - prometheus
     volumes:
       - ./infra/tempo/tempo.yaml:/etc/tempo.yaml:ro
     ports:
@@ -193,6 +202,9 @@ services:
       CRYPTO_HISTORY_BACKFILL_ENABLED: ${CRYPTO_HISTORY_BACKFILL_ENABLED:-false}
       CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS: ${CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS:-365}
       CRYPTO_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE: ${CRYPTO_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:-false}
+      CRYPTO_HISTORY_BACKFILL_DELAY_MS: ${CRYPTO_HISTORY_BACKFILL_DELAY_MS:-4500}
+      CRYPTO_HISTORY_BACKFILL_SKIP_IF_COUNT: ${CRYPTO_HISTORY_BACKFILL_SKIP_IF_COUNT:-340}
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
       APP_CRYPTO_HISTORY_BACKFILL_ENABLED: ${CRYPTO_HISTORY_BACKFILL_ENABLED:-false}
       APP_CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS: ${CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS:-365}
       APP_CRYPTO_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE: ${CRYPTO_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:-false}
@@ -276,6 +288,10 @@ services:
         condition: service_started
       market-data-service:
         condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      tempo:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
       interval: 30s
@@ -295,6 +311,23 @@ services:
       KEYCLOAK_ADMIN_REALM: ${KEYCLOAK_ADMIN_REALM:-nrs-finance}
       KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:-}
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+      KEYCLOAK_SECURITY_OTP_ENFORCEMENT_ENABLED: ${KEYCLOAK_SECURITY_OTP_ENFORCEMENT_ENABLED:-false}
+      # Remember me realm senkronu (SSO süreleri + rememberMe bayrağı). .env'de false yazarsanız kapanır.
+      KEYCLOAK_SECURITY_REMEMBER_ME_ENFORCEMENT_ENABLED: ${KEYCLOAK_SECURITY_REMEMBER_ME_ENFORCEMENT_ENABLED:-true}
+      KEYCLOAK_SECURITY_ENFORCED_ROLES: ${KEYCLOAK_SECURITY_ENFORCED_ROLES:-ADMIN,FINANCE_MANAGER}
+      KEYCLOAK_SECURITY_REQUIRED_ACTION: ${KEYCLOAK_SECURITY_REQUIRED_ACTION:-CONFIGURE_TOTP}
+      KEYCLOAK_SECURITY_REMEMBER_ME: ${KEYCLOAK_SECURITY_REMEMBER_ME:-true}
+      KEYCLOAK_SECURITY_SSO_IDLE: ${KEYCLOAK_SECURITY_SSO_IDLE:-PT30M}
+      KEYCLOAK_SECURITY_SSO_MAX: ${KEYCLOAK_SECURITY_SSO_MAX:-PT8H}
+      KEYCLOAK_SECURITY_ACCESS_TOKEN_LIFESPAN: ${KEYCLOAK_SECURITY_ACCESS_TOKEN_LIFESPAN:-PT5M}
+      KEYCLOAK_SECURITY_CLIENT_SESSION_IDLE: ${KEYCLOAK_SECURITY_CLIENT_SESSION_IDLE:-PT30M}
+      KEYCLOAK_SECURITY_CLIENT_SESSION_MAX: ${KEYCLOAK_SECURITY_CLIENT_SESSION_MAX:-PT8H}
+      KEYCLOAK_SECURITY_RECONCILE_CRON: ${KEYCLOAK_SECURITY_RECONCILE_CRON:-0 0 */6 * * *}
+      APP_OBSERVABILITY_ENABLED: ${APP_OBSERVABILITY_ENABLED:-true}
+      APP_OBSERVABILITY_OPENSEARCH_BASE_URL: ${APP_OBSERVABILITY_OPENSEARCH_BASE_URL:-http://nrs-opensearch:9200}
+      APP_OBSERVABILITY_TEMPO_BASE_URL: ${APP_OBSERVABILITY_TEMPO_BASE_URL:-http://nrs-tempo:3200}
+      APP_OBSERVABILITY_GRAFANA_PUBLIC_BASE_URL: ${APP_OBSERVABILITY_GRAFANA_PUBLIC_BASE_URL:-http://localhost:3001}
+      APP_OBSERVABILITY_GRAFANA_TEMPO_UID: ${APP_OBSERVABILITY_GRAFANA_TEMPO_UID:-nrs-tempo}
     logging:
       driver: "json-file"
       options:
@@ -423,13 +456,21 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: http://localhost:8085
-        VITE_MARKET_API_URL: http://localhost:8083
-        VITE_METRICS_URL: http://localhost:8088
-        VITE_NOTIFICATION_API_URL: http://localhost:8089
-        VITE_KEYCLOAK_URL: http://localhost:8081
-        VITE_KEYCLOAK_REALM: nrs-finance
-        VITE_KEYCLOAK_CLIENT_ID: nrs-frontend
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8085}
+        VITE_MARKET_API_URL: ${VITE_MARKET_API_URL:-http://localhost:8083}
+        VITE_METRICS_URL: ${VITE_METRICS_URL:-http://localhost:8088}
+        VITE_NOTIFICATION_API_URL: ${VITE_NOTIFICATION_API_URL:-http://localhost:8089}
+        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-http://localhost:8081}
+        VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-nrs-finance}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-nrs-frontend}
+        # İframe src tarayıcıda çalışır → localhost:3001 kullanıcı makinesindeki Grafana’ya gider.
+        # .env yoksa bile Audit sayfasında grid görünsün diye varsayılanlar (dashboard uid kendi ortamına göre .env ile ez).
+        VITE_GRAFANA_SOLO_BASE: ${VITE_GRAFANA_SOLO_BASE:-http://localhost:3001/d-solo/nrs-observability/nrs-observability}
+        VITE_GRAFANA_ORG_ID: ${VITE_GRAFANA_ORG_ID:-1}
+        VITE_GRAFANA_AUDIT_PANEL_REQUEST_VOLUME: ${VITE_GRAFANA_AUDIT_PANEL_REQUEST_VOLUME:-1}
+        VITE_GRAFANA_AUDIT_PANEL_ERROR_RATE: ${VITE_GRAFANA_AUDIT_PANEL_ERROR_RATE:-2}
+        VITE_GRAFANA_AUDIT_PANEL_SERVICE_HEALTH: ${VITE_GRAFANA_AUDIT_PANEL_SERVICE_HEALTH:-4}
+        VITE_GRAFANA_SERVICE_MAP_TRACE_URL_TEMPLATE: ${VITE_GRAFANA_SERVICE_MAP_TRACE_URL_TEMPLATE:-}
     container_name: nrs-frontend
     ports:
       - "3000:80"

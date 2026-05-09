@@ -47,6 +47,11 @@ public class ApplicationLogIndexerService {
             source.put("logger", getText(node, "logger"));
             source.put("thread", getText(node, "thread"));
             source.put("correlationId", getText(node, "correlationId"));
+            source.put("traceId", getText(node, "traceId"));
+            source.put("spanId", getText(node, "spanId"));
+            putIfPresent(source, "userId", getText(node, "userId"));
+            putIfPresent(source, "actionType", getText(node, "actionType"));
+            putIfPresent(source, "username", getText(node, "username"));
             source.put("exception", getText(node, "exception"));
             if (node.has("stackTrace")) {
                 source.put("stackTrace", node.get("stackTrace").toString());
@@ -77,6 +82,12 @@ public class ApplicationLogIndexerService {
         if (node == null || !node.has(field)) return null;
         JsonNode f = node.get(field);
         return f == null || f.isNull() ? null : f.asText();
+    }
+
+    private static void putIfPresent(Map<String, Object> source, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            source.put(key, value);
+        }
     }
 
     /**

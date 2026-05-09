@@ -3,6 +3,17 @@ apiVersion: 1
 datasources:
   - name: Tempo
     type: tempo
+    uid: nrs-tempo
     access: proxy
     url: http://tempo:3200
     editable: true
+    jsonData:
+      serviceMap:
+        datasourceUid: nrs-prometheus
+      tracesToMetrics:
+        datasourceUid: nrs-prometheus
+        tags:
+          - key: service.name
+            value: service
+      nodeGraph:
+        enabled: true

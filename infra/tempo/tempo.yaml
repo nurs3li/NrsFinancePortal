@@ -1,3 +1,4 @@
+# https://grafana.com/docs/tempo/latest/configuration/
 server:
   http_listen_port: 3200
 
@@ -15,3 +16,29 @@ storage:
     backend: local
     local:
       path: /tmp/tempo/traces
+
+# Trace'lerden service graph + span metrikleri üretir; Prometheus'a remote_write eder.
+metrics_generator:
+  registry:
+    collection_interval: 15s
+    external_labels:
+      source: tempo
+  processor:
+    service_graphs:
+      dimensions:
+        - http.method
+        - http.status_code
+    span_metrics:
+      dimensions:
+        - http.method
+        - http.status_code
+  storage:
+    path: /tmp/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics]
