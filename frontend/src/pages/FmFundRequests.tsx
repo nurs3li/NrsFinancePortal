@@ -24,7 +24,6 @@ type FundRequestView = {
     bankAccountIban: string | null;
     receiptFileUrl: string | null;
     receiptFileId: string | null;
-    referenceNo: string | null;
     sourceBankName: string | null;
     depositIban: string | null;
     systemIbanId: string | null;
@@ -333,10 +332,6 @@ export function FmFundRequests() {
                                                     <div>
                                                         <div style={{ color: tokens.textMuted }}>Kaynak Banka</div>
                                                         <div>{r.sourceBankName || '-'}</div>
-                                                    </div>
-                                                    <div>
-                                                        <div style={{ color: tokens.textMuted }}>Harici Referans</div>
-                                                        <div>{r.referenceNo || '-'}</div>
                                                     </div>
                                                     <div>
                                                         <div style={{ color: tokens.textMuted }}>Dekont</div>
