@@ -42,7 +42,6 @@ type FundRequestView = {
     bankAccountIban: string | null;
     receiptFileUrl: string | null;
     receiptFileId: string | null;
-    referenceNo: string | null;
     sourceBankName: string | null;
     depositIban: string | null;
     systemIbanId: string | null;
@@ -62,8 +61,6 @@ type CreateFundRequestPayload = {
     requestNote?: string;
     receiptFileUrl?: string;
     receiptFileId?: string;
-    referenceNo?: string;
-    externalReferenceNo?: string;
     sourceBankName?: string;
     depositIban?: string;
     systemIbanId?: string;
@@ -647,7 +644,6 @@ export function Wallet() {
                                                     {r.type === 'DEPOSIT' ? (
                                                         <div>
                                                             <div>Yatırım IBAN: {r.depositIban || r.bankAccountIban || '-'}</div>
-                                                            <div>Ref: {r.referenceNo || '-'}</div>
                                                             {r.receiptFileUrl ? (
                                                                 <button
                                                                     type="button"

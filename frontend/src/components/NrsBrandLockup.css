@@ -1,0 +1,66 @@
+.nrs-brand__mark {
+    flex-shrink: 0;
+    display: block;
+}
+
+.nrs-brand__text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.05;
+    gap: 0.2rem;
+}
+
+.nrs-brand__main {
+    font-weight: 800;
+    font-size: clamp(0.82rem, 2vw, 0.95rem);
+    letter-spacing: 0.14em;
+    color: #f8fafc;
+}
+
+.nrs-brand__portal-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.15rem;
+}
+
+.nrs-brand__line {
+    flex: 0 0 1.1rem;
+    max-width: 2.25rem;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.85), transparent);
+    opacity: 0.9;
+}
+
+.nrs-brand__portal {
+    font-size: 0.58rem;
+    font-weight: 600;
+    letter-spacing: 0.38em;
+    color: #7dd3fc;
+    white-space: nowrap;
+}
+
+/* App header: match theme tokens, slightly tighter on narrow layouts */
+.app-header__logo .nrs-brand__main {
+    color: var(--header-text);
+}
+
+.app-header__logo .nrs-brand__portal {
+    color: #7dd3fc;
+}
+
+.app-header__logo .nrs-brand__mark {
+    width: 48px;
+    height: 43px;
+}
+
+@media (max-width: 1100px) {
+    .app-header__logo .nrs-brand__text {
+        display: none;
+    }
+
+    .app-header__logo .nrs-brand__mark {
+        width: 44px;
+        height: 39px;
+    }
+}

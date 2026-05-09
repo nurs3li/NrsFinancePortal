@@ -19,7 +19,6 @@ public class FundRequestView {
     private final String bankAccountIban;
     private final String receiptFileUrl;
     private final String receiptFileId;
-    private final String referenceNo;
     private final String sourceBankName;
     private final String depositIban;
     private final String systemIbanId;
@@ -46,7 +45,6 @@ public class FundRequestView {
             String bankAccountIban,
             String receiptFileUrl,
             String receiptFileId,
-            String referenceNo,
             String sourceBankName,
             String depositIban,
             String systemIbanId,
@@ -72,7 +70,6 @@ public class FundRequestView {
         this.bankAccountIban = bankAccountIban;
         this.receiptFileUrl = receiptFileUrl;
         this.receiptFileId = receiptFileId;
-        this.referenceNo = referenceNo;
         this.sourceBankName = sourceBankName;
         this.depositIban = depositIban;
         this.systemIbanId = systemIbanId;
@@ -101,7 +98,6 @@ public class FundRequestView {
                 r.getBankAccountIban(),
                 r.getReceiptFileUrl(),
                 r.getReceiptFileId(),
-                r.getReferenceNo(),
                 r.getSourceBankName(),
                 r.getDepositIban(),
                 r.getSystemIbanId(),
@@ -129,7 +125,6 @@ public class FundRequestView {
     public String getBankAccountIban() { return bankAccountIban; }
     public String getReceiptFileUrl() { return receiptFileUrl; }
     public String getReceiptFileId() { return receiptFileId; }
-    public String getReferenceNo() { return referenceNo; }
     public String getSourceBankName() { return sourceBankName; }
     public String getDepositIban() { return depositIban; }
     public String getSystemIbanId() { return systemIbanId; }

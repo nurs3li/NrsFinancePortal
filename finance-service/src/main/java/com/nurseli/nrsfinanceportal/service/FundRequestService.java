@@ -75,7 +75,6 @@ public class FundRequestService {
                 resolveLegacyBankIban(request),
                 request.getReceiptFileUrl(),
                 request.getReceiptFileId(),
-                resolveExternalReferenceNo(request),
                 request.getSourceBankName(),
                 request.getDepositIban(),
                 request.getSystemIbanId(),
@@ -299,14 +298,6 @@ public class FundRequestService {
             if (amount.compareTo(ruleProperties.getDepositAutoApproveLimitTry()) > 0) {
                 return false;
             }
-            if (ruleProperties.isRequireReceiptForDeposit()
-                    && !hasText(request.getReceiptFileUrl())
-                    && !hasText(request.getReceiptFileId())) {
-                return false;
-            }
-            if (ruleProperties.isRequireReferenceNoForDeposit() && !hasText(resolveExternalReferenceNo(request))) {
-                return false;
-            }
             if (ruleProperties.isRequireIbanForDeposit() && !hasText(resolveLegacyBankIban(request))) {
                 return false;
             }
@@ -341,6 +332,7 @@ public class FundRequestService {
 
     private void validateRequestByType(FundRequestCreateRequest request) {
         if (request.getType() == FundRequestType.DEPOSIT) {
+            // Dekont: otomatik onay veya FM incelemesi — tüm yatırım talepleri için zorunlu (config ile kapatılamaz).
             if (!hasText(request.getReceiptFileUrl()) && !hasText(request.getReceiptFileId())) {
                 throw new IllegalArgumentException("Deposit request requires receipt file");
             }
@@ -371,10 +363,6 @@ public class FundRequestService {
             return hasText(request.getDepositIban()) ? request.getDepositIban() : request.getBankAccountIban();
         }
         return request.getDestinationIban();
-    }
-
-    private String resolveExternalReferenceNo(FundRequestCreateRequest request) {
-        return hasText(request.getExternalReferenceNo()) ? request.getExternalReferenceNo() : request.getReferenceNo();
     }
 
     private void notifyAfterCommit(Runnable action) {

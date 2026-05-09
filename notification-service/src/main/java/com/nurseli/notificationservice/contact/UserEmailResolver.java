@@ -1,5 +1,6 @@
 package com.nurseli.notificationservice.contact;
 
+import com.nurseli.notificationservice.config.NotificationEmailProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Component;
 public class UserEmailResolver {
 
     private final FinanceUserClient financeUserClient;
+    private final NotificationEmailProperties notificationEmailProperties;
 
     public String resolveEmail(String userSub) {
         if (userSub == null || userSub.isBlank()) {
@@ -18,11 +20,18 @@ public class UserEmailResolver {
 
         try {
             FinanceUserInfoResponse u = financeUserClient.getBySub(userSub);
-            if (u == null) return null;
+            if (u == null) {
+                log.debug("[UserEmailResolver] No finance user for sub={}", userSub);
+                return null;
+            }
 
-            if (!u.emailVerified()) {
+            if (notificationEmailProperties.isRequireFinanceEmailVerified() && !u.emailVerified()) {
                 log.info("[UserEmailResolver] Email not verified for sub={}, skipping email channel", userSub);
                 return null;
+            }
+
+            if (!u.emailVerified()) {
+                log.debug("[UserEmailResolver] Using email despite finance emailVerified=false for sub={}", userSub);
             }
 
             if (u.email() == null || u.email().isBlank()) {

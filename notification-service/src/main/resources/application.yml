@@ -78,6 +78,8 @@ gmail:
 
 notification:
   test-email: ${NOTIFICATION_TEST_EMAIL:}
+  email:
+    require-finance-email-verified: ${NOTIFICATION_EMAIL_REQUIRE_FINANCE_VERIFIED:true}
 
 keycloak:
   auth-server-url: http://localhost:8081

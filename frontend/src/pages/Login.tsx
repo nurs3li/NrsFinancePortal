@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { financeClient } from '../api/client';
 
 function decodeOAuthHint(raw: string | null): string | null {
     if (!raw) return null;
@@ -40,10 +41,6 @@ function parseOAuthErrorsFromLocation(): string | null {
     return mapLoginOAuthError(hp.get('error'), hp.get('error_description'));
 }
 
-const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8081';
-const KEYCLOAK_REALM = import.meta.env.VITE_KEYCLOAK_REALM || 'nrs-finance';
-const KEYCLOAK_CLIENT_ID = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'nrs-frontend';
-
 export function Login() {
     const { isAuthenticated, login, ready, role } = useAuth();
     const { tokens } = useTheme();
@@ -52,6 +49,15 @@ export function Login() {
     const location = useLocation();
     const [searchParams, setSearchParams] = useSearchParams();
     const [loginError, setLoginError] = useState<string | null>(null);
+    const [registerMode, setRegisterMode] = useState(false);
+    const [registerBusy, setRegisterBusy] = useState(false);
+    const [registerMessage, setRegisterMessage] = useState<string | null>(null);
+    const [registerError, setRegisterError] = useState<string | null>(null);
+    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [code, setCode] = useState('');
     const from = (location.state as { from?: { pathname: string } })?.from?.pathname;
 
     const suspendedBanner = useMemo(() => searchParams.get('suspended'), [searchParams]);
@@ -85,10 +91,52 @@ export function Login() {
         }
     }, [ready, suspendedBanner, setSearchParams, t]);
 
-    const goToRegister = () => {
-        const redirectUri = encodeURIComponent(window.location.origin + '/');
-        const url = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/registrations?client_id=${KEYCLOAK_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=openid`;
-        window.location.href = url;
+    const requestRegisterCode = async () => {
+        setRegisterError(null);
+        setRegisterMessage(null);
+        if (!email.trim()) {
+            setRegisterError('Lütfen e-posta girin.');
+            return;
+        }
+        setRegisterBusy(true);
+        try {
+            const res = await financeClient.post('/api/public/register/request-code', { email });
+            const msg = res.data?.data ?? 'Doğrulama kodu e-postanıza gönderildi.';
+            setRegisterMessage(msg);
+        } catch (err: any) {
+            setRegisterError(err?.response?.data?.errors?.message ?? err?.response?.data?.message ?? 'Kod gönderilemedi.');
+        } finally {
+            setRegisterBusy(false);
+        }
+    };
+
+    const completeRegistration = async () => {
+        setRegisterError(null);
+        setRegisterMessage(null);
+        if (!email.trim() || !username.trim() || !password || !code.trim()) {
+            setRegisterError('Lütfen tüm alanları doldurun.');
+            return;
+        }
+        if (password !== confirmPassword) {
+            setRegisterError('Şifreler eşleşmiyor.');
+            return;
+        }
+        setRegisterBusy(true);
+        try {
+            const res = await financeClient.post('/api/public/register/complete', {
+                email,
+                username,
+                password,
+                code,
+            });
+            const msg = res.data?.data ?? 'Kayıt tamamlandı.';
+            setRegisterMessage(msg);
+            setCode('');
+        } catch (err: any) {
+            setRegisterError(err?.response?.data?.errors?.message ?? err?.response?.data?.message ?? 'Kayıt tamamlanamadı.');
+        } finally {
+            setRegisterBusy(false);
+        }
     };
 
     if (!ready) {
@@ -156,7 +204,11 @@ export function Login() {
             </p>
             <button
                 type="button"
-                onClick={goToRegister}
+                onClick={() => {
+                    setRegisterMode((v) => !v);
+                    setRegisterError(null);
+                    setRegisterMessage(null);
+                }}
                 style={{
                     width: '100%',
                     padding: '12px 24px',
@@ -171,6 +223,23 @@ export function Login() {
             >
                 {t('login.register', 'Kayıt ol')}
             </button>
+            {registerMode && (
+                <div style={{ marginTop: 16, textAlign: 'left', display: 'grid', gap: 8 }}>
+                    <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-posta" style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg }} />
+                    <button type="button" disabled={registerBusy} onClick={requestRegisterCode} style={{ padding: '10px 12px', borderRadius: 8, border: `1px solid ${tokens.accent}`, background: 'transparent', color: tokens.accent, cursor: 'pointer' }}>
+                        {registerBusy ? 'Gönderiliyor...' : 'Doğrulama kodu gönder'}
+                    </button>
+                    <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Kullanıcı adı" style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg }} />
+                    <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Şifre" type="password" style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg }} />
+                    <input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Şifre (tekrar)" type="password" style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg }} />
+                    <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Mail doğrulama kodu (6 hane)" style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg }} />
+                    <button type="button" disabled={registerBusy} onClick={completeRegistration} style={{ padding: '10px 12px', borderRadius: 8, border: 'none', background: tokens.accentGradient, color: '#fff', cursor: 'pointer' }}>
+                        {registerBusy ? 'İşleniyor...' : 'Kayıtı tamamla'}
+                    </button>
+                    {registerMessage && <div style={{ color: '#22c55e', fontSize: '0.85rem' }}>{registerMessage}</div>}
+                    {registerError && <div style={{ color: tokens.error ?? '#f87171', fontSize: '0.85rem' }}>{registerError}</div>}
+                </div>
+            )}
         </div>
     );
 }

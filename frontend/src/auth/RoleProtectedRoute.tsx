@@ -17,14 +17,14 @@ export function RoleProtectedRoute({
     }
 
     if (!isAuthenticated) {
-        return <Navigate to="/login" state={{ from: location }} replace />;
+        return <Navigate to="/" state={{ from: location }} replace />;
     }
 
     if (role == null || !allowedRoles.includes(role)) {
         if (role === 'USER') return <Navigate to="/dashboard" replace />;
         if (role === 'FINANCE_MANAGER') return <Navigate to="/fm/tasks" replace />;
         if (role === 'ADMIN') return <Navigate to="/admin" replace />;
-        return <Navigate to="/login" replace />;
+        return <Navigate to="/" replace />;
     }
 
     return <>{children}</>;

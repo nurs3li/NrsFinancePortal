@@ -235,26 +235,6 @@
   font-size: 0.82rem;
 }
 
-.header-dropdown__lang-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px 12px;
-  border-top: 1px solid var(--header-border);
-  font-size: 0.8rem;
-}
-
-.header-dropdown__lang-select {
-  min-width: 112px;
-  border: 1px solid var(--header-border);
-  border-radius: 8px;
-  background: var(--header-card);
-  color: var(--header-card-text);
-  padding: 4px 8px;
-  font-size: 0.8rem;
-}
-
 .theme-switch-icons {
   display: inline-flex;
   align-items: center;
@@ -269,6 +249,84 @@
   color: var(--header-accent);
 }
 
+.header-quick-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+}
+
+.header-quick-switch__theme {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 999px;
+  border: 1px solid var(--header-border);
+  background: color-mix(in srgb, var(--header-card) 86%, white 14%);
+}
+
+.header-quick-switch__icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--header-card-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.header-quick-switch__icon-btn.is-active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+}
+
+.header-quick-switch__lang {
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid var(--header-border);
+  background: color-mix(in srgb, var(--header-card) 86%, white 14%);
+}
+
+.header-quick-switch__lang-btn {
+  min-width: 126px;
+  height: 42px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--header-card-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.header-quick-switch__lang-btn.is-active {
+  background: linear-gradient(135deg, #9bb9ff 0%, #7ea4ff 100%);
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.header-quick-switch__divider {
+  width: 1px;
+  height: 24px;
+  background: var(--header-border);
+  margin-left: 2px;
+}
+
+.header-quick-switch__caret {
+  color: var(--header-card-text);
+}
+
 .app-main {
   flex: 1;
   padding: 24px;
@@ -281,7 +339,4 @@
     padding: 0 16px;
   }
 
-  .app-header__logo span {
-    display: none;
-  }
 }

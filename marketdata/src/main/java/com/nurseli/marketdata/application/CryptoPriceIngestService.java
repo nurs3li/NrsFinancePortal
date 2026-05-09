@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.application;
 
+import com.nurseli.marketdata.config.CryptoHistoryBackfillProperties;
 import com.nurseli.marketdata.domain.price.CryptoSymbolMapping;
 import com.nurseli.marketdata.domain.price.CryptoDailyCandle;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
@@ -26,6 +27,7 @@ public class CryptoPriceIngestService {
     private final CoinGeckoClient coinGeckoClient;
     private final MarketPriceHistoryRepository repository;
     private final CryptoDailyCandleRepository cryptoDailyCandleRepository;
+    private final CryptoHistoryBackfillProperties cryptoHistoryBackfillProperties;
 
     @Transactional
     @CacheEvict(
@@ -77,15 +79,23 @@ public class CryptoPriceIngestService {
     @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
     public void fetchAndSaveHistoryBackfill(int periodDays) {
         int days = Math.max(7, Math.min(periodDays, 365));
+        long delayMs = Math.max(500L, cryptoHistoryBackfillProperties.getDelayMsBetweenCoins());
+        int skipAt = cryptoHistoryBackfillProperties.getSkipSymbolIfCandleCountAtLeast();
+        LocalDate rangeStart = LocalDate.now().minusDays(days);
         for (Map.Entry<String, String> entry : CryptoSymbolMapping.SYMBOL_TO_ID.entrySet()) {
             String symbol = entry.getKey();
             String coinId = entry.getValue();
             try {
-                List<CoinGeckoClient.OhlcPoint> points = coinGeckoClient.fetchDailyOhlc(coinId, days);
-                if (points.isEmpty()) {
-                    sleepQuietly(1100);
-                    points = coinGeckoClient.fetchDailyOhlc(coinId, days);
+                if (skipAt > 0) {
+                    int threshold = Math.min(skipAt, days);
+                    long have = cryptoDailyCandleRepository.countBySymbolAndAsOfGreaterThanEqual(symbol, rangeStart);
+                    if (have >= threshold) {
+                        log.info("[CRYPTO_HISTORY] skip warm symbol={} candlesInRange={} threshold={}", symbol, have, threshold);
+                        sleepQuietly(delayMs);
+                        continue;
+                    }
                 }
+                List<CoinGeckoClient.OhlcPoint> points = coinGeckoClient.fetchDailyOhlc(coinId, days);
                 int inserted = 0;
                 for (CoinGeckoClient.OhlcPoint p : points) {
                     if (cryptoDailyCandleRepository.existsBySymbolAndAsOf(symbol, p.day())) {
@@ -104,9 +114,10 @@ public class CryptoPriceIngestService {
                     inserted++;
                 }
                 log.info("[CRYPTO_HISTORY] symbol={} coinId={} points={} inserted={}", symbol, coinId, points.size(), inserted);
-                sleepQuietly(1100);
+                sleepQuietly(delayMs);
             } catch (Exception ex) {
                 log.warn("[CRYPTO_HISTORY] failed symbol={} coinId={} reason={}", symbol, coinId, ex.getMessage());
+                sleepQuietly(delayMs);
             }
         }
     }
@@ -138,8 +149,10 @@ public class CryptoPriceIngestService {
                     candle.setSource("COINGECKO_OHLC");
                     cryptoDailyCandleRepository.save(candle);
                 }
+                sleepQuietly(800);
             } catch (Exception ex) {
                 log.debug("[CRYPTO_HISTORY] incremental failed symbol={} reason={}", symbol, ex.getMessage());
+                sleepQuietly(800);
             }
         }
     }

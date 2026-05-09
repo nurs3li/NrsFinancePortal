@@ -1,10 +1,13 @@
 package com.nurseli.marketdata.infrastructure.coingecko;
 
 import com.nurseli.marketdata.config.DataSourcesProperties;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -17,38 +20,56 @@ import java.util.Map;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class CoinGeckoMetalClient {
 
-    private final DataSourcesProperties dataSourcesProperties;
+    private final RestTemplate restTemplate;
+    private final String baseUrl;
+    private final String apiKey;
 
     // PAX GOLD = 1 token = 1 ONS ALTIN
     private static final String PAX_GOLD_ENDPOINT = "/simple/price";
     private static final String PAX_GOLD_HISTORY_ENDPOINT = "/coins/pax-gold/market_chart";
     private static final String PAX_GOLD_OHLC_ENDPOINT = "/coins/pax-gold/ohlc";
 
+    public CoinGeckoMetalClient(DataSourcesProperties dataSourcesProperties) {
+        DataSourcesProperties.CoinGecko cg = dataSourcesProperties.getCoingecko();
+        this.baseUrl = cg.getUrl();
+        this.apiKey = cg.getApiKey() == null ? "" : cg.getApiKey().trim();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Math.max(1000, cg.getConnectTimeoutMs()));
+        factory.setReadTimeout(Math.max(3000, cg.getReadTimeoutMs()));
+        this.restTemplate = new RestTemplate(factory);
+    }
+
+    private HttpHeaders baseHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        if (!apiKey.isEmpty()) {
+            if (baseUrl != null && baseUrl.contains("pro-api.coingecko")) {
+                headers.set("x-cg-pro-api-key", apiKey);
+            } else {
+                headers.set("x-cg-demo-api-key", apiKey);
+            }
+        }
+        return headers;
+    }
+
     /**
      * @return TRY / ONS, or null if rate limited (429) or invalid response
      */
     public BigDecimal fetchGoldTryPerOunce() {
-        String baseUrl = dataSourcesProperties.getCoingecko().getUrl();
         String url = baseUrl + PAX_GOLD_ENDPOINT + "?ids=pax-gold&vs_currencies=try";
 
         try {
-            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-            factory.setConnectTimeout(3000);
-            factory.setReadTimeout(3000);
-            RestTemplate restTemplate = new RestTemplate(factory);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
-
-            if (response == null || !response.containsKey("pax-gold")) {
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(baseHeaders()), Map.class);
+            Map<?, ?> body = response.getBody();
+            if (body == null || !body.containsKey("pax-gold")) {
                 log.warn("[COINGECKO] PAXG response invalid or empty");
                 return null;
             }
 
             @SuppressWarnings("unchecked")
-            Map<String, Object> paxGold = (Map<String, Object>) response.get("pax-gold");
+            Map<String, Object> paxGold = (Map<String, Object>) body.get("pax-gold");
 
             Object tryValue = paxGold.get("try");
             if (tryValue == null) {
@@ -72,16 +93,12 @@ public class CoinGeckoMetalClient {
      * CoinGecko market_chart: günlük tarihsel TRY/ONS fiyatları.
      */
     public List<DailyGoldTryPoint> fetchGoldTryHistoryPerOunce(int days) {
-        String baseUrl = dataSourcesProperties.getCoingecko().getUrl();
         String url = baseUrl + PAX_GOLD_HISTORY_ENDPOINT + "?vs_currency=try&days=" + days + "&interval=daily";
         try {
-            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-            factory.setConnectTimeout(5000);
-            factory.setReadTimeout(8000);
-            RestTemplate restTemplate = new RestTemplate(factory);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
-            if (response == null || !(response.get("prices") instanceof List<?> prices)) {
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(baseHeaders()), Map.class);
+            Map<?, ?> body = response.getBody();
+            if (body == null || !(body.get("prices") instanceof List<?> prices)) {
                 return List.of();
             }
 
@@ -108,15 +125,11 @@ public class CoinGeckoMetalClient {
      * CoinGecko OHLC: günlük TRY/ONS mum verisi (open/high/low/close).
      */
     public List<DailyGoldTryOhlcPoint> fetchGoldTryOhlcHistoryPerOunce(int days) {
-        String baseUrl = dataSourcesProperties.getCoingecko().getUrl();
         String url = baseUrl + PAX_GOLD_OHLC_ENDPOINT + "?vs_currency=try&days=" + days;
         try {
-            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-            factory.setConnectTimeout(5000);
-            factory.setReadTimeout(8000);
-            RestTemplate restTemplate = new RestTemplate(factory);
-            @SuppressWarnings("unchecked")
-            List<Object> rows = restTemplate.getForObject(url, List.class);
+            ResponseEntity<List> response = restTemplate.exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(baseHeaders()), List.class);
+            List<?> rows = response.getBody();
             if (rows == null || rows.isEmpty()) return List.of();
 
             List<DailyGoldTryOhlcPoint> out = new ArrayList<>();

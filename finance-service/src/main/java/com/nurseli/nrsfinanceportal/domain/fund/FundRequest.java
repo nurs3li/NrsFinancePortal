@@ -52,9 +52,6 @@ public class FundRequest {
     @Column(name = "receipt_file_id", length = 200)
     private String receiptFileId;
 
-    @Column(name = "reference_no", length = 100)
-    private String referenceNo;
-
     @Column(name = "source_bank_name", length = 200)
     private String sourceBankName;
 
@@ -107,7 +104,6 @@ public class FundRequest {
             String bankAccountIban,
             String receiptFileUrl,
             String receiptFileId,
-            String referenceNo,
             String sourceBankName,
             String depositIban,
             String systemIbanId,
@@ -130,7 +126,6 @@ public class FundRequest {
         r.bankAccountIban = bankAccountIban;
         r.receiptFileUrl = receiptFileUrl;
         r.receiptFileId = receiptFileId;
-        r.referenceNo = referenceNo;
         r.sourceBankName = sourceBankName;
         r.depositIban = depositIban;
         r.systemIbanId = systemIbanId;
@@ -207,7 +202,6 @@ public class FundRequest {
     public String getBankAccountIban() { return bankAccountIban; }
     public String getReceiptFileUrl() { return receiptFileUrl; }
     public String getReceiptFileId() { return receiptFileId; }
-    public String getReferenceNo() { return referenceNo; }
     public String getSourceBankName() { return sourceBankName; }
     public String getDepositIban() { return depositIban; }
     public String getSystemIbanId() { return systemIbanId; }

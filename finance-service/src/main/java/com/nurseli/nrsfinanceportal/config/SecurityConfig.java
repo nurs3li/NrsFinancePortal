@@ -16,10 +16,15 @@ import com.nurseli.nrsfinanceportal.repository.UserRepository;
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
+    private final AuditContextMdcFilter auditContextMdcFilter;
     private final FrozenUserAccessFilter frozenUserAccessFilter;
     private final UserRepository userRepository;
 
-    public SecurityConfig(FrozenUserAccessFilter frozenUserAccessFilter, UserRepository userRepository) {
+    public SecurityConfig(
+            AuditContextMdcFilter auditContextMdcFilter,
+            FrozenUserAccessFilter frozenUserAccessFilter,
+            UserRepository userRepository) {
+        this.auditContextMdcFilter = auditContextMdcFilter;
         this.frozenUserAccessFilter = frozenUserAccessFilter;
         this.userRepository = userRepository;
     }
@@ -41,14 +46,16 @@ public class SecurityConfig {
                                 "/actuator/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",
-                                "/swagger-ui/**"
+                                "/swagger-ui/**",
+                                "/api/public/register/**"
                         ).permitAll()
                         .requestMatchers(req -> "OPTIONS".equalsIgnoreCase(req.getMethod())).permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
-                .addFilterAfter(frozenUserAccessFilter, BearerTokenAuthenticationFilter.class);
+                .addFilterAfter(auditContextMdcFilter, BearerTokenAuthenticationFilter.class)
+                .addFilterAfter(frozenUserAccessFilter, AuditContextMdcFilter.class);
         return http.build();
     }
 }

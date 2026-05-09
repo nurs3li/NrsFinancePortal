@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface CryptoDailyCandleRepository extends JpaRepository<CryptoDailyCandle, Long> {
+    long countBySymbolAndAsOfGreaterThanEqual(String symbol, LocalDate minAsOf);
+
     boolean existsBySymbolAndAsOf(String symbol, LocalDate asOf);
     List<CryptoDailyCandle> findBySymbolAndAsOfBetweenOrderByAsOfAsc(String symbol, LocalDate from, LocalDate to);
 

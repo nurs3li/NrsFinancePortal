@@ -15,6 +15,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -99,6 +100,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.error(errorBody(ApiErrorCode.ACCESS_DENIED, "Access denied", request)));
+    }
+
+    /**
+     * SSE uzun bağlantılar: Spring varsayılan async süresi dolunca oluşur; bakım bildirimi ve ERROR log spam'ini önler.
+     */
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public ResponseEntity<Void> handleAsyncTimeout(AsyncRequestTimeoutException ex, HttpServletRequest request) {
+        String path = request != null ? request.getRequestURI() : "";
+        if (path != null && path.contains("/sse/")) {
+            log.debug("[SSE] Async timeout (normal yaşam döngüsü; istemci EventSource ile yeniden bağlanır): {}", path);
+        } else {
+            log.warn("[ASYNC] AsyncRequestTimeoutException: {}", path);
+        }
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 
     @ExceptionHandler(Exception.class)
