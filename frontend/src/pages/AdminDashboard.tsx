@@ -169,6 +169,21 @@ export function AdminDashboard() {
                     </table>
                 )}
             </div>
+
+            {typeof import.meta.env.VITE_GRAFANA_DASHBOARD_EMBED_URL === 'string'
+                && import.meta.env.VITE_GRAFANA_DASHBOARD_EMBED_URL.trim() !== '' && (
+                <div style={panelStyle}>
+                    <h2 style={{ marginTop: 0, fontSize: '1rem', color: tokens.text }}>
+                        {t('admin.grafanaEmbedTitle', 'System health (Grafana)')}
+                    </h2>
+                    <iframe
+                        title="Grafana"
+                        src={import.meta.env.VITE_GRAFANA_DASHBOARD_EMBED_URL}
+                        style={{ width: '100%', height: 420, border: 0, borderRadius: 8 }}
+                        referrerPolicy="no-referrer-when-downgrade"
+                    />
+                </div>
+            )}
         </div>
     );
 }

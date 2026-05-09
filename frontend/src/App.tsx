@@ -9,7 +9,7 @@ import { RoleProtectedRoute } from './auth/RoleProtectedRoute';
 import { Layout } from './components/Layout';
 import { DashboardOrRedirect } from './components/DashboardOrRedirect';
 import { HomeRedirect } from './components/HomeRedirect';
-import { Login } from './pages/Login';
+import { LoginRedirect } from './components/LoginRedirect';
 import { News } from './pages/News';
 import { Market } from './pages/Market';
 import { MarketHeatmap } from './pages/MarketHeatmap';
@@ -39,7 +39,7 @@ function App() {
                         <BrowserRouter>
                         <Routes>
                             <Route path="/" element={<HomeRedirect />} />
-                            <Route path="/login" element={<Login />} />
+                            <Route path="/login" element={<LoginRedirect />} />
                             <Route element={<Layout />}>
                                 <Route
                                     path="/dashboard"

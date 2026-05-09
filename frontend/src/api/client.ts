@@ -48,7 +48,7 @@ async function handleAuthErrorWithSingleRetry(err: any): Promise<any> {
             setTimeout(() => {
                 loginRedirectInFlight = false;
             }, 10_000);
-            keycloak.login();
+            keycloak.login({ locale: getPreferredAppLang(), prompt: 'login' });
         }
         return Promise.reject(err);
     }
@@ -72,7 +72,7 @@ async function handleAuthErrorWithSingleRetry(err: any): Promise<any> {
         setTimeout(() => {
             loginRedirectInFlight = false;
         }, 10_000);
-        keycloak.login();
+        keycloak.login({ locale: getPreferredAppLang(), prompt: 'login' });
     }
     return Promise.reject(err);
 }
@@ -109,7 +109,7 @@ financeClient.interceptors.response.use(
             typeof errs === 'object' &&
             errs.error === 'USER_LOGIN_SUSPENDED'
         ) {
-            await keycloak.logout({ redirectUri: `${window.location.origin}/login?suspended=1` });
+            await keycloak.logout({ redirectUri: `${window.location.origin}/?suspended=1` });
             return Promise.reject(err);
         }
         return handleAuthErrorWithSingleRetry(err);
