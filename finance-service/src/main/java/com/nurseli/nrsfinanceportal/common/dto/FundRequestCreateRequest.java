@@ -22,9 +22,7 @@ public class FundRequestCreateRequest {
 
     private String receiptFileUrl;
     private String receiptFileId;
-    private String referenceNo;
     private String sourceBankName;
-    private String externalReferenceNo;
 
     private String depositIban;
     private String systemIbanId;
@@ -41,9 +39,7 @@ public class FundRequestCreateRequest {
     public Long getAccountId() { return accountId; }
     public String getReceiptFileUrl() { return receiptFileUrl; }
     public String getReceiptFileId() { return receiptFileId; }
-    public String getReferenceNo() { return referenceNo; }
     public String getSourceBankName() { return sourceBankName; }
-    public String getExternalReferenceNo() { return externalReferenceNo; }
     public String getDepositIban() { return depositIban; }
     public String getSystemIbanId() { return systemIbanId; }
     public String getDestinationIban() { return destinationIban; }

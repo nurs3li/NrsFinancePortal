@@ -24,9 +24,7 @@ public class FundRequestRuleProperties {
     private BigDecimal withdrawalAutoApproveLimitTry = new BigDecimal("3000");
 
     /**
-     * DEPOSIT auto-approve için zorunlu alan kontrolleri
+     * DEPOSIT otomatik onay adaylığı: yatırım IBAN bilgisi (dekont ayrıca her yatırımda zorunludur).
      */
-    private boolean requireReceiptForDeposit = true;
-    private boolean requireReferenceNoForDeposit = true;
     private boolean requireIbanForDeposit = true;
 }

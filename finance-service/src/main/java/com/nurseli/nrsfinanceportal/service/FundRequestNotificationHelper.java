@@ -153,8 +153,7 @@ public class FundRequestNotificationHelper {
         if (deposit) {
             sb.append("• Yatırım / sistem IBAN: ").append(nvl(firstNonBlank(request.getDepositIban(), request.getBankAccountIban()), "—")).append("\n");
             sb.append("• Kaynak banka: ").append(nvl(request.getSourceBankName(), "—")).append("\n");
-            sb.append("• Referans / dekont: ").append(nvl(request.getReferenceNo(), "—")).append(" / ")
-                    .append(nvl(request.getReceiptFileUrl(), nvl(request.getReceiptFileId(), "—"))).append("\n");
+            sb.append("• Dekont: ").append(nvl(request.getReceiptFileUrl(), nvl(request.getReceiptFileId(), "—"))).append("\n");
         } else {
             sb.append("• Hedef IBAN: ").append(nvl(request.getDestinationIban(), "—")).append("\n");
             sb.append("• Alıcı adı: ").append(nvl(request.getDestinationAccountHolder(), "—")).append("\n");
