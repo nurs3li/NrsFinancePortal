@@ -77,6 +77,8 @@ public class KafkaLogAppender extends AbstractAppender {
             if (ctx != null && ctx.containsKey("correlationId")) {
                 doc.put("correlationId", ctx.getValue("correlationId"));
             }
+            putTraceIds(ctx, doc);
+            putAuditFields(ctx, doc);
 
             ThrowableProxy tp = event.getThrownProxy();
             if (tp != null) {
@@ -89,6 +91,37 @@ public class KafkaLogAppender extends AbstractAppender {
         } catch (Exception e) {
             // Kafka'ya yazamazsak sessizce geç
         }
+    }
+
+    private static void putAuditFields(ReadOnlyStringMap ctx, Map<String, Object> doc) {
+        if (ctx == null) return;
+        String uid = firstCtx(ctx, "userId");
+        String at = firstCtx(ctx, "actionType");
+        String un = firstCtx(ctx, "username");
+        if (uid != null && !uid.isBlank()) doc.put("userId", uid);
+        if (at != null && !at.isBlank()) doc.put("actionType", at);
+        if (un != null && !un.isBlank()) doc.put("username", un);
+    }
+
+    private static void putTraceIds(ReadOnlyStringMap ctx, Map<String, Object> doc) {
+        if (ctx == null) return;
+        String tid = firstCtx(ctx, "trace_id", "traceId");
+        String sid = firstCtx(ctx, "span_id", "spanId");
+        if (tid != null && !tid.isBlank()) doc.put("traceId", tid);
+        if (sid != null && !sid.isBlank()) doc.put("spanId", sid);
+    }
+
+    private static String firstCtx(ReadOnlyStringMap ctx, String... keys) {
+        for (String k : keys) {
+            if (ctx.containsKey(k)) {
+                Object v = ctx.getValue(k);
+                if (v != null) {
+                    String s = v.toString();
+                    if (!s.isBlank()) return s;
+                }
+            }
+        }
+        return null;
     }
 
     private String formatTimestamp(org.apache.logging.log4j.core.time.Instant instant) {
