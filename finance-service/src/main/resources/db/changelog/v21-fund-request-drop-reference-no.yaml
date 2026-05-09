@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: v21-fund-request-drop-reference-no
+      author: nurseli
+      changes:
+        - dropIndex:
+            indexName: idx_fund_request_reference_no
+            tableName: fund_requests
+        - dropColumn:
+            tableName: fund_requests
+            columnName: reference_no

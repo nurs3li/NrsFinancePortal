@@ -58,3 +58,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v20-fund-request-fm-claim.yaml
+
+  - include:
+      file: db/changelog/v21-fund-request-drop-reference-no.yaml
