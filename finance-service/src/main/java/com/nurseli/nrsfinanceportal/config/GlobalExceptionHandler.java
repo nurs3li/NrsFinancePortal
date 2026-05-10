@@ -15,6 +15,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -112,6 +113,21 @@ public class GlobalExceptionHandler {
             log.debug("[SSE] Async timeout (normal yaşam döngüsü; istemci EventSource ile yeniden bağlanır): {}", path);
         } else {
             log.warn("[ASYNC] AsyncRequestTimeoutException: {}", path);
+        }
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+    }
+
+    /**
+     * İstemci SSE/long-poll bağlantısını kapattığında (sayfa değişimi, AbortController, proxy timeout)
+     * yanıt zaten kapatılmış olabilir. "Response not usable after response errors" — bakım maili gönderilmez.
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public ResponseEntity<Void> handleAsyncNotUsable(AsyncRequestNotUsableException ex, HttpServletRequest request) {
+        String path = request != null ? request.getRequestURI() : "";
+        if (path != null && path.contains("/sse/")) {
+            log.debug("[SSE] İstemci bağlantıyı kesti veya yanıt kullanılamaz (beklenen): {} — {}", path, ex.getMessage());
+        } else {
+            log.debug("[ASYNC] AsyncRequestNotUsable: {} — {}", path, ex.getMessage());
         }
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }

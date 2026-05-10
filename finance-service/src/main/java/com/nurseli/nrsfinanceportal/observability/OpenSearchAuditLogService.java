@@ -180,7 +180,21 @@ public class OpenSearchAuditLogService {
         }
 
         if (serviceName != null && !serviceName.isBlank()) {
-            must.add(Map.of("match_phrase", Map.of("serviceName", serviceName.trim())));
+            String raw = serviceName.trim();
+            if (raw.contains(",")) {
+                List<Map<String, Object>> shouldSvc = new ArrayList<>();
+                for (String p : raw.split(",")) {
+                    String svc = p.trim();
+                    if (!svc.isEmpty()) {
+                        shouldSvc.add(Map.of("match_phrase", Map.of("serviceName", svc)));
+                    }
+                }
+                if (!shouldSvc.isEmpty()) {
+                    must.add(Map.of("bool", Map.of("should", shouldSvc, "minimum_should_match", 1)));
+                }
+            } else {
+                must.add(Map.of("match_phrase", Map.of("serviceName", raw)));
+            }
         }
         java.util.List<String> levelList = parseLevels(levelsCsv, level);
         if (levelList.size() == 1) {
@@ -205,13 +219,22 @@ public class OpenSearchAuditLogService {
             must.add(Map.of("match_phrase", Map.of("actionType", actionType.trim().toUpperCase())));
         }
         if (username != null && !username.isBlank()) {
-            must.add(Map.of("match", Map.of("username", Map.of("query", username.trim(), "operator", "and"))));
+            String u = username.trim();
+            must.add(Map.of("bool", Map.of(
+                    "should", List.of(
+                            Map.of("match_phrase", Map.of("username", u)),
+                            Map.of("match", Map.of("username", Map.of("query", u, "operator", "and")))
+                    ),
+                    "minimum_should_match", 1
+            )));
         }
         if (q != null && !q.isBlank()) {
-            must.add(Map.of("simple_query_string", Map.of(
+            // simple_query_string Lucene özel karakterlerinde sessizce 0 sonuç veya hata verebiliyor; çok alanlı match daha öngörülebilir.
+            must.add(Map.of("multi_match", Map.of(
                     "query", q.trim(),
-                    "fields", List.of("message", "logger", "thread"),
-                    "default_operator", "and"
+                    "type", "best_fields",
+                    "operator", "and",
+                    "fields", List.of("message^2", "logger", "thread", "exception")
             )));
         }
 
