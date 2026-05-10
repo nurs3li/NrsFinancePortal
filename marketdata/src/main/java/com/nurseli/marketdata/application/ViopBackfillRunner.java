@@ -47,11 +47,23 @@ public class ViopBackfillRunner implements ApplicationRunner {
         if (!props.isEnabled()) {
             return;
         }
+        importAllCsvFilesToDb();
+        if (props.isShutdownOnComplete()) {
+            log.info("[VIOP_BACKFILL] shutdownOnComplete=true, shutting down application");
+            System.exit(org.springframework.boot.SpringApplication.exit(context, () -> 0));
+        }
+    }
+
+    /**
+     * {@code viop_*.csv} dosyalarını (sıralı) okuyup DB'ye yazar; mevcut (contract, as_of) çiftleri atlanır.
+     * Uygulama açılışında veya {@code POST /internal/market/backfill/viop-csv} ile tek seferlik çağrılabilir.
+     */
+    public Map<String, Object> importAllCsvFilesToDb() {
         BackfillStats stats = new BackfillStats();
         try {
             List<Path> files = listFiles();
             stats.totalFiles = files.size();
-            log.info("[VIOP_BACKFILL] Starting file backfill. files={}, dir={}, pattern={}", files.size(), props.getDir(), props.getPattern());
+            log.info("[VIOP_BACKFILL] Starting file backfill. files={}, dir={}", files.size(), props.getDir());
             for (Path file : files) {
                 try {
                     processFile(file, stats);
@@ -64,12 +76,21 @@ public class ViopBackfillRunner implements ApplicationRunner {
                     stats.totalFiles, stats.totalRows, stats.inserts, stats.duplicates, stats.rowErrors, stats.fileErrors);
         } catch (Exception ex) {
             log.error("[VIOP_BACKFILL] fatal error: {}", ex.getMessage(), ex);
-        } finally {
-            if (props.isShutdownOnComplete()) {
-                log.info("[VIOP_BACKFILL] shutdownOnComplete=true, shutting down application");
-                System.exit(org.springframework.boot.SpringApplication.exit(context, () -> 0));
-            }
+            return Map.of(
+                    "ok", false,
+                    "error", ex.getMessage() == null ? "unknown" : ex.getMessage()
+            );
         }
+        return Map.of(
+                "ok", true,
+                "dir", props.getDir(),
+                "files", stats.totalFiles,
+                "rows", stats.totalRows,
+                "inserts", stats.inserts,
+                "duplicates", stats.duplicates,
+                "rowErrors", stats.rowErrors,
+                "fileErrors", stats.fileErrors
+        );
     }
 
     private List<Path> listFiles() throws IOException {

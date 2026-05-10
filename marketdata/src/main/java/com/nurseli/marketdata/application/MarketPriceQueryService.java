@@ -224,6 +224,31 @@ public class MarketPriceQueryService {
         return getHistory(symbol, days);
     }
 
+    /**
+     * Döviz (USDTRY/EURTRY/GBPTRY) geçmişi — günlük mum tablosundan, gün sayısı için batch kısıtı yok.
+     * Uzun aralıklı simülasyon isteklerinde {@link #getBatchHistory} çağrısı {@link #validateDays} nedeniyle
+     * başarısız olabildiğinden history uç noktasında bu yol kullanılır.
+     */
+    public List<MarketPriceHistoryResponse> getFxHistory(String rawSymbol, int days) {
+        if (rawSymbol == null || rawSymbol.isBlank()) {
+            throw new InvalidRequestException("symbol zorunludur.");
+        }
+        String symbol = rawSymbol.trim().toUpperCase();
+        if (!isAllowedSymbol(MarketType.FX, symbol)) {
+            throw new InvalidRequestException("type=FX için geçersiz symbol: " + symbol);
+        }
+        if (days <= 0) {
+            return List.of();
+        }
+        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime start = end.minusDays(days);
+        List<CandlePointResponse> candles = toFxCandles(symbol, start.toLocalDate(), end.toLocalDate());
+        if (!candles.isEmpty()) {
+            return toHistoryFromCandles(candles);
+        }
+        return getHistory(symbol, days);
+    }
+
     // =========================
     // BATCH HISTORY (OHLC) + CACHE
     // =========================
