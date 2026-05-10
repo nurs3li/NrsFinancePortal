@@ -1,4 +1,6 @@
 # https://grafana.com/docs/tempo/latest/configuration/
+# TraceQL metrik sorguları (örn. Grafana Traces Drilldown: | rate() by(resource.service.name))
+# için metrics_generator içinde local-blocks + traces_storage şarttır.
 server:
   http_listen_port: 3200
 
@@ -17,13 +19,18 @@ storage:
     local:
       path: /tmp/tempo/traces
 
-# Trace'lerden service graph + span metrikleri üretir; Prometheus'a remote_write eder.
 metrics_generator:
+  # local-blocks işlemcisi için WAL; aksi halde: "local blocks processor requires traces wal"
+  traces_storage:
+    path: /tmp/tempo/generator/traces
   registry:
     collection_interval: 15s
     external_labels:
       source: tempo
   processor:
+    local_blocks:
+      # Drilldown metrikleri tüm span türlerini sayabilsin (sadece server span değil)
+      filter_server_spans: false
     service_graphs:
       dimensions:
         - http.method
@@ -41,4 +48,4 @@ metrics_generator:
 overrides:
   defaults:
     metrics_generator:
-      processors: [service-graphs, span-metrics]
+      processors: [local-blocks, service-graphs, span-metrics]

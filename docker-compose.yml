@@ -163,6 +163,7 @@ services:
     build: ./marketdata
     container_name: nrs-market-data
     volumes:
+      # CSV'ler zaten repo içinde artifacts/viop altında; konteynerde /app/artifacts/viop olur (VIOP_BACKFILL_DIR=artifacts/viop).
       - ./artifacts:/app/artifacts:ro
     ports:
       - "8083:8083"
@@ -469,7 +470,13 @@ services:
         VITE_GRAFANA_ORG_ID: ${VITE_GRAFANA_ORG_ID:-1}
         VITE_GRAFANA_AUDIT_PANEL_REQUEST_VOLUME: ${VITE_GRAFANA_AUDIT_PANEL_REQUEST_VOLUME:-1}
         VITE_GRAFANA_AUDIT_PANEL_ERROR_RATE: ${VITE_GRAFANA_AUDIT_PANEL_ERROR_RATE:-2}
+        VITE_GRAFANA_AUDIT_PANEL_P95_RESPONSE: ${VITE_GRAFANA_AUDIT_PANEL_P95_RESPONSE:-}
         VITE_GRAFANA_AUDIT_PANEL_SERVICE_HEALTH: ${VITE_GRAFANA_AUDIT_PANEL_SERVICE_HEALTH:-4}
+        # Opsiyonel: audit dashboard’a eklenen Tempo panellerinin panel id’leri + Explore tam URL’leri.
+        VITE_GRAFANA_AUDIT_PANEL_TEMPO_SPAN_RATE: ${VITE_GRAFANA_AUDIT_PANEL_TEMPO_SPAN_RATE:-}
+        VITE_GRAFANA_AUDIT_PANEL_TEMPO_NODE_GRAPH: ${VITE_GRAFANA_AUDIT_PANEL_TEMPO_NODE_GRAPH:-}
+        VITE_GRAFANA_TEMPO_EXPLORE_DRILLDOWN_URL: ${VITE_GRAFANA_TEMPO_EXPLORE_DRILLDOWN_URL:-}
+        VITE_GRAFANA_TEMPO_EXPLORE_NODE_GRAPH_URL: ${VITE_GRAFANA_TEMPO_EXPLORE_NODE_GRAPH_URL:-}
         VITE_GRAFANA_SERVICE_MAP_TRACE_URL_TEMPLATE: ${VITE_GRAFANA_SERVICE_MAP_TRACE_URL_TEMPLATE:-}
     container_name: nrs-frontend
     ports:
