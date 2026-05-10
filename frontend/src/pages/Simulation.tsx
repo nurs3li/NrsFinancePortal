@@ -86,6 +86,72 @@ function qualityLabel(quality: string): string {
     return quality || 'BILINMIYOR';
 }
 
+const SIMULATION_STORAGE_KEY = 'nrs-finance-portal-simulation-list-v1';
+
+type OverviewPriceRow = { buyPrice?: number; sellPrice?: number };
+
+type OverviewLite = {
+    doviz?: Record<string, OverviewPriceRow>;
+    metals?: Record<string, OverviewPriceRow>;
+    crypto?: Record<string, OverviewPriceRow>;
+    funds?: Record<string, OverviewPriceRow>;
+    stocks?: Record<string, OverviewPriceRow>;
+};
+
+function midFromRow(row?: OverviewPriceRow | null): number | null {
+    if (!row) return null;
+    const b = Number(row.buyPrice ?? 0);
+    const s = Number(row.sellPrice ?? 0);
+    if (b > 0 && s > 0) return (b + s) / 2;
+    if (b > 0) return b;
+    if (s > 0) return s;
+    return null;
+}
+
+/** Market overview ile SimulationService.getPriceTry mantığına yakın TRY birim fiyat */
+function liveTryFromOverview(o: OverviewLite | null | undefined, assetType: AssetType, symbol: string): number | null {
+    if (!o) return null;
+    const sym = String(symbol ?? '').toUpperCase();
+    const usdTry = midFromRow(o.doviz?.['USDTRY']);
+    const usdMul = (usd: number | null) => {
+        if (usd == null || usd <= 0) return null;
+        if (!usdTry || usdTry <= 0) return null;
+        return usd * usdTry;
+    };
+    switch (assetType) {
+        case 'FX':
+            return midFromRow(o.doviz?.[sym]);
+        case 'METAL':
+            return midFromRow(o.metals?.[sym]);
+        case 'CRYPTO':
+            return usdMul(midFromRow(o.crypto?.[sym]));
+        case 'FUND':
+            return usdMul(midFromRow(o.funds?.[sym]));
+        case 'STOCK':
+            return usdMul(midFromRow(o.stocks?.[sym]));
+        default:
+            return null;
+    }
+}
+
+function mergeLiveIntoSeries(
+    series: SimulationPerformancePoint[],
+    buyPricePerUnit: number,
+    liveTry: number
+): SimulationPerformancePoint[] {
+    if (buyPricePerUnit <= 0 || liveTry <= 0) return series;
+    const today = new Date().toISOString().slice(0, 10);
+    const cumulativeReturnPct = ((liveTry - buyPricePerUnit) / buyPricePerUnit) * 100;
+    const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+    const last = sorted[sorted.length - 1];
+    if (last?.date === today) {
+        sorted[sorted.length - 1] = { date: today, priceTry: liveTry, cumulativeReturnPct };
+        return sorted;
+    }
+    sorted.push({ date: today, priceTry: liveTry, cumulativeReturnPct });
+    return sorted;
+}
+
 export function Simulation() {
     const { tokens } = useTheme();
     const { t } = useLanguage();
@@ -102,6 +168,65 @@ export function Simulation() {
     const [error, setError] = useState<string | null>(null);
     const [simulationResults, setSimulationResults] = useState<SimulationResultItem[]>([]);
     const [sortMode, setSortMode] = useState<SortMode>('LATEST');
+    const [listHydrated, setListHydrated] = useState(false);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(SIMULATION_STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw) as SimulationResultItem[];
+                if (Array.isArray(parsed)) setSimulationResults(parsed);
+            }
+        } catch {
+            /* ignore */
+        }
+        setListHydrated(true);
+    }, []);
+
+    useEffect(() => {
+        if (!listHydrated) return;
+        try {
+            localStorage.setItem(SIMULATION_STORAGE_KEY, JSON.stringify(simulationResults));
+        } catch {
+            /* ignore */
+        }
+    }, [simulationResults, listHydrated]);
+
+    useEffect(() => {
+        if (!listHydrated || simulationResults.length === 0) return;
+
+        const tick = async () => {
+            try {
+                const res = await financeClient.get('/api/market/overview');
+                const overview = unwrapData<OverviewLite>(res);
+                setSimulationResults((prev) =>
+                    prev.map((r) => {
+                        const live = liveTryFromOverview(overview, r.assetType, r.assetName);
+                        if (live == null || live <= 0 || r.buyPrice <= 0) return r;
+                        const units = r.initialAmount / r.buyPrice;
+                        const currentValue = units * live;
+                        const pnl = currentValue - r.initialAmount;
+                        const pnlPct = r.initialAmount > 0 ? (pnl / r.initialAmount) * 100 : 0;
+                        const series = mergeLiveIntoSeries(r.series, r.buyPrice, live);
+                        return {
+                            ...r,
+                            currentPrice: live,
+                            currentValue,
+                            pnl,
+                            pnlPct,
+                            series,
+                        };
+                    })
+                );
+            } catch {
+                /* overview isteği başarısız — önceki seri korunur */
+            }
+        };
+
+        const id = window.setInterval(tick, 45_000);
+        void tick();
+        return () => window.clearInterval(id);
+    }, [listHydrated, simulationResults.length]);
 
     useEffect(() => {
         setOverviewLoading(true);

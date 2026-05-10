@@ -92,7 +92,11 @@ export function AdminTasks() {
         fetchTasks();
     }, [page, status]);
 
+    const fetchTasksRef = useRef(fetchTasks);
+    fetchTasksRef.current = fetchTasks;
+
     const sseAbortRef = useRef<AbortController | null>(null);
+    /** SSE'yi sayfa/filtre her değişince koparmak sunucuda AsyncRequestNotUsableException tetikleyebilir; bağlantı token ömrü boyunca sabit kalsın. */
     useEffect(() => {
         sseAbortRef.current?.abort();
         if (!keycloak.token) return;
@@ -118,7 +122,7 @@ export function AdminTasks() {
                     buf += dec.decode(value, { stream: true });
                     if (buf.includes('TASK_ESCALATED_ADMIN')) {
                         buf = '';
-                        fetchTasks();
+                        fetchTasksRef.current();
                     }
                     if (buf.length > 64_000) buf = buf.slice(-32_000);
                 }
@@ -127,7 +131,7 @@ export function AdminTasks() {
             }
         })();
         return () => ac.abort();
-    }, [page, status]);
+    }, [keycloak.token]);
 
     const toggleContext = (taskId: number) => {
         if (expandedId === taskId) {
