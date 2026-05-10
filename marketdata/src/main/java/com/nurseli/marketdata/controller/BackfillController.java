@@ -1,6 +1,7 @@
 package com.nurseli.marketdata.controller;
 
 import com.nurseli.marketdata.application.MarketPriceBackfillService;
+import com.nurseli.marketdata.application.ViopBackfillRunner;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 public class BackfillController {
 
     private final MarketPriceBackfillService backfillService;
+    private final ViopBackfillRunner viopBackfillRunner;
 
     /**
      * Örnek çağrı:
@@ -28,5 +30,14 @@ public class BackfillController {
         backfillService.backfillFxLastDays(days);
         return ResponseEntity.ok()
                 .body("TCMB FX backfill tamamlandı. days=" + days);
+    }
+
+    /**
+     * Klasördeki tüm {@code viop_YYYYMMDD.csv} dosyalarını bir kez işler; satırlar DB'de varsa atlanır.
+     * Örnek: {@code curl -X POST http://localhost:8083/internal/market/backfill/viop-csv}
+     */
+    @PostMapping("/viop-csv")
+    public ResponseEntity<?> importViopCsvFiles() {
+        return ResponseEntity.ok(viopBackfillRunner.importAllCsvFilesToDb());
     }
 }

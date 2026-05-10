@@ -206,11 +206,17 @@ public class SimulationService {
         }
 
         SimulationPerformancePointDto last = points.get(points.size() - 1);
-        if (!today.isAfter(last.date())) {
-            return points;
+        // Günlük mum son noktası bugün olsa bile alış anındaki kapanıştan farklı olabilir; canlı kotasyonu yansıt.
+        if (last.date().equals(today)) {
+            java.util.ArrayList<SimulationPerformancePointDto> head =
+                    new java.util.ArrayList<>(points.subList(0, points.size() - 1));
+            head.add(todayPoint);
+            return List.copyOf(head);
         }
-
-        return java.util.stream.Stream.concat(points.stream(), java.util.stream.Stream.of(todayPoint)).toList();
+        if (today.isAfter(last.date())) {
+            return java.util.stream.Stream.concat(points.stream(), java.util.stream.Stream.of(todayPoint)).toList();
+        }
+        return points;
     }
 
     private SimulationPerformancePointDto toPoint(LocalDateTime ts, BigDecimal priceTry, BigDecimal buyPriceTry) {

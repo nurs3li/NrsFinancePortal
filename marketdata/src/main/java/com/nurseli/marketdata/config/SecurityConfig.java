@@ -44,6 +44,8 @@ public class SecurityConfig {
                                 "/api/debt/**"
                         ).permitAll()
                         .requestMatchers(req -> "OPTIONS".equalsIgnoreCase(req.getMethod())).permitAll()
+                        // CSV → DB tek seferlik içe aktarım (artifacts/viop). Ağda 8083’ü dışarı açmayın.
+                        .requestMatchers(HttpMethod.POST, "/internal/market/backfill/viop-csv").permitAll()
                         .requestMatchers("/internal/**").hasAnyRole("ADMIN", "OPS")
                         .anyRequest().authenticated()
                 )

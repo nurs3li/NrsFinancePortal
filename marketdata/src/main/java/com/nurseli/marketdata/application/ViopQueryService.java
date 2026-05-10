@@ -46,7 +46,7 @@ public class ViopQueryService {
     }
 
     public List<ViopSnapshotResponse> latest() {
-        List<ViopSnapshotResponse> rows = snapshotRepository.findAll().stream()
+        List<ViopSnapshotResponse> rows = snapshotRepository.findLatestSnapshotPerContract().stream()
                 .collect(Collectors.toMap(
                         s -> viopContractParser.normalizeContractCode(s.getContractCode()),
                         s -> s,

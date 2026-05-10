@@ -7,7 +7,6 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { useSearchParams } from 'react-router-dom';
 import {
     TEMPLATE_THEME,
-    classifyViopContract,
     getAssetClassOption,
     professionalTradeLabel,
     type AssetClass,
@@ -15,11 +14,7 @@ import {
     type TemplateType,
     type TradeType,
 } from '../constants/OrderConstants';
-import {
-    fetchDebtSymbolsByClass,
-    fetchSpotSymbolsByAssetClass,
-    fetchViopSymbolsByClass,
-} from '../services/marketDataService';
+import { fetchSpotSymbolsByAssetClass } from '../services/marketDataService';
 
 type TradeRequest = {
     assetType: AssetType;
@@ -67,13 +62,12 @@ function unwrapFinance<T>(res: AxiosResponse<T>): T {
     return body as T;
 }
 
-/** Piyasa kotasyonu USD olan kategoriler (FX/altın/VIOP/tahvil TRY). */
+/** Piyasa kotasyonu USD olan kategoriler (hisse/kripto spot). */
 function tradePriceQuotedUsd(category: TradeCategory): boolean {
     return category === 'EQUITY' || category === 'CRYPTO';
 }
-const ISIN_PATTERN = /^TR[A-Z0-9]{10}$/;
 const FUTURES_PATTERN = /^[A-Z0-9_]+\d{4}$/;
-type TradeCategory = 'EQUITY' | 'CRYPTO' | 'FX' | 'METAL' | 'FUND' | 'FUTURES' | 'BOND';
+type TradeCategory = 'EQUITY' | 'CRYPTO' | 'FX' | 'METAL' | 'FUND';
 type QuantityMode = 'DECIMAL' | 'INTEGER';
 
 const TRADE_CATEGORIES: {
@@ -90,8 +84,6 @@ const TRADE_CATEGORIES: {
     { id: 'FX', label: 'Döviz', templateType: 'SPOT', assetClass: 'SPOT_FX', assetType: 'FX', quantityMode: 'DECIMAL', quantityLabel: 'Para birimi' },
     { id: 'METAL', label: 'Altın', templateType: 'SPOT', assetClass: 'SPOT_COMMODITY', assetType: 'METAL', quantityMode: 'DECIMAL', quantityLabel: 'Gram' },
     { id: 'FUND', label: 'Fon', templateType: 'SPOT', assetClass: 'SPOT_EQUITY', assetType: 'FUND', quantityMode: 'INTEGER', quantityLabel: 'Pay' },
-    { id: 'FUTURES', label: 'VIOP', templateType: 'FUTURES', assetClass: 'FUTURES_INDEX', assetType: 'STOCK', quantityMode: 'INTEGER', quantityLabel: 'Kontrat' },
-    { id: 'BOND', label: 'Tahvil', templateType: 'FIXED_INCOME', assetClass: 'BOND_GOV', assetType: 'FUND', quantityMode: 'INTEGER', quantityLabel: 'Nominal' },
 ];
 
 export function Trade() {
@@ -112,9 +104,6 @@ export function Trade() {
     const [tradeType, setTradeType] = useState<TradeType>('BUY');
     const [quantity, setQuantity] = useState<string>('0.1');
     const [limitPrice, setLimitPrice] = useState<string>('');
-    const [contractMonth, setContractMonth] = useState<string>('Haz 2026');
-    const [nominal, setNominal] = useState<string>('');
-    const [priceMode, setPriceMode] = useState<'PRICE' | 'YIELD'>('PRICE');
 
     const [symbolPool, setSymbolPool] = useState<string[]>([]);
     const [symbolPoolLoading, setSymbolPoolLoading] = useState(false);
@@ -155,7 +144,6 @@ export function Trade() {
         setAssetType(selectedCategory.assetType);
         setQuantity(selectedCategory.quantityMode === 'INTEGER' ? '1' : '0.1');
         setLimitPrice('');
-        setNominal('');
     }, [selectedCategory]);
 
     /** Kategori değişince önceki kategorinin sembolü dropdown’da kalmaması için */
@@ -167,21 +155,16 @@ export function Trade() {
     useEffect(() => {
         const kind = String(searchParams.get('kind') ?? '').toUpperCase();
         const symbolFromQs = searchParams.get('symbol');
-        if (kind === 'BOND') {
-            setCategory('BOND');
-        } else if (kind === 'FUTURES') {
-            setCategory('FUTURES');
-        } else if (kind === 'STOCK') {
+        if (kind === 'STOCK') {
             setCategory('EQUITY');
+        } else if (kind === 'BOND' || kind === 'FUTURES') {
+            setCategory('CRYPTO');
         }
         if (symbolFromQs) {
             const normalized = symbolFromQs.toUpperCase();
             setSymbol(normalized);
-            if (ISIN_PATTERN.test(normalized)) {
-                setCategory('BOND');
-            } else if (FUTURES_PATTERN.test(normalized)) {
-                setCategory('FUTURES');
-                setAssetClass(classifyViopContract(normalized));
+            if (FUTURES_PATTERN.test(normalized)) {
+                setCategory('CRYPTO');
             }
         }
     }, [searchParams]);
@@ -198,14 +181,8 @@ export function Trade() {
                     .map((s) => String(s ?? '').toUpperCase())
                     .filter(Boolean)
                     .sort((a, b) => a.localeCompare(b, 'tr-TR'));
-            } else if (category === 'FUTURES') {
-                const classes: AssetClass[] = ['FUTURES_INDEX', 'FUTURES_FX', 'FUTURES_COMMODITY', 'FUTURES_EQUITY'];
-                const all = await Promise.all(classes.map((cls) => fetchViopSymbolsByClass(cls)));
-                nextPool = Array.from(new Set(all.flat())).sort((a, b) => a.localeCompare(b, 'tr-TR'));
-            } else if (templateType === 'SPOT') {
-                nextPool = await fetchSpotSymbolsByAssetClass(assetClass);
             } else {
-                nextPool = await fetchDebtSymbolsByClass(assetClass);
+                nextPool = await fetchSpotSymbolsByAssetClass(assetClass);
             }
             if (reqId === symbolPoolRequestIdRef.current) {
                 setSymbolPool(nextPool);
@@ -219,7 +196,7 @@ export function Trade() {
                 setSymbolPoolLoading(false);
             }
         }
-    }, [templateType, assetClass, category]);
+    }, [assetClass, category]);
 
     useEffect(() => {
         if (!orderFormV2Enabled) return;
@@ -231,16 +208,6 @@ export function Trade() {
         if (symbol && symbolPool.includes(symbol)) return symbol;
         return symbolPool[0];
     }, [symbolPool, symbol]);
-
-    useEffect(() => {
-        if (category !== 'FUTURES' || !tradeSymbol) return;
-        const futuresClass = classifyViopContract(tradeSymbol);
-        setAssetClass(futuresClass);
-        const option = getAssetClassOption(futuresClass);
-        if (option) {
-            setAssetType(option.backendAssetType);
-        }
-    }, [category, tradeSymbol]);
 
     useEffect(() => {
         if (!tradeSymbol) {
@@ -280,18 +247,6 @@ export function Trade() {
 
         const fetchPrice = async () => {
             try {
-                if (category === 'FUTURES') {
-                    const res = await marketClient.get<Array<Record<string, unknown>>>('/api/market/viop/latest');
-                    const row = (res.data ?? []).find((item) => String(item.contractCode ?? '').toUpperCase() === tradeSymbol);
-                    setLastPrice(readPrice(row));
-                    return;
-                }
-                if (category === 'BOND') {
-                    const res = await marketClient.get<Array<Record<string, unknown>>>('/api/market/debt/latest');
-                    const row = (res.data ?? []).find((item) => String(item.isin ?? '').toUpperCase() === tradeSymbol);
-                    setLastPrice(readPrice(row));
-                    return;
-                }
                 const endpoint =
                     category === 'EQUITY'
                         ? '/api/market/equity/latest'
@@ -366,19 +321,6 @@ export function Trade() {
             }
         }
         const attributes: Record<string, unknown> = { assetClass };
-        if (templateType === 'FUTURES') {
-            attributes.contractMonth = contractMonth;
-            attributes.expiryDate = contractMonth;
-        }
-        if (templateType === 'FIXED_INCOME') {
-            attributes.nominal = nominal ? Number(nominal) : null;
-            attributes.priceMode = priceMode;
-            if (priceMode === 'YIELD') {
-                attributes.yield = limitPrice ? Number(limitPrice) : null;
-            } else if (limitPrice) {
-                attributes.limitPrice = Number(limitPrice);
-            }
-        }
         if (templateType === 'SPOT' && limitPrice) {
             attributes.limitPrice = Number(limitPrice);
         }
@@ -525,38 +467,8 @@ export function Trade() {
                                 <input type="number" step="0.0001" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} style={inputStyle} />
                             </label>
                         ) : null}
-                        {templateType === 'FUTURES' ? (
-                            <label style={{ fontSize: '0.875rem' }}>
-                                Sozlesme Vadesi
-                                <select value={contractMonth} onChange={(e) => setContractMonth(e.target.value)} style={inputStyle}>
-                                    <option value="Haz 2026">Haz 2026</option>
-                                    <option value="Eyl 2026">Eyl 2026</option>
-                                    <option value="Ara 2026">Ara 2026</option>
-                                    <option value="Mar 2027">Mar 2027</option>
-                                </select>
-                            </label>
-                        ) : null}
-                        {templateType === 'FIXED_INCOME' ? (
-                            <>
-                                <label style={{ fontSize: '0.875rem' }}>
-                                    Fiyat/Getiri Modu
-                                    <select value={priceMode} onChange={(e) => setPriceMode(e.target.value as 'PRICE' | 'YIELD')} style={inputStyle}>
-                                        <option value="PRICE">Fiyat Uzerinden Emir</option>
-                                        <option value="YIELD">Getiri Uzerinden Emir</option>
-                                    </select>
-                                </label>
-                                <label style={{ fontSize: '0.875rem' }}>
-                                    {priceMode === 'YIELD' ? 'Hedef Getiri (%)' : 'Birim Fiyat'}
-                                    <input type="number" step="0.0001" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} style={inputStyle} />
-                                </label>
-                                <label style={{ fontSize: '0.875rem' }}>
-                                    Nominal Deger
-                                    <input type="number" step="1" value={nominal} onChange={(e) => setNominal(e.target.value)} style={inputStyle} />
-                                </label>
-                            </>
-                        ) : null}
                         <div style={{ fontSize: '0.75rem', color: tokens.textMuted }}>
-                            Secilen varlik turu icin emirler {templateType === 'SPOT' ? 'BIST/Binance' : templateType === 'FUTURES' ? 'BIST VIOP' : 'BIST Borclanma'} uzerinden gercek zamanli islenmektedir.
+                            Secilen varlik turu icin spot emirler BIST / Binance kotasyonlari uzerinden islenmektedir.
                         </div>
                         {lastPrice != null && Number.isFinite(lastPrice) ? (
                             <div style={{ borderRadius: 10, border: `1px solid ${tokens.border}`, background: tokens.bgCard, padding: 10 }}>

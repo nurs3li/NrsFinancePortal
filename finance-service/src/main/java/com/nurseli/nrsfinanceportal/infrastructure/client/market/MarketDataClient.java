@@ -19,6 +19,7 @@ import java.util.Map;
 public class MarketDataClient {
 
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(18);
+    private static final Duration HISTORY_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 
     /** Döviz dahil tüm latest uçları market-data {@code MarketPriceLatestResponse} ile aynı şema. */
     private static final ParameterizedTypeReference<Map<String, MarketPriceLatestDto>> LATEST_MAP =
@@ -155,9 +156,9 @@ public class MarketDataClient {
                 .retrieve()
                 .bodyToMono(HISTORY_ENVELOPE)
                 .map(envelope -> envelope.data() != null ? envelope.data() : List.<MarketPriceHistoryDto>of())
-                .timeout(REQUEST_TIMEOUT)
+                .timeout(HISTORY_REQUEST_TIMEOUT)
                 .onErrorReturn(List.of())
-                .block(REQUEST_TIMEOUT.plusSeconds(1));
+                .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(2));
         return list != null ? list : List.of();
     }
 
