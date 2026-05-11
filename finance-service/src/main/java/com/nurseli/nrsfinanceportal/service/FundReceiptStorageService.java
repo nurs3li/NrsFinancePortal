@@ -1,12 +1,16 @@
 package com.nurseli.nrsfinanceportal.service;
 
 import com.nurseli.nrsfinanceportal.common.dto.ReceiptUploadResponseDto;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -22,7 +26,24 @@ public class FundReceiptStorageService {
 
     private static final Set<String> ALLOWED_EXT = Set.of("pdf", "jpg", "jpeg", "png");
     private static final long MAX_SIZE_BYTES = 10L * 1024L * 1024L;
-    private final Path root = Paths.get(System.getProperty("java.io.tmpdir"), "nrs-finance", "receipts");
+    private final Path root;
+
+    public FundReceiptStorageService(@Value("${app.receipt-storage.root:}") String configuredRoot) {
+        if (StringUtils.hasText(configuredRoot)) {
+            this.root = Paths.get(configuredRoot.trim());
+        } else {
+            this.root = Paths.get(System.getProperty("user.home"), ".nrs-finance", "receipts");
+        }
+    }
+
+    @PostConstruct
+    void ensureStorageReady() {
+        try {
+            Files.createDirectories(root);
+        } catch (IOException e) {
+            throw new IllegalStateException("Cannot create receipt storage directory: " + root, e);
+        }
+    }
 
     public ReceiptUploadResponseDto store(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -57,6 +78,11 @@ public class FundReceiptStorageService {
         if (!StringUtils.hasText(receiptId)) {
             throw new IllegalArgumentException("Receipt id required");
         }
+        try {
+            Files.createDirectories(root);
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Cannot access receipt storage", e);
+        }
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(root, receiptId + "_*")) {
             for (Path p : stream) {
                 byte[] bytes = Files.readAllBytes(p);
@@ -74,9 +100,9 @@ public class FundReceiptStorageService {
                 return new StoredReceipt(original, mediaType, resource);
             }
         } catch (IOException e) {
-            throw new IllegalStateException("Cannot read receipt file", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Cannot read receipt file", e);
         }
-        throw new IllegalArgumentException("Receipt not found");
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Receipt not found");
     }
 
     private String extensionOf(String fileName) {

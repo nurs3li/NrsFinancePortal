@@ -40,7 +40,9 @@ public class MarketLiveSnapshotService {
                 "FUTURES",
                 v.contractCode(),
                 nz(v.price()),
-                pct(v.basis(), v.price()),
+                v.listPctChange14d() != null
+                        ? v.listPctChange14d()
+                        : (v.seqMovePct() != null ? v.seqMovePct() : pct(v.basis(), v.price())),
                 BigDecimal.valueOf(v.openInterest() == null ? 0 : v.openInterest())
         )));
         debtQueryService.latest().forEach(d -> ticks.add(new MarketLiveTickResponse(

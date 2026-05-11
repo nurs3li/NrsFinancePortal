@@ -1,0 +1,265 @@
+/* Premium simulation page — scoped under .sim-page */
+
+.sim-page {
+    --sim-text: rgba(255, 255, 255, 0.9);
+    --sim-text-muted: rgba(255, 255, 255, 0.62);
+    --sim-focus-glow: 0 0 12px rgba(0, 212, 255, 0.4);
+}
+
+.sim-page h1,
+.sim-page h2 {
+    color: var(--sim-text);
+}
+
+.sim-page .sim-lead {
+    color: var(--sim-text-muted);
+}
+
+.card-premium {
+    background: rgba(16, 22, 35, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(192, 192, 192, 0.15);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(2, 6, 23, 0.45);
+    transition:
+        transform 220ms ease,
+        box-shadow 220ms ease,
+        border-color 220ms ease;
+}
+
+.card-premium:hover {
+    transform: translateY(-4px);
+    border-color: rgba(192, 192, 192, 0.32);
+    box-shadow: 0 16px 40px rgba(2, 12, 32, 0.55);
+}
+
+/* Yapışkan form kartı: hover’da zıplamasın */
+.card-premium.card-premium--static:hover {
+    transform: none;
+    border-color: rgba(192, 192, 192, 0.22);
+    box-shadow: 0 8px 32px rgba(2, 6, 23, 0.45);
+}
+
+.sim-chart-surface {
+    background: rgba(8, 14, 28, 0.55);
+    border-radius: 14px;
+    border: 1px solid rgba(192, 192, 192, 0.1);
+    padding: 10px;
+}
+
+.sim-premium-input,
+.sim-premium-select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(192, 192, 192, 0.18);
+    background-color: rgba(10, 18, 32, 0.75);
+    color: var(--sim-text);
+    font-size: 0.9375rem;
+    outline: none;
+    transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease;
+}
+
+.sim-premium-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    cursor: pointer;
+    padding-right: 32px;
+    background-image: linear-gradient(45deg, transparent 50%, rgba(192, 192, 192, 0.5) 50%),
+        linear-gradient(135deg, rgba(192, 192, 192, 0.5) 50%, transparent 50%);
+    background-position:
+        calc(100% - 18px) calc(50% + 3px),
+        calc(100% - 13px) calc(50% + 3px);
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+}
+
+.sim-premium-input:focus,
+.sim-premium-select:focus {
+    border-color: rgba(0, 212, 255, 0.45);
+    box-shadow: var(--sim-focus-glow);
+}
+
+.sim-submit-btn {
+    padding: 12px 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(192, 192, 192, 0.25);
+    background: linear-gradient(135deg, rgba(192, 192, 192, 0.22) 0%, rgba(15, 40, 90, 0.95) 45%, rgba(8, 22, 55, 0.98) 100%);
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 44px;
+    transition:
+        box-shadow 200ms ease,
+        filter 200ms ease,
+        transform 160ms ease;
+}
+
+.sim-submit-btn:hover:not(:disabled) {
+    filter: brightness(1.12);
+    box-shadow:
+        0 0 20px rgba(0, 212, 255, 0.35),
+        0 6px 24px rgba(2, 8, 24, 0.4);
+    transform: translateY(-1px);
+}
+
+.sim-submit-btn:disabled {
+    opacity: 0.65;
+    cursor: default;
+}
+
+.sim-chart-tooltip {
+    background: rgba(4, 8, 16, 0.94);
+    border: 1px solid rgba(192, 192, 192, 0.35);
+    border-radius: 12px;
+    padding: 10px 14px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    min-width: 160px;
+}
+
+.sim-chart-tooltip-title {
+    color: rgba(192, 192, 192, 0.9);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.sim-chart-tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.84rem;
+    color: rgba(255, 255, 255, 0.92);
+    margin-top: 4px;
+}
+
+.sim-table tbody tr.sim-table-row {
+    transition: background 160ms ease;
+}
+
+.sim-table tbody tr.sim-table-row:hover {
+    background: rgba(0, 212, 255, 0.07);
+}
+
+.quality-pill {
+    display: inline-block;
+    margin-top: 6px;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.quality-pill-exact {
+    background: rgba(57, 255, 20, 0.12);
+    color: #5cff3a;
+    border: 1px solid rgba(57, 255, 20, 0.35);
+    box-shadow: inset 0 0 12px rgba(57, 255, 20, 0.18);
+}
+
+.quality-pill-prev {
+    background: rgba(245, 158, 11, 0.14);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.quality-pill-fallback {
+    background: rgba(239, 68, 68, 0.14);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.sim-pnl-cell {
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+
+.sim-pnl-pos {
+    color: #39ff14;
+    text-shadow: 0 0 12px rgba(57, 255, 20, 0.35);
+}
+
+.sim-pnl-neg {
+    color: #ff4d6a;
+    text-shadow: 0 0 12px rgba(255, 77, 106, 0.35);
+}
+
+.sim-toolbar-btn {
+    border-radius: 10px;
+    border: 1px solid rgba(192, 192, 192, 0.2);
+    background: rgba(10, 18, 32, 0.65);
+    color: var(--sim-text);
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 0.8125rem;
+    transition:
+        border-color 160ms ease,
+        background 160ms ease;
+}
+
+.sim-toolbar-btn:hover {
+    border-color: rgba(0, 212, 255, 0.35);
+    background: rgba(0, 212, 255, 0.08);
+}
+
+.sim-csv-btn {
+    border: 1px solid rgba(192, 192, 192, 0.25);
+    background: linear-gradient(135deg, rgba(192, 192, 192, 0.18) 0%, rgba(20, 50, 120, 0.9) 100%);
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 700;
+}
+
+.sim-csv-btn:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 0 16px rgba(0, 212, 255, 0.25);
+}
+
+[data-theme='light'] .card-premium {
+    background: rgba(248, 250, 252, 0.88);
+    border-color: rgba(100, 116, 139, 0.25);
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme='light'] .card-premium:hover {
+    border-color: rgba(59, 130, 246, 0.35);
+}
+
+[data-theme='light'] .sim-page {
+    --sim-text: rgba(15, 23, 42, 0.92);
+    --sim-text-muted: rgba(51, 65, 85, 0.85);
+}
+
+[data-theme='light'] .sim-premium-input,
+[data-theme='light'] .sim-premium-select {
+    background: rgba(255, 255, 255, 0.92);
+    color: #0f172a;
+    border-color: rgba(100, 116, 139, 0.35);
+}
+
+[data-theme='light'] .sim-chart-surface {
+    background: rgba(241, 245, 249, 0.9);
+    border-color: rgba(100, 116, 139, 0.2);
+}
+
+[data-theme='light'] .sim-chart-tooltip {
+    background: rgba(255, 255, 255, 0.97);
+    border-color: rgba(100, 116, 139, 0.4);
+    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.15);
+}
+
+[data-theme='light'] .sim-chart-tooltip-title {
+    color: #475569;
+}
+
+[data-theme='light'] .sim-chart-tooltip-row {
+    color: #0f172a;
+}

@@ -70,6 +70,8 @@ type ViopSnapshot = {
     contractMonth?: string;
     price: number;
     basis: number;
+    /** Teorik spot; `basis` 0 gelince baz = fiyat − spot ile türetilir (backend ViopSnapshotResponse) */
+    theoreticalSpot?: number | null;
     /** API bazen null/omit; 0 geldiğinde basis doluysa client tarafında fiyat oranı kullanılır */
     annualizedBasisPct?: number | null;
     marginRequirement?: number;
@@ -385,23 +387,38 @@ async function mapPool<T, R>(items: T[], batchSize: number, fn: (item: T) => Pro
     return out;
 }
 
+/** Raporlanan baz veya (fiyat − teorik spot); API sadece spot doldurup bazı 0 bırakabiliyor */
+function impliedViopBasis(v: Pick<ViopSnapshot, 'basis' | 'theoreticalSpot'>, price: number): number {
+    const reported = Number(v?.basis ?? 0);
+    if (Number.isFinite(reported) && Math.abs(reported) > 1e-9) {
+        return reported;
+    }
+    const p = Number(price);
+    const spotRaw = v?.theoreticalSpot;
+    const spot = spotRaw === null || spotRaw === undefined ? Number.NaN : Number(spotRaw);
+    if (p > 0 && Number.isFinite(spot) && Math.abs(spot) > 1e-9) {
+        return p - spot;
+    }
+    return Number.isFinite(reported) ? reported : 0;
+}
+
 /**
- * Yıllıklandırılmış taşıma %: API 0 veya boş döndüğünde anlamlı basis varsa (basis/fiyat)*100 yaklaşımı.
- * Gerçekten basis≈0 ve annualized=0 ise 0 döner.
+ * Taşıma %: API’deki annualized anlamlıysa onu kullan; değilse (örtük baz / fiyat) * 100.
  */
 function effectiveViopCarryPercent(v: ViopSnapshot, price: number): number {
     const p = Number(price);
-    const basisVal = Number(v?.basis ?? 0);
+    if (!(p > 0)) return Number.NaN;
+    const impliedBasis = impliedViopBasis(v, p);
     const raw = v?.annualizedBasisPct;
     const ann = raw === null || raw === undefined ? Number.NaN : Number(raw);
-    const basisSignificant = Number.isFinite(basisVal) && Math.abs(basisVal) > 1e-9;
-    if (Number.isFinite(ann) && (Math.abs(ann) > 1e-9 || !basisSignificant)) {
+    if (Number.isFinite(ann) && Math.abs(ann) > 1e-9) {
         return ann;
     }
-    if (p > 0 && basisSignificant) {
-        return (basisVal / p) * 100;
+    if (Number.isFinite(impliedBasis) && Math.abs(impliedBasis) > 1e-9) {
+        return (impliedBasis / p) * 100;
     }
-    return Number.isFinite(ann) ? ann : Number.NaN;
+    if (Number.isFinite(ann)) return ann;
+    return Number.NaN;
 }
 
 /** Kontrat listesi çok uzunsa (latest boş) history fırtınasını sınırla */
@@ -853,17 +870,19 @@ export function Market() {
                 .map((v) => {
                     const symbol = normalizeSymbolKey(v.contractCode);
                     const pctByHistory = Number(viopHistoryChangeMap[symbol]);
-                    const pctFallback = v.price ? (Number(v.basis ?? 0) / Number(v.price)) * 100 : 0;
+                    const priceN = Number(v.price ?? 0);
+                    const pctFallback =
+                        priceN > 0 ? (impliedViopBasis(v, priceN) / priceN) * 100 : 0;
                     const pct = Number.isFinite(pctByHistory) ? pctByHistory : pctFallback;
                     return {
                         symbol,
                         category: 'FUTURES' as const,
-                        price: Number(v.price ?? 0),
+                        price: priceN,
                         changePercent: Number.isFinite(pct) ? pct : 0,
                         trend: pct >= 0 ? ('UP' as const) : ('DOWN' as const),
                         metrics: {
-                            basis: Number(v.basis ?? 0),
-                            yield: effectiveViopCarryPercent(v, Number(v.price ?? 0)),
+                            basis: impliedViopBasis(v, priceN),
+                            yield: effectiveViopCarryPercent(v, priceN),
                         },
                         volume: Number(v.openInterest ?? 0),
                     } satisfies MarketInstrument;
@@ -1247,11 +1266,12 @@ export function Market() {
         });
         return [...dailyLast.values()].map((x) => {
             const priceN = Number(x.price ?? 0);
+            const basisDisp = impliedViopBasis(x, priceN);
             const carry = effectiveViopCarryPercent(x, priceN);
             return {
                 time: x.asOf ?? new Date().toISOString(),
                 price: priceN,
-                basis: Number(x.basis ?? 0),
+                basis: basisDisp,
                 annualizedBasisPct: Number.isFinite(carry) ? carry : 0,
                 openInterest: Number(x.openInterest ?? 0),
             };
@@ -1510,9 +1530,11 @@ export function Market() {
             : Number(latest.openInterest ?? 0);
         const prevOi = oiSeries.length > 1 ? Number(oiSeries[oiSeries.length - 2]?.openInterest ?? 0) : lastOi;
         const oiChangePct = prevOi > 0 ? ((lastOi - prevOi) / prevOi) * 100 : 0;
-        const carry = effectiveViopCarryPercent(latest, Number(latest.price));
+        const priceN = Number(latest.price);
+        const displayBasis = impliedViopBasis(latest, priceN);
+        const carry = effectiveViopCarryPercent(latest, priceN);
         return {
-            basis: Number(latest.basis ?? 0),
+            basis: displayBasis,
             carry: Number.isFinite(carry) ? carry : 0,
             oiChangePct,
             oi: lastOi,
@@ -1533,22 +1555,17 @@ export function Market() {
         () => [...instruments].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent)).slice(0, 5),
         [instruments]
     );
-    const futuresHighestCarry = useMemo(
-        () =>
-            [...instruments]
-                .map((ins) => {
-                    const y = Number(ins.metrics?.yield);
-                    const basisVal = Number(ins.metrics?.basis ?? 0);
-                    const fallback =
-                        Number.isFinite(basisVal) && ins.price > 0 ? (basisVal / ins.price) * 100 : Number.NaN;
-                    const carry = Number.isFinite(y) ? y : fallback;
-                    return { symbol: ins.symbol, carry };
-                })
-                .filter((x) => Number.isFinite(x.carry))
-                .sort((a, b) => b.carry - a.carry)
-                .slice(0, 5),
-        [instruments]
-    );
+    const futuresHighestCarry = useMemo(() => {
+        const rows = instruments
+            .map((ins) => {
+                const carry = Number(ins.metrics?.yield);
+                return { symbol: ins.symbol, carry };
+            })
+            .filter((x) => Number.isFinite(x.carry));
+        const nonZero = rows.filter((x) => Math.abs(x.carry) > 1e-9);
+        const pool = nonZero.length > 0 ? nonZero : rows;
+        return [...pool].sort((a, b) => b.carry - a.carry).slice(0, 5);
+    }, [instruments]);
 
     const formatCarry = useCallback((value: number) => {
         if (!Number.isFinite(value)) return '—';
@@ -2286,7 +2303,9 @@ export function Market() {
 
                             {activeCategory === 'FUTURES' ? (
                                 <div className="terminal-mini-list">
-                                    <strong style={{ fontSize: 13 }}>Top Futures Movers</strong>
+                                    <strong style={{ fontSize: 13 }}>
+                                        {t('market.futuresTopMovers', 'En hareketli vadeliler')}
+                                    </strong>
                                     {futuresTopMovers.map((v) => (
                                         <div key={`mv-${v.symbol}`} className="terminal-mini-item">
                                             <span>{parseViopContractLabel(v.symbol)}</span>
@@ -2296,7 +2315,9 @@ export function Market() {
                                             </span>
                                         </div>
                                     ))}
-                                    <strong style={{ fontSize: 13, marginTop: 4 }}>Highest Carry</strong>
+                                    <strong style={{ fontSize: 13, marginTop: 4 }}>
+                                        {t('market.futuresHighestCarry', 'En yüksek taşıma (baz/fiyat %)')}
+                                    </strong>
                                     {futuresHighestCarry.map((v) => (
                                         <div key={`carry-${v.symbol}`} className="terminal-mini-item">
                                             <span>{parseViopContractLabel(v.symbol)}</span>
@@ -2305,14 +2326,18 @@ export function Market() {
                                     ))}
                                     {futuresHeaderMetrics ? (
                                         <div className="terminal-mini-item">
-                                            <span>Spot vs Vadeli Farkı</span>
+                                            <span>{t('market.spotFuturesSpread', 'Spot / vadeli farkı (baz)')}</span>
                                             <span>{futuresHeaderMetrics.basis.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
                                         </div>
                                     ) : null}
                                     {futuresHeaderMetrics ? (
                                         <div className="terminal-mini-item">
-                                            <span>Yön</span>
-                                            <span>{futuresHeaderMetrics.basis >= 0 ? 'UP' : 'DOWN'}</span>
+                                            <span>{t('market.direction', 'Yön')}</span>
+                                            <span>
+                                                {futuresHeaderMetrics.basis >= 0
+                                                    ? t('market.directionUp', 'Yukarı')
+                                                    : t('market.directionDown', 'Aşağı')}
+                                            </span>
                                         </div>
                                     ) : null}
                                 </div>

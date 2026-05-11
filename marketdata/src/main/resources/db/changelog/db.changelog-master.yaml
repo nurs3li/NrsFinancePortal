@@ -17,3 +17,9 @@ databaseChangeLog:
       file: db/changelog/v7-crypto-daily-candle.yaml
   - include:
       file: db/changelog/v8-fx-daily-candle.yaml
+  - include:
+      file: db/changelog/v9-viop-csv-rollups.yaml
+  - include:
+      file: db/changelog/v10-viop-seq-move.yaml
+  - include:
+      file: db/changelog/v11-viop-perf-indexes.yaml

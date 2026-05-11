@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - changeSet:
+      id: 010-viop-seq-move-from-last-two-points
+      author: codex
+      changes:
+        - addColumn:
+            tableName: derivative_contract
+            columns:
+              - column:
+                  name: viop_seq_move_pct
+                  type: NUMERIC(14,6)
+              - column:
+                  name: viop_seq_move_trend
+                  type: VARCHAR(16)

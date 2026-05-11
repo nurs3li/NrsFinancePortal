@@ -191,12 +191,6 @@ market:
           dirtyPriceScale: 1
           yieldScale: 1
   providers:
-    viop:
-      enabled: false
-      baseUrl: ${VIOP_PROVIDER_BASE_URL:}
-      apiKey: ${VIOP_PROVIDER_API_KEY:}
-      timeoutMs: 3000
-      latestPath: /viop/latest
     debt:
       enabled: ${DEBT_PROVIDER_ENABLED:false}
       baseUrl: ${DEBT_PROVIDER_BASE_URL:}
@@ -297,24 +291,11 @@ app:
       canonical: FINHUB
       fallback-order: []
   viop:
-    live-ingest-enabled: ${APP_VIOP_LIVE_INGEST_ENABLED:false}
-    hybrid:
-      enabled: ${VIOP_HYBRID_ENABLED:false}
-      bistBulletinEnabled: ${VIOP_BIST_BULLETIN_ENABLED:false}
-      priceFallbackEnabled: ${VIOP_PRICE_FALLBACK_ENABLED:false}
-      bistBulletinUrl: ${VIOP_BIST_BULLETIN_URL:}
-      priceFallbackUrl: ${VIOP_PRICE_FALLBACK_URL:}
-      priceFallbackApiKey: ${VIOP_PRICE_FALLBACK_API_KEY:}
-      timeoutMs: ${VIOP_HYBRID_TIMEOUT_MS:3000}
-      suspiciousBasisPctLimit: ${VIOP_SUSPICIOUS_BASIS_LIMIT:15}
-      redisEnabled: ${VIOP_HYBRID_REDIS_ENABLED:false}
-      redisTtlSeconds: ${VIOP_HYBRID_REDIS_TTL_SECONDS:1}
-      kafkaEnabled: ${VIOP_HYBRID_KAFKA_ENABLED:false}
-      kafkaBootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS:}
-      kafkaTopic: ${VIOP_HYBRID_KAFKA_TOPIC:high-volatility-alert}
-      openInterestSurgeThresholdPct: ${VIOP_OI_SURGE_THRESHOLD_PCT:10}
     backfill:
       enabled: ${VIOP_BACKFILL_ENABLED:false}
       dir: ${VIOP_BACKFILL_DIR:artifacts/viop}
       pattern: ${VIOP_BACKFILL_PATTERN:viop_*.csv}
       shutdownOnComplete: ${VIOP_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
+    rollups:
+      # true: açılışta kontrat % / son-iki-nokta alanlarını snapshot'lardan bir kez hesaplar (POST backfill şart değil)
+      refresh-on-startup: ${VIOP_ROLLUPS_REFRESH_ON_START:false}

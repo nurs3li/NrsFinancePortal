@@ -41,6 +41,7 @@ public class ViopBackfillRunner implements ApplicationRunner {
     private final OpenInterestSnapshotRepository openInterestSnapshotRepository;
     private final ConfigurableApplicationContext context;
     private final ViopContractParser viopContractParser;
+    private final ViopCsvRollupService viopCsvRollupService;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -74,6 +75,11 @@ public class ViopBackfillRunner implements ApplicationRunner {
             }
             log.info("[VIOP_BACKFILL] DONE files={}, rows={}, inserts={}, duplicates={}, rowErrors={}, fileErrors={}",
                     stats.totalFiles, stats.totalRows, stats.inserts, stats.duplicates, stats.rowErrors, stats.fileErrors);
+            try {
+                viopCsvRollupService.refreshAfterCsvImport();
+            } catch (Exception rollupEx) {
+                log.warn("[VIOP_BACKFILL] list rollup refresh failed: {}", rollupEx.getMessage());
+            }
         } catch (Exception ex) {
             log.error("[VIOP_BACKFILL] fatal error: {}", ex.getMessage(), ex);
             return Map.of(

@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { registerSimulationPdfFont, SIMULATION_PDF_FONT_FAMILY } from '../utils/simulationPdfFont';
 import {
+    Area,
     CartesianGrid,
+    ComposedChart,
     Legend,
-    Line,
-    LineChart,
     ResponsiveContainer,
     Tooltip,
     XAxis,
@@ -13,6 +16,7 @@ import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { Trash2 } from 'lucide-react';
 import './TerminalPages.css';
+import './Simulation.css';
 import { fetchSimulationSymbolsByType } from '../services/marketDataService';
 import { useLanguage } from '../i18n/LanguageContext';
 
@@ -68,7 +72,99 @@ function unwrapData<T>(res: any): T {
     return (res?.data?.data ?? res?.data) as T;
 }
 
-const LINE_COLORS = ['#c0c0c0', '#d9d9d9', '#aeb4c4', '#94a3b8', '#e2e8f0', '#f8fafc', '#22d3ee', '#7dd3fc'];
+/** Premium çizgi paleti: altın, elektrik mavisi, neon yeşil, mor (4+ seri döngü) */
+const CHART_PALETTE = ['#FFD700', '#00D4FF', '#39FF14', '#BC13FE'] as const;
+
+function assetTypeOptionIcon(t: AssetType): string {
+    switch (t) {
+        case 'CRYPTO':
+            return '₿';
+        case 'FX':
+            return '💱';
+        case 'METAL':
+            return '◆';
+        case 'FUND':
+            return '▣';
+        case 'STOCK':
+            return '📈';
+        default:
+            return '•';
+    }
+}
+
+function useAnimatedNumber(target: number) {
+    const [display, setDisplay] = useState(0);
+    const displayRef = useRef(0);
+
+    useEffect(() => {
+        const from = displayRef.current;
+        let raf = 0;
+        const t0 = performance.now();
+        const dur = 680;
+        const step = (now: number) => {
+            const p = Math.min(1, (now - t0) / dur);
+            const eased = 1 - (1 - p) ** 3;
+            const next = from + (target - from) * eased;
+            displayRef.current = next;
+            setDisplay(next);
+            if (p < 1) raf = requestAnimationFrame(step);
+        };
+        raf = requestAnimationFrame(step);
+        return () => cancelAnimationFrame(raf);
+    }, [target]);
+
+    return display;
+}
+
+type SimTooltipPayload = { name?: string; value?: number; color?: string };
+
+function SimPerformanceTooltip({
+    active,
+    label,
+    payload,
+}: {
+    active?: boolean;
+    label?: string;
+    payload?: SimTooltipPayload[];
+}) {
+    if (!active || !payload?.length) return null;
+    return (
+        <div className="sim-chart-tooltip">
+            <div className="sim-chart-tooltip-title">{label}</div>
+            {payload.map((e: SimTooltipPayload, i: number) => (
+                <div key={i} className="sim-chart-tooltip-row">
+                    <span style={{ color: e.color }}>{e.name}</span>
+                    <span>
+                        {e.value == null
+                            ? '—'
+                            : `${Number(e.value).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%`}
+                    </span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function SimAnimatedTry({ value, bold }: { value: number; bold?: boolean }) {
+    const v = useAnimatedNumber(value);
+    return (
+        <span className="tp-mono" style={{ fontWeight: bold ? 700 : 500 }}>
+            ₺{v.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
+        </span>
+    );
+}
+
+function SimAnimatedPnl({ pnl, pnlPct }: { pnl: number; pnlPct: number }) {
+    const ap = useAnimatedNumber(pnl);
+    const ac = useAnimatedNumber(pnlPct);
+    const pos = pnl >= 0;
+    return (
+        <span className={`tp-mono sim-pnl-cell ${pos ? 'sim-pnl-pos' : 'sim-pnl-neg'}`}>
+            {pos ? '+' : ''}₺{ap.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} (
+            {ac.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%)
+        </span>
+    );
+}
 
 function sourceLabel(source: string): string {
     const s = String(source ?? '').toUpperCase();
@@ -84,6 +180,37 @@ function qualityLabel(quality: string): string {
     if (q === 'PREVIOUS_DAY') return 'PREVIOUS_DAY (Onceki uygun gun)';
     if (q === 'FALLBACK') return 'FALLBACK (En erken/mevcut nokta)';
     return quality || 'BILINMIYOR';
+}
+
+function formatExportDecimal(n: number, decimals: number): string {
+    const f = 10 ** decimals;
+    const v = Math.round(n * f) / f;
+    return String(v);
+}
+
+/** CSV/PDF satırı: API/DB alan adları veya ham enum yerine kullanıcı dilinde etiketler */
+function buildSimulationExportRow(
+    r: SimulationResultItem,
+    fmt: {
+        assetType: (a: AssetType) => string;
+        quality: (q: string) => string;
+        source: (s: string) => string;
+    }
+): string[] {
+    return [
+        fmt.assetType(r.assetType),
+        r.assetName,
+        r.buyDate,
+        formatExportDecimal(r.initialAmount, 2),
+        formatExportDecimal(r.buyPrice, 4),
+        formatExportDecimal(r.currentPrice, 4),
+        formatExportDecimal(r.currentValue, 2),
+        formatExportDecimal(r.pnl, 2),
+        formatExportDecimal(r.pnlPct, 2),
+        fmt.source(r.buyPriceSource),
+        r.historicalPriceDate,
+        fmt.quality(r.qualityFlag),
+    ];
 }
 
 const SIMULATION_STORAGE_KEY = 'nrs-finance-portal-simulation-list-v1';
@@ -154,7 +281,7 @@ function mergeLiveIntoSeries(
 
 export function Simulation() {
     const { tokens } = useTheme();
-    const { t } = useLanguage();
+    const { t, lang } = useLanguage();
     const [type, setType] = useState<AssetType>('CRYPTO');
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [amount, setAmount] = useState('5000');
@@ -375,82 +502,147 @@ export function Simulation() {
         setSimulationResults((prev) => prev.map((x) => ({ ...x, visible })));
     };
 
-    const exportCsv = () => {
-        if (simulationResults.length === 0) return;
-        const headers = [
-            'id',
-            'assetType',
-            'assetName',
-            'buyDate',
-            'initialAmountTRY',
-            'buyPriceTRY',
-            'currentPriceTRY',
-            'currentValueTRY',
-            'pnlTRY',
-            'pnlPct',
-            'buyPriceSource',
-            'historicalPriceDate',
-            'qualityFlag',
-            'visible',
-        ];
-        const esc = (v: string | number | boolean) => `"${String(v).replaceAll('"', '""')}"`;
+    const exportHeaders = useMemo(
+        () => [
+            t('simulation.exportColAssetType', 'Varlık türü'),
+            t('simulation.exportColSymbol', 'Sembol'),
+            t('simulation.exportColBuyDate', 'Alım tarihi'),
+            t('simulation.exportColInitialTry', 'Başlangıç tutarı (TRY)'),
+            t('simulation.exportColBuyUnitTry', 'Alış fiyatı (TRY / birim)'),
+            t('simulation.exportColCurrentUnitTry', 'Güncel fiyat (TRY / birim)'),
+            t('simulation.exportColValueTry', 'Güncel değer (TRY)'),
+            t('simulation.exportColPnlTry', 'Kâr/zarar (TRY)'),
+            t('simulation.exportColPnlPct', 'Getiri (%)'),
+            t('simulation.exportColPriceSource', 'Fiyat kaynağı'),
+            t('simulation.exportColRefDate', 'Referans tarihi'),
+            t('simulation.exportColQuality', 'Veri kalitesi'),
+        ],
+        [t]
+    );
+
+    const exportCellFormatters = useMemo(
+        () => ({
+            assetType(at: AssetType) {
+                switch (at) {
+                    case 'CRYPTO':
+                        return t('category.crypto', 'Kripto');
+                    case 'FX':
+                        return t('category.fx', 'Döviz');
+                    case 'METAL':
+                        return t('category.metals', 'Altın');
+                    case 'FUND':
+                        return t('category.funds', 'Fonlar');
+                    case 'STOCK':
+                        return t('category.equity', 'Hisse');
+                    default:
+                        return at;
+                }
+            },
+            quality(q: string) {
+                const u = String(q ?? '').toUpperCase();
+                if (u === 'EXACT') return t('simulation.exportQualityExact', 'Seçilen güne tam veri');
+                if (u === 'PREVIOUS_DAY') return t('simulation.exportQualityPrevious', 'Önceki işlem günü');
+                if (u === 'FALLBACK') return t('simulation.exportQualityFallback', 'En yakın geçerli tarih');
+                return t('simulation.exportQualityUnknown', 'Belirtilmedi');
+            },
+            source(s: string) {
+                const u = String(s ?? '').toUpperCase();
+                if (u === 'SYSTEM_HISTORY') return t('simulation.exportSourceHistory', 'Sistem geçmiş fiyatı');
+                if (u === 'SYSTEM_LATEST_FALLBACK')
+                    return t('simulation.exportSourceLatestFallback', 'Sistem son fiyat (yedek)');
+                if (u === 'USER_INPUT') return t('simulation.exportSourceManual', 'Kullanıcı girişi');
+                return s ? t('simulation.exportSourceOther', s) : t('simulation.exportSourceUnknown', 'Bilinmiyor');
+            },
+        }),
+        [t]
+    );
+
+    const exportCsv = useCallback(() => {
+        if (displayedResults.length === 0) return;
+        const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
         const lines = displayedResults.map((r) =>
-            [
-                r.id,
-                r.assetType,
-                r.assetName,
-                r.buyDate,
-                r.initialAmount,
-                r.buyPrice,
-                r.currentPrice,
-                r.currentValue,
-                r.pnl,
-                r.pnlPct,
-                r.buyPriceSource,
-                r.historicalPriceDate,
-                r.qualityFlag,
-                r.visible,
-            ].map(esc).join(',')
+            buildSimulationExportRow(r, exportCellFormatters).map(esc).join(',')
         );
-        const csv = [headers.join(','), ...lines].join('\n');
+        const csv = '\uFEFF' + [exportHeaders.join(','), ...lines].join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `simulation-results-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}.csv`;
+        a.download = `simulation-ozet-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}.csv`;
         a.click();
         URL.revokeObjectURL(url);
-    };
+    }, [displayedResults, exportHeaders, exportCellFormatters]);
+
+    const exportPdf = useCallback(async () => {
+        if (displayedResults.length === 0) return;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        try {
+            await registerSimulationPdfFont(doc);
+        } catch {
+            window.alert(
+                t(
+                    'simulation.exportPdfFontError',
+                    'PDF için Türkçe font yüklenemedi. fonts/NotoSans-Regular.ttf dosyasının public klasöründe olduğundan emin olun.'
+                )
+            );
+            return;
+        }
+        const title = t('simulation.exportPdfTitle', 'NRS Finance Portal — Simülasyon özeti');
+        const genLabel = t('simulation.exportPdfGeneratedLabel', 'Oluşturulma');
+        const localeStr = lang === 'en' ? 'en-GB' : 'tr-TR';
+        doc.setFont(SIMULATION_PDF_FONT_FAMILY, 'normal');
+        doc.setFontSize(11);
+        doc.setTextColor(25, 25, 30);
+        doc.text(title, 14, 12);
+        doc.setFontSize(8);
+        doc.setTextColor(60, 60, 60);
+        doc.text(`${genLabel}: ${new Date().toLocaleString(localeStr)}`, 14, 17);
+        const body = displayedResults.map((r) => buildSimulationExportRow(r, exportCellFormatters));
+        autoTable(doc, {
+            startY: 22,
+            head: [exportHeaders],
+            body,
+            styles: {
+                font: SIMULATION_PDF_FONT_FAMILY,
+                fontStyle: 'normal',
+                fontSize: 7,
+                cellPadding: 1.2,
+                textColor: [25, 25, 30],
+            },
+            headStyles: {
+                font: SIMULATION_PDF_FONT_FAMILY,
+                fontStyle: 'normal',
+                fillColor: [16, 22, 35],
+                textColor: [235, 238, 245],
+            },
+            margin: { left: 10, right: 10 },
+        });
+        const withTable = doc as jsPDF & { lastAutoTable?: { finalY: number } };
+        const footY = (withTable.lastAutoTable?.finalY ?? 180) + 8;
+        doc.setFont(SIMULATION_PDF_FONT_FAMILY, 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(90, 90, 90);
+        doc.text(
+            t(
+                'simulation.exportPdfFooter',
+                'Internal IDs are not exported. Personal use only.'
+            ),
+            14,
+            footY,
+            { maxWidth: 275 }
+        );
+        doc.save(`simulation-ozet-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}.pdf`);
+    }, [displayedResults, exportHeaders, exportCellFormatters, lang, t]);
 
     const fmtMoney = (v: number) => `₺${Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`;
-
-    const pageStyle: React.CSSProperties = {
-        padding: 24,
-        background: tokens.bg,
-        color: tokens.text,
-        minHeight: '100%',
-    };
-    const cardStyle: React.CSSProperties = {
-        background: tokens.bgCard,
-        border: `1px solid ${tokens.border}`,
-        borderRadius: 12,
-        padding: 16,
-    };
-    const inputStyle: React.CSSProperties = {
-        width: '100%',
-        padding: 8,
-        borderRadius: 8,
-        border: `1px solid ${tokens.border}`,
-        background: tokens.inputBg,
-        color: tokens.text,
-        fontSize: '0.9375rem',
-    };
 
     return (
         <div
             style={
                 {
-                    ...pageStyle,
+                    padding: 24,
+                    background: tokens.bg,
+                    minHeight: '100%',
                     '--tp-bg': '#0a192f',
                     '--tp-card': tokens.bgCard,
                     '--tp-border': tokens.border,
@@ -460,26 +652,24 @@ export function Simulation() {
                     '--tp-danger': '#ef4444',
                 } as React.CSSProperties
             }
-            className="terminal-pages-root"
+            className="terminal-pages-root sim-page"
         >
             <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>{t('simulation.title', 'Portföy Analiz Aracı')}</h1>
-            <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 16 }}>
+            <p className="sim-lead" style={{ fontSize: '0.875rem', marginBottom: 16 }}>
                 Çoklu simülasyon ekle, varlıkları karşılaştır, kümülatif getiri eğrilerini aynı grafikte takip et.
             </p>
-            <div style={{ ...cardStyle, marginBottom: 12, fontSize: '0.8125rem', color: tokens.textMuted }}>
+            <div className="card-premium" style={{ marginBottom: 12, fontSize: '0.8125rem', padding: 14, color: 'rgba(255,255,255,0.72)' }}>
                 Simülasyon hesapları TRY bazında yapılır. USD bazlı varlıklarda geçmiş fiyatlar simülasyon sırasında USDTRY ile normalize edilir.
             </div>
 
             <div
-                className="tp-card"
+                className="card-premium card-premium--static tp-card"
                 style={{
-                    ...cardStyle,
                     marginBottom: 16,
                     position: 'sticky',
                     top: 12,
                     zIndex: 3,
-                    boxShadow: '0 6px 20px rgba(2, 6, 23, 0.35)',
-                    background: tokens.bgCard,
+                    padding: 16,
                 }}
             >
                 <form
@@ -491,126 +681,184 @@ export function Simulation() {
                         alignItems: 'end',
                     }}
                 >
-                    <label style={{ fontSize: '0.875rem' }}>
+                    <label style={{ fontSize: '0.875rem', color: tokens.text }}>
                         {t('simulation.assetType', 'Varlık Türü')}
-                        <select value={type} onChange={(e) => setType(e.target.value as AssetType)} style={inputStyle}>
-                            <option value="CRYPTO">CRYPTO</option>
-                            <option value="FX">FX</option>
-                            <option value="METAL">METAL</option>
-                            <option value="FUND">FUND</option>
-                            <option value="STOCK">STOCK</option>
+                        <select
+                            value={type}
+                            onChange={(e) => setType(e.target.value as AssetType)}
+                            className="sim-premium-select"
+                            style={{ marginTop: 6 }}
+                        >
+                            <option value="CRYPTO">{assetTypeOptionIcon('CRYPTO')} CRYPTO</option>
+                            <option value="FX">{assetTypeOptionIcon('FX')} FX</option>
+                            <option value="METAL">{assetTypeOptionIcon('METAL')} METAL</option>
+                            <option value="FUND">{assetTypeOptionIcon('FUND')} FUND</option>
+                            <option value="STOCK">{assetTypeOptionIcon('STOCK')} STOCK</option>
                         </select>
                     </label>
 
-                    <label style={{ fontSize: '0.875rem' }}>
+                    <label style={{ fontSize: '0.875rem', color: tokens.text }}>
                         Sembol
                         {overviewLoading ? (
-                            <div style={{ ...inputStyle, color: tokens.textMuted }}>{t('common.loading', 'Yükleniyor...')}</div>
+                            <div className="sim-premium-input" style={{ marginTop: 6, color: tokens.textMuted }}>
+                                {t('common.loading', 'Yükleniyor...')}
+                            </div>
                         ) : symbolOptions.length > 0 ? (
-                            <select value={symbol} onChange={(e) => setSymbol(e.target.value)} style={inputStyle}>
-                                {symbolOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                            <select
+                                value={symbol}
+                                onChange={(e) => setSymbol(e.target.value)}
+                                className="sim-premium-select"
+                                style={{ marginTop: 6 }}
+                            >
+                                {symbolOptions.map((s) => (
+                                    <option key={s} value={s}>
+                                        {assetTypeOptionIcon(type)} {s}
+                                    </option>
+                                ))}
                             </select>
                         ) : (
-                            <div style={{ ...inputStyle, color: tokens.textMuted }}>{t('simulation.noSymbolForType', 'Bu varlık türü için kayıtlı sembol yok.')}</div>
+                            <div className="sim-premium-input" style={{ marginTop: 6, color: tokens.textMuted }}>
+                                {t('simulation.noSymbolForType', 'Bu varlık türü için kayıtlı sembol yok.')}
+                            </div>
                         )}
                     </label>
 
-                    <label style={{ fontSize: '0.875rem' }}>
+                    <label style={{ fontSize: '0.875rem', color: tokens.text }}>
                         {t('simulation.initialAmountTry', 'Başlangıç Tutarı (TRY)')}
-                        <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} style={inputStyle} />
+                        <input
+                            type="number"
+                            step="0.01"
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            className="sim-premium-input"
+                            style={{ marginTop: 6 }}
+                        />
                     </label>
 
-                    <label style={{ fontSize: '0.875rem' }}>
+                    <label style={{ fontSize: '0.875rem', color: tokens.text }}>
                         {t('simulation.buyDate', 'Alım Tarihi')}
-                        <input type="date" value={buyDate} onChange={(e) => setBuyDate(e.target.value)} style={inputStyle} />
+                        <input
+                            type="date"
+                            value={buyDate}
+                            onChange={(e) => setBuyDate(e.target.value)}
+                            className="sim-premium-input"
+                            style={{ marginTop: 6 }}
+                        />
                     </label>
 
-                    <label style={{ fontSize: '0.875rem' }}>
+                    <label style={{ fontSize: '0.875rem', color: tokens.text }}>
                         Alış Fiyat Kaynağı
-                        <select value={buyPriceMode} onChange={(e) => setBuyPriceMode(e.target.value as BuyPriceMode)} style={inputStyle}>
-                            <option value="SYSTEM">Sistem Geçmiş Fiyatı</option>
-                            <option value="MANUAL">Kullanıcı Manuel Fiyatı</option>
+                        <select
+                            value={buyPriceMode}
+                            onChange={(e) => setBuyPriceMode(e.target.value as BuyPriceMode)}
+                            className="sim-premium-select"
+                            style={{ marginTop: 6 }}
+                        >
+                            <option value="SYSTEM">⚙ Sistem Geçmiş Fiyatı</option>
+                            <option value="MANUAL">✎ Kullanıcı Manuel Fiyatı</option>
                         </select>
                     </label>
 
                     {buyPriceMode === 'MANUAL' ? (
-                        <label style={{ fontSize: '0.875rem' }}>
+                        <label style={{ fontSize: '0.875rem', color: tokens.text }}>
                             Manuel Alış Fiyatı (TRY / birim)
                             <input
                                 type="number"
                                 step="0.00000001"
                                 value={manualBuyPrice}
                                 onChange={(e) => setManualBuyPrice(e.target.value)}
-                                style={inputStyle}
+                                className="sim-premium-input"
+                                style={{ marginTop: 6 }}
                                 placeholder="Örn: 1250.75"
                             />
                         </label>
                     ) : null}
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        style={{
-                            padding: '10px 16px',
-                            borderRadius: 10,
-                            border: 'none',
-                            background: 'linear-gradient(90deg,#0ea5e9,#2563eb)',
-                            color: '#fff',
-                            fontWeight: 700,
-                            cursor: loading ? 'default' : 'pointer',
-                            opacity: loading ? 0.7 : 1,
-                            minHeight: 40,
-                        }}
-                    >
+                    <button type="submit" disabled={loading} className="sim-submit-btn">
                         {loading ? t('simulation.adding', 'Ekleniyor...') : t('simulation.simulateAndAdd', 'Simüle Et ve Listeye Ekle')}
                     </button>
                 </form>
             </div>
 
-            {error && <div style={{ ...cardStyle, borderColor: tokens.error, color: tokens.error, marginBottom: 16 }}>Hata: {error}</div>}
+            {error && (
+                <div
+                    className="card-premium"
+                    style={{
+                        marginBottom: 16,
+                        padding: 14,
+                        borderColor: 'rgba(239, 68, 68, 0.45)',
+                        color: '#fecaca',
+                    }}
+                >
+                    Hata: {error}
+                </div>
+            )}
 
-            <div className="tp-card" style={{ ...cardStyle, marginBottom: 16 }}>
+            <div className="card-premium tp-card" style={{ marginBottom: 16, padding: 16 }}>
                 <h2 style={{ marginTop: 0, marginBottom: 10, fontSize: '1rem' }}>{t('simulation.performanceChart', 'Karşılaştırmalı Performans Grafiği')}</h2>
-                <div style={{ color: tokens.textMuted, fontSize: '0.8125rem', marginBottom: 12 }}>
-                    Kümülatif getiri (%) — parlak lacivert/silver tema
+                <div className="sim-lead" style={{ fontSize: '0.8125rem', marginBottom: 12 }}>
+                    Kümülatif getiri (%) — premium palet ve alan dolgusu
                 </div>
                 {visibleResults.length === 0 || chartData.length === 0 ? (
-                    <p style={{ color: tokens.textMuted, margin: 0 }}>Grafikte göstermek için en az bir simülasyon ekleyip görünür yap.</p>
+                    <p className="sim-lead" style={{ margin: 0 }}>
+                        Grafikte göstermek için en az bir simülasyon ekleyip görünür yap.
+                    </p>
                 ) : (
-                    <div style={{ width: '100%', height: 360, background: tokens.inputBg, borderRadius: 10, padding: 8 }}>
+                    <div className="sim-chart-surface" style={{ width: '100%', height: 380 }}>
                         <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 8 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke={tokens.border} />
-                                <XAxis dataKey="date" tick={{ fill: tokens.textMuted, fontSize: 11 }} />
-                                <YAxis tick={{ fill: tokens.textMuted, fontSize: 11 }} tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
-                                <Tooltip
-                                    formatter={(v: number | string | undefined) =>
-                                        v == null ? '' : `${Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%`
-                                    }
+                            <ComposedChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 8 }}>
+                                <defs>
+                                    {visibleResults.map((res, i) => {
+                                        const c = CHART_PALETTE[i % CHART_PALETTE.length];
+                                        const gid = `simFill-${res.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+                                        return (
+                                            <linearGradient key={res.id} id={gid} x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stopColor={c} stopOpacity={0.35} />
+                                                <stop offset="100%" stopColor={c} stopOpacity={0} />
+                                            </linearGradient>
+                                        );
+                                    })}
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke={tokens.border} opacity={0.35} />
+                                <XAxis dataKey="date" tick={{ fill: tokens.textMuted, fontSize: 11 }} stroke={tokens.border} />
+                                <YAxis
+                                    tick={{ fill: tokens.textMuted, fontSize: 11 }}
+                                    stroke={tokens.border}
+                                    tickFormatter={(v) => `${Number(v).toFixed(1)}%`}
                                 />
-                                <Legend />
+                                <Tooltip content={<SimPerformanceTooltip />} />
+                                <Legend
+                                    wrapperStyle={{ color: tokens.text, fontSize: 12 }}
+                                    formatter={(value) => <span style={{ color: tokens.text }}>{value}</span>}
+                                />
                                 {visibleResults.map((res, i) => {
                                     const key = `${res.assetType}-${res.assetName}-${res.id.slice(-4)}`;
+                                    const color = CHART_PALETTE[i % CHART_PALETTE.length];
+                                    const gid = `simFill-${res.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
                                     return (
-                                        <Line
+                                        <Area
                                             key={res.id}
                                             type="monotone"
                                             dataKey={key}
                                             name={`${res.assetName} (${res.assetType})`}
-                                            stroke={LINE_COLORS[i % LINE_COLORS.length]}
-                                            strokeWidth={2}
-                                            dot={false}
+                                            stroke={color}
+                                            strokeWidth={3}
+                                            fill={`url(#${gid})`}
+                                            fillOpacity={1}
                                             connectNulls
+                                            dot={false}
+                                            activeDot={{ r: 5, strokeWidth: 2, stroke: color, fill: '#0a0f1a' }}
+                                            isAnimationActive={false}
                                         />
                                     );
                                 })}
-                            </LineChart>
+                            </ComposedChart>
                         </ResponsiveContainer>
                     </div>
                 )}
             </div>
 
-            <div className="tp-card" style={cardStyle}>
+            <div className="card-premium tp-card" style={{ padding: 16 }}>
                 <div
                     style={{
                         display: 'flex',
@@ -626,7 +874,8 @@ export function Simulation() {
                         <select
                             value={sortMode}
                             onChange={(e) => setSortMode(e.target.value as SortMode)}
-                            style={{ ...inputStyle, width: 210, padding: '6px 8px', fontSize: '0.8125rem' }}
+                            className="sim-premium-select"
+                            style={{ width: 220, padding: '8px 10px', fontSize: '0.8125rem' }}
                         >
                             <option value="LATEST">Sıralama: En Yeni</option>
                             <option value="PNL_DESC">Sıralama: En Yüksek Getiri (₺)</option>
@@ -635,31 +884,26 @@ export function Simulation() {
                             <option value="PNL_PCT_ASC">Sıralama: En Kötü Getiri (%)</option>
                             <option value="NAME_ASC">Sıralama: Sembol (A-Z)</option>
                         </select>
-                        <button
-                            type="button"
-                            onClick={() => setAllVisible(true)}
-                            style={{ borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: tokens.text, padding: '6px 10px', cursor: 'pointer' }}
-                        >
+                        <button type="button" onClick={() => setAllVisible(true)} className="sim-toolbar-btn">
                             Tümünü Göster
                         </button>
-                        <button
-                            type="button"
-                            onClick={() => setAllVisible(false)}
-                            style={{ borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: tokens.text, padding: '6px 10px', cursor: 'pointer' }}
-                        >
+                        <button type="button" onClick={() => setAllVisible(false)} className="sim-toolbar-btn">
                             Tümünü Gizle
+                        </button>
+                        <button type="button" onClick={exportCsv} className="sim-toolbar-btn sim-csv-btn">
+                            {t('simulation.exportCsv', 'CSV indir')}
                         </button>
                         <button
                             type="button"
-                            onClick={exportCsv}
-                            style={{ borderRadius: 8, border: 'none', background: 'linear-gradient(90deg,#0ea5e9,#2563eb)', color: '#fff', padding: '6px 10px', cursor: 'pointer', fontWeight: 700 }}
+                            onClick={() => void exportPdf()}
+                            className="sim-toolbar-btn sim-csv-btn"
                         >
-                            CSV Export
+                            {t('simulation.exportPdf', 'PDF indir')}
                         </button>
                     </div>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
-                    <table className="tp-table">
+                    <table className="tp-table sim-table">
                         <thead>
                             <tr>
                                 <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Görünür</th>
@@ -688,7 +932,7 @@ export function Simulation() {
                                 </tr>
                             ) : (
                                 displayedResults.map((r) => (
-                                    <tr key={r.id} className="tp-table-row-hover">
+                                    <tr key={r.id} className="tp-table-row-hover sim-table-row">
                                         <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
                                             <button
                                                 type="button"
@@ -706,28 +950,25 @@ export function Simulation() {
                                         <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.initialAmount)}</td>
                                         <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.buyPrice)}</td>
                                         <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.currentPrice)}</td>
-                                        <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}`, fontWeight: 700 }}>
-                                            {fmtMoney(r.currentValue)}
+                                        <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
+                                            <SimAnimatedTry value={r.currentValue} bold />
                                         </td>
-                                        <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                            <span style={{ color: r.pnl >= 0 ? '#22c55e' : '#ef4444', fontWeight: 700 }}>
-                                                {fmtMoney(r.pnl)} ({r.pnlPct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%)
-                                            </span>
+                                        <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
+                                            <SimAnimatedPnl pnl={r.pnl} pnlPct={r.pnlPct} />
                                         </td>
                                         <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                            <div style={{ fontSize: '0.8rem' }}>{sourceLabel(r.buyPriceSource)}</div>
-                                            <div style={{ color: tokens.textMuted, fontSize: '0.75rem' }}>{new Date(r.historicalPriceDate).toLocaleDateString('tr-TR')}</div>
+                                            <div style={{ fontSize: '0.8rem', color: tokens.text }}>{sourceLabel(r.buyPriceSource)}</div>
+                                            <div className="sim-lead" style={{ fontSize: '0.75rem' }}>
+                                                {new Date(r.historicalPriceDate).toLocaleDateString('tr-TR')}
+                                            </div>
                                             <span
-                                                style={{
-                                                    display: 'inline-block',
-                                                    marginTop: 4,
-                                                    borderRadius: 999,
-                                                    padding: '2px 8px',
-                                                    fontSize: '0.7rem',
-                                                    fontWeight: 700,
-                                                    background: r.qualityFlag === 'EXACT' ? 'rgba(34,197,94,.2)' : r.qualityFlag === 'PREVIOUS_DAY' ? 'rgba(245,158,11,.2)' : 'rgba(239,68,68,.2)',
-                                                    color: r.qualityFlag === 'EXACT' ? '#22c55e' : r.qualityFlag === 'PREVIOUS_DAY' ? '#f59e0b' : '#ef4444',
-                                                }}
+                                                className={
+                                                    r.qualityFlag === 'EXACT'
+                                                        ? 'quality-pill quality-pill-exact'
+                                                        : r.qualityFlag === 'PREVIOUS_DAY'
+                                                        ? 'quality-pill quality-pill-prev'
+                                                        : 'quality-pill quality-pill-fallback'
+                                                }
                                             >
                                                 {qualityLabel(r.qualityFlag)}
                                             </span>
