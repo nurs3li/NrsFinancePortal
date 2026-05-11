@@ -38,7 +38,7 @@ class MarketDomainControllerContractTest {
     @Test
     void viopEndpointsShouldBeReachable() throws Exception {
         when(viopQueryService.contracts()).thenReturn(List.of(
-                new ViopContractResponse("XU0300626", "XU030", "2026-06-30", "FUTURES")
+                new ViopContractResponse("XU0300626", "XU030", "2026-06-30", "FUTURES", null, null, null, null, null, null)
         ));
         when(viopQueryService.latest()).thenReturn(List.of(
                 new ViopSnapshotResponse(
@@ -59,7 +59,15 @@ class MarketDomainControllerContractTest {
                         120,
                         "EXACT",
                         "VIOP_PROVIDER",
-                        120L
+                        120L,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
                 )
         ));
         when(viopQueryService.history("XU0300426", 7)).thenReturn(List.of());

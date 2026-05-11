@@ -1,0 +1,23 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-viop-csv-list-rollups
+      author: codex
+      changes:
+        - addColumn:
+            tableName: derivative_contract
+            columns:
+              - column:
+                  name: viop_list_pct_change_1d
+                  type: NUMERIC(14,6)
+              - column:
+                  name: viop_list_pct_change_7d
+                  type: NUMERIC(14,6)
+              - column:
+                  name: viop_list_pct_change_30d
+                  type: NUMERIC(14,6)
+              - column:
+                  name: viop_list_pct_change_365d
+                  type: NUMERIC(14,6)
+              - column:
+                  name: viop_rollups_computed_at
+                  type: TIMESTAMP

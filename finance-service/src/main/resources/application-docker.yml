@@ -89,6 +89,8 @@ app:
     deposit-auto-approve-limit-try: 50000
     withdrawal-auto-approve-limit-try: 3000
     require-iban-for-deposit: true
+  receipt-storage:
+    root: ${NRS_RECEIPT_STORAGE_ROOT:/data/receipts}
   keycloak:
     admin:
       enabled: ${KEYCLOAK_ADMIN_ENABLED:false}

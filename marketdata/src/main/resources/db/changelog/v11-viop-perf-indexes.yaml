@@ -1,0 +1,28 @@
+databaseChangeLog:
+  - changeSet:
+      id: 011-viop-perf-indexes-derivative-snapshot
+      author: codex
+      changes:
+        - createIndex:
+            tableName: derivative_snapshot
+            indexName: idx_derivative_snapshot_contract_as_of
+            columns:
+              - column:
+                  name: contract_code
+              - column:
+                  name: as_of
+                  descending: true
+
+  - changeSet:
+      id: 011-viop-perf-indexes-open-interest-snapshot
+      author: codex
+      changes:
+        - createIndex:
+            tableName: open_interest_snapshot
+            indexName: idx_open_interest_snapshot_contract_as_of
+            columns:
+              - column:
+                  name: contract_code
+              - column:
+                  name: as_of
+                  descending: true

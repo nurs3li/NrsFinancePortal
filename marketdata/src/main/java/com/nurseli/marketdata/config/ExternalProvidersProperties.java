@@ -9,17 +9,7 @@ import org.springframework.context.annotation.Configuration;
 @Data
 public class ExternalProvidersProperties {
 
-    private final Viop viop = new Viop();
     private final Debt debt = new Debt();
-
-    @Data
-    public static class Viop {
-        private boolean enabled = false;
-        private String baseUrl;
-        private String apiKey;
-        private int timeoutMs = 3000;
-        private String latestPath = "/viop/latest";
-    }
 
     @Data
     public static class Debt {

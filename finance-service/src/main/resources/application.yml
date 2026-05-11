@@ -93,6 +93,9 @@ app:
     deposit-auto-approve-limit-try: 50000
     withdrawal-auto-approve-limit-try: 3000
     require-iban-for-deposit: true
+  # Dekont dosyaları. Boşsa: ${user.home}/.nrs-finance/receipts. Docker: /data/receipts + volume önerilir (tmp silinmez).
+  receipt-storage:
+    root: ${NRS_RECEIPT_STORAGE_ROOT:}
   keycloak:
     admin:
       enabled: ${KEYCLOAK_ADMIN_ENABLED:false}
