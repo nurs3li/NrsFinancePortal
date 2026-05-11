@@ -1,4 +1,21 @@
 .saas-dashboard {
+  /*
+   * Tema değişkenleri runtime'da Dashboard.tsx (dashboardVars) ile güncellenir.
+   * Buradaki değerler light tema başlangıcı + JetBrains/WebStorm CSS analizinin çözümlemesi içindir.
+   */
+  --dashboard-bg: #f9fafb;
+  --dashboard-card: #ffffff;
+  --dashboard-text: #1a202c;
+  --dashboard-muted: #718096;
+  --dashboard-border: #e2e8f0;
+  --dashboard-accent: #3182ce;
+  --dashboard-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --dashboard-news-logo-bg: #edf2f7;
+  --dashboard-success: #16a34a;
+  --dashboard-danger: #dc2626;
+  --skeleton-base: rgba(148, 163, 184, 0.16);
+  --skeleton-highlight: rgba(148, 163, 184, 0.32);
+
   min-height: 100%;
   padding: 24px;
   background: var(--dashboard-bg, #F9FAFB);
@@ -126,10 +143,39 @@
   margin-bottom: 16px;
 }
 
+.dashboard-kpi-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 132px;
+  text-align: center;
+}
+
+.card-premium {
+  position: relative;
+  border: 1px solid var(--dashboard-border, #E2E8F0);
+  transition: box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.card-premium:hover {
+  border-color: rgba(203, 213, 225, 0.95);
+  box-shadow:
+    var(--dashboard-shadow, 0 4px 6px -1px rgba(0, 0, 0, 0.1)),
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 0 20px -4px rgba(226, 232, 240, 0.55);
+}
+
+.kpi-subtext--placeholder {
+  min-height: 1.1em;
+  visibility: hidden;
+  margin: 8px 0 0;
+}
+
 .dashboard-card {
   background: var(--dashboard-card, #FFFFFF);
   border-radius: 16px;
   padding: 24px;
+  border: 1px solid rgba(192, 192, 192, 0.2);
   box-shadow: var(--dashboard-shadow, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
 }
 
@@ -204,10 +250,52 @@
   height: 300px;
 }
 
+.dashboard-chart-tooltip {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dashboard-card, #fff) 82%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(203, 213, 225, 0.85);
+  box-shadow: 0 8px 24px -8px rgba(15, 23, 42, 0.35);
+  color: var(--dashboard-text, #1A202C);
+}
+
+.dashboard-chart-tooltip-label {
+  font-size: 0.72rem;
+  color: var(--dashboard-muted, #718096);
+  margin-bottom: 4px;
+}
+
+.dashboard-chart-tooltip-value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .dashboard-bottom-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr);
   gap: 16px;
+  align-items: start;
+}
+
+.dashboard-side-panels {
+  position: sticky;
+  top: 20px;
+  align-self: start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  max-height: none;
+  overflow: visible;
+  padding-bottom: 0;
+}
+
+.dashboard-news-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .assets-table {
@@ -216,15 +304,67 @@
 
 .asset-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) minmax(0, 0.6fr);
+  grid-template-columns: minmax(0, 1.35fr) 76px minmax(0, 0.72fr) minmax(0, 0.58fr);
   align-items: center;
   gap: 8px;
-  padding: 14px 0;
+  padding: 14px 36px 14px 0;
   border-bottom: 1px solid var(--dashboard-border, #E5E7EB);
+  position: relative;
 }
 
 .asset-row:last-child {
   border-bottom: 0;
+}
+
+.asset-row--interactive {
+  cursor: pointer;
+  border-radius: 12px;
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 44px;
+  transition: background-color 0.18s ease;
+}
+
+.asset-row--interactive:hover,
+.asset-row--interactive:focus-visible {
+  background-color: color-mix(in srgb, var(--dashboard-text, #1A202C) 5%, transparent);
+  outline: none;
+}
+
+.asset-row-go {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--dashboard-muted, #718096);
+  opacity: 0;
+  transition: opacity 0.18s ease, color 0.18s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.asset-row--interactive:hover .asset-row-go,
+.asset-row--interactive:focus-visible .asset-row-go {
+  opacity: 1;
+  color: var(--dashboard-accent, #3182CE);
+}
+
+.asset-trend-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.asset-sparkline {
+  width: 100%;
+  max-width: 76px;
+  height: 24px;
+  display: block;
 }
 
 .asset-main {
@@ -463,30 +603,58 @@
 .activity-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 7px;
+  margin-bottom: 8px;
 }
 
 .activity-row p {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.79rem;
   color: var(--dashboard-text, #2D3748);
 }
 
-.status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--dashboard-accent, #3182CE);
-  display: inline-block;
+.activity-icon {
+  color: color-mix(in srgb, var(--dashboard-accent, #3182CE) 55%, #cbd5e1);
+  flex-shrink: 0;
 }
 
-.news-dot {
-  font-size: 0.8rem;
+.dashboard-compact-card {
+  padding: 16px 18px;
 }
 
 .news-list {
   margin-top: 12px;
+}
+
+.news-list--stretch {
+  flex: 1 1 auto;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+}
+
+.news-list--stretch .news-item {
+  opacity: 0.42;
+  transition: opacity 0.45s ease;
+}
+
+.news-list--stretch.news-list--ready .news-item {
+  opacity: 1;
+}
+
+.news-skeleton-block {
+  margin-top: 4px;
+}
+
+.dashboard-news-skel-row {
+  margin-bottom: 10px;
+}
+
+.news-skeleton-block .skeleton-line,
+.news-skeleton-block .skeleton-dot {
+  background: linear-gradient(90deg, var(--skeleton-base, rgba(148, 163, 184, 0.16)) 25%, var(--skeleton-highlight, rgba(148, 163, 184, 0.32)) 37%, var(--skeleton-base, rgba(148, 163, 184, 0.16)) 63%);
+  background-size: 400% 100%;
+  animation: skeletonShimmer 1.4s ease infinite;
 }
 
 .news-item {
@@ -540,6 +708,83 @@
   background: rgba(49, 130, 206, 0.12);
 }
 
+.dashboard-news-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.dashboard-news-modal {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: min(82vh, 720px);
+  overflow: auto;
+  padding: 24px 24px 20px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--dashboard-card, #fff) 72%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 24px 48px -24px rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  color: var(--dashboard-text, #1A202C);
+}
+
+.dashboard-news-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dashboard-border, #E2E8F0) 55%, transparent);
+  color: var(--dashboard-text, #1A202C);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dashboard-news-modal-title {
+  margin: 0 40px 12px 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.dashboard-news-modal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  font-size: 0.78rem;
+  color: var(--dashboard-muted, #718096);
+  margin-bottom: 16px;
+}
+
+.dashboard-news-modal-body {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--dashboard-text, #2D3748);
+}
+
+.dashboard-news-modal-body a {
+  color: var(--dashboard-accent, #3182CE);
+}
+
+.dashboard-news-modal-source-link {
+  display: inline-flex;
+  margin-top: 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--dashboard-accent, #3182CE);
+}
+
 @media (max-width: 1240px) {
   .dashboard-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -547,6 +792,13 @@
 
   .dashboard-bottom-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-side-panels {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    grid-template-columns: 1fr 1fr;
   }
 
   .dashboard-middle-column {
@@ -561,6 +813,10 @@
   }
 
   .dashboard-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-side-panels {
     grid-template-columns: 1fr;
   }
 

@@ -24,6 +24,40 @@ function unwrapEnvelopePayload(payload: unknown): unknown {
     return payload;
 }
 
+/** responseType: 'arraybuffer' isteklerinde hata gövdesi ArrayBuffer gelebilir. */
+export function readFinanceBinaryErrorMessage(err: unknown): string | undefined {
+    const data = (err as { response?: { data?: unknown } })?.response?.data;
+    if (data == null) return undefined;
+    if (typeof data === 'object' && !(data instanceof ArrayBuffer)) {
+        const errs = (data as { errors?: { error?: string; message?: string } }).errors;
+        if (errs && typeof errs === 'object') {
+            if (typeof errs.error === 'string') return errs.error;
+            if (typeof errs.message === 'string') return errs.message;
+        }
+        const m = (data as { message?: string }).message;
+        if (typeof m === 'string') return m;
+        return undefined;
+    }
+    if (data instanceof ArrayBuffer) {
+        try {
+            const text = new TextDecoder().decode(data);
+            const j = JSON.parse(text) as { errors?: { error?: string; message?: string }; message?: string };
+            return j?.errors?.error ?? j?.errors?.message ?? j?.message;
+        } catch {
+            return undefined;
+        }
+    }
+    if (typeof data === 'string') {
+        try {
+            const j = JSON.parse(data) as { errors?: { error?: string; message?: string } };
+            return j?.errors?.error ?? j?.errors?.message;
+        } catch {
+            return data;
+        }
+    }
+    return undefined;
+}
+
 let loginRedirectInFlight = false;
 
 function getPreferredAppLang(): string {

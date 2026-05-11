@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { financeClient } from '../api/client';
+import { financeClient, readFinanceBinaryErrorMessage } from '../api/client';
 import keycloak from '../auth/keycloak';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
@@ -72,8 +72,20 @@ export function FmFundRequests() {
             window.open(objectUrl, '_blank', 'noopener,noreferrer');
             setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
         } catch (err: any) {
+            const status = err?.response?.status as number | undefined;
+            const fromApi = readFinanceBinaryErrorMessage(err);
+            if (status === 404) {
+                alert(
+                    t(
+                        'wallet.receiptMissing',
+                        'Dekont dosyası sunucuda yok. Eski kayıtlar geçici klasörde tutulduysa silinmiş olabilir; servis artık kalıcı dizin kullanıyor. Yeni yüklemeler korunur.'
+                    ) + (fromApi ? `\n\n(${fromApi})` : '')
+                );
+                return;
+            }
             alert(
-                err?.response?.data?.errors?.error ??
+                fromApi ??
+                    err?.response?.data?.errors?.error ??
                     err?.response?.data?.message ??
                     err?.message ??
                     t('wallet.receiptOpenFailed', 'Dekont görüntülenemedi')

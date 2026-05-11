@@ -86,7 +86,8 @@ export function classifyDebtInstrument(name: string | undefined, issuer: string 
     return 'BOND_CORP';
 }
 
-export function professionalTradeLabel(tradeType: TradeType, symbol: string, assetType: AssetType): string {
+/** Tablo alt satırı: SPOT-KRIPTO vb. teknik etiket */
+export function tradeTechnicalDetail(symbol: string, assetType: AssetType): string {
     const template = inferTemplateBySymbol(symbol);
     if (template === 'FUTURES') {
         const cls = classifyViopContract(symbol);
@@ -103,10 +104,10 @@ export function professionalTradeLabel(tradeType: TradeType, symbol: string, ass
             BOND_CORP: 'TAHVIL-OZEL',
             BOND_EUROBOND: 'TAHVIL-EUROBOND',
         };
-        return `${tradeType === 'BUY' ? 'AL' : 'SAT'} (${map[cls]})`;
+        return map[cls];
     }
     if (template === 'FIXED_INCOME') {
-        return `${tradeType === 'BUY' ? 'AL' : 'SAT'} (TAHVIL/BONO)`;
+        return 'TAHVIL/BONO';
     }
     const assetMap: Record<AssetType, string> = {
         CRYPTO: 'SPOT-KRIPTO',
@@ -115,5 +116,21 @@ export function professionalTradeLabel(tradeType: TradeType, symbol: string, ass
         METAL: 'SPOT-EMTIA',
         STOCK: 'SPOT-HISSE',
     };
-    return `${tradeType === 'BUY' ? 'AL' : 'SAT'} (${assetMap[assetType] ?? 'SPOT'})`;
+    return assetMap[assetType] ?? 'SPOT';
+}
+
+export function getTradeSideAndDetail(
+    tradeType: TradeType,
+    symbol: string,
+    assetType: AssetType,
+): { sideLabel: 'AL' | 'SAT'; detail: string } {
+    return {
+        sideLabel: tradeType === 'BUY' ? 'AL' : 'SAT',
+        detail: tradeTechnicalDetail(symbol, assetType),
+    };
+}
+
+export function professionalTradeLabel(tradeType: TradeType, symbol: string, assetType: AssetType): string {
+    const { sideLabel, detail } = getTradeSideAndDetail(tradeType, symbol, assetType);
+    return `${sideLabel} (${detail})`;
 }

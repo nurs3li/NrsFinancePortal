@@ -2,7 +2,7 @@ import { Outlet, Link, NavLink, useLocation, useNavigate } from 'react-router-do
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, startTransition, type CSSProperties } from 'react';
 import { notificationClient } from '../api/client';
 import { Bell, ChevronDown, LogOut, Moon, Sun } from 'lucide-react';
 import { NrsBrandLockup } from './NrsBrandLockup';
@@ -194,7 +194,14 @@ export function Layout() {
                                 setHoveredNavKey(item.key);
                                 focusNavItem(event.currentTarget);
                             }}
-                            onClick={(event) => focusNavItem(event.currentTarget)}
+                            onClick={(e) => {
+                                if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                                if (location.pathname === item.to) return;
+                                e.preventDefault();
+                                startTransition(() => {
+                                    navigate(item.to);
+                                });
+                            }}
                         >
                             {item.label}
                         </NavLink>
@@ -340,7 +347,8 @@ export function Layout() {
             </header>
 
             <main className="app-main">
-                <Outlet />
+                {/* Rota değişince alt sayfa tam unmount/remount; ağır sayfalar (ör. VİOP listesi) sonrası takılı görünümü önler */}
+                <Outlet key={location.pathname} />
             </main>
         </div>
     );
