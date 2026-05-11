@@ -1,10 +1,30 @@
 .terminal-page {
+    /*
+     * Tema değişkenleri runtime'da Market.tsx (terminalVars) ile güncellenir.
+     * Aşağıdakiler light başlangıç + IDE (custom property) çözümlemesi içindir.
+     */
+    --terminal-bg: #f8fafc;
+    --terminal-bg-accent: rgba(59, 130, 246, 0.1);
+    --terminal-card-bg: #ffffff;
+    --terminal-border: #e2e8f0;
+    --terminal-text: #0f172a;
+    --terminal-muted: #64748b;
+    --terminal-btn-bg: #f1f5f9;
+    --terminal-btn-active-bg: rgba(29, 78, 216, 0.14);
+    --terminal-btn-active-text: #0f172a;
+    --terminal-table-head-bg: #f8fafc;
+    --terminal-hover-bg: rgba(148, 163, 184, 0.16);
+    --terminal-active-row-bg: rgba(59, 130, 246, 0.14);
+
     min-height: 100%;
     min-height: 100dvh;
     padding: 20px 24px;
     box-sizing: border-box;
     background: radial-gradient(circle at top right, var(--terminal-bg-accent), transparent 42%), var(--terminal-bg);
     color: var(--terminal-text);
+    position: relative;
+    z-index: 0;
+    isolation: isolate;
 }
 
 .terminal-hero {
@@ -341,6 +361,10 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    position: relative;
+    z-index: 0;
+    overflow: hidden;
+    max-width: 100%;
 }
 
 .terminal-chart-header {

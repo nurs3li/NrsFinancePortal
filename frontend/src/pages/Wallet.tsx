@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
-import { financeClient } from '../api/client';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { financeClient, readFinanceBinaryErrorMessage } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 import { useLanguage } from '../i18n/LanguageContext';
+import './Wallet.css';
 
 type FundRequestType = 'DEPOSIT' | 'WITHDRAWAL';
 type FundRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
@@ -104,9 +105,71 @@ function unwrapData<T>(res: any): T {
     return (res?.data?.data ?? res?.data) as T;
 }
 
+function useAnimatedNumber(target: number) {
+    const [display, setDisplay] = useState(0);
+    const displayRef = useRef(0);
+
+    useEffect(() => {
+        const from = displayRef.current;
+        let raf = 0;
+        const t0 = performance.now();
+        const dur = 680;
+        const step = (now: number) => {
+            const p = Math.min(1, (now - t0) / dur);
+            const eased = 1 - (1 - p) ** 3;
+            const next = from + (target - from) * eased;
+            displayRef.current = next;
+            setDisplay(next);
+            if (p < 1) raf = requestAnimationFrame(step);
+        };
+        raf = requestAnimationFrame(step);
+        return () => cancelAnimationFrame(raf);
+    }, [target]);
+
+    return display;
+}
+
+function WalletMetricTry({
+    value,
+    label,
+    valueClassName,
+    locale,
+}: {
+    value: number;
+    label: string;
+    valueClassName?: string;
+    locale: string;
+}) {
+    const v = useAnimatedNumber(value);
+    return (
+        <div className="wallet-card-premium">
+            <div className="wallet-metric-label">{label}</div>
+            <div className={`wallet-metric-value ${valueClassName ?? ''}`.trim()}>
+                ₺{v.toLocaleString(locale, { maximumFractionDigits: 2 })}
+            </div>
+        </div>
+    );
+}
+
+function statusPillClass(s: FundRequestStatus): string {
+    switch (s) {
+        case 'APPROVED':
+            return 'wallet-pill wallet-pill--approved';
+        case 'PENDING':
+            return 'wallet-pill wallet-pill--pending';
+        case 'REJECTED':
+            return 'wallet-pill wallet-pill--rejected';
+        case 'CANCELLED':
+            return 'wallet-pill wallet-pill--cancelled';
+        default:
+            return 'wallet-pill';
+    }
+}
+
 export function Wallet() {
     const { tokens } = useTheme();
     const { t, lang } = useLanguage();
+    const locale = lang === 'en' ? 'en-US' : 'tr-TR';
 
     const [balance, setBalance] = useState<BalanceView | null>(null);
     const [summary, setSummary] = useState<WalletSummary | null>(null);
@@ -117,6 +180,7 @@ export function Wallet() {
 
     const [submitting, setSubmitting] = useState(false);
 
+    const [modalMode, setModalMode] = useState<FundRequestType | null>(null);
     const [type, setType] = useState<FundRequestType>('DEPOSIT');
     const [amount, setAmount] = useState('1000');
     const [currency, setCurrency] = useState('TRY');
@@ -129,12 +193,17 @@ export function Wallet() {
     const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
     const [uploadingReceipt, setUploadingReceipt] = useState(false);
     const [requestNote, setRequestNote] = useState('');
+    const [dropActive, setDropActive] = useState(false);
+
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+    const receiptInputRef = useRef<HTMLInputElement>(null);
+
     const openReceipt = async (receiptFileId?: string | null, receiptFileUrl?: string | null) => {
-        const idFromUrl =
-            receiptFileUrl?.split('/receipts/')[1]?.split('?')[0]?.trim() || null;
+        const idFromUrl = receiptFileUrl?.split('/receipts/')[1]?.split('?')[0]?.trim() || null;
         const receiptId = (receiptFileId || idFromUrl || '').trim();
         if (!receiptId) return;
         try {
@@ -147,8 +216,20 @@ export function Wallet() {
             window.open(objectUrl, '_blank', 'noopener,noreferrer');
             setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
         } catch (err: any) {
+            const status = err?.response?.status as number | undefined;
+            const fromApi = readFinanceBinaryErrorMessage(err);
+            if (status === 404) {
+                alert(
+                    t(
+                        'wallet.receiptMissing',
+                        'Dekont dosyası sunucuda yok. Eski kayıtlar geçici klasörde tutulduysa silinmiş olabilir; servis artık kalıcı dizin kullanıyor. Yeni yüklemeler korunur.'
+                    ) + (fromApi ? `\n\n(${fromApi})` : '')
+                );
+                return;
+            }
             alert(
-                err?.response?.data?.errors?.error ??
+                fromApi ??
+                    err?.response?.data?.errors?.error ??
                     err?.response?.data?.message ??
                     err?.message ??
                     t('wallet.receiptOpenFailed', 'Dekont görüntülenemedi')
@@ -181,7 +262,7 @@ export function Wallet() {
                 setError(msg);
             })
             .finally(() => setLoading(false));
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         fetchAll();
@@ -204,6 +285,17 @@ export function Wallet() {
         setSourceBankName('');
         setAmount('1000');
     }, [type]);
+
+    const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+
+    useEffect(() => {
+        setPage((p) => Math.min(Math.max(1, p), totalPages));
+    }, [items.length, pageSize, totalPages]);
+
+    const paginatedItems = useMemo(() => {
+        const start = (page - 1) * pageSize;
+        return items.slice(start, start + pageSize);
+    }, [items, page, pageSize]);
 
     const uploadReceipt = async (file: File) => {
         const ext = file.name.toLowerCase().split('.').pop() ?? '';
@@ -234,7 +326,7 @@ export function Wallet() {
         }
     };
 
-    const submit = async (e: React.FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
         setSuccessMsg(null);
 
@@ -258,12 +350,14 @@ export function Wallet() {
             alert(t('wallet.ibanRequired', 'Çekim için alıcı IBAN zorunludur.'));
             return;
         }
+        let normalizedIban = destinationIban;
         if (type === 'WITHDRAWAL') {
             const iban = destinationIban.replace(/\s+/g, '').toUpperCase();
             if (!/^TR\d{24}$/.test(iban)) {
                 alert(t('wallet.invalidTrIban', 'Geçersiz IBAN. TR ile başlamalı ve 24 rakam içermelidir.'));
                 return;
             }
+            normalizedIban = iban;
             setDestinationIban(iban);
         }
         if (type === 'WITHDRAWAL' && !destinationAccountHolder.trim()) {
@@ -285,7 +379,7 @@ export function Wallet() {
             receiptFileId: type === 'DEPOSIT' ? receiptFileId ?? undefined : undefined,
             depositIban: type === 'DEPOSIT' ? depositInstructions?.iban : undefined,
             systemIbanId: type === 'DEPOSIT' ? depositInstructions?.systemIbanId : undefined,
-            destinationIban: type === 'WITHDRAWAL' ? destinationIban?.trim() || undefined : undefined,
+            destinationIban: type === 'WITHDRAWAL' ? normalizedIban?.trim() || undefined : undefined,
             destinationAccountHolder: type === 'WITHDRAWAL' ? destinationAccountHolder?.trim() || undefined : undefined,
             destinationBankName: type === 'WITHDRAWAL' ? destinationBankName?.trim() || undefined : undefined,
         };
@@ -318,108 +412,286 @@ export function Wallet() {
         }
     };
 
-    const fmtMoney = (v: number) => `₺${Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`;
+    const closeModal = useCallback(() => {
+        setModalMode(null);
+        setSuccessMsg(null);
+    }, []);
 
-    const statusStyle = (status: FundRequestStatus): React.CSSProperties => {
-        if (status === 'APPROVED') return { color: '#166534', background: '#dcfce7', borderRadius: 999, padding: '2px 8px', fontWeight: 700 };
-        if (status === 'REJECTED') return { color: '#991b1b', background: '#fee2e2', borderRadius: 999, padding: '2px 8px', fontWeight: 700 };
-        if (status === 'PENDING') return { color: '#92400e', background: '#fef3c7', borderRadius: 999, padding: '2px 8px', fontWeight: 700 };
-        return { color: tokens.textMuted, background: tokens.inputBg, borderRadius: 999, padding: '2px 8px', fontWeight: 700 };
+    const openDepositModal = () => {
+        setModalMode('DEPOSIT');
+        setType('DEPOSIT');
+        setSuccessMsg(null);
     };
 
-    const pageStyle: React.CSSProperties = {
-        padding: 24,
-        background: tokens.bg,
-        color: tokens.text,
-        minHeight: '100%',
+    const openWithdrawModal = () => {
+        setModalMode('WITHDRAWAL');
+        setType('WITHDRAWAL');
+        setSuccessMsg(null);
     };
 
-    const cardStyle: React.CSSProperties = {
-        background: tokens.bgCard,
-        border: `1px solid ${tokens.border}`,
-        borderRadius: 12,
-        padding: 16,
+    useEffect(() => {
+        if (!modalMode) return;
+        const onKey = (ev: KeyboardEvent) => {
+            if (ev.key === 'Escape') closeModal();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [modalMode, closeModal]);
+
+    const statusLabel = (s: FundRequestStatus) => {
+        switch (s) {
+            case 'APPROVED':
+                return t('wallet.statusApproved', 'Onaylandı');
+            case 'PENDING':
+                return t('wallet.statusPending', 'Beklemede');
+            case 'REJECTED':
+                return t('wallet.statusRejected', 'Reddedildi');
+            case 'CANCELLED':
+                return t('wallet.statusCancelled', 'İptal');
+            default:
+                return s;
+        }
     };
 
-    const inputStyle: React.CSSProperties = {
-        width: '100%',
-        padding: 8,
-        borderRadius: 8,
-        border: `1px solid ${tokens.border}`,
-        background: tokens.inputBg,
-        color: tokens.text,
-        fontSize: '0.9375rem',
-    };
+    const typeLabel = (ft: FundRequestType) =>
+        ft === 'DEPOSIT' ? t('wallet.deposit', 'Yatırım') : t('wallet.withdrawal', 'Çekim');
+
+    const currentBal = summary?.currentBalance ?? balance?.currentAmount ?? 0;
+    const availBal = summary?.availableBalance ?? balance?.currentAmount ?? 0;
+    const pendDep = summary?.pendingDeposit ?? 0;
+    const pendWdr = summary?.pendingWithdrawal ?? 0;
 
     return (
-        <div style={pageStyle}>
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>{t('nav.wallet', 'Cüzdan')}</h1>
-            <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 16 }}>
-                {t('wallet.subtitle', 'Para yatırma/çekme talebi oluştur ve durumunu takip et.')}
-            </p>
+        <div className="wallet-page" style={{ background: tokens.bg, color: tokens.text }}>
+            <div className="wallet-container">
+                <h1 style={{ fontSize: '1.65rem', fontWeight: 800, marginBottom: 6 }}>{t('nav.wallet', 'Cüzdan')}</h1>
+                <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 20 }}>
+                    {t('wallet.subtitle', 'Para yatırma/çekme talebi oluştur ve durumunu takip et.')}
+                </p>
 
-            {loading && <p style={{ color: tokens.textMuted }}>{t('common.loading', 'Yükleniyor...')}</p>}
-            {error && <p style={{ color: tokens.error }}>{t('news.errorPrefix', 'Hata')}: {error}</p>}
+                {loading && <p style={{ color: tokens.textMuted }}>{t('common.loading', 'Yükleniyor...')}</p>}
+                {error && (
+                    <p style={{ color: tokens.error }}>
+                        {t('news.errorPrefix', 'Hata')}: {error}
+                    </p>
+                )}
 
-            {!loading && !error && (
-                <>
+                {!loading && !error && (
+                    <>
+                        <div className="wallet-metrics-grid">
+                            <WalletMetricTry
+                                value={currentBal}
+                                label={t('wallet.currentBalance', 'Mevcut Bakiye')}
+                                locale={locale}
+                            />
+                            <WalletMetricTry
+                                value={availBal}
+                                label={t('wallet.availableBalance', 'Kullanılabilir Bakiye')}
+                                locale={locale}
+                            />
+                            <WalletMetricTry
+                                value={pendDep}
+                                label={t('wallet.pendingDeposit', 'Bekleyen Yatırma')}
+                                valueClassName="wallet-metric-value--accent-green"
+                                locale={locale}
+                            />
+                            <WalletMetricTry
+                                value={pendWdr}
+                                label={t('wallet.pendingWithdrawal', 'Bekleyen Çekim')}
+                                valueClassName="wallet-metric-value--accent-amber"
+                                locale={locale}
+                            />
+                        </div>
+
+                        <div className="wallet-main-split">
+                            <aside className="wallet-sidebar">
+                                <div className="wallet-card-premium wallet-actions">
+                                    <h2 className="wallet-actions-title">
+                                        {t('wallet.quickActions', 'Hızlı İşlemler')}
+                                    </h2>
+                                    <div className="wallet-cta-row">
+                                        <button type="button" className="wallet-cta wallet-cta--deposit" onClick={openDepositModal}>
+                                            {t('wallet.depositCta', 'Para Yatır')}
+                                        </button>
+                                        <button type="button" className="wallet-cta wallet-cta--withdraw" onClick={openWithdrawModal}>
+                                            {t('wallet.withdrawCta', 'Para Çek')}
+                                        </button>
+                                    </div>
+                                </div>
+                            </aside>
+
+                            <section className="wallet-card-premium wallet-history-card">
+                                <h2
+                                    style={{
+                                        marginTop: 0,
+                                        marginBottom: 14,
+                                        fontSize: '0.95rem',
+                                        fontWeight: 800,
+                                        letterSpacing: '0.04em',
+                                        textTransform: 'uppercase',
+                                        color: tokens.textMuted,
+                                    }}
+                                >
+                                    {t('wallet.requestHistory', 'Talep Geçmişim')}
+                                </h2>
+
+                                <div className="wallet-table-wrap">
+                                    <table className="wallet-table">
+                                        <thead>
+                                            <tr>
+                                                <th>{t('wallet.tableId', 'ID')}</th>
+                                                <th>{t('wallet.tableType', 'Tip')}</th>
+                                                <th>{t('transactions.amount', 'Tutar')}</th>
+                                                <th>{t('wallet.status', 'Durum')}</th>
+                                                <th>{t('news.date', 'Tarih')}</th>
+                                                <th>{t('wallet.detail', 'Detay')}</th>
+                                                <th>{t('wallet.reviewNote', 'İnceleme notu')}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {items.length === 0 ? (
+                                                <tr>
+                                                    <td
+                                                        colSpan={7}
+                                                        style={{
+                                                            padding: 14,
+                                                            color: tokens.textMuted,
+                                                            textAlign: 'center',
+                                                        }}
+                                                    >
+                                                        {t('wallet.noRequests', 'Henüz talep yok.')}
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                paginatedItems.map((r) => (
+                                                    <tr key={r.id} className="wallet-table-row">
+                                                        <td>#{r.id}</td>
+                                                        <td>{typeLabel(r.type)}</td>
+                                                        <td>
+                                                            {Number(r.amount).toLocaleString(locale, { maximumFractionDigits: 2 })}{' '}
+                                                            {r.currency}
+                                                        </td>
+                                                        <td>
+                                                            <span className={statusPillClass(r.status)}>{statusLabel(r.status)}</span>
+                                                        </td>
+                                                        <td>{new Date(r.createdAt).toLocaleString(locale)}</td>
+                                                        <td style={{ fontSize: '0.78rem' }}>
+                                                            {r.type === 'DEPOSIT' ? (
+                                                                <div>
+                                                                    <div>
+                                                                        {t('wallet.depositIbanShort', 'Yatırım IBAN')}:{' '}
+                                                                        {r.depositIban || r.bankAccountIban || '-'}
+                                                                    </div>
+                                                                    {r.receiptFileUrl ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => void openReceipt(r.receiptFileId, r.receiptFileUrl)}
+                                                                            style={{
+                                                                                border: 'none',
+                                                                                background: 'transparent',
+                                                                                color: '#00d4ff',
+                                                                                padding: 0,
+                                                                                cursor: 'pointer',
+                                                                                marginTop: 4,
+                                                                            }}
+                                                                        >
+                                                                            {t('wallet.receipt', 'Dekont')}
+                                                                        </button>
+                                                                    ) : (
+                                                                        <div style={{ marginTop: 4 }}>
+                                                                            {t('wallet.receipt', 'Dekont')}: —
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <div>
+                                                                    <div>
+                                                                        {t('wallet.recipientIbanShort', 'Alıcı IBAN')}:{' '}
+                                                                        {r.destinationIban || '-'}
+                                                                    </div>
+                                                                    <div>
+                                                                        {t('wallet.recipientNameShort', 'Alıcı')}:{' '}
+                                                                        {r.destinationAccountHolder || '-'}
+                                                                    </div>
+                                                                    <div>
+                                                                        {t('wallet.bankNameShort', 'Banka')}: {r.destinationBankName || '-'}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td>{r.reviewNote || '—'}</td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {items.length > 0 && (
+                                    <div className="wallet-pagination">
+                                        <span>
+                                            {t('wallet.pageSizeLabel', 'Sayfa başına')}
+                                            :{' '}
+                                        </span>
+                                        <select
+                                            className="wallet-input"
+                                            style={{ width: 'auto', padding: '6px 10px', fontSize: '0.78rem' }}
+                                            value={pageSize}
+                                            onChange={(e) => {
+                                                setPageSize(Number(e.target.value));
+                                                setPage(1);
+                                            }}
+                                        >
+                                            <option value={5}>5</option>
+                                            <option value={10}>10</option>
+                                        </select>
+                                        <span>
+                                            {t('wallet.paginationSep', '·')} {page} / {totalPages}
+                                        </span>
+                                        <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                                            {t('wallet.prev', 'Önceki')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={page >= totalPages}
+                                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                        >
+                                            {t('wallet.next', 'Sonraki')}
+                                        </button>
+                                    </div>
+                                )}
+                            </section>
+                        </div>
+                    </>
+                )}
+            </div>
+
+            {modalMode && (
+                <div
+                    className="wallet-modal-overlay"
+                    role="presentation"
+                    onClick={closeModal}
+                    onKeyDown={(e) => e.key === 'Escape' && closeModal()}
+                >
                     <div
-                        style={{
-                            ...cardStyle,
-                            marginBottom: 16,
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                            gap: 12,
-                        }}
+                        className="wallet-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="wallet-modal-title"
+                        onClick={(e) => e.stopPropagation()}
                     >
-                        <div>
-                            <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Mevcut Bakiye</div>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-                                {fmtMoney(summary?.currentBalance ?? balance?.currentAmount ?? 0)}
-                            </div>
+                        <div className="wallet-modal-header">
+                            <h2 id="wallet-modal-title" className="wallet-modal-title">
+                                {modalMode === 'DEPOSIT'
+                                    ? t('wallet.modalDepositTitle', 'Para yatırma talebi')
+                                    : t('wallet.modalWithdrawTitle', 'Para çekme talebi')}
+                            </h2>
+                            <button type="button" className="wallet-modal-close" aria-label="Close" onClick={closeModal}>
+                                ×
+                            </button>
                         </div>
-                        <div>
-                            <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Kullanılabilir Bakiye</div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>
-                                {fmtMoney(summary?.availableBalance ?? balance?.currentAmount ?? 0)}
-                            </div>
-                        </div>
-                        <div>
-                            <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Bekleyen Yatırma</div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#22c55e' }}>
-                                {fmtMoney(summary?.pendingDeposit ?? 0)}
-                            </div>
-                        </div>
-                        <div>
-                            <div style={{ fontSize: '0.8125rem', color: tokens.textMuted }}>Bekleyen Çekim</div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f59e0b' }}>
-                                {fmtMoney(summary?.pendingWithdrawal ?? 0)}
-                            </div>
-                        </div>
-                        <div style={{ color: tokens.textMuted, fontSize: '0.8125rem' }}>
-                            accountId: {summary?.accountId ?? balance?.accountId ?? '-'}
-                        </div>
-                    </div>
 
-                    <div style={{ ...cardStyle, marginBottom: 16 }}>
-                        <h2 style={{ marginTop: 0, marginBottom: 12, fontSize: '1rem' }}>{t('wallet.newRequest', 'Yeni Talep')}</h2>
-
-                        <form
-                            onSubmit={submit}
-                            style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                                gap: 12,
-                            }}
-                        >
-                            <label style={{ fontSize: '0.875rem' }}>
-                                {t('wallet.requestType', 'İşlem Tipi')}
-                                <select value={type} onChange={(e) => setType(e.target.value as FundRequestType)} style={inputStyle}>
-                                    <option value="DEPOSIT">{t('wallet.deposit', 'Yatırım')}</option>
-                                    <option value="WITHDRAWAL">{t('wallet.withdrawal', 'Çekim')}</option>
-                                </select>
-                            </label>
-
+                        <form onSubmit={submit} className="wallet-form-grid">
                             <label style={{ fontSize: '0.875rem' }}>
                                 {t('wallet.amount', 'Tutar')}
                                 <input
@@ -427,7 +699,7 @@ export function Wallet() {
                                     step="0.01"
                                     value={amount}
                                     onChange={(e) => setAmount(e.target.value)}
-                                    style={inputStyle}
+                                    className="wallet-input"
                                     required
                                 />
                             </label>
@@ -437,35 +709,38 @@ export function Wallet() {
                                 <input
                                     value={currency}
                                     onChange={(e) => setCurrency(e.target.value)}
-                                    style={inputStyle}
+                                    className="wallet-input"
                                     placeholder="TRY"
                                 />
                             </label>
 
-                            {type === 'DEPOSIT' ? (
+                            {modalMode === 'DEPOSIT' ? (
                                 <>
                                     <div
                                         style={{
-                                            gridColumn: '1 / -1',
-                                            border: `1px solid ${tokens.border}`,
-                                            borderRadius: 10,
+                                            border: `1px solid rgba(192,192,192,0.18)`,
+                                            borderRadius: 12,
                                             padding: 12,
-                                            background: tokens.inputBg,
+                                            background: 'rgba(8, 14, 28, 0.35)',
                                         }}
                                     >
-                                        <div style={{ fontWeight: 700, marginBottom: 8 }}>{t('wallet.depositInstruction', 'Yatırım Talimatı (Sistem Hesabı)')}</div>
-                                        <div style={{ fontSize: '0.875rem', color: tokens.textMuted }}>
-                                            IBAN: <strong style={{ color: tokens.text }}>{depositInstructions?.iban ?? '-'}</strong>
+                                        <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                                            {t('wallet.depositInstruction', 'Yatırım Talimatı (Sistem Hesabı)')}
                                         </div>
-                                        <div style={{ fontSize: '0.875rem', color: tokens.textMuted }}>
-                                            Alıcı: <strong style={{ color: tokens.text }}>{depositInstructions?.recipientName ?? '-'}</strong>
+                                        <div style={{ fontSize: '0.875rem', color: 'rgba(184, 193, 204, 0.9)' }}>
+                                            IBAN: <strong style={{ color: 'inherit' }}>{depositInstructions?.iban ?? '—'}</strong>
                                         </div>
-                                        <div style={{ fontSize: '0.875rem', color: tokens.textMuted }}>
-                                            Banka: <strong style={{ color: tokens.text }}>{depositInstructions?.bankName ?? '-'}</strong>
+                                        <div style={{ fontSize: '0.875rem', color: 'rgba(184, 193, 204, 0.9)' }}>
+                                            {t('wallet.recipientNameShort', 'Alıcı')}:{' '}
+                                            <strong style={{ color: 'inherit' }}>{depositInstructions?.recipientName ?? '—'}</strong>
                                         </div>
-                                        <div style={{ fontSize: '0.875rem', color: tokens.textMuted }}>
+                                        <div style={{ fontSize: '0.875rem', color: 'rgba(184, 193, 204, 0.9)' }}>
+                                            {t('wallet.bankNameShort', 'Banka')}:{' '}
+                                            <strong style={{ color: 'inherit' }}>{depositInstructions?.bankName ?? '—'}</strong>
+                                        </div>
+                                        <div style={{ fontSize: '0.875rem', color: 'rgba(184, 193, 204, 0.9)' }}>
                                             {t('wallet.userReference', 'Kullanıcı Referansı')}:{' '}
-                                            <strong style={{ color: tokens.text }}>{depositInstructions?.userReferenceCode ?? '-'}</strong>
+                                            <strong style={{ color: 'inherit' }}>{depositInstructions?.userReferenceCode ?? '—'}</strong>
                                         </div>
                                     </div>
 
@@ -474,7 +749,7 @@ export function Wallet() {
                                         <select
                                             value={sourceBankName}
                                             onChange={(e) => setSourceBankName(e.target.value)}
-                                            style={inputStyle}
+                                            className="wallet-input"
                                         >
                                             <option value="">{t('wallet.selectSourceBank', 'Banka seçin')}</option>
                                             {SOURCE_BANK_OPTIONS.map((bank) => (
@@ -485,202 +760,121 @@ export function Wallet() {
                                         </select>
                                     </label>
 
-                                    <label style={{ gridColumn: '1 / -1', fontSize: '0.875rem' }}>
-                                        Dekont Dosyası (PDF/JPG/PNG) *
-                                        <input
-                                            type="file"
-                                            accept=".pdf,.jpg,.jpeg,.png"
-                                            style={inputStyle}
-                                            onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) {
-                                                    void uploadReceipt(file);
-                                                }
+                                    <div>
+                                        <div style={{ fontSize: '0.875rem', marginBottom: 8 }}>{t('wallet.receipt', 'Dekont')} *</div>
+                                        <div
+                                            className={`wallet-dropzone ${dropActive ? 'wallet-dropzone--active' : ''}`}
+                                            onClick={() => receiptInputRef.current?.click()}
+                                            onDragEnter={(e) => {
+                                                e.preventDefault();
+                                                setDropActive(true);
                                             }}
-                                        />
-                                        <div style={{ marginTop: 6, fontSize: '0.8125rem', color: tokens.textMuted }}>
+                                            onDragOver={(e) => {
+                                                e.preventDefault();
+                                                setDropActive(true);
+                                            }}
+                                            onDragLeave={() => setDropActive(false)}
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                setDropActive(false);
+                                                const file = e.dataTransfer.files?.[0];
+                                                if (file) void uploadReceipt(file);
+                                            }}
+                                        >
+                                            <input
+                                                ref={receiptInputRef}
+                                                type="file"
+                                                accept=".pdf,.jpg,.jpeg,.png"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) void uploadReceipt(file);
+                                                }}
+                                            />
+                                            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                                                {t('wallet.dropzoneTitle', 'Dekontu sürükleyip bırakın')}
+                                            </div>
+                                            <div style={{ fontSize: '0.8125rem', color: 'rgba(184, 193, 204, 0.85)' }}>
+                                                {t('wallet.dropzoneHint', 'veya tıklayarak seçin · PDF, JPG, PNG')}
+                                            </div>
+                                        </div>
+                                        <div style={{ marginTop: 8, fontSize: '0.8125rem', color: 'rgba(184, 193, 204, 0.85)' }}>
                                             {uploadingReceipt
-                                                ? 'Dekont yükleniyor...'
+                                                ? t('wallet.uploadingReceipt', 'Dekont yükleniyor...')
                                                 : receiptFileName
-                                                  ? `Yüklendi: ${receiptFileName}`
-                                                  : 'Henüz dekont yüklenmedi'}
+                                                  ? `${t('wallet.receiptUploadedPrefix', 'Yüklendi')}: ${receiptFileName}`
+                                                  : t('wallet.receiptNotUploaded', 'Henüz dekont yüklenmedi')}
                                         </div>
                                         {receiptFileId && (
                                             <button
                                                 type="button"
                                                 onClick={() => void openReceipt(receiptFileId, receiptFileUrl)}
-                                                style={{
-                                                    marginTop: 6,
-                                                    border: `1px solid ${tokens.border}`,
-                                                    background: tokens.bgCard,
-                                                    color: tokens.text,
-                                                    borderRadius: 8,
-                                                    padding: '6px 10px',
-                                                    cursor: 'pointer',
-                                                }}
+                                                className="wallet-cta wallet-cta--withdraw"
+                                                style={{ marginTop: 10, width: '100%' }}
                                             >
                                                 {t('wallet.viewUploadedReceipt', 'Yüklenen dekontu görüntüle')}
                                             </button>
                                         )}
-                                    </label>
+                                    </div>
                                 </>
                             ) : (
                                 <>
                                     <label style={{ fontSize: '0.875rem' }}>
-                                        Alıcı IBAN
+                                        {t('wallet.recipientIbanShort', 'Alıcı IBAN')}
                                         <input
                                             value={destinationIban}
                                             onChange={(e) => setDestinationIban(e.target.value)}
-                                            style={inputStyle}
+                                            className="wallet-input"
                                             placeholder="TR..."
                                             required
                                         />
                                     </label>
 
                                     <label style={{ fontSize: '0.875rem' }}>
-                                        Alıcı Ad Soyad
+                                        {t('wallet.recipientNameFormLabel', 'Alıcı Ad Soyad')}
                                         <input
                                             value={destinationAccountHolder}
                                             onChange={(e) => setDestinationAccountHolder(e.target.value)}
-                                            style={inputStyle}
-                                            placeholder="Ad Soyad"
+                                            className="wallet-input"
+                                            placeholder={t('wallet.recipientNamePlaceholder', 'Ad Soyad')}
                                             required
                                         />
                                     </label>
 
                                     <label style={{ fontSize: '0.875rem' }}>
-                                        Banka Adı
+                                        {t('wallet.bankNameFormLabel', 'Banka Adı')}
                                         <input
                                             value={destinationBankName}
                                             onChange={(e) => setDestinationBankName(e.target.value)}
-                                            style={inputStyle}
-                                            placeholder="Banka"
+                                            className="wallet-input"
+                                            placeholder={t('wallet.bankNamePlaceholder', 'Banka')}
                                             required
                                         />
                                     </label>
                                 </>
                             )}
 
-                            <label style={{ gridColumn: '1 / -1', fontSize: '0.875rem' }}>
-                                Not
+                            <label style={{ fontSize: '0.875rem' }}>
+                                {t('wallet.noteLabel', 'Not')}
                                 <textarea
                                     value={requestNote}
                                     onChange={(e) => setRequestNote(e.target.value)}
                                     rows={3}
-                                    style={{ ...inputStyle, resize: 'vertical' }}
-                                    placeholder="Kısa açıklama..."
+                                    className="wallet-input"
+                                    style={{ resize: 'vertical', minHeight: 72 }}
+                                    placeholder={t('wallet.notePlaceholder', 'Kısa açıklama...')}
                                 />
                             </label>
 
-                            <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'center' }}>
-                                <button
-                                    type="submit"
-                                    disabled={submitting}
-                                    style={{
-                                        padding: '8px 14px',
-                                        borderRadius: 8,
-                                        border: 'none',
-                                        background: tokens.accentGradient,
-                                        color: '#fff',
-                                        fontWeight: 600,
-                                        cursor: submitting ? 'default' : 'pointer',
-                                        opacity: submitting ? 0.7 : 1,
-                                    }}
-                                >
-                                    {submitting ? t('common.submitting', 'Gönderiliyor...') : t('wallet.createRequest', 'Talep oluştur')}
-                                </button>
+                            {successMsg && (
+                                <div style={{ color: '#39ff14', fontSize: '0.875rem', fontWeight: 600 }}>{successMsg}</div>
+                            )}
 
-                                {successMsg && <span style={{ color: '#22c55e', fontSize: '0.875rem' }}>{successMsg}</span>}
-                            </div>
+                            <button type="submit" className="wallet-submit" disabled={submitting}>
+                                {submitting ? t('common.submitting', 'Gönderiliyor...') : t('wallet.createRequest', 'Talep oluştur')}
+                            </button>
                         </form>
                     </div>
-
-                    <div style={cardStyle}>
-                        <h2 style={{ marginTop: 0, marginBottom: 12, fontSize: '1rem' }}>{t('wallet.requestHistory', 'Talep Geçmişim')}</h2>
-
-                        <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                                <thead>
-                                    <tr>
-                                        <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>ID</th>
-                                        <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Tip</th>
-                                        <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>{t('transactions.amount', 'Tutar')}</th>
-                                        <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>{t('wallet.status', 'Durum')}</th>
-                                        <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>{t('news.date', 'Tarih')}</th>
-                                        <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>{t('wallet.detail', 'Detay')}</th>
-                                        <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>İnceleme notu</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {items.length === 0 ? (
-                                        <tr>
-                                            <td
-                                                colSpan={7}
-                                                style={{
-                                                    padding: 10,
-                                                    borderBottom: `1px solid ${tokens.tableBorder}`,
-                                                    color: tokens.textMuted,
-                                                    textAlign: 'center',
-                                                }}
-                                            >
-                                                {t('wallet.noRequests', 'Henüz talep yok.')}
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        items.map((r) => (
-                                            <tr key={r.id}>
-                                                <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>#{r.id}</td>
-                                                <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>{r.type}</td>
-                                                <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                                    {Number(r.amount).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR', { maximumFractionDigits: 2 })} {r.currency}
-                                                </td>
-                                                <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                                    <span style={statusStyle(r.status)}>{r.status}</span>
-                                                </td>
-                                                <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                                    {new Date(r.createdAt).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR')}
-                                                </td>
-                                                <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}`, fontSize: '0.8125rem' }}>
-                                                    {r.type === 'DEPOSIT' ? (
-                                                        <div>
-                                                            <div>Yatırım IBAN: {r.depositIban || r.bankAccountIban || '-'}</div>
-                                                            {r.receiptFileUrl ? (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => void openReceipt(r.receiptFileId, r.receiptFileUrl)}
-                                                                    style={{
-                                                                        border: 'none',
-                                                                        background: 'transparent',
-                                                                        color: '#60a5fa',
-                                                                        padding: 0,
-                                                                        cursor: 'pointer',
-                                                                    }}
-                                                                >
-                                                                    {t('wallet.receipt', 'Dekont')}
-                                                                </button>
-                                                            ) : (
-                                                                <div>Dekont: -</div>
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <div>
-                                                            <div>Alıcı IBAN: {r.destinationIban || '-'}</div>
-                                                            <div>Alıcı: {r.destinationAccountHolder || '-'}</div>
-                                                            <div>Banka: {r.destinationBankName || '-'}</div>
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                                    {r.reviewNote || '-'}
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </>
+                </div>
             )}
         </div>
     );

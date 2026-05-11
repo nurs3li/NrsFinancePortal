@@ -72,7 +72,8 @@ export function useHeaderInteractions({ navRef, userMenuRef, activeNavKey }: Hea
 
   const focusNavItem = useCallback((node: HTMLElement | null) => {
     if (!node) return;
-    node.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    // 'smooth' bazı tarayıcılarda rota değişimiyle çakışıp tıklamayı “yutuyor” gibi hissettirebiliyor (ağır VİOP sayfası).
+    node.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
   }, []);
 
   return {

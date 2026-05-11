@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
-import type { LogicalRange, Time } from 'lightweight-charts';
+import type { LogicalRange, Time, UTCTimestamp } from 'lightweight-charts';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type ViopPoint = {
@@ -29,19 +29,30 @@ type Props = {
     tokens: ThemeSlice;
 };
 
+/**
+ * VIOP geçmişi UTCTimestamp (saniye) olarak verilir; lightweight-charts gerçek zaman ekseni üzerine
+ * yerleştirip noktalar arası takvim boşluğunu (örn. 1Y'de aylar arası) doğru gösterir. Önceki sürüm
+ * date-string ("YYYY-MM-DD") veriyordu: chart bunu BusinessDay gibi sıkı 1‑bar/1‑gün konumlandırıyor,
+ * az noktada (1Y'de sparse) aralar orantısız görünüyor ve x ekseninde takvim eşitsizliği kayboluyordu.
+ */
 function toChartTime(value: string): Time {
     const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return String(value).slice(0, 10) as Time;
-    // VIOP ekranı günlük veri ile çalışıyor; tüm noktaları tek tipte (BusinessDay) tutup
-    // karışık Time formatının (unix + date string) zaman ekseninde sağ-sol zıplama üretmesini engeller.
-    return d.toISOString().slice(0, 10) as Time;
+    const ms = d.getTime();
+    if (Number.isNaN(ms)) {
+        // Geçersizse epoch döndür: chart noktayı zaten setData'da filtreleyecek.
+        return 0 as UTCTimestamp;
+    }
+    return Math.floor(ms / 1000) as UTCTimestamp;
 }
 
 function chartTimeKey(value: Time): string {
     if (typeof value === 'number') {
-        return new Date(value * 1000).toISOString();
+        return String(value);
     }
-    return String(value);
+    if (typeof value === 'string') {
+        return value;
+    }
+    return JSON.stringify(value);
 }
 
 export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timeframeLabel, trendLabel, tokens }: Props) {
@@ -60,11 +71,17 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
     const [hover, setHover] = useState<ViopPoint | null>(null);
     const chartHeight = 520;
     const sorted = useMemo(() => {
+        // Exact timestamp tabanlı dedup: aynı saniyeyi paylaşan iki snapshot bulunmaz; gün dahilindeki
+        // intra-day örnekleri kaybetmiyoruz.
         const byTime = new Map<string, ViopPoint>();
         [...points]
             .filter((p) => Number.isFinite(p.price) && p.price > 0)
             .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
-            .forEach((p) => byTime.set(chartTimeKey(toChartTime(p.time)), p));
+            .forEach((p) => {
+                const t = toChartTime(p.time);
+                if (typeof t === 'number' && t <= 0) return;
+                byTime.set(chartTimeKey(t), p);
+            });
         return [...byTime.values()];
     }, [points]);
     const limitedData = sorted.length > 0 && sorted.length < 5;
@@ -89,10 +106,9 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                 borderColor: tokens.border,
                 timeVisible: true,
                 secondsVisible: false,
-                lockVisibleTimeRangeOnResize: true,
-                rightOffset: 0,
-                fixLeftEdge: true,
-                fixRightEdge: true,
+                // 1Y görünümünde noktalar arası takvim mesafesini doğru göstermek için sabit edge kilitlerini
+                // ve resize lock'unu kaldırdık: fitContent + UTCTimestamp gerçek tarihlere göre yerleştirir.
+                rightOffset: 4,
                 shiftVisibleRangeOnNewBar: false,
             },
             crosshair: { mode: 1 },
@@ -150,12 +166,15 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
 
         chart.subscribeCrosshairMove((param) => {
             if (!param?.time) {
-                setHover(null);
+                setHover((prev) => (prev == null ? prev : null));
                 return;
             }
             const key = chartTimeKey(param.time);
-            const row = dataByKeyRef.current[key];
-            setHover(row ?? null);
+            const row = dataByKeyRef.current[key] ?? null;
+            setHover((prev) => {
+                if (prev?.time === row?.time && prev?.price === row?.price) return prev;
+                return row;
+            });
         });
         chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
             if (range) logicalRangeRef.current = range;
@@ -170,12 +189,8 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                     borderColor: tokens.border,
                     timeVisible: true,
                     secondsVisible: false,
-                    lockVisibleTimeRangeOnResize: true,
-                ...lay,
-                rightOffset: 0,
-                fixLeftEdge: true,
-                fixRightEdge: true,
-                shiftVisibleRangeOnNewBar: false,
+                    ...lay,
+                    shiftVisibleRangeOnNewBar: false,
                 },
             });
             if (logicalRangeRef.current) {
@@ -232,26 +247,18 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                 borderColor: tokens.border,
                 timeVisible: true,
                 secondsVisible: false,
-                lockVisibleTimeRangeOnResize: true,
                 ...tsLay,
-                rightOffset: 0,
-                fixLeftEdge: true,
-                fixRightEdge: true,
                 shiftVisibleRangeOnNewBar: false,
             },
         });
 
-        if (!hasInitialFitRef.current) {
+        // Timeframe veya kontrat değiştikçe yeniden fit'le — kilitli logical range eski 1M görünümünü
+        // 1Y'ye taşıyıp az noktayı orantısız aralıkta gösteriyordu.
+        requestAnimationFrame(() => {
+            chart.timeScale().fitContent();
+            logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
             hasInitialFitRef.current = true;
-            requestAnimationFrame(() => {
-                chart.timeScale().fitContent();
-                logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
-            });
-            return;
-        }
-        if (logicalRangeRef.current) {
-            chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
-        }
+        });
     }, [loading, sorted, ma7, ma21, showMa, tokens, timeframeLabel]);
 
     if (loading) {
@@ -289,7 +296,10 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
             {limitedData ? (
                 <div style={{ color: tokens.textMuted, marginBottom: 8, fontSize: 12 }}>Bu periyotta sınırlı VİOP verisi.</div>
             ) : null}
-            <div ref={chartRef} style={{ width: '100%', height: chartHeight }} />
+            <div
+                ref={chartRef}
+                style={{ width: '100%', maxWidth: '100%', height: chartHeight, overflow: 'hidden' }}
+            />
         </div>
     );
 }

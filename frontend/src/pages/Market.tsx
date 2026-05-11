@@ -78,6 +78,17 @@ type ViopSnapshot = {
     longShortIndicator?: 'LONG' | 'SHORT' | 'NEUTRAL';
     openInterest?: number;
     asOf?: string;
+    /** CSV import sonrası backend rollup (liste zaman aralığı); yoksa null */
+    listPctChange1d?: number | null;
+    listPctChange7d?: number | null;
+    listPctChange30d?: number | null;
+    listPctChange365d?: number | null;
+    seqMovePct?: number | null;
+    seqMoveTrend?: string | null;
+    /** /viop/latest: son 14 takvim günü gün başına kapanışlara göre % */
+    listPctChange14d?: number | null;
+    /** /viop/latest: gün başına son pozitif kapanışlar (sparkline) */
+    sparklineCloses?: number[] | null;
 };
 type DebtSnapshot = {
     isin: string;
@@ -91,7 +102,18 @@ type DebtSnapshot = {
     quality?: 'EXACT' | 'FALLBACK' | 'STALE' | string;
     synthetic?: boolean;
 };
-type ViopContract = { contractCode: string; underlying: string; expiry: string; type: string };
+type ViopContract = {
+    contractCode: string;
+    underlying: string;
+    expiry: string;
+    type: string;
+    listPctChange1d?: number | null;
+    listPctChange7d?: number | null;
+    listPctChange30d?: number | null;
+    listPctChange365d?: number | null;
+    seqMovePct?: number | null;
+    seqMoveTrend?: string | null;
+};
 type DebtInstrument = { isin: string; name: string; issuer: string; maturityDate: string };
 type MarketCategory = 'EQUITY' | 'CRYPTO' | 'FX' | 'METALS' | 'FUNDS' | 'FUTURES' | 'BOND';
 type CompareRow = { time: string; values: Record<string, number> };
@@ -105,6 +127,57 @@ const RANGE_TO_DAYS: Record<'1D' | '1W' | '1M' | '1Y', number> = {
     '1M': 30,
     '1Y': 365,
 };
+
+function toFiniteNumber(v: unknown): number | null {
+    if (v == null) return null;
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string') {
+        const n = parseFloat(v.replace(',', '.'));
+        return Number.isFinite(n) ? n : null;
+    }
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+}
+
+/** VIOP liste % / trend: DB’de son iki snapshot’a göre (takvim günü değil). */
+function viopSeqChangeFromDb(
+    snap: ViopSnapshot | undefined,
+    contract: ViopContract | undefined
+): { pct: number; trend: 'UP' | 'DOWN' } | null {
+    const n = toFiniteNumber(snap?.seqMovePct ?? contract?.seqMovePct);
+    if (n == null) return null;
+    const tr = String(snap?.seqMoveTrend ?? contract?.seqMoveTrend ?? '')
+        .trim()
+        .toUpperCase();
+    let trend: 'UP' | 'DOWN' = n >= 0 ? 'UP' : 'DOWN';
+    if (tr === 'DOWN') trend = 'DOWN';
+    else if (tr === 'UP') trend = 'UP';
+    else if (tr === 'NEUTRAL') trend = 'UP';
+    return { pct: n, trend };
+}
+
+/** Terminal satırı: önce son 14 gün (gün başına kapanış) %, yoksa rollup/seq/baz. */
+function viopTerminalListChange(
+    snap: ViopSnapshot | undefined,
+    contract: ViopContract | undefined
+): { pct: number; trend: 'UP' | 'DOWN' } | null {
+    const p14 = toFiniteNumber(snap?.listPctChange14d);
+    if (p14 != null) {
+        return { pct: p14, trend: p14 >= 0 ? 'UP' : 'DOWN' };
+    }
+    for (const v of [
+        snap?.listPctChange7d,
+        snap?.listPctChange30d,
+        contract?.listPctChange7d,
+        contract?.listPctChange30d,
+    ]) {
+        const n = toFiniteNumber(v);
+        if (n != null) return { pct: n, trend: n >= 0 ? 'UP' : 'DOWN' };
+    }
+    const seq = viopSeqChangeFromDb(snap, contract);
+    if (seq != null) return seq;
+    return null;
+}
 const CATEGORY_LABELS: { id: MarketCategory; label: string }[] = [
     { id: 'EQUITY', label: 'Hisse' },
     { id: 'CRYPTO', label: 'Kripto' },
@@ -377,7 +450,6 @@ function normalizeSymbolKey(symbol: string): string {
         .toUpperCase();
 }
 
-/** Ağır VIOP history: tüm kontratları aynı anda patlatma */
 async function mapPool<T, R>(items: T[], batchSize: number, fn: (item: T) => Promise<R>): Promise<R[]> {
     const out: R[] = [];
     for (let i = 0; i < items.length; i += batchSize) {
@@ -421,8 +493,16 @@ function effectiveViopCarryPercent(v: ViopSnapshot, price: number): number {
     return Number.NaN;
 }
 
-/** Kontrat listesi çok uzunsa (latest boş) history fırtınasını sınırla */
-const VIOP_HISTORY_CATALOG_CAP = 96;
+/**
+ * /viop/latest gerçekten boş döndüğünde fallback için kontrat başına history isteği atıyoruz.
+ * 96 çok agresifti (200+ kontratın yarısı 6 paralel kanaldan saniyelerce frontend'i bloke ediyordu);
+ * orta seviye olarak küçük tutuyoruz — gerçek mod sadece boş latest senaryosunda devrede.
+ */
+const VIOP_HISTORY_CATALOG_CAP = 24;
+
+/** Tablo gövdesi: yalnızca görünür aralık + overscan render (VİOP’ta binlerce <tr> = navigasyon kilitlenmesi) */
+const MARKET_LIST_ROW_HEIGHT = 52;
+const MARKET_LIST_OVERSCAN_ROWS = 12;
 
 function toContractMonth(label: string): string {
     const m = label.match(/\((.+)\)/);
@@ -556,7 +636,7 @@ export function Market() {
     } = useQuery({
         queryKey: ['market', 'dashboard', 'terminal'],
         queryFn: () => financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => unwrapData(r)),
-        refetchInterval: 12_000,
+        refetchInterval: activeCategory === 'FUTURES' || activeCategory === 'BOND' ? false : 12_000,
     });
 
     const usdTryRateQueryEnabled =
@@ -675,9 +755,11 @@ export function Market() {
         });
     }, []);
 
-    const { data: viopLatest = [] } = useQuery({
+    const { data: viopLatest = [], isSuccess: viopLatestSucceeded } = useQuery({
         queryKey: ['market', 'viop', 'latest', 'terminal'],
-        queryFn: () => marketClient.get<ViopSnapshot[]>('/api/market/viop/latest').then((r) => r.data),
+        queryFn: ({ signal }) =>
+            marketClient.get<ViopSnapshot[]>('/api/market/viop/latest', { signal }).then((r) => r.data),
+        enabled: activeCategory === 'FUTURES',
         refetchInterval: false,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
@@ -685,71 +767,49 @@ export function Market() {
     });
     const { data: viopContracts = [] } = useQuery({
         queryKey: ['market', 'viop', 'contracts', 'terminal'],
-        queryFn: () => marketClient.get<ViopContract[]>('/api/market/viop/contracts').then((r) => r.data),
+        queryFn: ({ signal }) =>
+            marketClient.get<ViopContract[]>('/api/market/viop/contracts', { signal }).then((r) => r.data),
+        enabled: activeCategory === 'FUTURES',
         refetchInterval: false,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
         staleTime: Infinity,
     });
     const viopRangeDays = RANGE_TO_DAYS[range];
-    const { data: viopHistoryChangeMap = {} } = useQuery({
-        queryKey: [
-            'market',
-            'viop',
-            'history-change-map',
-            'terminal',
-            range,
-            viopContracts.length,
-            viopLatest.map((v) => normalizeSymbolKey(v.contractCode)).filter(Boolean).sort().join(','),
-        ],
-        enabled: activeCategory === 'FUTURES' && (viopLatest.length > 0 || viopContracts.length > 0),
-        queryFn: async () => {
-            const fromLatest = [...new Set(viopLatest.map((v) => normalizeSymbolKey(v.contractCode)).filter(Boolean))];
-            const fromCatalog = [...new Set(viopContracts.map((c) => normalizeSymbolKey(c.contractCode)).filter(Boolean))];
-            let contracts = fromLatest.length > 0 ? fromLatest : fromCatalog;
-            if (fromLatest.length === 0 && contracts.length > VIOP_HISTORY_CATALOG_CAP) {
-                contracts = contracts.slice(0, VIOP_HISTORY_CATALOG_CAP);
-            }
-            const histDays = Math.min(400, Math.max(3, viopRangeDays));
-            const entries = await mapPool(contracts, 10, async (contract) => {
-                try {
-                    const rows = await marketClient
-                        .get<ViopSnapshot[]>('/api/market/viop/history', {
-                            params: { contract, days: histDays },
-                        })
-                        .then((r) => r.data);
-                    const sorted = [...(rows ?? [])]
-                        .filter((x) => Number(x?.price ?? 0) > 0)
-                        .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
-                    const first = Number(sorted[0]?.price ?? Number.NaN);
-                    const last = Number(sorted[sorted.length - 1]?.price ?? Number.NaN);
-                    const pct = first > 0 && Number.isFinite(last) ? ((last - first) / first) * 100 : Number.NaN;
-                    return [contract, pct] as const;
-                } catch {
-                    return [contract, Number.NaN] as const;
-                }
-            });
-            return Object.fromEntries(entries) as Record<string, number>;
-        },
-        refetchInterval: false,
-        refetchOnWindowFocus: false,
-        refetchOnReconnect: false,
-        staleTime: Infinity,
-    });
+
+    const viopContractBySymbol = useMemo(() => {
+        const m: Record<string, ViopContract> = {};
+        viopContracts.forEach((c) => {
+            const k = normalizeSymbolKey(c.contractCode);
+            if (k) m[k] = c;
+        });
+        return m;
+    }, [viopContracts]);
+
+    /**
+     * Fallback "history fırtınası": yalnızca /viop/latest GERÇEKTEN boş döndüyse devreye girer.
+     * Önceki versiyon `viopLatest.length === 0` ile loading durumunda da tetikleniyor, 96 paralel
+     * istek üretip VIOP sekmesini ve sayfa geçişlerini kilitliyordu.
+     */
     const { data: viopLatestFromHistory = {} } = useQuery({
-        queryKey: ['market', 'viop', 'history-latest', 'terminal', range, viopContracts.length, viopLatest.length],
-        enabled: activeCategory === 'FUTURES' && viopLatest.length === 0 && viopContracts.length > 0,
-        queryFn: async () => {
+        queryKey: ['market', 'viop', 'history-latest', 'terminal', range, viopContracts.length],
+        enabled:
+            activeCategory === 'FUTURES' &&
+            viopLatestSucceeded &&
+            viopLatest.length === 0 &&
+            viopContracts.length > 0,
+        queryFn: async ({ signal }) => {
             let contracts = [...new Set(viopContracts.map((c) => normalizeSymbolKey(c.contractCode)).filter(Boolean))];
             if (contracts.length > VIOP_HISTORY_CATALOG_CAP) {
                 contracts = contracts.slice(0, VIOP_HISTORY_CATALOG_CAP);
             }
             const histDays = Math.min(400, Math.max(14, viopRangeDays));
-            const entries = await mapPool(contracts, 10, async (contract) => {
+            const entries = await mapPool(contracts, 4, async (contract) => {
                 try {
                     const rows = await marketClient
                         .get<ViopSnapshot[]>('/api/market/viop/history', {
                             params: { contract, days: histDays },
+                            signal,
                         })
                         .then((r) => r.data);
                     const latest = [...(rows ?? [])]
@@ -766,37 +826,41 @@ export function Market() {
         refetchInterval: false,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
-        staleTime: Infinity,
+        staleTime: 5 * 60_000,
+        gcTime: 5 * 60_000,
     });
 
     const { data: debtLatest = [] } = useQuery({
         queryKey: ['market', 'debt', 'latest', 'terminal'],
-        queryFn: () => marketClient.get<DebtSnapshot[]>('/api/market/debt/latest').then((r) => r.data),
-        refetchInterval: 15_000,
+        queryFn: ({ signal }) =>
+            marketClient.get<DebtSnapshot[]>('/api/market/debt/latest', { signal }).then((r) => r.data),
+        enabled: activeCategory === 'BOND',
+        refetchInterval: activeCategory === 'BOND' ? 15_000 : false,
     });
     const { data: debtCatalog = [] } = useQuery({
         queryKey: ['market', 'debt', 'catalog', 'terminal'],
-        queryFn: () => marketClient.get<DebtInstrument[]>('/api/market/debt/catalog').then((r) => r.data),
-        refetchInterval: 60_000,
+        queryFn: ({ signal }) =>
+            marketClient.get<DebtInstrument[]>('/api/market/debt/catalog', { signal }).then((r) => r.data),
+        enabled: activeCategory === 'BOND',
+        refetchInterval: activeCategory === 'BOND' ? 60_000 : false,
     });
     const { data: debtHistoryByIsin = {} } = useQuery({
         queryKey: ['market', 'debt', 'history-by-isin', 'terminal', range, debtCatalog.length],
         enabled: activeCategory === 'BOND' && debtCatalog.length > 0,
-        queryFn: async () => {
+        queryFn: async ({ signal }) => {
             const uniq = [...new Set(debtCatalog.map((d) => normalizeSymbolKey(d.isin)).filter(Boolean))];
-            const entries = await Promise.all(
-                uniq.map(async (isin) => {
-                    const rows = await marketClient
-                        .get<DebtSnapshot[]>('/api/market/debt/history', {
-                            params: { isin, days: Math.max(180, RANGE_TO_DAYS[range]) },
-                        })
-                        .then((r) => r.data);
-                    return [isin, rows] as const;
-                })
-            );
+            const entries = await mapPool(uniq, 4, async (isin) => {
+                const rows = await marketClient
+                    .get<DebtSnapshot[]>('/api/market/debt/history', {
+                        params: { isin, days: Math.max(180, RANGE_TO_DAYS[range]) },
+                        signal,
+                    })
+                    .then((r) => r.data);
+                return [isin, rows] as const;
+            });
             return Object.fromEntries(entries) as DebtHistoryByIsin;
         },
-        refetchInterval: 60_000,
+        refetchInterval: activeCategory === 'BOND' ? 60_000 : false,
     });
 
 
@@ -869,17 +933,18 @@ export function Market() {
             return [...merged.values()]
                 .map((v) => {
                     const symbol = normalizeSymbolKey(v.contractCode);
-                    const pctByHistory = Number(viopHistoryChangeMap[symbol]);
                     const priceN = Number(v.price ?? 0);
+                    const fromDb = viopTerminalListChange(v, viopContractBySymbol[symbol]);
                     const pctFallback =
                         priceN > 0 ? (impliedViopBasis(v, priceN) / priceN) * 100 : 0;
-                    const pct = Number.isFinite(pctByHistory) ? pctByHistory : pctFallback;
+                    const pct = fromDb ? fromDb.pct : pctFallback;
+                    const trendDir = fromDb ? fromDb.trend : pct >= 0 ? ('UP' as const) : ('DOWN' as const);
                     return {
                         symbol,
                         category: 'FUTURES' as const,
                         price: priceN,
                         changePercent: Number.isFinite(pct) ? pct : 0,
-                        trend: pct >= 0 ? ('UP' as const) : ('DOWN' as const),
+                        trend: trendDir,
                         metrics: {
                             basis: impliedViopBasis(v, priceN),
                             yield: effectiveViopCarryPercent(v, priceN),
@@ -975,7 +1040,18 @@ export function Market() {
                 });
             });
         return [...unique.values()].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
-    }, [activeCategory, dashboard, viopLatest, viopLatestFromHistory, viopHistoryChangeMap, viopContracts, debtLatest, debtHistoryByIsin, fxSpreadMap]);
+    }, [
+        activeCategory,
+        dashboard,
+        viopLatest,
+        viopLatestFromHistory,
+        viopContracts,
+        viopContractBySymbol,
+        range,
+        debtLatest,
+        debtHistoryByIsin,
+        fxSpreadMap,
+    ]);
 
     useEffect(() => {
         if (!instruments.length) {
@@ -1040,19 +1116,20 @@ export function Market() {
     const { data: indicatorData, isLoading: loadingIndicators } = useQuery({
         queryKey: ['market', 'indicators', 'terminal', activeCategory, selectedSymbol, days],
         enabled: Boolean(selectedSymbol && marketType),
-        queryFn: () =>
+        queryFn: ({ signal }) =>
             marketClient
                 .get<IndicatorsResponse>('/api/market/indicators', {
                     params: { type: marketType, symbol: selectedSymbol, days, ma: '7,21' },
+                    signal,
                 })
                 .then((r) => r.data),
-        refetchInterval: 15_000,
+        refetchInterval: Boolean(selectedSymbol && marketType) ? 15_000 : false,
     });
 
     const { data: batchData, isLoading: loadingCandles } = useQuery({
         queryKey: ['market', 'candles', 'terminal', activeCategory, selectedSymbol, days],
         enabled: Boolean(selectedSymbol && marketType),
-        queryFn: async () => {
+        queryFn: async ({ signal }) => {
             if (activeCategory === 'METALS') {
                 const symbolCandidates = [selectedSymbol, selectedSymbol === 'ALTIN_TRY' ? 'XAU_TRY' : 'ALTIN_TRY']
                     .map((s) => normalizeSymbolKey(s))
@@ -1060,7 +1137,7 @@ export function Market() {
                 for (const symbol of symbolCandidates) {
                     try {
                         const rows = await marketClient
-                            .get<MarketHistoryPoint[]>('/api/market/metals/history', { params: { symbol, days } })
+                            .get<MarketHistoryPoint[]>('/api/market/metals/history', { params: { symbol, days }, signal })
                             .then((r) => r.data);
                         const candlesFromHistory = historyRowsToSyntheticCandles(rows ?? []);
                         if (candlesFromHistory.length > 0) {
@@ -1078,6 +1155,7 @@ export function Market() {
             const batch = await marketClient
                 .get<BatchHistoryResponse>('/api/market/history/batch', {
                     params: { type: marketType, symbols: selectedSymbol, days },
+                    signal,
                 })
                 .then((r) => r.data);
             const existing = batch?.series?.[selectedSymbol] ?? [];
@@ -1093,7 +1171,7 @@ export function Market() {
                     : selectedSymbol;
             try {
                 const rows = await marketClient
-                    .get<MarketHistoryPoint[]>(historyPath, { params: { symbol: historySymbol, days } })
+                    .get<MarketHistoryPoint[]>(historyPath, { params: { symbol: historySymbol, days }, signal })
                     .then((r) => r.data);
                 const fallbackCandles = historyRowsToSyntheticCandles(rows ?? []);
                 const existingFlat =
@@ -1128,10 +1206,11 @@ export function Market() {
     const { data: viopHistory = [], isLoading: loadingViopHistory } = useQuery({
         queryKey: ['market', 'viop-history', selectedSymbol, days],
         enabled: activeCategory === 'FUTURES' && Boolean(selectedSymbol),
-        queryFn: async () => {
+        queryFn: async ({ signal }) => {
             const primary = await marketClient
                 .get<ViopSnapshot[]>('/api/market/viop/history', {
                     params: { contract: selectedSymbol, days },
+                    signal,
                 })
                 .then((r) => r.data);
             if (primary.length > 0 || days >= 365) {
@@ -1140,36 +1219,42 @@ export function Market() {
             return marketClient
                 .get<ViopSnapshot[]>('/api/market/viop/history', {
                     params: { contract: selectedSymbol, days: 365 },
+                    signal,
                 })
                 .then((r) => r.data);
         },
-        refetchInterval: 15_000,
+        refetchInterval: false,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        staleTime: 5 * 60_000,
     });
     const { data: viopOiHistory = [] } = useQuery({
         queryKey: ['market', 'viop-oi-history', selectedSymbol, days],
         enabled: activeCategory === 'FUTURES' && Boolean(selectedSymbol),
-        queryFn: () =>
+        queryFn: ({ signal }) =>
             marketClient
                 .get<ViopSnapshot[]>('/api/market/viop/oi-history', {
                     params: { contract: selectedSymbol, days },
+                    signal,
                 })
                 .then((r) => r.data),
         refetchInterval: false,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
-        staleTime: Infinity,
+        staleTime: 5 * 60_000,
     });
 
     const { data: debtHistory = [], isLoading: loadingDebtHistory } = useQuery({
         queryKey: ['market', 'debt-history', selectedSymbol, days],
         enabled: activeCategory === 'BOND' && Boolean(selectedSymbol),
-        queryFn: () =>
+        queryFn: ({ signal }) =>
             marketClient
                 .get<DebtSnapshot[]>('/api/market/debt/history', {
                     params: { isin: selectedSymbol, days },
+                    signal,
                 })
                 .then((r) => r.data),
-        refetchInterval: 15_000,
+        refetchInterval: activeCategory === 'BOND' && Boolean(selectedSymbol) ? 15_000 : false,
     });
 
     const candles = useMemo(() => {
@@ -1255,27 +1340,33 @@ export function Market() {
     }, [activeCategory, debtHistory]);
     const viopLinePoints = useMemo(() => {
         if (activeCategory !== 'FUTURES') return [];
-        const sorted = [...viopHistory]
-            .filter((x) => Number(x.price ?? 0) > 0)
-            .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
-        const dailyLast = new Map<string, ViopSnapshot>();
-        sorted.forEach((x) => {
-            const dayKey = String(x.asOf ?? '').slice(0, 10);
-            if (!dayKey) return;
-            dailyLast.set(dayKey, x);
-        });
-        return [...dailyLast.values()].map((x) => {
+        // Önce exact timestamp ile dedup (backend retry / duplicate snapshot koruması) — gün bazlı
+        // dedup yapmıyoruz: chart Unix timestamp kullanıyor ve gerçek zaman aralıklarına ihtiyacı var.
+        const byTs = new Map<number, ViopSnapshot>();
+        viopHistory.forEach((x) => {
             const priceN = Number(x.price ?? 0);
-            const basisDisp = impliedViopBasis(x, priceN);
-            const carry = effectiveViopCarryPercent(x, priceN);
-            return {
-                time: x.asOf ?? new Date().toISOString(),
-                price: priceN,
-                basis: basisDisp,
-                annualizedBasisPct: Number.isFinite(carry) ? carry : 0,
-                openInterest: Number(x.openInterest ?? 0),
-            };
+            if (!(priceN > 0)) return;
+            const ts = new Date(x.asOf ?? 0).getTime();
+            if (!Number.isFinite(ts) || ts <= 0) return;
+            const existing = byTs.get(ts);
+            if (!existing || new Date(existing.asOf ?? 0).getTime() <= ts) {
+                byTs.set(ts, x);
+            }
         });
+        return [...byTs.entries()]
+            .sort((a, b) => a[0] - b[0])
+            .map(([, x]) => {
+                const priceN = Number(x.price ?? 0);
+                const basisDisp = impliedViopBasis(x, priceN);
+                const carry = effectiveViopCarryPercent(x, priceN);
+                return {
+                    time: x.asOf ?? new Date().toISOString(),
+                    price: priceN,
+                    basis: basisDisp,
+                    annualizedBasisPct: Number.isFinite(carry) ? carry : 0,
+                    openInterest: Number(x.openInterest ?? 0),
+                };
+            });
     }, [activeCategory, viopHistory]);
 
     const ma7 = useMemo(() => {
@@ -1337,6 +1428,10 @@ export function Market() {
             if (ins.category === 'FUTURES') {
                 const contractLabel = parseViopContractLabel(symbolKey);
                 const latestViop = viopLatestMap[symbolKey];
+                const viopSpark = latestViop?.sparklineCloses;
+                const sparkFromDb = Array.isArray(viopSpark)
+                    ? viopSpark.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0)
+                    : [];
                 const basis = Number(ins.metrics?.basis ?? 0);
                 return {
                     ...ins,
@@ -1345,7 +1440,7 @@ export function Market() {
                     volume: liveVolume,
                     type: 'FUTURES',
                     displayName: contractLabel,
-                    sparkline: normalizeTrendSparkline([], livePrice, liveChange),
+                    sparkline: normalizeTrendSparkline(sparkFromDb, livePrice, liveChange),
                     contractMonth: latestViop?.contractMonth ?? toContractMonth(contractLabel),
                     expiryDate: latestViop?.expiryDate,
                     marginRequirement: Number(latestViop?.marginRequirement ?? (ins.price * 0.12).toFixed(2)),
@@ -1390,17 +1485,47 @@ export function Market() {
         () => instrumentVms.find((x) => x.symbol === selectedSymbol) ?? instrumentVms[0] ?? null,
         [instrumentVms, selectedSymbol]
     );
-    const virtualRows = useMemo(() => {
-        return {
-            rowHeight: 52,
-            viewport: 500,
-            start: 0,
-            end: filteredInstruments.length,
-            totalHeight: filteredInstruments.length * 52,
-            topSpacer: 0,
-            rows: filteredInstruments,
+
+    const tableWrapRef = useRef<HTMLDivElement>(null);
+    const [listScrollTop, setListScrollTop] = useState(0);
+    const [listViewportH, setListViewportH] = useState(560);
+
+    useLayoutEffect(() => {
+        const el = tableWrapRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const onScroll = () => setListScrollTop(el.scrollTop);
+        el.addEventListener('scroll', onScroll, { passive: true });
+        const ro = new ResizeObserver(() => setListViewportH(el.clientHeight));
+        ro.observe(el);
+        onScroll();
+        setListViewportH(el.clientHeight);
+        return () => {
+            el.removeEventListener('scroll', onScroll);
+            ro.disconnect();
         };
-    }, [filteredInstruments]);
+    }, []);
+
+    useEffect(() => {
+        const el = tableWrapRef.current;
+        if (el) el.scrollTop = 0;
+        setListScrollTop(0);
+    }, [activeCategory]);
+
+    const listVirtual = useMemo(() => {
+        const total = filteredInstruments.length;
+        const rowH = MARKET_LIST_ROW_HEIGHT;
+        const start = Math.min(total, Math.max(0, Math.floor(listScrollTop / rowH) - MARKET_LIST_OVERSCAN_ROWS));
+        const visibleRows = Math.ceil(listViewportH / rowH) + 2 * MARKET_LIST_OVERSCAN_ROWS + 2;
+        const end = Math.min(total, start + visibleRows);
+        const rows = filteredInstruments.slice(start, end);
+        return {
+            rowHeight: rowH,
+            topSpacer: start * rowH,
+            bottomSpacer: Math.max(0, (total - end) * rowH),
+            rows,
+            totalHeight: total * rowH,
+        };
+    }, [filteredInstruments, listScrollTop, listViewportH]);
     const sparklinePath = useCallback((values: number[]) => {
         if (!values.length) return '';
         const min = Math.min(...values);
@@ -1555,24 +1680,6 @@ export function Market() {
         () => [...instruments].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent)).slice(0, 5),
         [instruments]
     );
-    const futuresHighestCarry = useMemo(() => {
-        const rows = instruments
-            .map((ins) => {
-                const carry = Number(ins.metrics?.yield);
-                return { symbol: ins.symbol, carry };
-            })
-            .filter((x) => Number.isFinite(x.carry));
-        const nonZero = rows.filter((x) => Math.abs(x.carry) > 1e-9);
-        const pool = nonZero.length > 0 ? nonZero : rows;
-        return [...pool].sort((a, b) => b.carry - a.carry).slice(0, 5);
-    }, [instruments]);
-
-    const formatCarry = useCallback((value: number) => {
-        if (!Number.isFinite(value)) return '—';
-        const abs = Math.abs(value);
-        if (abs > 0 && abs < 0.01) return value < 0 ? '-<0,01' : '<0,01';
-        return value.toLocaleString('tr-TR', { maximumFractionDigits: 4 });
-    }, []);
 
     const cryptoDominance = useMemo(() => {
         if (activeCategory !== 'CRYPTO' || !dashboard) return [] as { symbol: string; dominancePct: number }[];
@@ -1684,10 +1791,19 @@ export function Market() {
         }
     }, [compareSymbols, loadCompare]);
 
-    usePolling(() => {
-        void refetchDashboard();
-    }, 12_000);
+    /** VİOP sekmesinde canlı tick kullanılmıyor; WS + dashboard poll ana iş parçacığını kilitliyordu (üst menü tıklanmıyor gibi). */
+    usePolling(
+        () => {
+            void refetchDashboard();
+        },
+        12_000,
+        activeCategory !== 'FUTURES'
+    );
     useEffect(() => {
+        if (activeCategory === 'FUTURES') {
+            setLiveOverrides({});
+            return;
+        }
         const base = (import.meta.env.VITE_MARKET_API_URL || 'http://localhost:8083').replace(/^http/i, 'ws');
         const wsUrl = `${base}/ws/market`;
         let socket: WebSocket | null = null;
@@ -1727,7 +1843,7 @@ export function Market() {
             isCancelled = true;
             socket?.close();
         };
-    }, []);
+    }, [activeCategory]);
 
     const errMsg = dashboardError instanceof Error ? dashboardError.message : '';
     /** VİOP / tahvil listesi finance dashboard’undan bağımsız; dashboard beklerken tüm sayfayı kilitleme */
@@ -1880,9 +1996,7 @@ export function Market() {
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
-                            <div
-                                className="terminal-table-wrap"
-                            >
+                            <div ref={tableWrapRef} className="terminal-table-wrap">
                                 <table className="terminal-data-table">
                                     <thead>
                                         <tr>
@@ -1896,12 +2010,12 @@ export function Market() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {virtualRows.topSpacer > 0 ? (
-                                            <tr style={{ height: virtualRows.topSpacer }}>
+                                        {listVirtual.topSpacer > 0 ? (
+                                            <tr style={{ height: listVirtual.topSpacer }}>
                                                 <td colSpan={5} />
                                             </tr>
                                         ) : null}
-                                        {virtualRows.rows.map((row) => {
+                                        {listVirtual.rows.map((row) => {
                                             const sk = rowToStarredApiKey(activeCategory, row.symbol);
                                             const starFilled = sk
                                                 ? isStarredResolved(starredAssets, sk.marketType, sk.symbol)
@@ -2016,17 +2130,8 @@ export function Market() {
                                             </tr>
                                             );
                                         })}
-                                        {Math.max(0, virtualRows.totalHeight - virtualRows.topSpacer - virtualRows.rows.length * virtualRows.rowHeight) > 0 ? (
-                                            <tr
-                                                style={{
-                                                    height: Math.max(
-                                                        0,
-                                                        virtualRows.totalHeight -
-                                                            virtualRows.topSpacer -
-                                                            virtualRows.rows.length * virtualRows.rowHeight
-                                                    ),
-                                                }}
-                                            >
+                                        {listVirtual.bottomSpacer > 0 ? (
+                                            <tr style={{ height: listVirtual.bottomSpacer }}>
                                                 <td colSpan={5} />
                                             </tr>
                                         ) : null}
@@ -2192,64 +2297,68 @@ export function Market() {
                                 />
                             )}
                         </div>
-                        <div className="terminal-card terminal-center-comparison">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                <strong style={{ fontSize: 14 }}>{t('market.comparisonChart', 'Karşılaştırma Grafiği (Baz 100)')}</strong>
-                                <div style={{ fontSize: 12, color: '#94a3b8' }}>{t('market.select2to4', 'Aynı kategoriden 2-4 sembol seç')}</div>
+                        {activeCategory !== 'FUTURES' ? (
+                            <div className="terminal-card terminal-center-comparison">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                    <strong style={{ fontSize: 14 }}>{t('market.comparisonChart', 'Karşılaştırma Grafiği (Baz 100)')}</strong>
+                                    <div style={{ fontSize: 12, color: '#94a3b8' }}>{t('market.select2to4', 'Aynı kategoriden 2-4 sembol seç')}</div>
+                                </div>
+                                {marketType ? (
+                                    <div className="terminal-compare-selector">
+                                        {instruments.slice(0, 12).map((ins) => {
+                                            const checked = compareSymbols.includes(ins.symbol);
+                                            return (
+                                                <label key={`cmp-${ins.symbol}`} className="terminal-chip">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checked}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setCompareSymbols((prev) => (prev.length >= 4 ? prev : [...prev, ins.symbol]));
+                                                            } else {
+                                                                setCompareSymbols((prev) => prev.filter((s) => s !== ins.symbol));
+                                                            }
+                                                        }}
+                                                    />
+                                                    {ins.symbol}
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                ) : null}
+                                {!marketType ? (
+                                    <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
+                                        {t('market.compareBondInfo', 'Tahvil kategorisinde karşılaştırma grafiği yerine üstteki ana chart kullanılır.')}
+                                    </div>
+                                ) : null}
+                                {loadingCompare ? (
+                                    <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
+                                        {t('market.compareLoading', 'Karşılaştırma yükleniyor...')}
+                                    </div>
+                                ) : compareRows.length === 0 ? (
+                                    <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
+                                        {t('market.comparePickTwo', 'Karşılaştırma için en az iki sembol seçin.')}
+                                    </div>
+                                ) : (
+                                    <div style={{ marginTop: 10 }}>
+                                        <MarketCompareLwChart
+                                            rows={compareRows}
+                                            symbols={compareSymbols.slice(0, 4)}
+                                            colors={['#38bdf8', '#22c55e', '#eab308', '#f87171']}
+                                            lineWidthBySymbol={lineWidthBySymbol}
+                                            timeframeLabel={range}
+                                            tokens={{
+                                                bgCard: tokens.bgCard,
+                                                border: tokens.border,
+                                                text: tokens.text,
+                                                textMuted: tokens.textMuted,
+                                            }}
+                                            height={250}
+                                        />
+                                    </div>
+                                )}
                             </div>
-                            {marketType ? <div className="terminal-compare-selector">
-                                {instruments.slice(0, 12).map((ins) => {
-                                    const checked = compareSymbols.includes(ins.symbol);
-                                    return (
-                                        <label key={`cmp-${ins.symbol}`} className="terminal-chip">
-                                            <input
-                                                type="checkbox"
-                                                checked={checked}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) {
-                                                        setCompareSymbols((prev) => (prev.length >= 4 ? prev : [...prev, ins.symbol]));
-                                                    } else {
-                                                        setCompareSymbols((prev) => prev.filter((s) => s !== ins.symbol));
-                                                    }
-                                                }}
-                                            />
-                                            {ins.symbol}
-                                        </label>
-                                    );
-                                })}
-                            </div> : null}
-                            {!marketType && activeCategory !== 'FUTURES' ? (
-                                <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
-                                    {t('market.compareBondInfo', 'Tahvil kategorisinde karşılaştırma grafiği yerine üstteki ana chart kullanılır.')}
-                                </div>
-                            ) : null}
-                            {loadingCompare ? (
-                                <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
-                                    {t('market.compareLoading', 'Karşılaştırma yükleniyor...')}
-                                </div>
-                            ) : compareRows.length === 0 ? (
-                                <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
-                                    {t('market.comparePickTwo', 'Karşılaştırma için en az iki sembol seçin.')}
-                                </div>
-                            ) : (
-                                <div style={{ marginTop: 10 }}>
-                                    <MarketCompareLwChart
-                                        rows={compareRows}
-                                        symbols={compareSymbols.slice(0, 4)}
-                                        colors={['#38bdf8', '#22c55e', '#eab308', '#f87171']}
-                                        lineWidthBySymbol={lineWidthBySymbol}
-                                        timeframeLabel={range}
-                                        tokens={{
-                                            bgCard: tokens.bgCard,
-                                            border: tokens.border,
-                                            text: tokens.text,
-                                            textMuted: tokens.textMuted,
-                                        }}
-                                        height={250}
-                                    />
-                                </div>
-                            )}
-                        </div>
+                        ) : null}
                         </div>
 
                         <div className="terminal-card terminal-right-panel" style={sideRailBoxStyle}>
@@ -2315,26 +2424,11 @@ export function Market() {
                                             </span>
                                         </div>
                                     ))}
-                                    <strong style={{ fontSize: 13, marginTop: 4 }}>
-                                        {t('market.futuresHighestCarry', 'En yüksek taşıma (baz/fiyat %)')}
-                                    </strong>
-                                    {futuresHighestCarry.map((v) => (
-                                        <div key={`carry-${v.symbol}`} className="terminal-mini-item">
-                                            <span>{parseViopContractLabel(v.symbol)}</span>
-                                            <span>%{formatCarry(v.carry)}</span>
-                                        </div>
-                                    ))}
-                                    {futuresHeaderMetrics ? (
-                                        <div className="terminal-mini-item">
-                                            <span>{t('market.spotFuturesSpread', 'Spot / vadeli farkı (baz)')}</span>
-                                            <span>{futuresHeaderMetrics.basis.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
-                                        </div>
-                                    ) : null}
-                                    {futuresHeaderMetrics ? (
+                                    {futuresHeaderMetrics && selectedInstrumentVm ? (
                                         <div className="terminal-mini-item">
                                             <span>{t('market.direction', 'Yön')}</span>
                                             <span>
-                                                {futuresHeaderMetrics.basis >= 0
+                                                {selectedInstrumentVm.changePercent >= 0
                                                     ? t('market.directionUp', 'Yukarı')
                                                     : t('market.directionDown', 'Aşağı')}
                                             </span>
