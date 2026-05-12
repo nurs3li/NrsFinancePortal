@@ -24,6 +24,7 @@ public class NewsIngestService {
 
     private final FinHubClient finHubClient;
     private final NewsRepository newsRepository;
+    private final TranslationService translationService;
 
     private static final Map<String, NewsCategory> CATEGORY_MAP = Map.of(
             "general", NewsCategory.GENERAL,
@@ -79,6 +80,13 @@ public class NewsIngestService {
                             .category(candidateCategory)
                             .publishedAt(parseDateTime(item.getDatetime()))
                             .build();
+
+                    if (translationService.isEnabled()) {
+                        String trTitle = translationService.translate(news.getTitle());
+                        if (trTitle != null && !trTitle.isBlank()) {
+                            news.setTitleTr(trTitle);
+                        }
+                    }
 
                     try {
                         newsRepository.saveAndFlush(news);

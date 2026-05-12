@@ -29,8 +29,14 @@ public class News {
     @Column(nullable = false, length = 500)
     private String title;
 
+    @Column(name = "title_tr", length = 500)
+    private String titleTr;
+
     @Column(columnDefinition = "TEXT")
     private String summary;
+
+    @Column(name = "summary_tr", columnDefinition = "TEXT")
+    private String summaryTr;
 
     @Column(length = 100)
     private String source; // FinHub, Bloomberg, vb.
