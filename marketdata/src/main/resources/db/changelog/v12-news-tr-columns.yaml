@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - changeSet:
+      id: v12-news-title-summary-tr
+      author: nurseli
+      changes:
+        - addColumn:
+            tableName: news
+            columns:
+              - column:
+                  name: title_tr
+                  type: VARCHAR(500)
+              - column:
+                  name: summary_tr
+                  type: TEXT

@@ -2,6 +2,7 @@ databaseChangeLog:
   - changeSet:
       id: 011-viop-perf-indexes-derivative-snapshot
       author: codex
+      failOnError: false
       changes:
         - createIndex:
             tableName: derivative_snapshot
@@ -11,11 +12,11 @@ databaseChangeLog:
                   name: contract_code
               - column:
                   name: as_of
-                  descending: true
 
   - changeSet:
       id: 011-viop-perf-indexes-open-interest-snapshot
       author: codex
+      failOnError: false
       changes:
         - createIndex:
             tableName: open_interest_snapshot
@@ -25,4 +26,3 @@ databaseChangeLog:
                   name: contract_code
               - column:
                   name: as_of
-                  descending: true

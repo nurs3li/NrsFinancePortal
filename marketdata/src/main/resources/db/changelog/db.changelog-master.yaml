@@ -23,3 +23,5 @@ databaseChangeLog:
       file: db/changelog/v10-viop-seq-move.yaml
   - include:
       file: db/changelog/v11-viop-perf-indexes.yaml
+  - include:
+      file: db/changelog/v12-news-tr-columns.yaml
