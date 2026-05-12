@@ -28,12 +28,15 @@ export type ReviewTaskView = {
     readOnlyHint: string | null;
 };
 
+// Spring Data 3.3+ VIA_DTO shape (bkz. NrsFinancePortalApplication).
 type PageResponse<T> = {
     content: T[];
-    totalElements: number;
-    totalPages: number;
-    number: number;
-    size: number;
+    page: {
+        size: number;
+        number: number;
+        totalElements: number;
+        totalPages: number;
+    };
 };
 
 type FmTaskSummary = {
@@ -102,11 +105,11 @@ export function FmTasks() {
                     list = list.filter((t) => !COMPLETED_STATUSES.includes(t.status));
                 }
                 setTasks(list);
-                setTotalPages(pageData?.totalPages ?? 0);
+                setTotalPages(pageData?.page?.totalPages ?? 0);
                 setTotalElements(
                     (tabConfig.mode === 'me' && 'filterHighPriority' in tabConfig && tabConfig.filterHighPriority) || hideCompleted
                         ? list.length
-                        : (pageData?.totalElements ?? 0),
+                        : (pageData?.page?.totalElements ?? 0),
                 );
             })
             .catch((err) => {

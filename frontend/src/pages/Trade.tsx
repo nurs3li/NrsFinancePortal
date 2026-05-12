@@ -47,12 +47,39 @@ type TradeHistoryItem = {
     tradedAt: string;
 };
 
+/*
+ * Spring Data 3.3+ VIA_DTO shape: pagination metadata `page.*` altinda. Buyuk olasilikla
+ * backend bu modda calisiyor (NrsFinancePortalApplication'da
+ * @EnableSpringDataWebSupport(VIA_DTO)). Yine de hata-tolerant olmak icin **eski** PageImpl
+ * formatini (top-level `totalPages/totalElements/number/size`) da bir geriye-uyumluluk
+ * fallback'i olarak kabul ediyoruz. Bu sayede backend bir gun yine VIA_DTO disinda donerse
+ * UI patlamak yerine sayfalama bilgilerini eski alanlardan okuyabilir.
+ */
 type Page<T> = {
     content: T[];
-    totalElements: number;
-    number: number;
-    size: number;
+    page?: {
+        size: number;
+        number: number;
+        totalElements: number;
+        totalPages: number;
+    };
+    // Eski PageImpl alanlari (opsiyonel)
+    size?: number;
+    number?: number;
+    totalElements?: number;
+    totalPages?: number;
 };
+
+type PageMeta = { size: number; number: number; totalElements: number; totalPages: number };
+
+/** Page<T> her iki shape'inde de tek tip pagination metadata dondurur. */
+function readPageMeta<T>(p: Page<T> | null | undefined): PageMeta {
+    const size = p?.page?.size ?? p?.size ?? 0;
+    const number = p?.page?.number ?? p?.number ?? 0;
+    const totalElements = p?.page?.totalElements ?? p?.totalElements ?? (p?.content?.length ?? 0);
+    const totalPages = p?.page?.totalPages ?? p?.totalPages ?? 1;
+    return { size, number, totalElements, totalPages };
+}
 
 type BalanceMe = { currentAmount: number };
 type PortfolioRow = { symbol: string; type: string; quantity: number };
@@ -474,8 +501,9 @@ export function Trade() {
             ? 'rgba(57, 255, 20, 0.22)'
             : 'rgba(248, 113, 113, 0.28)';
 
-    const histTotalPages = history ? Math.max(1, Math.ceil(history.totalElements / history.size)) : 1;
-    const histPageItems = buildHistPageItems(history?.number ?? 0, histTotalPages);
+    const histMeta = readPageMeta(history);
+    const histTotalPages = histMeta.totalPages || 1;
+    const histPageItems = buildHistPageItems(histMeta.number, histTotalPages);
 
     return (
         <div className="trade-terminal-root" style={{ background: tokens.bg, color: tokens.text }}>
@@ -785,7 +813,7 @@ export function Trade() {
                                         <button
                                             type="button"
                                             className="trade-page-btn"
-                                            disabled={history.number <= 0}
+                                            disabled={histMeta.number <= 0}
                                             onClick={() => setHistoryPage((p) => Math.max(0, p - 1))}
                                         >
                                             {t('trade.prevPage', 'Önceki')}
@@ -799,7 +827,7 @@ export function Trade() {
                                                 <button
                                                     key={item}
                                                     type="button"
-                                                    className={`trade-page-btn ${item === history.number ? 'trade-page-btn--active' : ''}`}
+                                                    className={`trade-page-btn ${item === histMeta.number ? 'trade-page-btn--active' : ''}`}
                                                     onClick={() => setHistoryPage(item)}
                                                 >
                                                     {item + 1}
@@ -809,7 +837,7 @@ export function Trade() {
                                         <button
                                             type="button"
                                             className="trade-page-btn"
-                                            disabled={history.number >= histTotalPages - 1}
+                                            disabled={histMeta.number >= histTotalPages - 1}
                                             onClick={() => setHistoryPage((p) => p + 1)}
                                         >
                                             {t('trade.nextPage', 'Sonraki')}

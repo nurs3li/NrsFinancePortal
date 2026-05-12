@@ -14,13 +14,14 @@ public interface OpenInterestSnapshotRepository extends JpaRepository<OpenIntere
     void deleteByContractCode(String contractCode);
 
     /**
-     * Her contract için en son OI satırını tek turda (DISTINCT ON) döndürür.
-     * `latest()` çağrısındaki contract başına ayrı OI lookup'larını batch'ler.
+     * Her contract için en son OI satırı; `latest()` çağrısındaki contract başına ayrı OI lookup'larını
+     * batch'liyor. Native DISTINCT ON yerine JPQL: Hibernate entity mapping garantili.
      */
-    @Query(value = """
-            select distinct on (contract_code) *
-            from open_interest_snapshot
-            order by contract_code, as_of desc
-            """, nativeQuery = true)
+    @Query("""
+            select o from OpenInterestSnapshot o
+            where o.asOf = (
+                select max(o2.asOf) from OpenInterestSnapshot o2 where o2.contractCode = o.contractCode
+            )
+            """)
     List<OpenInterestSnapshot> findLatestPerContract();
 }

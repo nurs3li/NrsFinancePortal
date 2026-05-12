@@ -219,6 +219,7 @@ app:
     provider: ${APP_TRANSLATION_PROVIDER:googlefree}
     base-url: ${APP_TRANSLATION_BASE_URL:http://localhost:5000}
     timeout-ms: ${APP_TRANSLATION_TIMEOUT_MS:2500}
+    cache-max-entries: ${APP_TRANSLATION_CACHE_MAX:5000}
   data-sources:
     tcmb:
       url: https://www.tcmb.gov.tr/kurlar/today.xml
@@ -249,7 +250,13 @@ app:
       - JNJ
       - V
       - WMT
+    incremental-gap-heal-days: ${EQUITY_INCREMENTAL_GAP_HEAL_DAYS:21}
     history-incremental-cron: ${EQUITY_HISTORY_INCREMENTAL_CRON:0 30 2 * * *}
+    history-incremental-zone: ${EQUITY_HISTORY_INCREMENTAL_ZONE:Europe/Istanbul}
+    initial-seed:
+      enabled: ${EQUITY_INITIAL_SEED_ENABLED:true}
+      min-candles: ${EQUITY_INITIAL_SEED_MIN_CANDLES:120}
+      stale-days: ${EQUITY_INITIAL_SEED_STALE_DAYS:4}
     history-backfill:
       enabled: ${EQUITY_HISTORY_BACKFILL_ENABLED:false}
       periodDays: ${EQUITY_HISTORY_BACKFILL_PERIOD_DAYS:365}
@@ -283,6 +290,8 @@ app:
       - GLD
       - VWO
       - EEM
+    history-incremental-cron: ${ETF_HISTORY_INCREMENTAL_CRON:0 45 6 * * *}
+    history-incremental-days: ${ETF_HISTORY_INCREMENTAL_DAYS:30}
   providers:
     fx:
       bank-proxy-evds-enabled: true
@@ -292,5 +301,37 @@ app:
       dir: ${VIOP_BACKFILL_DIR:artifacts/viop}
       pattern: ${VIOP_BACKFILL_PATTERN:viop_*.csv}
       shutdownOnComplete: ${VIOP_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
+      # Periyodik tarama: klasore yeni eklenen viop_YYYYMMDD.csv dosyalari her 3 saatte bir
+      # otomatik DB'ye alinir (idempotent — duplicate satirlar atlanir).
+      incremental:
+        enabled: ${VIOP_BACKFILL_INCREMENTAL_ENABLED:true}
+        cron: ${VIOP_BACKFILL_INCREMENTAL_CRON:0 0 */3 * * *}
+        zone: ${VIOP_BACKFILL_INCREMENTAL_ZONE:Europe/Istanbul}
     rollups:
       refresh-on-startup: ${VIOP_ROLLUPS_REFRESH_ON_START:true}
+    query:
+      # Kategori dengeli VIOP whitelist: 10 doviz + 1 endeks + 2 emtia = 13 kontrat.
+      # Bos liste (allowed-contracts: []) tum kontratlari geri getirir (devre disi).
+      allowed-contracts:
+        # Doviz: USDTRY May'26 -> Ara'26 (en yakin 8 vade)
+        - F_USDTRY0526
+        - F_USDTRY0626
+        - F_USDTRY0726
+        - F_USDTRY0826
+        - F_USDTRY0926
+        - F_USDTRY1026
+        - F_USDTRY1126
+        - F_USDTRY1226
+        # Doviz: EUR caprazlari Ara'26
+        - F_EURUSD1226
+        - F_EURTRY1226
+        # Endeks: BIST30 Haz'26
+        - F_XU0300626
+        # Emtia: Gram Altin (XAUTRY) + ONS Altin (XAUUSD), Haz'26
+        - F_XAUTRYM0626
+        - F_XAUUSD0626
+        # Pay vadelileri Haz'26 (en likit BIST hisseleri)
+        - F_THYAO0626
+        - F_EREGL0626
+        - F_SASA0626
+        - F_SISE0626

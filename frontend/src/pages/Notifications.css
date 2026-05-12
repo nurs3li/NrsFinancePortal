@@ -1,0 +1,524 @@
+/*
+ * NRS Finance Bildirimler — Premium Notification Hub
+ *
+ * Tema renkleri:
+ *  - Silver: rgba(192, 192, 192, X) — kart sinirlari, ikonlar, soluk on plan elemanlari
+ *  - Electric blue: #38bdf8 — okunmamis satir aksanasi ve aktif tab parlamasi
+ *  - Kategori renkleri: yesil (#22c55e onay), kirmizi (#ef4444 guvenlik), mavi (#38bdf8 inceleme)
+ *
+ * Tum stiller `var(--notif-*)` ozelliklerinden gucleniyor; karanlık/aydinlik tema icin
+ * Notifications.tsx `pageVars` ile bu degiskenler .notif-page uzerinde set edilir.
+ * Asagidaki degerler light tema + IDE (custom property) cozumu icin baslangic fallback.
+ */
+
+.notif-page {
+    --notif-bg: #f8fafc;
+    --notif-text: #0f172a;
+    --notif-muted: #64748b;
+    padding: 28px 32px 40px;
+    min-height: 100%;
+    color: var(--notif-text);
+    background: var(--notif-bg);
+}
+
+.notif-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.notif-header__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(192, 192, 192, 0.16), rgba(192, 192, 192, 0.04));
+    border: 1px solid rgba(192, 192, 192, 0.18);
+    color: #d4d4d8;
+    /* Subtle silver shimmer */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.notif-header__title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+
+.notif-header__count {
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--notif-muted);
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(192, 192, 192, 0.06);
+    border: 1px solid rgba(192, 192, 192, 0.12);
+}
+
+/*
+ * Segmented Control (Tab) — "Tumu" / "Okunmamis"
+ * Aktif sekme gumus glow + alt cizgi ile vurgulaniyor.
+ */
+.notif-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px;
+    margin-bottom: 18px;
+    background: rgba(15, 23, 42, 0.45);
+    border: 1px solid rgba(192, 192, 192, 0.12);
+    border-radius: 12px;
+    position: relative;
+}
+
+.notif-tab {
+    position: relative;
+    padding: 8px 18px;
+    font-size: 0.86rem;
+    font-weight: 500;
+    color: var(--notif-muted);
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease;
+    letter-spacing: 0.005em;
+}
+
+.notif-tab:hover {
+    color: var(--notif-text);
+}
+
+.notif-tab.is-active {
+    color: #f8fafc;
+    background: linear-gradient(180deg, rgba(192, 192, 192, 0.14), rgba(192, 192, 192, 0.04));
+    box-shadow:
+        0 0 0 1px rgba(192, 192, 192, 0.18) inset,
+        0 2px 12px rgba(192, 192, 192, 0.08);
+}
+
+.notif-tab.is-active::after {
+    content: "";
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: 2px;
+    height: 1.5px;
+    background: linear-gradient(90deg, transparent, rgba(192, 192, 192, 0.6), transparent);
+    border-radius: 999px;
+}
+
+.notif-tab__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    margin-left: 8px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    background: rgba(56, 189, 248, 0.18);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+/* Liste */
+.notif-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.notif-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px 12px 18px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.35);
+    border: 1px solid rgba(192, 192, 192, 0.1);
+    cursor: pointer;
+    overflow: hidden;
+    transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+/*
+ * Okunmamis bildirimler icin sol kenarda 3px elektrik mavisi cizgi.
+ * Okunmuslarda ayni alan gumus tonunda kalir.
+ */
+.notif-item::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: rgba(192, 192, 192, 0.18);
+    transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.notif-item.is-unread::before {
+    background: #38bdf8;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.45);
+}
+
+.notif-item:hover {
+    background: rgba(30, 41, 59, 0.55);
+    border-color: rgba(192, 192, 192, 0.22);
+}
+
+.notif-item:hover .notif-item__chevron {
+    opacity: 0.85;
+    transform: translateX(2px);
+}
+
+.notif-item:hover .notif-item__hint {
+    opacity: 0.8;
+}
+
+.notif-item__type-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    border: 1px solid currentColor;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    flex-shrink: 0;
+}
+
+.notif-item__main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.notif-item__title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--notif-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.notif-item.is-read .notif-item__title {
+    color: var(--notif-muted);
+    font-weight: 500;
+}
+
+.notif-item__meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.72rem;
+    color: var(--notif-muted);
+}
+
+.notif-item__type-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    background: rgba(192, 192, 192, 0.08);
+    border: 1px solid rgba(192, 192, 192, 0.18);
+    color: var(--notif-muted);
+}
+
+.notif-item__date {
+    color: var(--notif-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.notif-item__count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: rgba(56, 189, 248, 0.18);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.notif-item__hint {
+    font-size: 0.7rem;
+    color: rgba(192, 192, 192, 0.7);
+    opacity: 0;
+    transition: opacity 0.18s ease;
+    white-space: nowrap;
+}
+
+.notif-item__chevron {
+    color: rgba(192, 192, 192, 0.55);
+    opacity: 0.35;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.notif-empty,
+.notif-loading,
+.notif-error {
+    padding: 40px 12px;
+    text-align: center;
+    color: var(--notif-muted);
+    font-size: 0.9rem;
+    border: 1px dashed rgba(192, 192, 192, 0.16);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.25);
+}
+
+.notif-error {
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.4);
+    background: rgba(248, 113, 113, 0.06);
+}
+
+/* Pagination */
+.notif-pagination {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 20px;
+    justify-content: center;
+}
+
+.notif-page-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(192, 192, 192, 0.16);
+    background: rgba(15, 23, 42, 0.45);
+    color: var(--notif-text);
+    cursor: pointer;
+    font-size: 0.82rem;
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.notif-page-btn:hover:not(:disabled) {
+    background: rgba(30, 41, 59, 0.6);
+    border-color: rgba(192, 192, 192, 0.28);
+}
+
+.notif-page-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.notif-page-info {
+    font-size: 0.78rem;
+    color: var(--notif-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Glassmorphism Modal
+ * Backdrop blur + scale-in animasyon. Z-index header (5000) altinda yer alir
+ * cunku modal odaklanmis durumdayken header gezinmesi hala calismali; modal
+ * kendi backdrop'una tiklayinca kapaniyor.
+ */
+.notif-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.55);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    z-index: 4500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    animation: notifModalFadeIn 0.18s ease-out;
+}
+
+.notif-modal {
+    position: relative;
+    width: min(620px, 100%);
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    padding: 26px 28px 24px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.92));
+    border: 1px solid rgba(192, 192, 192, 0.16);
+    box-shadow:
+        0 30px 70px rgba(2, 6, 23, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    color: var(--notif-text);
+    animation: notifModalScaleIn 0.22s cubic-bezier(0.2, 0.85, 0.35, 1.05);
+}
+
+.notif-modal__close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid rgba(192, 192, 192, 0.12);
+    background: rgba(15, 23, 42, 0.45);
+    color: var(--notif-muted);
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease;
+}
+
+.notif-modal__close:hover {
+    background: rgba(30, 41, 59, 0.7);
+    color: var(--notif-text);
+}
+
+.notif-modal__head {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 16px;
+    padding-right: 40px;
+}
+
+.notif-modal__head-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    border: 1px solid currentColor;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    flex-shrink: 0;
+}
+
+.notif-modal__title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0 0 4px;
+    color: var(--notif-text);
+    letter-spacing: -0.005em;
+}
+
+.notif-modal__subtitle {
+    font-size: 0.74rem;
+    color: var(--notif-muted);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.notif-modal__divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(192, 192, 192, 0.18), transparent);
+    margin: 16px 0;
+    border: 0;
+}
+
+.notif-modal__body {
+    font-size: 0.88rem;
+    line-height: 1.65;
+    color: var(--notif-text);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.notif-modal__details {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 8px 16px;
+    font-size: 0.8rem;
+}
+
+.notif-modal__detail-label {
+    color: var(--notif-muted);
+    font-weight: 500;
+}
+
+.notif-modal__detail-value {
+    color: var(--notif-text);
+    word-break: break-word;
+}
+
+.notif-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 22px;
+}
+
+.notif-modal__btn {
+    padding: 8px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(192, 192, 192, 0.18);
+    background: rgba(15, 23, 42, 0.55);
+    color: var(--notif-text);
+    font-size: 0.84rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.notif-modal__btn:hover {
+    background: rgba(30, 41, 59, 0.75);
+    border-color: rgba(192, 192, 192, 0.32);
+}
+
+.notif-modal__btn--primary {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(56, 189, 248, 0.08));
+    border-color: rgba(56, 189, 248, 0.5);
+    color: #e0f2fe;
+}
+
+.notif-modal__btn--primary:hover {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.32), rgba(56, 189, 248, 0.14));
+    border-color: rgba(56, 189, 248, 0.65);
+}
+
+@keyframes notifModalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes notifModalScaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.96) translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* Mobile uyumu */
+@media (max-width: 720px) {
+    .notif-page {
+        padding: 20px 14px 32px;
+    }
+    .notif-item {
+        grid-template-columns: auto 1fr auto;
+        padding: 12px 14px;
+    }
+    .notif-item__hint {
+        display: none;
+    }
+    .notif-modal {
+        padding: 22px 18px 18px;
+    }
+}
