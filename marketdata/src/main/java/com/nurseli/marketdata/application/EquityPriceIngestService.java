@@ -17,18 +17,26 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EquityPriceIngestService {
+
+    /** Anlık Finnhub quote satırlarından türetilen günlük mum (harici mum API'si olmadan). */
+    public static final String SOURCE_FINHUB_QUOTE_ROLLUP = "FINHUB_QUOTE_ROLLUP";
 
     private final FinHubClient finHubClient;
     private final StooqCsvClient stooqCsvClient;
@@ -71,6 +79,15 @@ public class EquityPriceIngestService {
                 log.error("[EQUITY] Failed for symbol={}: {}", symbol, e.getMessage());
             }
         }
+        LocalDate endDay = LocalDate.now();
+        LocalDate startRollup = endDay.minusDays(2);
+        for (String symbol : symbols) {
+            try {
+                rollupEquityDailyCandlesFromFinhubQuotes(symbol, startRollup, endDay);
+            } catch (Exception ex) {
+                log.warn("[EQUITY_ROLLUP] symbol={} reason={}", symbol, ex.getMessage());
+            }
+        }
     }
 
     @Transactional
@@ -101,6 +118,7 @@ public class EquityPriceIngestService {
             for (String symbol : batch) {
                 try {
                     ingestHistoryForSymbol(symbol, from, to, true);
+                    rollupEquityDailyCandlesFromFinhubQuotes(symbol, from, to);
                 } catch (Exception ex) {
                     log.warn("[EQUITY_HISTORY] Backfill failed symbol={} reason={}", symbol, ex.getMessage());
                 }
@@ -119,17 +137,119 @@ public class EquityPriceIngestService {
         LocalDate today = LocalDate.now();
         for (String symbol : symbols) {
             try {
-                LocalDate from = repository.findTopBySymbolOrderByTimestampDesc(symbol)
-                        .map(x -> x.getTimestamp().toLocalDate().plusDays(1))
+                // Son satır market_price_history içinde çoğunlukla 10 dk'da bir gelen FINHUB quote'tur;
+                // grafiğin kaynağı equity_daily_candle olduğu için "son gün" buradan türetilmeli (aksi halde
+                // from = bugün+1 olur ve incremental hiç çalışmaz).
+                LocalDate fromRaw = equityDailyCandleRepository.findTopBySymbolOrderByAsOfDesc(symbol)
+                        .map(c -> c.getAsOf().plusDays(1))
                         .orElse(today.minusDays(365));
+                int heal = Math.max(0, equityProperties.getIncrementalGapHealDays());
+                LocalDate from = fromRaw.minusDays(heal);
+                LocalDate oldest = today.minusDays(365);
+                if (from.isBefore(oldest)) {
+                    from = oldest;
+                }
                 if (from.isAfter(today)) {
                     continue;
                 }
                 ingestHistoryForSymbol(symbol, from, today, true);
+                rollupEquityDailyCandlesFromFinhubQuotes(symbol, from, today);
             } catch (Exception ex) {
                 log.warn("[EQUITY_HISTORY] Incremental failed symbol={} reason={}", symbol, ex.getMessage());
             }
         }
+    }
+
+    /**
+     * DB'deki anlık {@code FINHUB} quote satırlarını takvim gününe göre gruplayıp OHLC üretir ve
+     * {@code equity_daily_candle} içine yazar / günceller. Böylece Finnhub mum kotası olmadan da
+     * grafik son günleri sizin gelen veriden güncellenir; geçmiş Yahoo/Stooq mumlarının üzerine
+     * (aynı günde quote varsa) bu kaynak önceliklidir.
+     */
+    public void rollupEquityDailyCandlesFromFinhubQuotes(String symbol, LocalDate from, LocalDate to) {
+        if (symbol == null || symbol.isBlank() || from == null || to == null || from.isAfter(to)) {
+            return;
+        }
+        String sym = symbol.trim().toUpperCase();
+        LocalDateTime start = from.atStartOfDay();
+        LocalDateTime end = to.plusDays(1).atStartOfDay();
+        List<MarketPriceHistory> rows =
+                repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(sym, start, end);
+        Map<LocalDate, List<MarketPriceHistory>> byDay = new TreeMap<>();
+        for (MarketPriceHistory r : rows) {
+            if (!"FINHUB".equals(r.getSource())) {
+                continue;
+            }
+            LocalDate d = r.getTimestamp().toLocalDate();
+            if (d.isBefore(from) || d.isAfter(to)) {
+                continue;
+            }
+            byDay.computeIfAbsent(d, k -> new ArrayList<>()).add(r);
+        }
+        for (Map.Entry<LocalDate, List<MarketPriceHistory>> e : byDay.entrySet()) {
+            List<MarketPriceHistory> dayRows = e.getValue();
+            dayRows.sort(Comparator.comparing(MarketPriceHistory::getTimestamp));
+            BigDecimal open = mid(dayRows.get(0));
+            BigDecimal close = mid(dayRows.get(dayRows.size() - 1));
+            BigDecimal high = dayRows.stream().map(this::mid).max(Comparator.naturalOrder()).orElse(open);
+            BigDecimal low = dayRows.stream().map(this::mid).min(Comparator.naturalOrder()).orElse(open);
+            BigDecimal vol = syntheticVolumeFromTicks(dayRows, open, high, low, close);
+
+            EquityDailyCandle candle = equityDailyCandleRepository
+                    .findBySymbolAndAsOf(sym, e.getKey())
+                    .orElseGet(() -> {
+                        EquityDailyCandle c = new EquityDailyCandle();
+                        c.setSymbol(sym);
+                        c.setAsOf(e.getKey());
+                        return c;
+                    });
+            candle.setOpenPrice(open);
+            candle.setHighPrice(high);
+            candle.setLowPrice(low);
+            candle.setClosePrice(close);
+            candle.setVolume(vol);
+            candle.setSource(SOURCE_FINHUB_QUOTE_ROLLUP);
+            equityDailyCandleRepository.save(candle);
+        }
+        if (!byDay.isEmpty()) {
+            log.info("[EQUITY_ROLLUP] symbol={} days={} window={}..{}", sym, byDay.size(), from, to);
+        }
+    }
+
+    private BigDecimal mid(MarketPriceHistory row) {
+        return row.getBuyPrice()
+                .add(row.getSellPrice())
+                .divide(BigDecimal.valueOf(2), 6, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal syntheticVolumeFromTicks(
+            List<MarketPriceHistory> dayRows,
+            BigDecimal open,
+            BigDecimal high,
+            BigDecimal low,
+            BigDecimal close
+    ) {
+        if (dayRows == null || dayRows.isEmpty()) {
+            return BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
+        }
+        BigDecimal maxPrice = List.of(open, high, low, close).stream()
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .orElse(BigDecimal.ZERO);
+        BigDecimal minPrice = List.of(open, high, low, close).stream()
+                .filter(Objects::nonNull)
+                .min(Comparator.naturalOrder())
+                .orElse(BigDecimal.ZERO);
+        BigDecimal range = maxPrice.subtract(minPrice).abs();
+        if (maxPrice.signum() <= 0) {
+            return BigDecimal.valueOf(dayRows.size()).setScale(6, RoundingMode.HALF_UP);
+        }
+        BigDecimal volatilityScore = range.divide(maxPrice, 8, RoundingMode.HALF_UP);
+        BigDecimal tradeCountScore = BigDecimal.valueOf(dayRows.size());
+        return tradeCountScore
+                .multiply(BigDecimal.valueOf(1000))
+                .multiply(BigDecimal.ONE.add(volatilityScore))
+                .setScale(6, RoundingMode.HALF_UP);
     }
 
     private void ingestHistoryForSymbol(String symbol, LocalDate from, LocalDate to, boolean allowStooqFallback) {
@@ -215,7 +335,9 @@ public class EquityPriceIngestService {
     }
 
     private List<DailyBar> fetchDailyBarsFromYahoo(String symbol, LocalDate from, LocalDate to) {
-        return yahooChartClient.fetchDailyBars(symbol).stream()
+        long spanDays = ChronoUnit.DAYS.between(from, to) + 7;
+        String range = yahooChartRangeForSpan(spanDays);
+        return yahooChartClient.fetchDailyBars(symbol, range).stream()
                 .filter(r -> !r.day().isBefore(from) && !r.day().isAfter(to))
                 .map(r -> new DailyBar(
                         r.day(),
@@ -226,6 +348,26 @@ public class EquityPriceIngestService {
                         r.volume()
                 ))
                 .toList();
+    }
+
+    /** Yahoo chart `range` — sabit 1y yerine pencere; uzun backfill'de eksik mum önlenir. */
+    static String yahooChartRangeForSpan(long spanDays) {
+        if (spanDays <= 7) {
+            return "1mo";
+        }
+        if (spanDays <= 35) {
+            return "3mo";
+        }
+        if (spanDays <= 100) {
+            return "6mo";
+        }
+        if (spanDays <= 400) {
+            return "1y";
+        }
+        if (spanDays <= 800) {
+            return "2y";
+        }
+        return "max";
     }
 
     private void saveDailyCandleIfAbsent(String symbol, DailyBar bar, String source) {

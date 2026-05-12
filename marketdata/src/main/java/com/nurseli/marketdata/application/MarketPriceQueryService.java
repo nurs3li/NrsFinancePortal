@@ -38,7 +38,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MarketPriceQueryService {
 
-    private static final Set<Integer> ALLOWED_DAYS = Set.of(1, 7, 14, 30, 90, 180, 365);
+    // 3 ve 5: Frontend "1D" range'i icin. Equity/FX/Crypto repository'leri yalnizca daily candle
+    // tuttugu icin days=1 secilince hafta sonu/tatilde sadece 1 mum gelebiliyor; lightweight-charts
+    // ise >= 2 nokta istiyor. days=5 ile son 5 takvim gunu icindeki en az 2 is gunu kapanisi
+    // garantilenip "Analiz grafigi icin veri bulunamadi" mesaji onlenir.
+    private static final Set<Integer> ALLOWED_DAYS = Set.of(1, 3, 5, 7, 14, 30, 90, 180, 365);
     private static final int MAX_SYMBOLS = 8;
     private static final BigDecimal ZERO_VOLUME = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
 
@@ -106,7 +110,23 @@ public class MarketPriceQueryService {
     }
 
     public Map<String, MarketPriceLatestResponse> getLatestFunds() {
-        return getLatestBySource("ETF");
+        Map<String, MarketPriceLatestResponse> fromFinnhub = getLatestBySource("ETF");
+        Map<String, MarketPriceLatestResponse> fromYahoo = getLatestBySource("ETF_YAHOO");
+        if (fromYahoo.isEmpty()) {
+            return fromFinnhub;
+        }
+        if (fromFinnhub.isEmpty()) {
+            return fromYahoo;
+        }
+        Map<String, MarketPriceLatestResponse> merged = new LinkedHashMap<>(fromFinnhub);
+        for (var e : fromYahoo.entrySet()) {
+            MarketPriceLatestResponse y = e.getValue();
+            MarketPriceLatestResponse cur = merged.get(e.getKey());
+            if (cur == null || y.timestamp().isAfter(cur.timestamp())) {
+                merged.put(e.getKey(), y);
+            }
+        }
+        return merged;
     }
 
     public Map<String, MarketPriceLatestResponse> getLatestEquity() {
