@@ -1,9 +1,13 @@
 package com.nurseli.marketdata.application;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.nurseli.marketdata.config.TranslationProperties;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.net.URLDecoder;
@@ -18,24 +22,69 @@ public class TranslationService {
 
     private final TranslationProperties properties;
 
-    public String translate(String text) {
-        if (text == null || text.isBlank()) return text;
-        if (!properties.isEnabled()) return text;
+    private Cache<String, String> translationCache;
+    private WebClient plainHttp;
+    private WebClient libreHttp;
 
+    @PostConstruct
+    void initClientsAndCache() {
+        int maxBody = 8 * 1024 * 1024;
+        ExchangeStrategies strategies = ExchangeStrategies.builder()
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(maxBody))
+                .build();
+        this.plainHttp = WebClient.builder().exchangeStrategies(strategies).build();
+        this.libreHttp = WebClient.builder()
+                .baseUrl(properties.getBaseUrl())
+                .exchangeStrategies(strategies)
+                .build();
+        int maxEntries = Math.max(100, properties.getCacheMaxEntries());
+        this.translationCache = Caffeine.newBuilder()
+                .maximumSize(maxEntries)
+                .expireAfterWrite(Duration.ofHours(72))
+                .build();
+    }
+
+    public boolean isEnabled() {
+        return properties.isEnabled();
+    }
+
+    public String translate(String text) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+        if (!properties.isEnabled()) {
+            return text;
+        }
+        try {
+            return translationCache.get(text, this::translateWithoutCache);
+        } catch (Exception ignored) {
+            return text;
+        }
+    }
+
+    private String translateWithoutCache(String text) {
         String provider = properties.getProvider() == null ? "libre" : properties.getProvider().trim().toLowerCase();
         if ("googlefree".equals(provider) || "google".equals(provider)) {
             String fromGoogle = translateWithGoogleFree(text);
-            if (fromGoogle != null) return fromGoogle;
+            if (fromGoogle != null) {
+                return fromGoogle;
+            }
             String fromApertium = translateWithApertium(text);
-            if (fromApertium != null) return fromApertium;
+            if (fromApertium != null) {
+                return fromApertium;
+            }
             String fromMyMemory = translateWithMyMemory(text);
             return fromMyMemory == null ? text : fromMyMemory;
         }
         if ("apertium".equals(provider)) {
             String fromApertium = translateWithApertium(text);
-            if (fromApertium != null) return fromApertium;
+            if (fromApertium != null) {
+                return fromApertium;
+            }
             String fromGoogle = translateWithGoogleFree(text);
-            if (fromGoogle != null) return fromGoogle;
+            if (fromGoogle != null) {
+                return fromGoogle;
+            }
             String fromMyMemory = translateWithMyMemory(text);
             return fromMyMemory == null ? text : fromMyMemory;
         }
@@ -44,24 +93,30 @@ public class TranslationService {
             return fromMyMemory == null ? text : fromMyMemory;
         }
         String fromLibre = translateWithLibre(text);
-        if (fromLibre != null) return fromLibre;
+        if (fromLibre != null) {
+            return fromLibre;
+        }
         String fromGoogle = translateWithGoogleFree(text);
-        if (fromGoogle != null) return fromGoogle;
+        if (fromGoogle != null) {
+            return fromGoogle;
+        }
         String fromApertium = translateWithApertium(text);
-        if (fromApertium != null) return fromApertium;
+        if (fromApertium != null) {
+            return fromApertium;
+        }
         String fromMyMemory = translateWithMyMemory(text);
         return fromMyMemory == null ? text : fromMyMemory;
     }
 
     private String translateWithGoogleFree(String text) {
         try {
-            // Unofficial free endpoint has practical URL/query size limits; translate in chunks.
             List<String> chunks = splitForPublicTranslator(text, 420);
-            if (chunks.isEmpty()) return null;
-            WebClient client = WebClient.builder().build();
+            if (chunks.isEmpty()) {
+                return null;
+            }
             StringBuilder out = new StringBuilder();
             for (String chunk : chunks) {
-                List<?> response = client.get()
+                List<?> response = plainHttp.get()
                         .uri(uriBuilder -> uriBuilder
                                 .scheme("https")
                                 .host("translate.googleapis.com")
@@ -87,8 +142,12 @@ public class TranslationService {
                         chunkOut.append(piece);
                     }
                 }
-                if (chunkOut.isEmpty()) return null;
-                if (!out.isEmpty()) out.append(' ');
+                if (chunkOut.isEmpty()) {
+                    return null;
+                }
+                if (!out.isEmpty()) {
+                    out.append(' ');
+                }
                 out.append(chunkOut);
             }
             return out.toString();
@@ -99,19 +158,24 @@ public class TranslationService {
 
     private List<String> splitForPublicTranslator(String text, int maxChars) {
         String input = text == null ? "" : text.trim();
-        if (input.isEmpty()) return List.of();
-        if (input.length() <= maxChars) return List.of(input);
+        if (input.isEmpty()) {
+            return List.of();
+        }
+        if (input.length() <= maxChars) {
+            return List.of(input);
+        }
         List<String> out = new ArrayList<>();
         StringBuilder current = new StringBuilder();
         for (String token : input.split("\\s+")) {
-            if (token.isBlank()) continue;
+            if (token.isBlank()) {
+                continue;
+            }
             int nextLen = current.isEmpty() ? token.length() : current.length() + 1 + token.length();
             if (nextLen > maxChars && !current.isEmpty()) {
                 out.add(current.toString());
                 current.setLength(0);
             }
             if (token.length() > maxChars) {
-                // Very long token/URL: keep as-is in a separate chunk to avoid endless splitting.
                 if (!current.isEmpty()) {
                     out.add(current.toString());
                     current.setLength(0);
@@ -119,26 +183,26 @@ public class TranslationService {
                 out.add(token);
                 continue;
             }
-            if (!current.isEmpty()) current.append(' ');
+            if (!current.isEmpty()) {
+                current.append(' ');
+            }
             current.append(token);
         }
-        if (!current.isEmpty()) out.add(current.toString());
+        if (!current.isEmpty()) {
+            out.add(current.toString());
+        }
         return out;
     }
 
     private String translateWithLibre(String text) {
         try {
-            String baseUrl = properties.getBaseUrl();
-            WebClient client = WebClient.builder()
-                    .baseUrl(baseUrl)
-                    .build();
             Map<String, Object> body = Map.of(
                     "q", text,
                     "source", "auto",
                     "target", "tr",
                     "format", "text"
             );
-            Map<?, ?> response = client.post()
+            Map<?, ?> response = libreHttp.post()
                     .uri("/translate")
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(body)
@@ -147,9 +211,13 @@ public class TranslationService {
                     .timeout(Duration.ofMillis(properties.getTimeoutMs()))
                     .onErrorReturn(Map.of())
                     .block();
-            if (response == null || response.isEmpty()) return null;
+            if (response == null || response.isEmpty()) {
+                return null;
+            }
             Object translated = response.get("translatedText");
-            if (translated instanceof String t && !t.isBlank()) return t;
+            if (translated instanceof String t && !t.isBlank()) {
+                return t;
+            }
             return null;
         } catch (Exception ignored) {
             return null;
@@ -158,8 +226,7 @@ public class TranslationService {
 
     private String translateWithMyMemory(String text) {
         try {
-            WebClient client = WebClient.builder().build();
-            Map<?, ?> response = client.get()
+            Map<?, ?> response = plainHttp.get()
                     .uri(uriBuilder -> uriBuilder
                             .scheme("https")
                             .host("api.mymemory.translated.net")
@@ -173,7 +240,9 @@ public class TranslationService {
                     .timeout(Duration.ofMillis(properties.getTimeoutMs()))
                     .onErrorReturn(Map.of())
                     .block();
-            if (response == null || response.isEmpty()) return null;
+            if (response == null || response.isEmpty()) {
+                return null;
+            }
             Object details = response.get("responseDetails");
             if (details instanceof String d && d.toUpperCase().contains("QUERY LENGTH LIMIT EXCEEDED")) {
                 return null;
@@ -185,7 +254,9 @@ public class TranslationService {
                     if (t.contains("%20") || t.contains("%2F") || t.contains("%3A")) {
                         try {
                             String decoded = URLDecoder.decode(t, java.nio.charset.StandardCharsets.UTF_8);
-                            if (!decoded.isBlank()) return decoded;
+                            if (!decoded.isBlank()) {
+                                return decoded;
+                            }
                         } catch (Exception ignored) {
                             // keep original translated text if decode fails
                         }
@@ -201,8 +272,7 @@ public class TranslationService {
 
     private String translateWithApertium(String text) {
         try {
-            WebClient client = WebClient.builder().build();
-            Map<?, ?> response = client.get()
+            Map<?, ?> response = plainHttp.get()
                     .uri(uriBuilder -> uriBuilder
                             .scheme("https")
                             .host("www.apertium.org")
@@ -216,13 +286,19 @@ public class TranslationService {
                     .timeout(Duration.ofMillis(properties.getTimeoutMs()))
                     .onErrorReturn(Map.of())
                     .block();
-            if (response == null || response.isEmpty()) return null;
+            if (response == null || response.isEmpty()) {
+                return null;
+            }
             Object status = response.get("responseStatus");
-            if (status instanceof Number n && n.intValue() != 200) return null;
+            if (status instanceof Number n && n.intValue() != 200) {
+                return null;
+            }
             Object responseData = response.get("responseData");
             if (responseData instanceof Map<?, ?> data) {
                 Object translated = data.get("translatedText");
-                if (translated instanceof String t && !t.isBlank()) return t;
+                if (translated instanceof String t && !t.isBlank()) {
+                    return t;
+                }
             }
             return null;
         } catch (Exception ignored) {
@@ -230,4 +306,3 @@ public class TranslationService {
         }
     }
 }
-

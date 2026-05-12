@@ -9,6 +9,10 @@
     --terminal-border: #e2e8f0;
     --terminal-text: #0f172a;
     --terminal-muted: #64748b;
+    /* İkincil metin: --terminal-muted ile aynı; IDE/tema tutarlılığı (trend chip başlığı). */
+    --terminal-text-muted: #64748b;
+    /* Aktif segment / odak vurgusu; runtime’da Market.tsx terminalVars ile güncellenir. */
+    --terminal-accent: #1d4ed8;
     --terminal-btn-bg: #f1f5f9;
     --terminal-btn-active-bg: rgba(29, 78, 216, 0.14);
     --terminal-btn-active-text: #0f172a;
@@ -25,6 +29,15 @@
     position: relative;
     z-index: 0;
     isolation: isolate;
+    /*
+     * Detay paneli `position: fixed` overlay ile aciliyor. Detay paneli iceriginde
+     * scrollbar olabiliyor; eger ana sayfada da scrollbar varsa, panel acilirken/kapanirken
+     * tarayicilarin scrollbar gosterme/gizleme davranisi viewport genisligini birka9 px
+     * degistiriyor ve ResizeObserver'la dinleyen lightweight-charts container'lari
+     * resize edip "titreme" hissi yaratiyor. `scrollbar-gutter: stable` ile scrollbar
+     * alani her zaman rezerve ediliyor -> layout shift yok -> chart resize yok.
+     */
+    scrollbar-gutter: stable;
 }
 
 .terminal-hero {
@@ -182,9 +195,76 @@
 
 .terminal-data-table th:nth-child(5),
 .terminal-data-table td:nth-child(5) {
-    width: 80px;
-    max-width: 80px;
+    /*
+     * 80px -> 112px: Trend basliginin altina (Hisse/Kripto/FX/Altin/Fonlar'da) 1G/7G/14G
+     * segmented control ekledigimiz icin biraz daha genis bir kolon gerekiyor. Sparkline
+     * (60-72px) cell'in icinde rahat sigiyor; tablo hala ana mizanpan icinde sigili.
+     */
+    width: 112px;
+    max-width: 112px;
     box-sizing: border-box;
+}
+
+/* =========================================================================
+ * Trend kolonu basligi + kompakt periyod secici (1G / 7G / 14G).
+ * Yalnizca destekleyen kategorilerde (Hisse/Kripto/FX/Altin/Fonlar) gosterilir;
+ * BOND ve FUTURES'ta eski sade label korunur.
+ * ======================================================================= */
+.market-trend-head {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    line-height: 1.1;
+}
+
+.market-trend-head__label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--terminal-text-muted, #94a3b8);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.market-trend-period {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--terminal-border, #1f2937) 60%, transparent);
+    border: 1px solid color-mix(in srgb, var(--terminal-border, #1f2937) 85%, transparent);
+}
+
+.market-trend-period__btn {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--terminal-text-muted, #94a3b8);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.03em;
+    padding: 3px 7px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background-color 0.16s ease, color 0.16s ease;
+    font-variant-numeric: tabular-nums;
+}
+
+.market-trend-period__btn:hover {
+    color: var(--terminal-text, #e2e8f0);
+}
+
+.market-trend-period__btn.is-active {
+    background: color-mix(in srgb, var(--terminal-accent, #38bdf8) 28%, transparent);
+    color: var(--terminal-text, #e2e8f0);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--terminal-accent, #38bdf8) 45%, transparent);
+}
+
+.market-trend-period__btn:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--terminal-accent, #38bdf8) 65%, transparent);
+    outline-offset: 1px;
 }
 
 .terminal-data-table .terminal-instrument-cell {
@@ -232,27 +312,63 @@
     display: block;
 }
 
+/*
+ * Header (.app-header) `position: sticky; top: 0; height: 70px; z-index: 5000` ile
+ * her zaman ustte kaliyor. Drawer top: 0'dan baslayinca uzeri header tarafindan
+ * orttuluyor ve "Enstruman Detayi / Kapat / AAPL Apple Inc" basligi kayboluyordu.
+ * Drawer'i header yuksekligi kadar asagi al; boylece basliklar gorunur.
+ */
 .instrument-drawer {
     position: fixed;
-    top: 0;
+    top: 70px;
     right: 0;
     width: min(420px, 92vw);
-    height: 100vh;
+    height: calc(100vh - 70px);
     background: var(--terminal-card-bg);
     border-left: 1px solid var(--terminal-border);
     box-shadow: -14px 0 30px rgba(2, 6, 23, 0.45);
     z-index: 35;
     padding: 14px;
     overflow: auto;
+    /*
+     * Animasyonsuz acilista backdrop bir anda 0.4 opacity ile geliyor, arka plandaki
+     * chart 'anlik titreme' gibi algilanan bir kararma yasiyor. Drawer ve backdrop'u
+     * birlikte fade+slide ile yumusakca acalim; lightweight-charts hicbir reset
+     * yasamadigi icin (data prop'lari aynidir) gercek bir flicker yok, sadece visual
+     * algi. transform `translateX(0)` GPU compositor'da kalir ve main thread'i bloke
+     * etmez.
+     */
+    animation: instrumentDrawerSlideIn 0.18s ease-out;
 }
 
 .instrument-drawer-backdrop {
     position: fixed;
     inset: 0;
     border: 0;
-    background: rgba(2, 6, 23, 0.4);
+    background: rgba(2, 6, 23, 0.32);
     z-index: 34;
     cursor: default;
+    animation: instrumentDrawerBackdropFadeIn 0.18s ease-out;
+}
+
+@keyframes instrumentDrawerSlideIn {
+    from {
+        transform: translateX(12px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes instrumentDrawerBackdropFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 .instrument-drawer-head {
@@ -372,6 +488,7 @@
     justify-content: space-between;
     gap: 12px;
     align-items: center;
+    min-height: 48px;
 }
 
 .terminal-chart-title {
@@ -540,6 +657,7 @@
     min-width: 0;
     min-height: 0;
     align-content: start;
+    contain: layout;
 }
 
 .terminal-center-panel,

@@ -6,6 +6,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import type { MarketDashboard } from '../components/market/marketTypes';
 import { MarketFinvizTreemap, type TreemapTile } from '../components/market/MarketFinvizTreemap';
+import { approxPctByDays } from '../components/market/heatmapApproxPct';
 
 function fmtPct(v: number): string {
     return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
@@ -39,18 +40,6 @@ export function MarketHeatmap() {
         }
         return m;
     }, [data?.sparklines]);
-
-    const approxPctByDays = (closes: number[], days: number): number | null => {
-        if (!closes || closes.length < 2) return null;
-        const n = closes.length;
-        const last = closes[n - 1];
-        if (!Number.isFinite(last)) return null;
-        const steps = Math.max(1, Math.round((n - 1) * (days / 14)));
-        const baseIdx = Math.max(0, n - 1 - steps);
-        const base = closes[baseIdx];
-        if (!Number.isFinite(base) || base === 0) return null;
-        return ((last - base) / base) * 100;
-    };
 
     const displayTiles = useMemo(() => {
         const source = data?.heatmapTiles ?? [];
@@ -221,7 +210,8 @@ export function MarketHeatmap() {
                             {data?.heatmapMeta?.equityChangeHorizon ?? '1D'} / {data?.heatmapMeta?.equityWeightMode ?? 'EQUAL'})
                             {' · '}
                             {t('heatmap.otherAssets', 'Diğer varlıklar')}: {data?.heatmapMeta?.multiAssetMode ?? 'MULTI_ASSET'} (
-                            {data?.heatmapMeta?.multiAssetChangeHorizon ?? '14D'} / {data?.heatmapMeta?.multiAssetWeightMode ?? 'PRICE_SQRT'})
+                            {t('heatmap.uiHorizon', 'ekran')}: {timeframeDays}D /{' '}
+                            {data?.heatmapMeta?.multiAssetWeightMode ?? 'PRICE_SQRT'})
                         </div>
                         <MarketFinvizTreemap
                             tiles={displayTiles}

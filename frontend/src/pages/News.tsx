@@ -20,7 +20,11 @@ type NewsItem = {
     createdAt: string;
 };
 
-type NewsPage = { content: NewsItem[]; totalElements: number; number: number; size: number };
+// Spring Data 3.3+ VIA_DTO shape (bkz. MarketDataApplication).
+type NewsPage = {
+    content: NewsItem[];
+    page: { size: number; number: number; totalElements: number; totalPages: number };
+};
 
 const CATEGORIES = [
     { value: '', label: 'Tümü' },
@@ -190,7 +194,7 @@ export function News() {
                             </li>
                         ))}
                     </ul>
-                    {page && page.totalElements > page.size && (
+                    {page && page.page && page.page.totalElements > page.page.size && (
                         <div style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.875rem' }}>
                             <button
                                 type="button"
@@ -201,13 +205,13 @@ export function News() {
                                 {t('news.prev', 'Önceki')}
                             </button>
                             <span style={{ color: tokens.textMuted }}>
-                                {t('news.page', 'Sayfa')} {page.number + 1} / {Math.ceil(page.totalElements / page.size)}
+                                {t('news.page', 'Sayfa')} {page.page.number + 1} / {page.page.totalPages}
                             </span>
                             <button
                                 type="button"
-                                disabled={(page.number + 1) * page.size >= page.totalElements}
+                                disabled={(page.page.number + 1) * page.page.size >= page.page.totalElements}
                                 onClick={() => setPageNum((p) => p + 1)}
-                                style={{ padding: '6px 12px', background: tokens.bgCard, color: tokens.text, border: `1px solid ${tokens.border}`, borderRadius: 8, cursor: (page.number + 1) * page.size >= page.totalElements ? 'default' : 'pointer' }}
+                                style={{ padding: '6px 12px', background: tokens.bgCard, color: tokens.text, border: `1px solid ${tokens.border}`, borderRadius: 8, cursor: (page.page.number + 1) * page.page.size >= page.page.totalElements ? 'default' : 'pointer' }}
                             >
                                 {t('news.next', 'Sonraki')}
                             </button>
@@ -216,7 +220,34 @@ export function News() {
                 </div>
                 <div>
                     {detailLoading ? (
-                        <p style={{ color: tokens.textMuted }}>{t('news.loading', 'Yükleniyor...')}</p>
+                        <div>
+                            {selected ? (
+                                <div
+                                    style={{
+                                        padding: 16,
+                                        marginBottom: 12,
+                                        border: `1px solid ${tokens.border}`,
+                                        borderRadius: 8,
+                                        background: tokens.bgCard,
+                                        opacity: 0.92,
+                                    }}
+                                >
+                                    <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: 8 }}>
+                                        {preferTurkish && selected.titleTr ? selected.titleTr : selected.title}
+                                    </h2>
+                                    {selected.summary ? (
+                                        <div
+                                            className="content-container"
+                                            style={{ fontSize: '0.875rem', color: tokens.textMuted }}
+                                            dangerouslySetInnerHTML={{
+                                                __html: extractReadableNewsBody(selected.summary),
+                                            }}
+                                        />
+                                    ) : null}
+                                </div>
+                            ) : null}
+                            <p style={{ color: tokens.textMuted }}>{t('news.loading', 'Yükleniyor...')}</p>
+                        </div>
                     ) : selected ? (
                         <div style={{ padding: 16, border: `1px solid ${tokens.border}`, borderRadius: 8, background: tokens.bgCard }} className="news-detail-card">
                             <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: 8 }}>

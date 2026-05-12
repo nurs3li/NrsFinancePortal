@@ -69,10 +69,24 @@ export function getLogoKey(symbol: string, marketType: MarketKind): string {
     return symbol.toUpperCase();
 }
 
+/**
+ * VİOP/Bond kontrat kodlarini (F_USDTRY0526, EREGL0626, ISIN'ler vb.) dis CDN'e gondermek
+ * %100 404 ureriyor. Bu da AssetLogo onError -> setState fırtınasına yol acip ana thread'i
+ * tikiyordu (sayfa gecislerinin gerceklesmeme nedeni). Heuristik: salt-harf ve 1-5 karakter
+ * disindaki anahtarlari "ticker degil" sayip kisa devre yapiyoruz.
+ */
+function isLikelyEquityTicker(key: string): boolean {
+    if (!key || key.length < 1 || key.length > 5) return false;
+    if (!/^[A-Z]+$/.test(key)) return false;
+    return true;
+}
+
 export function getDynamicLogoUrl(symbol: string, marketType: MarketKind): string | null {
     const logoKey = getLogoKey(symbol, marketType);
     if (dynamicLogoMap[logoKey]) return dynamicLogoMap[logoKey];
-    if (marketType === 'EQUITY') return `https://financialmodelingprep.com/image-stock/${logoKey}.png`;
-    if (marketType === 'FUNDS') return `https://financialmodelingprep.com/image-stock/${logoKey}.png`;
+    if (marketType === 'EQUITY' || marketType === 'FUNDS') {
+        if (!isLikelyEquityTicker(logoKey)) return null;
+        return `https://financialmodelingprep.com/image-stock/${logoKey}.png`;
+    }
     return null;
 }

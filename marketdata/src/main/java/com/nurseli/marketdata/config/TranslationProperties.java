@@ -12,5 +12,7 @@ public class TranslationProperties {
     private String provider = "googlefree";
     private String baseUrl = "http://localhost:5000";
     private int timeoutMs = 2500;
+    /** Bellek içi çeviri önbelleği (aynı başlık/özet tekrar çevrilmesin). */
+    private int cacheMaxEntries = 5000;
 }
 

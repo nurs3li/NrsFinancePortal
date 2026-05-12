@@ -2,7 +2,7 @@ import { Outlet, Link, NavLink, useLocation, useNavigate } from 'react-router-do
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import { useState, useEffect, useCallback, useMemo, useRef, startTransition, type CSSProperties } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
 import { notificationClient } from '../api/client';
 import { Bell, ChevronDown, LogOut, Moon, Sun } from 'lucide-react';
 import { NrsBrandLockup } from './NrsBrandLockup';
@@ -183,6 +183,13 @@ export function Layout() {
                             key={item.key}
                             data-nav-key={item.key}
                             to={item.to}
+                            // NavLink'in built-in onClick davranisi: preventDefault + React Router'in
+                              // history API'siyle navigate eder. Onceden ozel onClick handler vardi ama
+                              // React event delegation ile celisti ve defaultPrevented hep false kaldi,
+                              // sonucta browser native anchor click URL'i degistiriyordu ama React Router
+                              // state'i guncelle*mi*yordu (URL=/dashboard, DOM=terminal-page bug'i).
+                              // Default davranisa guveniyoruz; modifier (ctrl/meta/shift/alt) tiklamalari
+                              // NavLink kendi icinde "yeni sekmede ac" olarak dogru ele aliyor.
                             className={() =>
                                 `app-header__nav-link ${activeNavKey === item.key ? 'is-active' : ''}`
                             }
@@ -193,14 +200,6 @@ export function Layout() {
                             onFocus={(event) => {
                                 setHoveredNavKey(item.key);
                                 focusNavItem(event.currentTarget);
-                            }}
-                            onClick={(e) => {
-                                if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-                                if (location.pathname === item.to) return;
-                                e.preventDefault();
-                                startTransition(() => {
-                                    navigate(item.to);
-                                });
                             }}
                         >
                             {item.label}
@@ -347,8 +346,13 @@ export function Layout() {
             </header>
 
             <main className="app-main">
-                {/* Rota değişince alt sayfa tam unmount/remount; ağır sayfalar (ör. VİOP listesi) sonrası takılı görünümü önler */}
-                <Outlet key={location.pathname} />
+                {/*
+                 * Eager import'a donduk; lazy + Suspense ile pending stuck olusuyordu
+                 * (VIOP'tan cikista URL degisse de Outlet eski sayfada kaliyordu).
+                 * React Router her route icin ayri component mount ediyor, dolayisiyla
+                 * boundary'siz Outlet yeterli ve navigation deterministik.
+                 */}
+                <Outlet />
             </main>
         </div>
     );

@@ -205,6 +205,7 @@ app:
     provider: ${APP_TRANSLATION_PROVIDER:googlefree}
     base-url: ${APP_TRANSLATION_BASE_URL:http://localhost:5000}
     timeout-ms: ${APP_TRANSLATION_TIMEOUT_MS:2500}
+    cache-max-entries: ${APP_TRANSLATION_CACHE_MAX:5000}
   data-sources:
     tcmb:
       url: https://www.tcmb.gov.tr/kurlar/today.xml
@@ -235,7 +236,15 @@ app:
       - JNJ
       - V
       - WMT
+    # Incremental'da son mumdan sonraki günden N gün geriye dış kaynak (Yahoo/Stooq) — ara boşluk doldurma
+    incremental-gap-heal-days: ${EQUITY_INCREMENTAL_GAP_HEAL_DAYS:21}
     history-incremental-cron: ${EQUITY_HISTORY_INCREMENTAL_CRON:0 30 2 * * *}
+    history-incremental-zone: ${EQUITY_HISTORY_INCREMENTAL_ZONE:Europe/Istanbul}
+    # Açılış: ihtiyaç varsa bir kez dış kaynakla geçmiş (Yahoo/Stooq/…); sonra incremental + quote rollup.
+    initial-seed:
+      enabled: ${EQUITY_INITIAL_SEED_ENABLED:true}
+      min-candles: ${EQUITY_INITIAL_SEED_MIN_CANDLES:120}
+      stale-days: ${EQUITY_INITIAL_SEED_STALE_DAYS:4}
     history-backfill:
       enabled: ${EQUITY_HISTORY_BACKFILL_ENABLED:false}
       periodDays: ${EQUITY_HISTORY_BACKFILL_PERIOD_DAYS:365}
@@ -271,6 +280,8 @@ app:
       - GLD
       - VWO
       - EEM
+    history-incremental-cron: ${ETF_HISTORY_INCREMENTAL_CRON:0 45 6 * * *}
+    history-incremental-days: ${ETF_HISTORY_INCREMENTAL_DAYS:30}
   market:
     fx:
       # TCMB ingest aralığı (ms). HTTP /doviz/latest canlı çekmez; DB + snapshot okur.
@@ -296,6 +307,45 @@ app:
       dir: ${VIOP_BACKFILL_DIR:artifacts/viop}
       pattern: ${VIOP_BACKFILL_PATTERN:viop_*.csv}
       shutdownOnComplete: ${VIOP_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
+      # Periyodik tarama: klasore yeni eklenen viop_YYYYMMDD.csv dosyalari her N saatte bir
+      # otomatik DB'ye alinir. ViopBackfillRunner.importAllCsvFilesToDb() idempotent calistigi
+      # icin tekrar tekrar tetiklenmesi guvenlidir (duplicate satirlar atilir).
+      incremental:
+        enabled: ${VIOP_BACKFILL_INCREMENTAL_ENABLED:true}
+        # Default: her 3 saatte bir (00:00, 03:00, ..., 21:00 Europe/Istanbul).
+        cron: ${VIOP_BACKFILL_INCREMENTAL_CRON:0 0 */3 * * *}
+        zone: ${VIOP_BACKFILL_INCREMENTAL_ZONE:Europe/Istanbul}
     rollups:
       # true: açılışta kontrat % / son-iki-nokta alanlarını snapshot'lardan bir kez hesaplar (POST backfill şart değil)
       refresh-on-startup: ${VIOP_ROLLUPS_REFRESH_ON_START:false}
+    query:
+      # VIOP whitelist — kategori dengeli ana sergisi (toplam 13 kontrat).
+      # 10 doviz + 1 endeks + 2 emtia: kullaniciya "Doviz, Endeks ve Emtia kapsiyoruz" sozunu
+      # somut olarak tasiyan bir vitrin. Hepsi son 17 gunluk yayinda aktif islem goren,
+      # likiditesi yuksek vadeli sozlesmeler — UI'de hicbir grafik bos kalmaz.
+      #
+      # Liste guncellenirken `frontend/src/constants/ViopWhitelist.ts` de birlikte
+      # guncellenmelidir. Kategorize secim metodolojisi: `artifacts/viop/_category_picks.py`.
+      allowed-contracts:
+        # --- Doviz: USDTRY en yakin 8 vade (May 2026 -> Ara 2026) ---
+        - F_USDTRY0526
+        - F_USDTRY0626
+        - F_USDTRY0726
+        - F_USDTRY0826
+        - F_USDTRY0926
+        - F_USDTRY1026
+        - F_USDTRY1126
+        - F_USDTRY1226
+        # --- Doviz: EUR caprazlari (Aralik 2026) ---
+        - F_EURUSD1226
+        - F_EURTRY1226
+        # --- Endeks: BIST30 vadeli (en yakin: Haziran 2026) ---
+        - F_XU0300626
+        # --- Emtia: Gram Altin TRY ve ONS Altin USD (Haziran 2026) ---
+        - F_XAUTRYM0626
+        - F_XAUUSD0626
+        # --- Pay vadelileri (Haziran 2026) — en yuksek hacimli BIST hisseleri ---
+        - F_THYAO0626
+        - F_EREGL0626
+        - F_SASA0626
+        - F_SISE0626

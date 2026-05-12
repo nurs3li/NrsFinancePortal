@@ -3,6 +3,7 @@ package com.nurseli.marketdata.application;
 import com.nurseli.marketdata.api.dto.ViopContractResponse;
 import com.nurseli.marketdata.api.dto.ViopMarketWatchResponse;
 import com.nurseli.marketdata.api.dto.ViopSnapshotResponse;
+import com.nurseli.marketdata.config.ViopQueryProperties;
 import com.nurseli.marketdata.domain.derivatives.DerivativeContract;
 import com.nurseli.marketdata.domain.derivatives.DerivativeSnapshot;
 import com.nurseli.marketdata.domain.derivatives.OpenInterestSnapshot;
@@ -20,6 +21,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,9 +44,47 @@ public class ViopQueryService {
     private final DerivativeSnapshotRepository snapshotRepository;
     private final OpenInterestSnapshotRepository openInterestSnapshotRepository;
     private final ViopContractParser viopContractParser;
+    private final ViopQueryProperties queryProperties;
+
+    /**
+     * Whitelist'i normalize edilmiş kodlardan oluşan bir Set olarak sunar.
+     * Boş ise filtre devre dışıdır.
+     */
+    private Set<String> allowedNormalizedCodes() {
+        List<String> raw = queryProperties.getAllowedContracts();
+        if (raw == null || raw.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> out = new HashSet<>(raw.size() * 2);
+        for (String c : raw) {
+            if (c == null || c.isBlank()) continue;
+            String normalized = viopContractParser.normalizeContractCode(c.trim());
+            if (normalized != null && !normalized.isBlank()) {
+                out.add(normalized);
+                // ek alias: bazı kodlar DB'de "F_" öneksiz tutuluyor olabilir
+                if (normalized.startsWith("F_")) {
+                    out.add(normalized.substring(2));
+                } else {
+                    out.add("F_" + normalized);
+                }
+            }
+        }
+        return out;
+    }
+
+    private boolean isWhitelisted(String rawCode, Set<String> allowed) {
+        if (allowed == null || allowed.isEmpty()) return true;
+        if (rawCode == null) return false;
+        if (allowed.contains(rawCode)) return true;
+        String normalized = viopContractParser.normalizeContractCode(rawCode);
+        if (normalized == null) return false;
+        return allowed.contains(normalized) || allowed.contains("F_" + normalized);
+    }
 
     public List<ViopContractResponse> contracts() {
+        Set<String> allowed = allowedNormalizedCodes();
         return contractRepository.findAll().stream()
+                .filter(c -> isWhitelisted(c.getContractCode(), allowed))
                 .collect(Collectors.toMap(
                         c -> viopContractParser.normalizeContractCode(c.getContractCode()),
                         c -> c,
@@ -67,7 +107,9 @@ public class ViopQueryService {
     }
 
     public List<ViopSnapshotResponse> latest() {
+        Set<String> allowed = allowedNormalizedCodes();
         List<DerivativeSnapshot> mergedLatest = snapshotRepository.findLatestSnapshotPerContract().stream()
+                .filter(s -> isWhitelisted(s.getContractCode(), allowed))
                 .collect(Collectors.toMap(
                         s -> viopContractParser.normalizeContractCode(s.getContractCode()),
                         s -> s,
@@ -98,6 +140,10 @@ public class ViopQueryService {
     }
 
     public List<ViopSnapshotResponse> history(String contract, int days) {
+        Set<String> allowed = allowedNormalizedCodes();
+        if (!isWhitelisted(contract, allowed)) {
+            return List.of();
+        }
         LocalDateTime cutoff = LocalDateTime.now().minusDays(days);
         return loadSnapshotsByAlias(contract).stream()
                 .filter(s -> !s.getAsOf().isBefore(cutoff))
@@ -106,6 +152,10 @@ public class ViopQueryService {
     }
 
     public List<ViopSnapshotResponse> oiHistory(String contract, int days) {
+        Set<String> allowed = allowedNormalizedCodes();
+        if (!isWhitelisted(contract, allowed)) {
+            return List.of();
+        }
         LocalDateTime cutoff = LocalDateTime.now().minusDays(days);
         // Latest snapshot'ı döngü dışına aldık (önceden her OI satırı için tekrar DB'ye gidiyordu).
         DerivativeSnapshot latestSnapshot = findLatestByAlias(contract);

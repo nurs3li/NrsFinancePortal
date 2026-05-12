@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
-import type { Time } from 'lightweight-charts';
+import type { LogicalRange, Time } from 'lightweight-charts';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type BondPoint = {
@@ -45,10 +45,27 @@ function chartTimeKey(value: Time): string {
     return String(value);
 }
 
-export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timeframeLabel, trendLabel, tokens }: Props) {
+function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLabel, trendLabel, tokens }: Props) {
     const chartRef = useRef<HTMLDivElement>(null);
+    const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null);
+    const priceAreaRef = useRef<ReturnType<ReturnType<typeof createChart>['addAreaSeries']> | null>(null);
+    const yieldLineRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+    const ma7Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+    const ma21Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+    const volumeRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
+    const hasInitialFitRef = useRef(false);
+    const logicalRangeRef = useRef<LogicalRange | null>(null);
+    const dataByKeyRef = useRef<Record<string, BondPoint>>({});
+    const barCountRef = useRef(0);
+    const rangeRef = useRef(parseTerminalChartRange(timeframeLabel));
+    const crosshairRafRef = useRef<(() => void) | null>(null);
+    const tokensRef = useRef(tokens);
+    useEffect(() => {
+        tokensRef.current = tokens;
+    });
     const [hover, setHover] = useState<{ time: string; price: number; yieldPct: number } | null>(null);
     const chartHeight = 520;
+
     const sorted = useMemo(() => {
         const byTime = new Map<string, BondPoint>();
         [...points]
@@ -60,33 +77,32 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
 
     useEffect(() => {
         const el = chartRef.current;
-        if (!el || loading || !sorted.length) return;
-
-        const chartRange = parseTerminalChartRange(timeframeLabel);
+        if (!el || chartApiRef.current) return;
         const widthPx = Math.max(320, el.clientWidth);
-        const tsLay = computeTerminalTimeScaleLayout(widthPx, sorted.length, chartRange);
-
+        const t = tokensRef.current;
         const chart = createChart(el, {
             width: widthPx,
             height: chartHeight,
             layout: {
-                background: { color: tokens.bgCard },
-                textColor: tokens.text,
+                background: { color: t.bgCard },
+                textColor: t.text,
             },
             grid: {
                 vertLines: { color: 'rgba(71, 85, 105, 0.25)' },
                 horzLines: { color: 'rgba(71, 85, 105, 0.25)' },
             },
-            leftPriceScale: { visible: true, borderColor: tokens.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
-            rightPriceScale: { visible: true, borderColor: tokens.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
+            leftPriceScale: { visible: true, borderColor: t.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
+            rightPriceScale: { visible: true, borderColor: t.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
             timeScale: {
-                borderColor: tokens.border,
+                borderColor: t.border,
                 timeVisible: true,
                 secondsVisible: false,
-                ...tsLay,
+                ...computeTerminalTimeScaleLayout(widthPx, Math.max(2, barCountRef.current), rangeRef.current),
+                shiftVisibleRangeOnNewBar: false,
             },
             crosshair: { mode: 1 },
         });
+        chartApiRef.current = chart;
 
         const priceArea = chart.addAreaSeries({
             priceScaleId: 'left',
@@ -97,11 +113,7 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
             priceLineVisible: false,
             lastValueVisible: true,
         });
-        priceArea.setData(
-            sorted
-                .filter((p) => Number.isFinite(p.price) && p.price > 0)
-                .map((p) => ({ time: toChartTime(p.time), value: p.price }))
-        );
+        priceAreaRef.current = priceArea;
 
         const yieldLine = chart.addLineSeries({
             priceScaleId: 'right',
@@ -110,31 +122,25 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
             priceLineVisible: false,
             lastValueVisible: true,
         });
-        yieldLine.setData(
-            sorted
-                .filter((p) => Number.isFinite(p.yieldPct))
-                .map((p) => ({ time: toChartTime(p.time), value: p.yieldPct }))
-        );
+        yieldLineRef.current = yieldLine;
 
-        if (showMa) {
-            const ma7Series = chart.addLineSeries({
-                priceScaleId: 'left',
-                color: '#38bdf8',
-                lineWidth: 2,
-                priceLineVisible: false,
-                lastValueVisible: false,
-            });
-            ma7Series.setData(ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })));
+        const ma7Series = chart.addLineSeries({
+            priceScaleId: 'left',
+            color: '#38bdf8',
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        });
+        ma7Ref.current = ma7Series;
 
-            const ma21Series = chart.addLineSeries({
-                priceScaleId: 'left',
-                color: '#f59e0b',
-                lineWidth: 2,
-                priceLineVisible: false,
-                lastValueVisible: false,
-            });
-            ma21Series.setData(ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })));
-        }
+        const ma21Series = chart.addLineSeries({
+            priceScaleId: 'left',
+            color: '#f59e0b',
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        });
+        ma21Ref.current = ma21Series;
 
         const volumeSeries = chart.addHistogramSeries({
             color: 'rgba(148, 163, 184, 0.25)',
@@ -146,7 +152,123 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
         volumeSeries.priceScale().applyOptions({
             scaleMargins: { top: 0.92, bottom: 0 },
         });
-        volumeSeries.setData(
+        volumeRef.current = volumeSeries;
+
+        let crosshairRaf = 0;
+        let pendingParam: Parameters<Parameters<typeof chart.subscribeCrosshairMove>[0]>[0] | null = null;
+        chart.subscribeCrosshairMove((param) => {
+            pendingParam = param;
+            if (crosshairRaf) return;
+            crosshairRaf = window.requestAnimationFrame(() => {
+                crosshairRaf = 0;
+                const p = pendingParam;
+                pendingParam = null;
+                if (!p?.time) {
+                    setHover((prev) => (prev == null ? prev : null));
+                    return;
+                }
+                const key = chartTimeKey(p.time);
+                const row = dataByKeyRef.current[key] ?? null;
+                const next = row
+                    ? { time: String(row.time).slice(0, 10), price: row.price, yieldPct: row.yieldPct }
+                    : null;
+                setHover((prev) => {
+                    if (!next) return prev == null ? prev : null;
+                    if (
+                        prev &&
+                        prev.time === next.time &&
+                        prev.price === next.price &&
+                        prev.yieldPct === next.yieldPct
+                    ) {
+                        return prev;
+                    }
+                    return next;
+                });
+            });
+        });
+        crosshairRafRef.current = () => {
+            if (crosshairRaf) window.cancelAnimationFrame(crosshairRaf);
+            crosshairRaf = 0;
+            pendingParam = null;
+        };
+
+        chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+            if (range) logicalRangeRef.current = range;
+        });
+
+        const onResize = () => {
+            const w = Math.max(320, el.clientWidth);
+            const lay = computeTerminalTimeScaleLayout(w, Math.max(2, barCountRef.current), rangeRef.current);
+            chart.applyOptions({
+                width: w,
+                timeScale: {
+                    borderColor: tokensRef.current.border,
+                    timeVisible: true,
+                    secondsVisible: false,
+                    ...lay,
+                    shiftVisibleRangeOnNewBar: false,
+                },
+            });
+            if (logicalRangeRef.current) {
+                chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
+            }
+        };
+        window.addEventListener('resize', onResize);
+        return () => {
+            window.removeEventListener('resize', onResize);
+            crosshairRafRef.current?.();
+            chart.remove();
+            chartApiRef.current = null;
+            priceAreaRef.current = null;
+            yieldLineRef.current = null;
+            ma7Ref.current = null;
+            ma21Ref.current = null;
+            volumeRef.current = null;
+            hasInitialFitRef.current = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        const chart = chartApiRef.current;
+        if (!chart) return;
+        chart.applyOptions({
+            layout: { background: { color: tokens.bgCard }, textColor: tokens.text },
+            leftPriceScale: { borderColor: tokens.border },
+            rightPriceScale: { borderColor: tokens.border },
+            timeScale: { borderColor: tokens.border },
+        });
+    }, [tokens.bgCard, tokens.border, tokens.text, tokens.textMuted]);
+
+    useEffect(() => {
+        const chart = chartApiRef.current;
+        if (!chart || loading || !sorted.length) return;
+
+        const chartRange = parseTerminalChartRange(timeframeLabel);
+        const widthPx = Math.max(320, chartRef.current?.clientWidth ?? 320);
+        const tsLay = computeTerminalTimeScaleLayout(widthPx, sorted.length, chartRange);
+        const rangeChanged = rangeRef.current !== chartRange;
+        rangeRef.current = chartRange;
+        barCountRef.current = sorted.length;
+
+        const byKey: Record<string, BondPoint> = {};
+        sorted.forEach((p) => {
+            byKey[chartTimeKey(toChartTime(p.time))] = p;
+        });
+        dataByKeyRef.current = byKey;
+
+        priceAreaRef.current?.setData(
+            sorted
+                .filter((p) => Number.isFinite(p.price) && p.price > 0)
+                .map((p) => ({ time: toChartTime(p.time), value: p.price }))
+        );
+        yieldLineRef.current?.setData(
+            sorted
+                .filter((p) => Number.isFinite(p.yieldPct))
+                .map((p) => ({ time: toChartTime(p.time), value: p.yieldPct }))
+        );
+        ma7Ref.current?.setData(showMa ? ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+        ma21Ref.current?.setData(showMa ? ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+        volumeRef.current?.setData(
             sorted.map((p) => ({
                 time: toChartTime(p.time),
                 value: Number(p.volume ?? 0),
@@ -154,57 +276,34 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
             }))
         );
 
-        chart.subscribeCrosshairMove((param) => {
-            if (!param?.time) {
-                setHover(null);
-                return;
-            }
-            const key = chartTimeKey(param.time);
-            const row = sorted.find((p) => chartTimeKey(toChartTime(p.time)) === key);
-            if (!row) {
-                setHover(null);
-                return;
-            }
-            setHover({
-                time: key.slice(0, 10),
-                price: row.price,
-                yieldPct: row.yieldPct,
-            });
+        chart.applyOptions({
+            width: widthPx,
+            timeScale: {
+                borderColor: tokensRef.current.border,
+                timeVisible: true,
+                secondsVisible: false,
+                ...tsLay,
+                shiftVisibleRangeOnNewBar: false,
+            },
         });
 
-        const fit = () => requestAnimationFrame(() => chart.timeScale().fitContent());
-        fit();
-
-        const onResize = () => {
-            const w = Math.max(320, el.clientWidth);
-            const lay = computeTerminalTimeScaleLayout(w, sorted.length, chartRange);
-            chart.applyOptions({
-                width: w,
-                timeScale: {
-                    borderColor: tokens.border,
-                    timeVisible: true,
-                    secondsVisible: false,
-                    ...lay,
-                },
+        if (!hasInitialFitRef.current || rangeChanged) {
+            requestAnimationFrame(() => {
+                chart.timeScale().fitContent();
+                logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
+                hasInitialFitRef.current = true;
             });
-            fit();
-        };
-        window.addEventListener('resize', onResize);
-        return () => {
-            window.removeEventListener('resize', onResize);
-            chart.remove();
-        };
-    }, [loading, sorted, ma7, ma21, showMa, tokens, timeframeLabel]);
+        }
+    }, [loading, sorted, ma7, ma21, showMa, timeframeLabel]);
 
-    if (loading) {
-        return <div className="terminal-chart-empty">Grafik yükleniyor...</div>;
-    }
-    if (!sorted.length) {
-        return <div className="terminal-chart-empty">Tahvil fiyat/getiri verisi bulunamadı.</div>;
-    }
-    if (sorted.length < 2) {
-        return <div className="terminal-chart-empty">Tahvil grafik için en az 2 veri noktası gerekli.</div>;
-    }
+    const showChart = !loading && sorted.length >= 2;
+    const emptyMessage = loading
+        ? 'Grafik yükleniyor...'
+        : !sorted.length
+            ? 'Tahvil fiyat/getiri verisi bulunamadı.'
+            : sorted.length < 2
+                ? 'Tahvil grafik için en az 2 veri noktası gerekli.'
+                : null;
 
     return (
         <div className="terminal-chart-wrap">
@@ -228,8 +327,19 @@ export function BondTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                     <div className="terminal-ohlc muted">Fiyat ve getiri için imleci grafik üzerine getir</div>
                 )}
             </div>
-            <div ref={chartRef} style={{ width: '100%', height: chartHeight }} />
+            {emptyMessage ? <div className="terminal-chart-empty">{emptyMessage}</div> : null}
+            <div
+                ref={chartRef}
+                style={{
+                    width: '100%',
+                    maxWidth: '100%',
+                    height: chartHeight,
+                    overflow: 'hidden',
+                    display: showChart ? 'block' : 'none',
+                }}
+            />
         </div>
     );
 }
 
+export const BondTerminalChart = memo(BondTerminalChartImpl);

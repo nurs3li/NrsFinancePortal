@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 /**
  * Uygulama açılır açılmaz tüm piyasa verilerini bir kez çeker.
  * Böylece ilk sayfa açılışında DB'de güncel veri olur (döviz, kripto, altın).
- * Fon verisi zaten FundMarketScheduler.fetchYesterdayOnStartup ile yükleniyor.
+ * Fon verisi FundMarketScheduler ile; hisse günlük mumları EquityMarketScheduler (startup + cron) ile yüklenir.
  */
 @Slf4j
 @Component

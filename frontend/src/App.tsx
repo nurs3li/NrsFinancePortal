@@ -29,6 +29,12 @@ import { Notifications } from './pages/Notifications';
 import { AdminSuspicious } from './pages/AdminSuspicious';
 import { AdminAudit } from './pages/AdminAudit';
 
+// NOT: Onceden agir sayfalari React.lazy ile sarmaliyorduk. Ancak React 18 Suspense'in
+// "pending sirasinda eski UI'yi tut" davranisi nedeniyle VIOP sekmesindeki yogun render
+// commit'leri pending state'i takip ediyor ve Outlet asla yeni sayfaya gecmiyordu — URL
+// degisse bile DOM eski Market sayfasinda kaliyordu (defaultPrevented=false ile teshis).
+// Eager import'a donduk: bundle birazcik buyuyor ama navigation deterministik calisiyor.
+
 function App() {
     return (
         <ThemeProvider>

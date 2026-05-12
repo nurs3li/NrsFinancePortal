@@ -277,13 +277,37 @@
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 2fr);
   gap: 16px;
-  align-items: start;
+  /*
+   * 3 kolon (Yildizlanan / Portfoy+ozetler / Haberler) ayni alt cizgide bitsin diye
+   * align-items: start yerine stretch kullaniyoruz. Boylece her grid hucresi en uzun
+   * komsunun yuksegine genisler ve "Haberler" karti dikeyde otomatik dolar.
+   */
+  align-items: stretch;
+}
+
+.dashboard-bottom-grid > .dashboard-starred-card {
+  /* Sol kolon en uzun olmasa bile en azindan diger 2 kolonun yuksekligini takip eder. */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-bottom-grid > .dashboard-starred-card .assets-table {
+  /*
+   * "Yildizlanan varliklar" tablosunu kart icindeki kalan tum alana yay; alta bos beyaz
+   * birakmadan, satirlari yeniden boyutlamadan dengeli bir hizalama sagliyoruz.
+   */
+  flex: 1 1 auto;
 }
 
 .dashboard-side-panels {
-  position: sticky;
-  top: 20px;
-  align-self: start;
+  /*
+   * Eskiden position: sticky idi -- bu, sag panellerin scroll'da takilmasini sagliyordu
+   * ama 3-kolon stretch hizalamasini kiriyordu (sticky element grid stretch sirasinda
+   * sabit kalir ve yuksekligi alinmaz). Layout butunlugu icin sticky'yi kaldirdik;
+   * sayfa kucuk oldugu icin sticky'ye ihtiyac yok.
+   */
+  align-self: stretch;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
@@ -295,6 +319,31 @@
 .dashboard-news-card {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+
+.dashboard-news-card--fill {
+  /*
+   * Sag kolonda news + notif yan yana dikey duruyor. News-card alt alandaki tum bos pikseli
+   * tek basina doldursun, notif-card icerigi kadar yer alsin diye flex 1 birakiyoruz.
+   * Yine de toplam yukseklik right-column'in (stretch ile) middle-column ile esitlenmis
+   * yuksekliginden gelir; news icindeki haber sayisi bu yuksekligin "notif-card cikinti"
+   * sonrasini olcup adapte eder.
+   */
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* =========================================================================
+ * Sag kolon: Haberler (esnek) + Son Bildirimler (kompakt). Toplam yuksek
+ * .dashboard-side-panels stretch'i sayesinde orta kolonun aynisi olur, kullanici
+ * "sayfanin alti hizali olsun, bos alan kalmasin" istegine bu yapi cevap verir.
+ * ======================================================================= */
+.dashboard-right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
   min-height: 0;
 }
 
@@ -433,10 +482,17 @@
 }
 
 .dashboard-middle-column {
-  display: grid;
-  grid-template-rows: auto auto;
-  gap: 16px;
+  /*
+   * Orta kolon: Portföy dağılımı (üst) + Son aktivite (alt). "Son Bildirimler" sağ kolona
+   * (haberler altina) tasindi; boylece orta kolon hem portfolio donut'una hem de aktivite
+   * karti icin nefes alacak alan birakir, sayfanin alt cizgisi tum kolonlarda stretch ile
+   * esitlenir.
+   */
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   align-content: start;
+  height: 100%;
 }
 
 .portfolio-dist-card {
@@ -602,15 +658,50 @@
 
 .activity-row {
   display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 8px;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 10px;
+  /* Dar sütunda metin sarmalamasının düzgün hizalanması için ikon üst-orta'da. */
+}
+
+.activity-row:last-child {
+  margin-bottom: 0;
 }
 
 .activity-row p {
   margin: 0;
-  font-size: 0.79rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
   color: var(--dashboard-text, #2D3748);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.activity-row svg.activity-icon {
+  margin-top: 3px;
+}
+
+.activity-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.activity-label {
+  font-size: 0.72rem !important;
+  color: var(--dashboard-muted, #718096) !important;
+  letter-spacing: 0.01em;
+  margin: 0 !important;
+}
+
+.activity-value {
+  font-size: 0.86rem !important;
+  font-weight: 600 !important;
+  color: var(--dashboard-text, #1A202C) !important;
+  margin: 0 !important;
+  font-variant-numeric: tabular-nums;
 }
 
 .activity-icon {
@@ -620,6 +711,192 @@
 
 .dashboard-compact-card {
   padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* =========================================================================
+ * "Son Bildirimler" kartı (eski "Uyarilar"ın yerine).
+ * Notifications sayfasıyla aynı renk/ikon dilini kompakt bir mini-liste
+ * şeklinde dashboard'a taşır: gümüş tonlu başlık, kurumsal SVG mikro ikonlar,
+ * okunmamış bildirimler için sol kenarda mavi accent.
+ * ======================================================================= */
+.dashboard-notif-card {
+  gap: 10px;
+}
+
+.dashboard-notif-card__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  min-width: 0;
+}
+
+.dashboard-notif-card__icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg,
+    color-mix(in srgb, #c0c0c0 24%, transparent) 0%,
+    color-mix(in srgb, #94a3b8 14%, transparent) 100%);
+  color: color-mix(in srgb, var(--dashboard-text, #1A202C) 78%, #94a3b8);
+  border: 1px solid color-mix(in srgb, #c0c0c0 35%, transparent);
+  flex-shrink: 0;
+}
+
+.dashboard-notif-card__title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  /*
+   * Eskiden "Son Bildirimler" başliği yan yana 2-sütunlu dar bir kartta 2 satıra
+   * düşüyordu. Tek-sütun dikey diziliṣe geçince satıra rahat sığar; yine de uzun
+   * çevirilerde ellipsis ile keserek tek satırı garanti ediyoruz.
+   */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-notif-card__all {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--dashboard-muted, #718096);
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
+  flex-shrink: 0;
+}
+
+.dashboard-notif-card__all:hover,
+.dashboard-notif-card__all:focus-visible {
+  background: color-mix(in srgb, var(--dashboard-accent, #3182CE) 14%, transparent);
+  color: var(--dashboard-accent, #3182CE);
+  outline: none;
+}
+
+.dashboard-notif-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dashboard-notif-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.dashboard-notif-skel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dashboard-notif-skel-row .skeleton-dot,
+.dashboard-notif-skel-row .skeleton-line {
+  background: linear-gradient(90deg,
+    var(--skeleton-base, rgba(148, 163, 184, 0.16)) 25%,
+    var(--skeleton-highlight, rgba(148, 163, 184, 0.32)) 37%,
+    var(--skeleton-base, rgba(148, 163, 184, 0.16)) 63%);
+  background-size: 400% 100%;
+  animation: skeletonShimmer 1.4s ease infinite;
+}
+
+.dashboard-notif-empty {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+}
+
+.dashboard-notif-item {
+  position: relative;
+  border-radius: 10px;
+  border-left: 3px solid transparent;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.dashboard-notif-item.is-unread {
+  border-left-color: #3b82f6;
+}
+
+.dashboard-notif-item__btn {
+  width: 100%;
+  /*
+   * Grid: ikon | (başlık + meta dikey) | tarih
+   * Eski tasariminda başlık + tarih TEK satıra zorlanmiştı ve dar sütunda title kesilip
+   * sadece tek harf gözüküyordu. Şimdi başlık iki satıra kadar genişler, tarih sağda
+   * tek satır kalır.
+   */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--dashboard-text, #1A202C);
+  transition: background-color 0.18s ease;
+}
+
+.dashboard-notif-item__btn:hover,
+.dashboard-notif-item__btn:focus-visible {
+  background: color-mix(in srgb, var(--dashboard-accent, #3182CE) 10%, transparent);
+  outline: none;
+}
+
+.dashboard-notif-item__icon {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  flex-shrink: 0;
+}
+
+.dashboard-notif-item__title {
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--dashboard-text, #1A202C);
+  min-width: 0;
+  /* Maks 2 satir; uzun başliklarda smooth bir ellipsis. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.dashboard-notif-item.is-unread .dashboard-notif-item__title {
+  font-weight: 700;
+}
+
+.dashboard-notif-item__date {
+  font-size: 0.72rem;
+  color: var(--dashboard-muted, #718096);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .news-list {
@@ -661,7 +938,12 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 0;
+  /*
+   * Eskiden 10px 0 idi; sag panelde 8-10 haberi sigdirabilmek icin satir yuksekligini
+   * azalttik. Yine de bilgi okunabilirligini bozmayacak sekilde tek satir baslik +
+   * kaynak/tarih meta'sina rahat yer kaliyor.
+   */
+  padding: 7px 8px;
   border-bottom: 1px solid var(--dashboard-border, #E5E7EB);
 }
 
@@ -670,29 +952,41 @@
 }
 
 .news-logo {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 999px;
   background: var(--dashboard-news-logo-bg, #EDF2F7);
   color: var(--dashboard-text, #1A202C);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .news-title {
   margin: 0;
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--dashboard-text, #1A202C);
+  line-height: 1.35;
+  /* Maks 2 satir; uzun basliklari ellipsis ile keser, satir yuksekligi tahmin
+     edilebilir kalir ve list/grid hizalamasi bozulmaz. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .news-meta {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: var(--dashboard-muted, #718096);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .news-item-button {
@@ -702,10 +996,11 @@
   text-align: left;
   cursor: pointer;
   border-radius: 10px;
+  transition: background-color 0.18s ease;
 }
 
 .news-item-button:hover {
-  background: rgba(49, 130, 206, 0.12);
+  background: color-mix(in srgb, var(--dashboard-accent, #3182CE) 12%, transparent);
 }
 
 .dashboard-news-modal-backdrop {
@@ -715,62 +1010,94 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  padding: 32px;
+  background: rgba(2, 6, 23, 0.52);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: dashboardModalBackdropIn 0.16s ease-out;
 }
 
 .dashboard-news-modal {
   position: relative;
-  width: min(560px, 100%);
-  max-height: min(82vh, 720px);
+  width: min(620px, 100%);
+  max-height: min(80vh, 760px);
   overflow: auto;
-  padding: 24px 24px 20px;
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--dashboard-card, #fff) 72%, transparent);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 24px 48px -24px rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  /*
+   * Ferah, professional bir modal: padding ve aralik buyuk, baslik daha guclu,
+   * gold-silver glassmorphism. Kucuk ekrana smooth bir scale-in animasyonu eklendi.
+   */
+  padding: 30px 34px 28px;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--dashboard-card, #fff) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dashboard-border, #E2E8F0) 70%, transparent);
+  box-shadow: 0 32px 64px -28px rgba(2, 6, 23, 0.55);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
   color: var(--dashboard-text, #1A202C);
+  animation: dashboardModalIn 0.2s ease-out;
+}
+
+@keyframes dashboardModalBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dashboardModalIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .dashboard-news-modal-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 36px;
-  height: 36px;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
   border: 0;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--dashboard-border, #E2E8F0) 55%, transparent);
+  background: color-mix(in srgb, var(--dashboard-border, #E2E8F0) 50%, transparent);
   color: var(--dashboard-text, #1A202C);
-  font-size: 1.35rem;
+  font-size: 1.3rem;
   line-height: 1;
   cursor: pointer;
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+
+.dashboard-news-modal-close:hover {
+  background: color-mix(in srgb, var(--dashboard-text, #1A202C) 14%, transparent);
+  transform: scale(1.05);
 }
 
 .dashboard-news-modal-title {
-  margin: 0 40px 12px 0;
-  font-size: 1.15rem;
+  margin: 0 44px 14px 0;
+  font-size: 1.28rem;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.4;
+  letter-spacing: -0.005em;
 }
 
 .dashboard-news-modal-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 18px;
-  font-size: 0.78rem;
+  gap: 10px 24px;
+  font-size: 0.8rem;
   color: var(--dashboard-muted, #718096);
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dashboard-border, #E2E8F0) 60%, transparent);
 }
 
 .dashboard-news-modal-body {
-  font-size: 0.88rem;
-  line-height: 1.55;
+  font-size: 0.92rem;
+  line-height: 1.72;
   color: var(--dashboard-text, #2D3748);
+}
+
+.dashboard-news-modal-body p {
+  margin: 0 0 12px;
+}
+.dashboard-news-modal-body p:last-child {
+  margin-bottom: 0;
 }
 
 .dashboard-news-modal-body a {
@@ -792,6 +1119,7 @@
 
   .dashboard-bottom-grid {
     grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .dashboard-side-panels {
@@ -799,11 +1127,29 @@
     max-height: none;
     overflow: visible;
     grid-template-columns: 1fr 1fr;
+    align-self: auto;
   }
 
+  /*
+   * 1240px alti: dikey 3-kolon hizalamasi anlamini yitirir; height: 100% iddialarini
+   * gevsetip kart yuksekliklerini iceriklerine birakiyoruz.
+   */
+  .dashboard-bottom-grid > .dashboard-starred-card,
+  .dashboard-news-card--fill,
   .dashboard-middle-column {
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto;
+    height: auto;
+  }
+
+  .dashboard-middle-column,
+  .dashboard-right-column {
+    /* Dikey diziliş zaten flex column; mobil özel ayarı gerekmiyor. */
+    gap: 12px;
+    height: auto;
+  }
+
+  /* Sag kolon stretch agresifligini gevsetip news-card auto-fit ile devam etsin. */
+  .dashboard-news-card--fill {
+    flex: 0 0 auto;
   }
 }
 
@@ -820,8 +1166,9 @@
     grid-template-columns: 1fr;
   }
 
-  .dashboard-middle-column {
-    grid-template-columns: 1fr;
+  .dashboard-middle-column,
+  .dashboard-right-column {
+    gap: 12px;
   }
 
   .chart-card-header {

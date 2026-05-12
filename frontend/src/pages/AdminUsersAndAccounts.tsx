@@ -17,12 +17,15 @@ type AdminAccountView = {
     frozenReason: string | null;
 };
 
+// Spring Data 3.3+ VIA_DTO shape (bkz. NrsFinancePortalApplication).
 type PageResponse<T> = {
     content: T[];
-    totalElements: number;
-    totalPages: number;
-    number: number;
-    size: number;
+    page: {
+        size: number;
+        number: number;
+        totalElements: number;
+        totalPages: number;
+    };
 };
 
 type AdminUserInspection = {
@@ -93,7 +96,7 @@ export function AdminUsersAndAccounts() {
                 const raw = res.data?.data ?? res.data;
                 const pageData = raw as PageResponse<AdminAccountView>;
                 setAccounts(pageData?.content ?? []);
-                setTotalPages(pageData?.totalPages ?? 0);
+                setTotalPages(pageData?.page?.totalPages ?? 0);
             })
             .catch((err) => {
                 const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? t('admin.accountsLoadFailed', 'Hesaplar yüklenemedi');

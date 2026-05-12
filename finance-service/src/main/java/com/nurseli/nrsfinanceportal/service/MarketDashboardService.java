@@ -16,10 +16,21 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MarketDashboardService {
 
-    private static final int HISTORY_DAYS = 14;
+    /*
+     * Sparkline için pencere: frontend "Trend" kolonu 1G/7G/14G arasında geçiş yapıyor; her
+     * dönemde farklı bir dilim üretebilmek için pencerede en az 14 işlem günü dolu kalmalı.
+     * Takvim günleri (hafta sonu + tatil dahil) ortalama %30 boş gelir, bu yüzden 30 takvim
+     * gününe çıkardık. Eskiden 14 günde Yahoo'dan ~7 nokta dönüyordu ve 7G/14G dilimler aynı
+     * tüm-diziyi alıyordu (kullanıcı şikayeti).
+     */
+    private static final int HISTORY_DAYS = 30;
     /** FX / kripto / emtia / fon: kısa pencerede tek nokta kalırsa sparkline ve % için yeniden dene */
     private static final int HISTORY_DAYS_LONG = 90;
-    private static final int SPARKLINE_POINTS = 24;
+    /*
+     * Downsample hedefi 30: gün başına ~1 nokta. Frontend `slice(-7)` ve `slice(-14)` yaparken
+     * gerçek 7 ve 14 günlük dilimleri yakalar, dönemler arası fark net görünür.
+     */
+    private static final int SPARKLINE_POINTS = 30;
     private static final String MODE_EQUITY_FINVIZ = "EQUITY_FINVIZ";
     private static final String MODE_MULTI_ASSET = "MULTI_ASSET";
     private static final String HORIZON_1D = "1D";
@@ -106,6 +117,14 @@ public class MarketDashboardService {
             String industry = EQUITY_INDUSTRY.getOrDefault(symbol, "OTHER");
             List<MarketPriceHistoryDto> raw = fetchHistory(AssetType.STOCK, symbol, HISTORY_DAYS);
             List<BigDecimal> closes = midClosesSorted(raw);
+            if (closes.size() < 2) {
+                List<MarketPriceHistoryDto> longer = fetchHistory(AssetType.STOCK, symbol, HISTORY_DAYS_LONG);
+                List<BigDecimal> longCloses = midClosesSorted(longer);
+                if (longCloses.size() > closes.size()) {
+                    raw = longer;
+                    closes = longCloses;
+                }
+            }
 
             if (closes.size() >= 2) {
                 sparklines.add(new SparklineEntry("STOCK", symbol, downsample(closes, SPARKLINE_POINTS)));

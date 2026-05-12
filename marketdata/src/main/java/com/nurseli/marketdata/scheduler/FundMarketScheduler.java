@@ -42,4 +42,18 @@ public class FundMarketScheduler {
             symbols.forEach(symbol -> service.ingestForDate(symbol, today));
         }
     }
+
+    /**
+     * Hisse tarafındaki günlük incremental history benzeri: uzun süre ayakta kalan serviste
+     * yalnızca quote job'ı kaçırılırsa grafik takılı kalmasın (Yahoo/Finnhub backfill).
+     */
+    @Scheduled(cron = "${app.etf.history-incremental-cron:0 45 6 * * *}", zone = "Europe/Istanbul")
+    public void fetchFundHistoryIncremental() {
+        int days = Math.max(7, etfProperties.getHistoryIncrementalDays());
+        log.info("[ETF][SCHEDULED] Incremental history backfill windowDays={}", days);
+        List<String> symbols = etfProperties.getSymbols();
+        if (symbols != null) {
+            symbols.forEach(symbol -> service.ingestHistory(symbol, days));
+        }
+    }
 }

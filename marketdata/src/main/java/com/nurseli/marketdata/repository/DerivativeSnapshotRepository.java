@@ -17,14 +17,16 @@ public interface DerivativeSnapshotRepository extends JpaRepository<DerivativeSn
     void deleteByContractCode(String contractCode);
 
     /**
-     * Her contract için en son snapshot'ı tek tur (DISTINCT ON) ile çeker.
-     * Korelasyonlu subquery yerine; (contract_code, as_of desc) indeksiyle index‑only scan.
+     * Her contract için en son snapshot. (contract_code, as_of desc) indeksiyle PG'de
+     * subquery merge join üzerinde dakikalardan saniyelere düşer.
+     * Native DISTINCT ON denemesi Hibernate entity mapping'inde stabil değildi; JPQL daha güvenli.
      */
-    @Query(value = """
-            select distinct on (contract_code) *
-            from derivative_snapshot
-            order by contract_code, as_of desc
-            """, nativeQuery = true)
+    @Query("""
+            select s from DerivativeSnapshot s
+            where s.asOf = (
+                select max(s2.asOf) from DerivativeSnapshot s2 where s2.contractCode = s.contractCode
+            )
+            """)
     List<DerivativeSnapshot> findLatestSnapshotPerContract();
 
     @Query("""
