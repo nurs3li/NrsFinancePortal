@@ -101,6 +101,11 @@
 			<artifactId>liquibase-core</artifactId>
 		</dependency>
 
+		<dependency>
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
+		</dependency>
+
 		<!-- WebClient (Spring WebFlux) -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
