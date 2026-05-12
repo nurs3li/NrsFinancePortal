@@ -1,9 +1,21 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
+import {
+    forwardRef,
+    useCallback,
+    useEffect,
+    useImperativeHandle,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+    type MouseEvent,
+} from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AxiosResponse } from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { financeClient, marketClient } from '../api/client';
 import type { LatestPriceRow, MarketDashboard } from '../components/market/marketTypes';
+import { approxPctByDays } from '../components/market/heatmapApproxPct';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { formatAssetLabel, getDynamicLogoUrl } from '../lib/assetBranding';
@@ -18,13 +30,26 @@ import { usePolling } from '../hooks/usePolling';
 import { Star, TrendingUp } from 'lucide-react';
 import { extractMaturityDate, formatBondDisplayName, getRemainingDays } from '../utils/bondFormatter';
 import { cryptoMeta, etfMeta, fxMeta, getBondMeta, instrumentMeta } from '../utils/instrumentMeta';
+import { isViopWhitelisted, VIOP_WHITELIST, viopCategoryFor, type ViopCategory } from '../constants/ViopWhitelist';
 import './MarketTerminal.css';
 
 type MarketInstrument = {
     symbol: string;
     category: MarketCategory;
     price: number;
+    /**
+     * Tablonun "Toplam donem degisimi" ana metrigi. Sparkline penceresinden hesaplandigi
+     * icin pratikte ~14 gunluk degisimi temsil eder; siralama/Hero panel/asagi yukari
+     * piyasaler bu deger uzerinden caliṣir.
+     */
     changePercent: number;
+    /**
+     * Heatmap (FINVIZ tarzi) tile'inin 1-gunluk yuzdesi. Sol tablo "1G" chip'i ile heatmap
+     * paneli birebir ayni rakami gostersin diye ayri tutuyoruz. Live tick geldiginde live
+     * tick'in changePercent'i (genelde 24h) ile override edilir; yoksa heatmap tile degerini
+     * dondurur. Yoksa fallback olarak `changePercent` ile aynidir.
+     */
+    dailyChangePercent?: number;
     trend: 'UP' | 'DOWN';
     high?: number;
     low?: number;
@@ -121,8 +146,25 @@ type LiveTick = { category: MarketCategory; symbol: string; price: number; chang
 type LivePayload = { ts: string; ticks: LiveTick[] };
 type DebtHistoryByIsin = Record<string, DebtSnapshot[]>;
 
+/**
+ * Chart penceresi -> backend gun parametresi.
+ *
+ * `1D` icin backend'den 3 gun veri istiyoruz: chart en az 2 nokta gerektirir ve `days=1`
+ * cogu zaman tek nokta donduruyordu (hafta sonu / tatil / market kapaniss). Kullanici icin
+ * "1D" anlam olarak "son gunluk degisim/yon" demek; arka tarafta 2-3 islem gunu cekersek
+ * "onceki gune gore degisim" cizgisi her zaman gorunur olur ve "yeterli veri yok"
+ * mesajiyla karsilasilmaz.
+ */
+/*
+ * 1D = 5 takvim gunu. Backend (marketdata) equity/fx/crypto repository'leri sadece daily
+ * kapanis tutuyor; days=1 hafta sonu/tatilde sadece 1 mum getiriyor ve lightweight-charts
+ * en az 2 nokta istedigi icin chart bos kaliyordu. days=5 ile son 1 is haftasinin (Pzt-Cum)
+ * kapanislari yakalanir, kullaniciya bir "yakin donem performans" baglami sunulur.
+ * Backend ALLOWED_DAYS'e 3 ve 5 eklendi; sayisal degeri burada degistirmek istersen oradan
+ * da senkronize et.
+ */
 const RANGE_TO_DAYS: Record<'1D' | '1W' | '1M' | '1Y', number> = {
-    '1D': 1,
+    '1D': 5,
     '1W': 7,
     '1M': 30,
     '1Y': 365,
@@ -312,7 +354,13 @@ function resolveChangePercent(closes: number[], fallback?: number): number {
     if (Number.isFinite(computed) && Math.abs(computed) > 1e-6) {
         return computed;
     }
-    if (fallback != null && Number.isFinite(fallback)) {
+    for (const days of [14, 7, 1] as const) {
+        const a = approxPctByDays(closes, days);
+        if (a != null && Number.isFinite(a) && Math.abs(a) > 1e-6) {
+            return a;
+        }
+    }
+    if (fallback != null && Number.isFinite(fallback) && Math.abs(fallback) > 1e-6) {
         return fallback;
     }
     return 0;
@@ -331,11 +379,14 @@ function buildFallbackTrendSparkline(price: number, changePercent: number, point
 function normalizeTrendSparkline(values: number[], price: number, changePercent: number, points = 14): number[] {
     const clean = (values ?? []).map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0);
     if (clean.length >= 2) {
-        const slice = clean.slice(-points);
-        if (slice.length < points) {
-            return [...Array(points - slice.length).fill(slice[0]), ...slice];
-        }
-        return slice;
+        /*
+         * Gercek veri ne kadar varsa o kadar nokta dondur -- eskiden 14'e kadar `slice[0]` ile
+         * padding yapiliyordu, bu da grafigin basini yapay bir yatay cizgi haline getiriyordu.
+         * 7G/14G yuzde hesabini da (last - first) padded ilk degere baglayip "her donemde ayni
+         * yuzde" bug'ina sebep oluyordu. Render tarafi (`row.sparkline.slice(-N)`) zaten yetersiz
+         * veride dizinin tamamini cizdigi icin padding gereksiz.
+         */
+        return clean.slice(-points);
     }
     return buildFallbackTrendSparkline(price, changePercent, points);
 }
@@ -414,6 +465,14 @@ function parseViopContractLabel(contractCode: string): string {
     const month = monthMap[mm] ?? mm;
     return `${underlying} Vadeli (${month} 20${yy})`;
 }
+
+/** VİOP kategori chip'i için kısa etiket + renk paleti (FX / IDX / EMT / PAY). */
+const VIOP_CATEGORY_CHIP: Record<ViopCategory, { label: string; bg: string; color: string }> = {
+    FX: { label: 'FX', bg: 'rgba(56, 189, 248, 0.18)', color: '#7dd3fc' },
+    INDEX: { label: 'IDX', bg: 'rgba(245, 158, 11, 0.18)', color: '#fbbf24' },
+    COMMODITY: { label: 'EMT', bg: 'rgba(234, 179, 8, 0.22)', color: '#facc15' },
+    EQUITY: { label: 'PAY', bg: 'rgba(34, 197, 94, 0.18)', color: '#86efac' },
+};
 
 function buildRsi(points: { time: string; close: number }[], period = 14): { time: string; value: number }[] {
     if (points.length <= period) return [];
@@ -504,6 +563,193 @@ const VIOP_HISTORY_CATALOG_CAP = 24;
 const MARKET_LIST_ROW_HEIGHT = 52;
 const MARKET_LIST_OVERSCAN_ROWS = 12;
 
+/**
+ * Sol listedeki sparkline trendinin kac gunluk pencereden hesaplanacagini belirler.
+ * BOND (tahvil) icin 7 gun: kullanici tahvili kisa-vadeli yon icin izliyor ve degisimler
+ * yavas oldugundan 14 gun cok pasif kaliyordu. Diger kategoriler 14 gun (default).
+ *
+ * NOT: Bu pencere hem sparkline'in kac noktasini cizecegini hem de yon-renk hesabini
+ * yonetir; ayrica tablo basligi `Trend ({gunSayisi}g)` olarak gosterilir, boylece
+ * kullanici hangi periyoda bakildigini net gorur.
+ */
+const SPARK_DAYS_BY_CATEGORY: Partial<Record<MarketCategory, number>> = {
+    BOND: 7,
+};
+const DEFAULT_SPARK_DAYS = 14;
+function sparkDaysFor(category: MarketCategory): number {
+    return SPARK_DAYS_BY_CATEGORY[category] ?? DEFAULT_SPARK_DAYS;
+}
+
+/**
+ * Trend kolonu icin kullanici tarafindan secilebilen pencere boyutlari.
+ *
+ * Kapsam: yalnizca Hisse / Kripto / Doviz / Altin / Fonlar kategorileri (TREND_SELECTABLE_CATEGORIES).
+ * BOND (tahvil) ve FUTURES (VIOP) icin bu secim *gosterilmez* -- tahvil sabit 7 gunde kaliyor
+ * (kullanici talebi, kisa vadeli yon icin), VIOP ise zaten gunluk kapanis stream'i kullaniyor
+ * ve secimin pratik anlami yok.
+ *
+ * Performans notu: bu secim yalnizca *istemci tarafinda var olan* `row.sparkline` dizisinin
+ * slice araligini ve yon-yuzdesini etkiler -- yeni network istegi tetiklemez, server'a ek yuk
+ * bindirmez, ilk sayfa yuklemesini geciktirmez. Tum maliyet O(N) bir slice ve iki cikartmaktan
+ * ibarettir.
+ */
+/*
+ * 1G icin `days: 2` -> sparkline `slice(-2)` minimum 2 nokta dondurur, polyline gercek bir
+ * cizgi olarak gorunur. Tek noktayla cizgi cikmiyordu (SVG polyline en az 2 nokta ister) ve
+ * trend kolonu 1G'de bos kaliyordu. Yuzde hesabi `effectiveChangePercent` icinde "1D" oz-kosulu
+ * ile `dailyChangePercent`'i kullaniyor; sparkline slice'i bunu degistirmez.
+ */
+const TREND_PERIOD_OPTIONS = [
+    { id: '1D' as const, days: 2, label: '1G' },
+    { id: '7D' as const, days: 7, label: '7G' },
+    { id: '14D' as const, days: 14, label: '14G' },
+];
+type TrendPeriodId = (typeof TREND_PERIOD_OPTIONS)[number]['id'];
+const DEFAULT_TREND_PERIOD: TrendPeriodId = '14D';
+const TREND_SELECTABLE_CATEGORIES: ReadonlySet<MarketCategory> = new Set<MarketCategory>([
+    'EQUITY',
+    'CRYPTO',
+    'FX',
+    'METALS',
+    'FUNDS',
+]);
+
+/**
+ * Trend kolonunda kullanilacak gercek pencere boyutunu dondurur:
+ *  - BOND   -> 7   (eski davranis, kullanici sabit istiyor)
+ *  - FUTURES -> 14 (default, secim UI'sini gostermiyoruz)
+ *  - Digerleri -> kullanici secimi (1 / 7 / 14)
+ */
+function effectiveSparkDays(category: MarketCategory, trendPeriod: TrendPeriodId): number {
+    if (!TREND_SELECTABLE_CATEGORIES.has(category)) {
+        return sparkDaysFor(category);
+    }
+    return TREND_PERIOD_OPTIONS.find((p) => p.id === trendPeriod)?.days ?? DEFAULT_SPARK_DAYS;
+}
+
+/**
+ * "1G" sütunu / `effectiveChangePercent(..., '1D')` için günlük % kaynağı.
+ * Hisse: backend heatmap tile gerçek 1 günlük (FINHUB) — tile öncelikli.
+ * Fon / döviz / kripto / altın: tile.changePercent uzun pencere (dashboard ~14–30g);
+ * kısa hareket için sparkline son iki nokta (`approxPctByDays(..., 1)`) öncelikli.
+ */
+function dailyChangePercentForListedAsset(
+    category: MarketCategory,
+    tileChange: number | null | undefined,
+    spark: number[],
+    resolvedChangePercent: number,
+): number {
+    const spark1 = approxPctByDays(spark, 1);
+    if (category === 'EQUITY') {
+        const t = tileChange != null ? Number(tileChange) : Number.NaN;
+        if (Number.isFinite(t) && Math.abs(t) > 1e-6) return t;
+        if (spark1 != null && Math.abs(spark1) > 1e-6) return spark1;
+        return resolvedChangePercent;
+    }
+    if (spark1 != null && Math.abs(spark1) > 1e-6) return spark1;
+    const t = tileChange != null ? Number(tileChange) : Number.NaN;
+    if (Number.isFinite(t) && Math.abs(t) > 1e-6) return t;
+    return resolvedChangePercent;
+}
+
+/**
+ * % kolonunda gosterilecek "donem degisim" yuzdesini hesaplar.
+ *
+ * Kurallar:
+ *  - BOND / FUTURES: row.changePercent -- bu kategorilerde periyod secimi yok, mevcut deger.
+ *  - 1D modu (secilebilir kategoriler): `dailyChangePercent` — hisse için tile 1G, diger
+ *    varlıklarda `dailyChangePercentForListedAsset` (spark 1G oncelikli, tile uzun pencere degil).
+ *  - 7D / 14D modu: row.sparkline.slice(-days) ilk-son nokta yuzdesi.
+ *    ((last - first) / first) * 100. Padding kaldirildigi icin slice gercek N gunluk veriden
+ *    olusur; yetersiz veri varsa row.changePercent fallback.
+ */
+function effectiveChangePercent(
+    row: { sparkline: number[]; changePercent: number; dailyChangePercent?: number; category: MarketCategory },
+    trendPeriod: TrendPeriodId,
+): number {
+    if (!TREND_SELECTABLE_CATEGORIES.has(row.category)) {
+        return row.changePercent;
+    }
+    if (trendPeriod === '1D') {
+        const daily = row.dailyChangePercent;
+        if (daily != null && Number.isFinite(daily) && Math.abs(daily) > 1e-6) {
+            return daily;
+        }
+        const a1 = approxPctByDays(row.sparkline, 1);
+        if (a1 != null && Math.abs(a1) > 1e-6) return a1;
+        return row.changePercent;
+    }
+    const days = TREND_PERIOD_OPTIONS.find((p) => p.id === trendPeriod)?.days ?? DEFAULT_SPARK_DAYS;
+    const slice = row.sparkline.slice(-days);
+    if (slice.length >= 2) {
+        const first = Number(slice[0]);
+        const last = Number(slice[slice.length - 1]);
+        if (Number.isFinite(first) && first > 0 && Number.isFinite(last)) {
+            return ((last - first) / first) * 100;
+        }
+    }
+    const approx =
+        trendPeriod === '7D'
+            ? approxPctByDays(row.sparkline, 7)
+            : trendPeriod === '14D'
+              ? approxPctByDays(row.sparkline, 14)
+              : null;
+    if (approx != null && Math.abs(approx) > 1e-6) {
+        return approx;
+    }
+    return row.changePercent;
+}
+
+/** Treemap `assetClass` → sol tablo / trend chip ile aynı `MarketCategory`. */
+function heatmapAssetClassToCategory(assetClass: string): MarketCategory {
+    switch (assetClass) {
+        case 'STOCK':
+            return 'EQUITY';
+        case 'CRYPTO':
+            return 'CRYPTO';
+        case 'FX':
+            return 'FX';
+        case 'METAL':
+            return 'METALS';
+        case 'FUND':
+            return 'FUNDS';
+        default:
+            return 'EQUITY';
+    }
+}
+
+/**
+ * Sağ panel ısı haritası: sol listedeki 1G / 7G / 14G seçimi ile aynı % mantığı
+ * (`effectiveChangePercent` + dashboard sparkline). Eskiden backend tile % sabitti.
+ */
+function enrichTreemapTileForTrendPeriod(
+    tile: TreemapTile,
+    dashboard: MarketDashboard | undefined,
+    trendPeriod: TrendPeriodId,
+): TreemapTile {
+    if (!dashboard) return tile;
+    const category = heatmapAssetClassToCategory(tile.assetClass);
+    if (!TREND_SELECTABLE_CATEGORIES.has(category)) {
+        return tile;
+    }
+    const closes = sparklineClosesFor(dashboard, tile.symbol, tile.assetClass);
+    const changePercent = resolveChangePercent(closes, tile.changePercent);
+    const dailyChangePercent = dailyChangePercentForListedAsset(
+        category,
+        tile.changePercent,
+        closes,
+        changePercent,
+    );
+    const row = {
+        sparkline: closes,
+        changePercent,
+        dailyChangePercent,
+        category,
+    };
+    const pct = effectiveChangePercent(row, trendPeriod);
+    return { ...tile, changePercent: pct };
+}
+
 function toContractMonth(label: string): string {
     const m = label.match(/\((.+)\)/);
     return m?.[1] ?? '—';
@@ -557,6 +803,46 @@ function isStarredResolved(data: StarredAssetsApiResponse | undefined, mt: strin
     return data.resolved.some((r) => r.marketType === mt && r.symbol === sym);
 }
 
+/**
+ * Heatmap hover detayini izolated bir component'ta tutuyoruz: aksi halde her tile hover
+ * Market.tsx (2900+ satir, ~10 chart) parent'ini re-render ediyor ve lightweight-charts
+ * gibi imperative bilesenler titremeye basliyor. forwardRef + useImperativeHandle ile
+ * parent rAF-throttled handler'dan kucuk bu component'in local state'ini guncelliyor;
+ * Market.tsx parent re-render etmiyor.
+ */
+type HeatmapHoverPanelHandle = { setTile: (tile: TreemapTile | null) => void };
+type HeatmapHoverPanelProps = {
+    labelChange: string;
+    labelSector: string;
+    promptText: string;
+};
+const HeatmapHoverPanel = forwardRef<HeatmapHoverPanelHandle, HeatmapHoverPanelProps>(
+    function HeatmapHoverPanel({ labelChange, labelSector, promptText }, ref) {
+        const [tile, setTile] = useState<TreemapTile | null>(null);
+        useImperativeHandle(ref, () => ({ setTile }), []);
+        return (
+            <div className="terminal-heatmap-detail">
+                {tile ? (
+                    <>
+                        <div>
+                            <strong>{tile.symbol}</strong> · {tile.assetClass}
+                        </div>
+                        <div>
+                            {labelChange}: {tile.changePercent >= 0 ? '+' : ''}
+                            {tile.changePercent.toFixed(2)}%
+                        </div>
+                        <div>
+                            {labelSector}: {tile.sector}
+                        </div>
+                    </>
+                ) : (
+                    <div>{promptText}</div>
+                )}
+            </div>
+        );
+    }
+);
+
 export function Market() {
     const { theme, tokens } = useTheme();
     const { t } = useLanguage();
@@ -565,6 +851,14 @@ export function Market() {
     const [showUsdInTry, setShowUsdInTry] = useState(false);
     const [selectedSymbol, setSelectedSymbol] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
+    /*
+     * Trend kolonunun pencere boyutu: yalnizca destekleyen kategorilerde (Hisse/Kripto/FX/
+     * Altin/Fonlar) tablo basligindaki kompakt segmented control'den degistirilir.
+     * Server'a istek atmaz -- mevcut sparkline dizisinden hesaplandigi icin maliyetsizdir.
+     * Kategori degistiginde state korunur, kullanici Hisse'de 7G secince Kripto'ya gectiginde
+     * de 7G ile karsilasir; bu daha tutarli bir deneyim.
+     */
+    const [trendPeriod, setTrendPeriod] = useState<TrendPeriodId>(DEFAULT_TREND_PERIOD);
     const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
     const [liveOverrides, setLiveOverrides] = useState<Record<string, LiveTick>>({});
     const [range, setRange] = useState<'1D' | '1W' | '1M' | '1Y'>('1M');
@@ -573,7 +867,10 @@ export function Market() {
     const [bondChartMode, setBondChartMode] = useState<'DUAL' | 'CANDLE'>('DUAL');
     const [viopChartMode, setViopChartMode] = useState<'LINE' | 'CANDLE'>('LINE');
     const [spotChartMode, setSpotChartMode] = useState<'ANALYSIS' | 'CANDLE'>('ANALYSIS');
-    const [hoverTile, setHoverTile] = useState<TreemapTile | null>(null);
+    // hoverTile state'i artik <HeatmapHoverPanel/> icinde izolated. Bu sayede hover
+    // Market.tsx (~2900 satir, ~10 chart) parent'ini re-render etmiyor; sadece kucuk
+    // panel re-render oluyor ve grafikler titremiyor.
+    const hoverPanelRef = useRef<HeatmapHoverPanelHandle>(null);
     const hoverTileRafRef = useRef<number | null>(null);
     const hoverTilePendingRef = useRef<TreemapTile | null>(null);
     const lastHoverTileKeyRef = useRef<string>('');
@@ -657,7 +954,9 @@ export function Market() {
     const sideRailRafRef = useRef<number | null>(null);
     const lastSideRailPxRef = useRef<number | null>(null);
     useLayoutEffect(() => {
-        if (activeCategory === 'BOND') {
+        // BOND / FUTURES: sol-sağ rail yüksekliği zaten clamp ile sabit; merkez stack ResizeObserver
+        // `setSideRailPx` ile tüm Market'i gereksiz re-render edip VIOP/tahvil grafik ve scroll'da titreme yaratıyordu.
+        if (activeCategory === 'BOND' || activeCategory === 'FUTURES') {
             setSideRailPx(null);
             lastSideRailPxRef.current = null;
             return;
@@ -678,7 +977,7 @@ export function Market() {
             const next = h > 0 ? h : null;
             const prev = lastSideRailPxRef.current;
             // 1-3px oynama/scrollbar jitter'ında state güncelleyip layout döngüsüne girmesin.
-            if (prev != null && next != null && Math.abs(prev - next) < 8) return;
+            if (prev != null && next != null && Math.abs(prev - next) < 16) return;
             lastSideRailPxRef.current = next;
             if (sideRailRafRef.current != null) cancelAnimationFrame(sideRailRafRef.current);
             sideRailRafRef.current = requestAnimationFrame(() => {
@@ -749,17 +1048,25 @@ export function Market() {
             const key = next ? `${next.assetClass}:${next.symbol}` : '';
             if (key !== lastHoverTileKeyRef.current) {
                 lastHoverTileKeyRef.current = key;
-                setHoverTile(next);
+                // Sadece izolated <HeatmapHoverPanel/> re-render olur; Market.tsx parent etkilenmez.
+                hoverPanelRef.current?.setTile(next);
             }
             hoverTileRafRef.current = null;
         });
     }, []);
 
+    // VIOP latest + contracts: küçük payload, tek seferlik. Tab değişiminden bağımsız her zaman
+    // fetch ediyoruz; aksi halde kullanıcı VIOP'a ilk gelişinde önce kontrat listesini bekliyor
+    // ve sonra grafiği — tek isabet yerine iki tur ekrana yansıyor.
+    //
+    // `select` ile whitelist filtresi defansif uygulanır: backend (`app.viop.query.allowed-contracts`)
+    // birincil filtre, frontend ise backend genişlerse UI'de likiditesiz/likit olmayan kontratların
+    // sızmamasını garanti eder. Whitelist sabiti: `constants/ViopWhitelist.ts`.
     const { data: viopLatest = [], isSuccess: viopLatestSucceeded } = useQuery({
         queryKey: ['market', 'viop', 'latest', 'terminal'],
         queryFn: ({ signal }) =>
             marketClient.get<ViopSnapshot[]>('/api/market/viop/latest', { signal }).then((r) => r.data),
-        enabled: activeCategory === 'FUTURES',
+        select: (rows) => (rows ?? []).filter((r) => isViopWhitelisted(r?.contractCode)),
         refetchInterval: false,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
@@ -769,7 +1076,7 @@ export function Market() {
         queryKey: ['market', 'viop', 'contracts', 'terminal'],
         queryFn: ({ signal }) =>
             marketClient.get<ViopContract[]>('/api/market/viop/contracts', { signal }).then((r) => r.data),
-        enabled: activeCategory === 'FUTURES',
+        select: (rows) => (rows ?? []).filter((c) => isViopWhitelisted(c?.contractCode)),
         refetchInterval: false,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
@@ -1024,6 +1331,12 @@ export function Market() {
                 const volume = resolveListVolume(dashboard, symbol, assetClass, price, tile);
                 const tileChange = tile?.changePercent;
                 const changePercent = resolveChangePercent(spark, tileChange);
+                const dailyChangePercent = dailyChangePercentForListedAsset(
+                    activeCategory,
+                    tileChange,
+                    spark,
+                    changePercent,
+                );
                 const r = row as Record<string, unknown>;
                 const apiCurrency = [r.currency, r.priceCurrency, r.quoteCurrency].find(
                     (x): x is string => typeof x === 'string' && x.trim().length > 0
@@ -1033,6 +1346,7 @@ export function Market() {
                     category: activeCategory,
                     price,
                     changePercent,
+                    dailyChangePercent,
                     trend: changePercent >= 0 ? 'UP' : 'DOWN',
                     volume,
                     metrics: activeCategory === 'FX' ? { basis: fxSpreadMap[symbol] ?? 0 } : undefined,
@@ -1197,10 +1511,10 @@ export function Market() {
                 return batch;
             }
         },
-        refetchInterval: false,
-        refetchOnWindowFocus: false,
-        refetchOnReconnect: false,
-        staleTime: Infinity,
+        // Günlük ingest sonrası grafik güncellensin: aynı sekmede kalınca da periyodik tazele.
+        refetchInterval: Boolean(selectedSymbol && marketType) ? 120_000 : false,
+        refetchOnWindowFocus: true,
+        staleTime: 45_000,
     });
 
     const { data: viopHistory = [], isLoading: loadingViopHistory } = useQuery({
@@ -1396,6 +1710,20 @@ export function Market() {
                 live && Number.isFinite(Number(live.changePercent)) && Math.abs(Number(live.changePercent)) > 1e-9
                     ? Number(live.changePercent)
                     : ins.changePercent;
+            /*
+             * Live tick `changePercent` cogu varlikta broker/24s piyasa farki; bunu
+             * `dailyChangePercent` uzerine yazmak 1G sutununu dashboard spark tabanli
+             * ısı haritasından koparir (orn. GBPTRY liste -0.98% vs harita +0.37%).
+             * EQUITY: tile zaten gercek 1G (FINHUB) — canli gunluk guncelleme mantikli.
+             * FX / Kripto / Altın / Fon: 1G = spark son iki nokta; heatmap ile ayni kaynak.
+             */
+            const liveDailyChange =
+                ins.category === 'EQUITY' &&
+                live &&
+                Number.isFinite(Number(live.changePercent)) &&
+                Math.abs(Number(live.changePercent)) > 1e-9
+                    ? Number(live.changePercent)
+                    : ins.dailyChangePercent ?? ins.changePercent;
             const baseVolume = ins.volume != null && Number.isFinite(Number(ins.volume)) ? Number(ins.volume) : null;
             const liveVolume =
                 live && Number.isFinite(Number(live.volume)) && Number(live.volume) > 0
@@ -1410,6 +1738,16 @@ export function Market() {
                 const remainingDays =
                     latestDebt?.daysToMaturity ??
                     (Number.isFinite(remainingFromIsin) ? remainingFromIsin : undefined);
+                // Trend sparkline'ini debtHistoryByIsin uzerinden gercek dirtyPrice serisinden
+                // turetiyoruz. Eskiden bos array veriliyordu, normalizeTrendSparkline yalnizca
+                // livePrice/liveChange'den 2 nokta uretip dumduz diagonal cizgi gosteriyordu.
+                // Tablo render'i zaten `row.sparkline.slice(-sparkDays)` ile son N gunu kesiyor
+                // (`SPARK_DAYS_BY_CATEGORY[BOND] = 7`), o yuzden burada tum gecmisi siralayip
+                // veriyoruz; gerekirse fallback olarak livePrice/liveChange normalize'i devreye girer.
+                const sparkFromHistory = [...(debtHistoryByIsin[symbolKey] ?? [])]
+                    .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime())
+                    .map((row) => Number(row?.dirtyPrice))
+                    .filter((p) => Number.isFinite(p) && p > 0);
                 return {
                     ...ins,
                     price: livePrice,
@@ -1417,7 +1755,7 @@ export function Market() {
                     volume: liveVolume,
                     type: 'BOND',
                     displayName: formatBondDisplayName(symbolKey),
-                    sparkline: normalizeTrendSparkline([], livePrice, liveChange),
+                    sparkline: normalizeTrendSparkline(sparkFromHistory, livePrice, liveChange),
                     maturityDate: fromApi ?? (fromIsin ? fromIsin.toISOString() : undefined),
                     daysToMaturity: remainingDays,
                     couponRate: Number(latestDebt?.couponRate ?? 0),
@@ -1462,6 +1800,7 @@ export function Market() {
                 ...ins,
                 price: livePrice,
                 changePercent: liveChange,
+                dailyChangePercent: liveDailyChange,
                 volume: liveVolume,
                 type: 'STOCK',
                 displayName: formatAssetLabel(symbolKey, marketKindForCategory(ins.category)),
@@ -1469,7 +1808,7 @@ export function Market() {
                 longShort: ins.trend === 'UP' ? 'LONG' : 'SHORT',
             };
         });
-    }, [instruments, dashboard, debtMetaMap, debtLatestMap, viopLatestMap, debtNameMap, activeCategory, liveOverrides]);
+    }, [instruments, dashboard, debtMetaMap, debtLatestMap, debtHistoryByIsin, viopLatestMap, debtNameMap, activeCategory, liveOverrides]);
 
     const filteredInstruments = useMemo(() => {
         const q = searchTerm.trim().toUpperCase();
@@ -1489,17 +1828,52 @@ export function Market() {
     const tableWrapRef = useRef<HTMLDivElement>(null);
     const [listScrollTop, setListScrollTop] = useState(0);
     const [listViewportH, setListViewportH] = useState(560);
+    const scrollRafRef = useRef<number | null>(null);
+    const lastReportedScrollTopRef = useRef(0);
+
+    const lastListViewportHRef = useRef(0);
 
     useLayoutEffect(() => {
         const el = tableWrapRef.current;
         if (!el || typeof ResizeObserver === 'undefined') return;
-        const onScroll = () => setListScrollTop(el.scrollTop);
+
+        // SCROLL THROTTLE: native scroll her pikselde tetiklenir. Onceden her pikselde
+        // setListScrollTop cagrilip Market.tsx (~2900 satir, ~10 chart) re-render
+        // ediliyordu; bu da scroll sirasinda gorsel titremeye yol aciyordu.
+        //
+        // (1) rAF throttle ile setState frekansi max 60Hz'a indirilir.
+        // (2) Satir-esikli (rowHeight) guard: scroll 1 satirdan az kaymisken state
+        //     guncellenmez. Overscan zaten 12 satir oldugu icin bu guvenli.
+        // Net etki: scroll sirasinda Market.tsx re-render frekansi 60Hz -> ~5Hz'a duser
+        // ve chart'lar artik titremiyor; native scroll smoothness korunuyor.
+        const onScroll = () => {
+            if (scrollRafRef.current != null) return;
+            scrollRafRef.current = requestAnimationFrame(() => {
+                scrollRafRef.current = null;
+                const current = el.scrollTop;
+                if (Math.abs(current - lastReportedScrollTopRef.current) >= MARKET_LIST_ROW_HEIGHT) {
+                    lastReportedScrollTopRef.current = current;
+                    setListScrollTop(current);
+                }
+            });
+        };
         el.addEventListener('scroll', onScroll, { passive: true });
-        const ro = new ResizeObserver(() => setListViewportH(el.clientHeight));
+        const ro = new ResizeObserver(() => {
+            const h = el.clientHeight;
+            if (Math.abs(h - lastListViewportHRef.current) < 12) return;
+            lastListViewportHRef.current = h;
+            requestAnimationFrame(() => setListViewportH(h));
+        });
         ro.observe(el);
-        onScroll();
+        lastReportedScrollTopRef.current = el.scrollTop;
+        setListScrollTop(el.scrollTop);
+        lastListViewportHRef.current = el.clientHeight;
         setListViewportH(el.clientHeight);
         return () => {
+            if (scrollRafRef.current != null) {
+                cancelAnimationFrame(scrollRafRef.current);
+                scrollRafRef.current = null;
+            }
             el.removeEventListener('scroll', onScroll);
             ro.disconnect();
         };
@@ -1508,6 +1882,7 @@ export function Market() {
     useEffect(() => {
         const el = tableWrapRef.current;
         if (el) el.scrollTop = 0;
+        lastReportedScrollTopRef.current = 0;
         setListScrollTop(0);
     }, [activeCategory]);
 
@@ -1544,16 +1919,24 @@ export function Market() {
     }, []);
 
     const hero = useMemo(() => {
-        const current = instruments.find((x) => x.symbol === selectedSymbol) ?? instruments[0];
+        // Üst hero % / ok: TREND (1G/7G/14G) seciminde tablo + ısı haritası ile aynı
+        // `effectiveChangePercent`; yalnızca uzun-pencere `changePercent` kalsa hero ile
+        // liste/heatmap ayrışırdı (FX canlı 24s vs spark 1G).
+        const current = instrumentVms.find((x) => x.symbol === selectedSymbol) ?? instrumentVms[0];
         if (!current) return null;
         const highs = candles.map((c) => c.high);
         const lows = candles.map((c) => c.low);
+        const headlineChange = TREND_SELECTABLE_CATEGORIES.has(current.category)
+            ? effectiveChangePercent(current, trendPeriod)
+            : current.changePercent;
         return {
             ...current,
+            changePercent: headlineChange,
+            trend: (headlineChange >= 0 ? 'UP' : 'DOWN') as 'UP' | 'DOWN',
             high: highs.length ? Math.max(...highs) : current.price,
             low: lows.length ? Math.min(...lows) : current.price,
         };
-    }, [instruments, selectedSymbol, candles]);
+    }, [instrumentVms, selectedSymbol, candles, trendPeriod]);
     const heroScaled = useMemo(() => {
         if (!hero) return null;
         const pd = terminalPriceDisplay(hero, { showUsdInTry, usdTryRate });
@@ -1668,14 +2051,39 @@ export function Market() {
 
     const markers = useMemo(() => [], []);
 
-    const topGainers = useMemo(
-        () => [...instruments].sort((a, b) => b.changePercent - a.changePercent).slice(0, 5),
-        [instruments]
-    );
-    const topLosers = useMemo(
-        () => [...instruments].sort((a, b) => a.changePercent - b.changePercent).slice(0, 5),
-        [instruments]
-    );
+    const insightsTreemapTiles = useMemo(() => {
+        if (!dashboard) return [];
+        return (dashboard.heatmapTiles ?? [])
+            .filter((tile) => {
+                if (activeCategory === 'EQUITY') return tile.assetClass === 'STOCK';
+                if (activeCategory === 'CRYPTO') return tile.assetClass === 'CRYPTO';
+                if (activeCategory === 'FX') return tile.assetClass === 'FX';
+                if (activeCategory === 'METALS') return tile.assetClass === 'METAL';
+                if (activeCategory === 'FUNDS') return tile.assetClass === 'FUND';
+                return false;
+            })
+            .map((tile) => enrichTreemapTileForTrendPeriod(tile, dashboard, trendPeriod));
+    }, [dashboard, activeCategory, trendPeriod]);
+
+    const topGainers = useMemo(() => {
+        const rows = instrumentVms.map((ins) => ({
+            symbol: ins.symbol,
+            changePercent: TREND_SELECTABLE_CATEGORIES.has(ins.category)
+                ? effectiveChangePercent(ins, trendPeriod)
+                : ins.changePercent,
+        }));
+        return [...rows].sort((a, b) => b.changePercent - a.changePercent).slice(0, 5);
+    }, [instrumentVms, trendPeriod]);
+
+    const topLosers = useMemo(() => {
+        const rows = instrumentVms.map((ins) => ({
+            symbol: ins.symbol,
+            changePercent: TREND_SELECTABLE_CATEGORIES.has(ins.category)
+                ? effectiveChangePercent(ins, trendPeriod)
+                : ins.changePercent,
+        }));
+        return [...rows].sort((a, b) => a.changePercent - b.changePercent).slice(0, 5);
+    }, [instrumentVms, trendPeriod]);
     const futuresTopMovers = useMemo(
         () => [...instruments].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent)).slice(0, 5),
         [instruments]
@@ -1698,14 +2106,24 @@ export function Market() {
     const lineWidthBySymbol = useMemo(() => {
         const out: Record<string, number> = {};
         const slice = compareSymbols.slice(0, 4);
-        const vols = slice.map((s) => Math.abs(instruments.find((x) => x.symbol === s)?.changePercent ?? 0));
+        const vols = slice.map((s) => {
+            const vm = instrumentVms.find((x) => x.symbol === s);
+            if (vm && TREND_SELECTABLE_CATEGORIES.has(vm.category)) {
+                return Math.abs(effectiveChangePercent(vm, trendPeriod));
+            }
+            return Math.abs(instruments.find((x) => x.symbol === s)?.changePercent ?? 0);
+        });
         const max = Math.max(...vols, 0.0001);
         for (const sym of slice) {
-            const v = Math.abs(instruments.find((x) => x.symbol === sym)?.changePercent ?? 0);
+            const vm = instrumentVms.find((x) => x.symbol === sym);
+            const v =
+                vm && TREND_SELECTABLE_CATEGORIES.has(vm.category)
+                    ? Math.abs(effectiveChangePercent(vm, trendPeriod))
+                    : Math.abs(instruments.find((x) => x.symbol === sym)?.changePercent ?? 0);
             out[sym] = 2 + Math.min(2.5, (v / max) * 2.5);
         }
         return out;
-    }, [compareSymbols, instruments]);
+    }, [compareSymbols, instruments, instrumentVms, trendPeriod]);
 
     const loadCompare = useCallback(() => {
         if ((activeCategory !== 'FUTURES' && !marketType) || compareSymbols.length < 2) {
@@ -1879,6 +2297,8 @@ export function Market() {
                 '--terminal-border': tokens.border,
                 '--terminal-text': tokens.text,
                 '--terminal-muted': tokens.textMuted,
+                '--terminal-text-muted': tokens.textMuted,
+                '--terminal-accent': tokens.accent,
                 '--terminal-btn-bg': tokens.inputBg,
                 '--terminal-btn-active-bg': theme === 'dark' ? 'rgba(8, 47, 73, 0.8)' : 'rgba(29, 78, 216, 0.14)',
                 '--terminal-btn-active-text': tokens.text,
@@ -1889,6 +2309,23 @@ export function Market() {
         [theme, tokens]
     );
 
+    /**
+     * Chart bileşenlerinin `tokens` prop'u için stable referans. Aksi halde her renderda yeni
+     * obje literal'i oluşur, chart'ların useEffect'i (deps: tokens) sürekli tetiklenir, chart
+     * destroy+create sarmalı oluşur — sayfa titrer ve ana thread tükenince diğer sayfalara
+     * geçiş tıkanır. Tema değiştiğinde yeni referans oluşmalı, bu yüzden token alanlarına bağlı.
+     */
+    const chartTokens = useMemo(
+        () => ({
+            bg: tokens.bg,
+            bgCard: tokens.bgCard,
+            border: tokens.border,
+            text: tokens.text,
+            textMuted: tokens.textMuted,
+        }),
+        [tokens.bg, tokens.bgCard, tokens.border, tokens.text, tokens.textMuted]
+    );
+
     if (errMsg) {
         return <div className="terminal-page">{t('market.pageError', 'Piyasa terminali hatası')}: {errMsg}</div>;
     }
@@ -1896,18 +2333,35 @@ export function Market() {
     return (
         <div className="terminal-page" style={terminalVars}>
             <div className="terminal-hero">
-                <div>
-                    <div style={{ fontSize: 12, color: tokens.textMuted, marginBottom: 2 }}>{t('market.selectedInstrument', 'Seçili Enstrüman')}</div>
-                    <div style={{ fontSize: 22, fontWeight: 700 }}>
-                        {hero
-                            ? activeCategory === 'FUTURES'
-                                ? parseViopContractLabel(hero.symbol)
-                                : activeCategory === 'BOND'
-                                ? debtNameMap[hero.symbol] ?? hero.symbol
-                                : formatAssetLabel(hero.symbol, marketKindForCategory(activeCategory))
-                            : '—'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    {/* AssetLogo en basta -- onceden hero'da hic gorsel yoktu, sadece "Secili Enstrüman" yazisi
+                     * ve sembol kodu vardi; kullanici "secili enstrumanin basinda adi gorunmuyor" geri bildirimi
+                     * verdi. VIOP/Bond kontrat kodlarini logo CDN'e gondermek 404 doguruyor (assetBranding
+                     * helper'i bunu yakalayip null donuyor), AssetLogo da fallback ikona dusuyor. */}
+                    <AssetLogo
+                        src={
+                            hero && (activeCategory === 'EQUITY' || activeCategory === 'CRYPTO' || activeCategory === 'FX' || activeCategory === 'METALS' || activeCategory === 'FUNDS')
+                                ? getDynamicLogoUrl(hero.symbol, marketKindForCategory(activeCategory))
+                                : null
+                        }
+                        alt={hero ? `${hero.symbol} logo` : 'logo'}
+                        fallbackIcon={TrendingUp}
+                        fallbackColor={tokens.textMuted}
+                        size={36}
+                    />
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: tokens.textMuted, marginBottom: 2 }}>{t('market.selectedInstrument', 'Seçili Enstrüman')}</div>
+                        <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.15 }}>
+                            {hero
+                                ? activeCategory === 'FUTURES'
+                                    ? parseViopContractLabel(hero.symbol)
+                                    : activeCategory === 'BOND'
+                                    ? debtNameMap[hero.symbol] ?? hero.symbol
+                                    : formatAssetLabel(hero.symbol, marketKindForCategory(activeCategory))
+                                : '—'}
+                        </div>
+                        <div style={{ fontSize: 12, color: tokens.textMuted }}>{hero?.symbol ?? ''}</div>
                     </div>
-                    <div style={{ fontSize: 12, color: tokens.textMuted }}>{hero?.symbol ?? ''}</div>
                 </div>
                 <div className="terminal-hero-price" title={heroScaled?.title}>
                     {heroScaled ? (
@@ -1979,7 +2433,21 @@ export function Market() {
                                     marginBottom: 10,
                                 }}
                             >
-                                <div style={{ fontWeight: 700 }}>{t('market.marketList', 'Piyasa Listesi')}</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 700 }}>{t('market.marketList', 'Piyasa Listesi')}</div>
+                                    {activeCategory === 'FUTURES' ? (
+                                        <div
+                                            style={{
+                                                fontSize: 11,
+                                                color: tokens.textMuted,
+                                                lineHeight: 1.25,
+                                                letterSpacing: 0.2,
+                                            }}
+                                        >
+                                            Döviz · Endeks · Emtia · Pay ({VIOP_WHITELIST.length} kontrat)
+                                        </div>
+                                    ) : null}
+                                </div>
                                 {activeCategory === 'EQUITY' || activeCategory === 'CRYPTO' ? (
                                     <button
                                         type="button"
@@ -2006,7 +2474,50 @@ export function Market() {
                                             <th>{t('market.instrument', 'Enstrüman')}</th>
                                             <th>{t('market.price', 'Fiyat')}</th>
                                             <th>%</th>
-                                            <th>{t('market.trend', 'Trend')}</th>
+                                            <th
+                                                title={`Son ${effectiveSparkDays(activeCategory, trendPeriod)} günlük kapanışlardan hesaplanır`}
+                                            >
+                                                {/*
+                                                  * Trend basligi: BOND/FUTURES disindaki kategorilerde 1G/7G/14G arasi
+                                                  * kompakt segmented control. Tabloyu yeniden render etmez (yalnizca
+                                                  * iki hucre `effectiveSparkDays` / `effectiveChangePercent` ile yeniden
+                                                  * hesaplar), bu yuzden sayfa yuklemesi gecikmez.
+                                                  */}
+                                                {TREND_SELECTABLE_CATEGORIES.has(activeCategory) ? (
+                                                    <div className="market-trend-head">
+                                                        <span className="market-trend-head__label">
+                                                            {t('market.trend', 'Trend')}
+                                                        </span>
+                                                        <div
+                                                            className="market-trend-period"
+                                                            role="group"
+                                                            aria-label="Trend periyodu"
+                                                        >
+                                                            {TREND_PERIOD_OPTIONS.map((opt) => (
+                                                                <button
+                                                                    key={opt.id}
+                                                                    type="button"
+                                                                    className={`market-trend-period__btn${
+                                                                        trendPeriod === opt.id ? ' is-active' : ''
+                                                                    }`}
+                                                                    aria-pressed={trendPeriod === opt.id}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setTrendPeriod(opt.id);
+                                                                    }}
+                                                                    title={`Trendi son ${opt.days} güne göre hesapla`}
+                                                                >
+                                                                    {opt.label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        {t('market.trend', 'Trend')} ({sparkDaysFor(activeCategory)}g)
+                                                    </>
+                                                )}
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -2072,12 +2583,13 @@ export function Market() {
                                                 <td className="terminal-instrument-cell">
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', rowGap: 4 }}>
                                                         <AssetLogo
-                                                            src={getDynamicLogoUrl(
-                                                                row.symbol,
+                                                            src={
+                                                                // VIOP/Bond kontrat kodlari ticker degil; CDN'e gondermek 404 ureriyor
+                                                                // ve onError -> setState dongusu navigasyonu engelliyor. Direkt null.
                                                                 row.category === 'BOND' || row.category === 'FUTURES'
-                                                                    ? 'EQUITY'
-                                                                    : marketKindForCategory(row.category)
-                                                            )}
+                                                                    ? null
+                                                                    : getDynamicLogoUrl(row.symbol, marketKindForCategory(row.category))
+                                                            }
                                                             alt={`${row.symbol} logo`}
                                                             fallbackIcon={TrendingUp}
                                                             fallbackColor={tokens.textMuted}
@@ -2101,6 +2613,49 @@ export function Market() {
                                                                 </span>
                                                             </div>
                                                         </>
+                                                    ) : row.category === 'FUTURES' ? (
+                                                        <div
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: 6,
+                                                                marginTop: 2,
+                                                                flexWrap: 'wrap',
+                                                            }}
+                                                        >
+                                                            {(() => {
+                                                                const cat = viopCategoryFor(row.symbol);
+                                                                if (!cat) return null;
+                                                                const chip = VIOP_CATEGORY_CHIP[cat];
+                                                                return (
+                                                                    <span
+                                                                        className="instrument-highlight-chip"
+                                                                        style={{
+                                                                            background: chip.bg,
+                                                                            color: chip.color,
+                                                                            fontSize: 10,
+                                                                            padding: '1px 6px',
+                                                                            letterSpacing: 0.3,
+                                                                            fontWeight: 700,
+                                                                        }}
+                                                                        title={
+                                                                            cat === 'FX'
+                                                                                ? 'Döviz Vadeli'
+                                                                                : cat === 'INDEX'
+                                                                                    ? 'Endeks Vadeli'
+                                                                                    : cat === 'COMMODITY'
+                                                                                        ? 'Emtia Vadeli'
+                                                                                        : 'Pay Vadeli'
+                                                                        }
+                                                                    >
+                                                                        {chip.label}
+                                                                    </span>
+                                                                );
+                                                            })()}
+                                                            <span style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.25, wordBreak: 'break-word' }}>
+                                                                {row.displayName}
+                                                            </span>
+                                                        </div>
                                                     ) : (
                                                         <div style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.25, marginTop: 2, wordBreak: 'break-word' }}>
                                                             {row.displayName}
@@ -2113,19 +2668,55 @@ export function Market() {
                                                         maximumFractionDigits: 4,
                                                     })}
                                                 </td>
-                                                <td style={{ color: row.changePercent >= 0 ? '#22c55e' : '#ef4444' }}>
-                                                    {row.changePercent >= 0 ? '+' : ''}
-                                                    {row.changePercent.toFixed(2)}%
+                                                <td
+                                                    style={{
+                                                        color:
+                                                            effectiveChangePercent(row, trendPeriod) >= 0
+                                                                ? '#22c55e'
+                                                                : '#ef4444',
+                                                    }}
+                                                    title={
+                                                        TREND_SELECTABLE_CATEGORIES.has(row.category) && trendPeriod !== '1D'
+                                                            ? `Son ${effectiveSparkDays(row.category, trendPeriod)} günlük donem değişimi`
+                                                            : '24 saatlik değişim'
+                                                    }
+                                                >
+                                                    {(() => {
+                                                        const pct = effectiveChangePercent(row, trendPeriod);
+                                                        return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+                                                    })()}
                                                 </td>
                                                 <td>
-                                                    <svg className="inline-spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
-                                                        <polyline
-                                                            points={sparklinePath(row.sparkline.slice(-14))}
-                                                            fill="none"
-                                                            stroke={row.changePercent >= 0 ? '#22c55e' : '#ef4444'}
-                                                            strokeWidth="2"
-                                                        />
-                                                    </svg>
+                                                    {(() => {
+                                                        // Sparkline yon-rengi ve uzunlugu, secili periyoda gore (BOND/FUTURES
+                                                        // dahil) hesaplanir. Tek slice + iki indeks okumasi, virtual list ile
+                                                        // birlestiginde maliyet pratikte ihmal edilebilir.
+                                                        const days = effectiveSparkDays(row.category, trendPeriod);
+                                                        const slice = row.sparkline.slice(-days);
+                                                        const effPct = effectiveChangePercent(row, trendPeriod);
+                                                        // Renk: % kolonu ile aynı işaret (spark eğimi eski veride yukarı, canlı % aşağı kalabiliyordu).
+                                                        const sparkUp = TREND_SELECTABLE_CATEGORIES.has(row.category)
+                                                            ? effPct >= 0
+                                                            : slice.length >= 2
+                                                              ? slice[slice.length - 1] >= slice[0]
+                                                              : effPct >= 0;
+                                                        return (
+                                                            <svg
+                                                                className="inline-spark"
+                                                                viewBox="0 0 100 24"
+                                                                preserveAspectRatio="none"
+                                                                aria-hidden="true"
+                                                            >
+                                                                <title>{`Son ${days} günlük trend`}</title>
+                                                                <polyline
+                                                                    points={sparklinePath(slice)}
+                                                                    fill="none"
+                                                                    stroke={sparkUp ? '#22c55e' : '#ef4444'}
+                                                                    strokeWidth="2"
+                                                                />
+                                                            </svg>
+                                                        );
+                                                    })()}
                                                 </td>
                                             </tr>
                                             );
@@ -2148,7 +2739,15 @@ export function Market() {
                                         key={cat.id}
                                         type="button"
                                         className={`terminal-btn ${activeCategory === cat.id ? 'active' : ''}`}
-                                        onClick={() => setActiveCategory(cat.id)}
+                                        onClick={() => {
+                                            // BOND/FUTURES intraday verisi tutmuyor; 1D secenegi
+                                            // bos grafik gosterirdi. Bu sekmelere gecerken range
+                                            // 1D ise default 1M'e dusururuz.
+                                            if ((cat.id === 'BOND' || cat.id === 'FUTURES') && range === '1D') {
+                                                setRange('1M');
+                                            }
+                                            setActiveCategory(cat.id);
+                                        }}
                                     >
                                         {categoryLabel(cat.id)}
                                     </button>
@@ -2156,7 +2755,15 @@ export function Market() {
                             </div>
                             <div className="terminal-controls">
                                 <div className="terminal-btn-row">
-                                    {(['1D', '1W', '1M', '1Y'] as const).map((r) => (
+                                    {/*
+                                     * 1D butonu sadece intraday akisi olan kategorilerde gosterilir.
+                                     * BOND ve FUTURES (VIOP) verisi gunluk kapanis bazli oldugu icin
+                                     * "1 Gun" secimi bos/anlamsiz grafik uretirdi -> gizlendi.
+                                     */}
+                                    {((activeCategory === 'BOND' || activeCategory === 'FUTURES')
+                                        ? (['1W', '1M', '1Y'] as const)
+                                        : (['1D', '1W', '1M', '1Y'] as const)
+                                    ).map((r) => (
                                         <button key={r} type="button" className={`terminal-btn ${range === r ? 'active' : ''}`} onClick={() => setRange(r)}>
                                             {r}
                                         </button>
@@ -2234,12 +2841,7 @@ export function Market() {
                                     loading={loadingDebtHistory}
                                     trendLabel={hero?.trend}
                                     timeframeLabel={range}
-                                    tokens={{
-                                        bgCard: tokens.bgCard,
-                                        border: tokens.border,
-                                        text: tokens.text,
-                                        textMuted: tokens.textMuted,
-                                    }}
+                                    tokens={chartTokens}
                                 />
                             ) : activeCategory === 'FUTURES' && viopChartMode === 'LINE' ? (
                                 <ViopTerminalChart
@@ -2250,12 +2852,7 @@ export function Market() {
                                     loading={loadingViopHistory}
                                     trendLabel={hero?.trend}
                                     timeframeLabel={range}
-                                    tokens={{
-                                        bgCard: tokens.bgCard,
-                                        border: tokens.border,
-                                        text: tokens.text,
-                                        textMuted: tokens.textMuted,
-                                    }}
+                                    tokens={chartTokens}
                                 />
                             ) : activeCategory !== 'FUTURES' && activeCategory !== 'BOND' && spotChartMode === 'ANALYSIS' ? (
                                 <SpotTerminalChart
@@ -2267,12 +2864,7 @@ export function Market() {
                                     loading={loadingCandles || loadingIndicators}
                                     trendLabel={hero?.trend}
                                     timeframeLabel={range}
-                                    tokens={{
-                                        bgCard: tokens.bgCard,
-                                        border: tokens.border,
-                                        text: tokens.text,
-                                        textMuted: tokens.textMuted,
-                                    }}
+                                    tokens={chartTokens}
                                 />
                             ) : (
                                 <MarketTerminalChart
@@ -2287,17 +2879,18 @@ export function Market() {
                                     symbol={selectedSymbol}
                                     trendLabel={hero?.trend}
                                     timeframeLabel={range}
-                                    tokens={{
-                                        bg: tokens.bg,
-                                        bgCard: tokens.bgCard,
-                                        border: tokens.border,
-                                        text: tokens.text,
-                                        textMuted: tokens.textMuted,
-                                    }}
+                                    tokens={chartTokens}
                                 />
                             )}
                         </div>
-                        {activeCategory !== 'FUTURES' ? (
+                        {/*
+                         * Karsilastirma Grafigi (Baz 100) panelini FUTURES ve BOND kategorilerinde
+                         * gizliyoruz. FUTURES'ta zaten karsilastirma manasizdi; BOND'da ise marketType
+                         * null oldugundan panel sadece "ana chart'i kullanin" mesajini gosteriyordu --
+                         * gereksiz dikey alan + bilgi gurultusu yaratiyordu. Diger kategorilerde
+                         * (EQUITY, CRYPTO, FX, METALS, FUNDS) panel aynen calismaya devam eder.
+                         */}
+                        {activeCategory !== 'FUTURES' && activeCategory !== 'BOND' ? (
                             <div className="terminal-card terminal-center-comparison">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                                     <strong style={{ fontSize: 14 }}>{t('market.comparisonChart', 'Karşılaştırma Grafiği (Baz 100)')}</strong>
@@ -2326,11 +2919,8 @@ export function Market() {
                                         })}
                                     </div>
                                 ) : null}
-                                {!marketType ? (
-                                    <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
-                                        {t('market.compareBondInfo', 'Tahvil kategorisinde karşılaştırma grafiği yerine üstteki ana chart kullanılır.')}
-                                    </div>
-                                ) : null}
+                                {/* "Tahvil kategorisinde..." bilgilendirme metni kaldirildi: BOND
+                                 * artik tum karsilastirma panelini gizliyor (yukaridaki kosul). */}
                                 {loadingCompare ? (
                                     <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
                                         {t('market.compareLoading', 'Karşılaştırma yükleniyor...')}
@@ -2347,12 +2937,7 @@ export function Market() {
                                             colors={['#38bdf8', '#22c55e', '#eab308', '#f87171']}
                                             lineWidthBySymbol={lineWidthBySymbol}
                                             timeframeLabel={range}
-                                            tokens={{
-                                                bgCard: tokens.bgCard,
-                                                border: tokens.border,
-                                                text: tokens.text,
-                                                textMuted: tokens.textMuted,
-                                            }}
+                                            tokens={chartTokens}
                                             height={250}
                                         />
                                     </div>
@@ -2372,14 +2957,7 @@ export function Market() {
                                 <>
                                     <div className="terminal-right-treemap-slot">
                                         <MarketFinvizTreemap
-                                            tiles={(dashboard?.heatmapTiles ?? []).filter((tile) => {
-                                                if (activeCategory === 'EQUITY') return tile.assetClass === 'STOCK';
-                                                if (activeCategory === 'CRYPTO') return tile.assetClass === 'CRYPTO';
-                                                if (activeCategory === 'FX') return tile.assetClass === 'FX';
-                                                if (activeCategory === 'METALS') return tile.assetClass === 'METAL';
-                                                if (activeCategory === 'FUNDS') return tile.assetClass === 'FUND';
-                                                return false;
-                                            })}
+                                            tiles={insightsTreemapTiles}
                                             borderColor="rgba(71, 85, 105, 0.55)"
                                             panelBg={tokens.bgCard}
                                             onTileHover={handleTreemapHover}
@@ -2391,22 +2969,12 @@ export function Market() {
                                             {t('market.detailedHeatmap', 'Detaylı ısı haritası')}
                                         </button>
                                     </div>
-                                    <div className="terminal-heatmap-detail">
-                                        {hoverTile ? (
-                                            <>
-                                                <div>
-                                                    <strong>{hoverTile.symbol}</strong> · {hoverTile.assetClass}
-                                                </div>
-                                                <div>
-                                                    {t('market.change', 'Değişim')}: {hoverTile.changePercent >= 0 ? '+' : ''}
-                                                    {hoverTile.changePercent.toFixed(2)}%
-                                                </div>
-                                                <div>{t('market.sector', 'Sektör')}: {hoverTile.sector}</div>
-                                            </>
-                                        ) : (
-                                            <div>{t('market.heatmapHoverPrompt', 'Detay için ısı haritasında bir alana gelin.')}</div>
-                                        )}
-                                    </div>
+                                    <HeatmapHoverPanel
+                                        ref={hoverPanelRef}
+                                        labelChange={`${t('market.change', 'Değişim')} (${TREND_PERIOD_OPTIONS.find((p) => p.id === trendPeriod)?.label ?? trendPeriod})`}
+                                        labelSector={t('market.sector', 'Sektör')}
+                                        promptText={t('market.heatmapHoverPrompt', 'Detay için ısı haritasında bir alana gelin.')}
+                                    />
                                 </>
                             ) : null}
 

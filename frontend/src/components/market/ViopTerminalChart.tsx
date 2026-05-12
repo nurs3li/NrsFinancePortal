@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import type { LogicalRange, Time, UTCTimestamp } from 'lightweight-charts';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
@@ -55,7 +55,7 @@ function chartTimeKey(value: Time): string {
     return JSON.stringify(value);
 }
 
-export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timeframeLabel, trendLabel, tokens }: Props) {
+function ViopTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLabel, trendLabel, tokens }: Props) {
     const chartRef = useRef<HTMLDivElement>(null);
     const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null);
     const priceAreaRef = useRef<ReturnType<ReturnType<typeof createChart>['addAreaSeries']> | null>(null);
@@ -68,6 +68,15 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
     const dataByKeyRef = useRef<Record<string, ViopPoint>>({});
     const barCountRef = useRef(0);
     const rangeRef = useRef(parseTerminalChartRange(timeframeLabel));
+    // rAF-throttle'lı crosshair handler için cleanup callback'i; chart yıkılırken pending frame iptal edilir.
+    const crosshairRafRef = useRef<(() => void) | null>(null);
+    // Parent her renderda yeni `tokens` object literal'i veriyor; mount useEffect'i deps'e koyarsak
+    // chart sonsuz destroy+create döngüsüne girer ve grafik titrer + ana thread tükenir. Ref ile en
+    // güncel tokens'ı tut, mount tek sefer çalışsın.
+    const tokensRef = useRef(tokens);
+    useEffect(() => {
+        tokensRef.current = tokens;
+    });
     const [hover, setHover] = useState<ViopPoint | null>(null);
     const chartHeight = 520;
     const sorted = useMemo(() => {
@@ -90,20 +99,21 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
         const el = chartRef.current;
         if (!el || chartApiRef.current) return;
         const widthPx = Math.max(320, el.clientWidth);
+        const t = tokensRef.current;
         const chart = createChart(el, {
             width: widthPx,
             height: chartHeight,
             layout: {
-                background: { color: tokens.bgCard },
-                textColor: tokens.text,
+                background: { color: t.bgCard },
+                textColor: t.text,
             },
             grid: {
                 vertLines: { color: 'rgba(71, 85, 105, 0.18)' },
                 horzLines: { color: 'rgba(71, 85, 105, 0.18)' },
             },
-            rightPriceScale: { borderColor: tokens.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
+            rightPriceScale: { borderColor: t.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
             timeScale: {
-                borderColor: tokens.border,
+                borderColor: t.border,
                 timeVisible: true,
                 secondsVisible: false,
                 // 1Y görünümünde noktalar arası takvim mesafesini doğru göstermek için sabit edge kilitlerini
@@ -164,18 +174,37 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
             scaleMargins: { top: 0.92, bottom: 0 },
         });
 
+        // Lightweight-charts fareyi piksel piksel takip eder ve saniyede 60+ kez çağırır.
+        // Idempotent olsa bile React scheduler her çağrıda dispatch yapar; chart canvas
+        // üzerinde fare gezinirken navigasyon click'leri kuyruğa girip işlenmeyebiliyor
+        // (VİOP sekmesinden çıkamama bug'ının asıl nedeni). rAF ile frame başına 1 kez
+        // çalışacak şekilde sıkıştırıyoruz.
+        let crosshairRaf = 0;
+        let pendingParam: Parameters<Parameters<typeof chart.subscribeCrosshairMove>[0]>[0] | null = null;
         chart.subscribeCrosshairMove((param) => {
-            if (!param?.time) {
-                setHover((prev) => (prev == null ? prev : null));
-                return;
-            }
-            const key = chartTimeKey(param.time);
-            const row = dataByKeyRef.current[key] ?? null;
-            setHover((prev) => {
-                if (prev?.time === row?.time && prev?.price === row?.price) return prev;
-                return row;
+            pendingParam = param;
+            if (crosshairRaf) return;
+            crosshairRaf = window.requestAnimationFrame(() => {
+                crosshairRaf = 0;
+                const p = pendingParam;
+                pendingParam = null;
+                if (!p?.time) {
+                    setHover((prev) => (prev == null ? prev : null));
+                    return;
+                }
+                const key = chartTimeKey(p.time);
+                const row = dataByKeyRef.current[key] ?? null;
+                setHover((prev) => {
+                    if (prev?.time === row?.time && prev?.price === row?.price) return prev;
+                    return row;
+                });
             });
         });
+        crosshairRafRef.current = () => {
+            if (crosshairRaf) window.cancelAnimationFrame(crosshairRaf);
+            crosshairRaf = 0;
+            pendingParam = null;
+        };
         chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
             if (range) logicalRangeRef.current = range;
         });
@@ -186,7 +215,7 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
             chart.applyOptions({
                 width: w,
                 timeScale: {
-                    borderColor: tokens.border,
+                    borderColor: tokensRef.current.border,
                     timeVisible: true,
                     secondsVisible: false,
                     ...lay,
@@ -200,6 +229,7 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
         window.addEventListener('resize', onResize);
         return () => {
             window.removeEventListener('resize', onResize);
+            crosshairRafRef.current?.();
             chart.remove();
             chartApiRef.current = null;
             priceAreaRef.current = null;
@@ -209,7 +239,19 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
             oiRef.current = null;
             hasInitialFitRef.current = false;
         };
-    }, [tokens, timeframeLabel]);
+        // Mount/unmount tek sefer: prop değişen tokens/timeframe için ayrı effect'ler aşağıda.
+    }, []);
+
+    /** Tokens (tema) değişince chart'ı yeniden kurmak yerine sadece renkleri güncelle. */
+    useEffect(() => {
+        const chart = chartApiRef.current;
+        if (!chart) return;
+        chart.applyOptions({
+            layout: { background: { color: tokens.bgCard }, textColor: tokens.text },
+            rightPriceScale: { borderColor: tokens.border },
+            timeScale: { borderColor: tokens.border },
+        });
+    }, [tokens.bgCard, tokens.border, tokens.text, tokens.textMuted]);
 
     useEffect(() => {
         const chart = chartApiRef.current;
@@ -217,6 +259,7 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
         const chartRange = parseTerminalChartRange(timeframeLabel);
         const widthPx = Math.max(320, chartRef.current?.clientWidth ?? 320);
         const tsLay = computeTerminalTimeScaleLayout(widthPx, sorted.length, chartRange);
+        const rangeChanged = rangeRef.current !== chartRange;
         rangeRef.current = chartRange;
         barCountRef.current = sorted.length;
 
@@ -243,8 +286,10 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
         );
 
         chart.applyOptions({
+            // display:none -> block geçişinde clientWidth değişmiş olabilir; tekrar uygula.
+            width: widthPx,
             timeScale: {
-                borderColor: tokens.border,
+                borderColor: tokensRef.current.border,
                 timeVisible: true,
                 secondsVisible: false,
                 ...tsLay,
@@ -252,24 +297,29 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
             },
         });
 
-        // Timeframe veya kontrat değiştikçe yeniden fit'le — kilitli logical range eski 1M görünümünü
-        // 1Y'ye taşıyıp az noktayı orantısız aralıkta gösteriyordu.
-        requestAnimationFrame(() => {
-            chart.timeScale().fitContent();
-            logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
-            hasInitialFitRef.current = true;
-        });
-    }, [loading, sorted, ma7, ma21, showMa, tokens, timeframeLabel]);
+        // fitContent yalnızca ilk veride veya timeframe değiştiğinde çağrılır; aksi halde her
+        // küçük data refresh'inde view zıplar ve titrer.
+        if (!hasInitialFitRef.current || rangeChanged) {
+            requestAnimationFrame(() => {
+                chart.timeScale().fitContent();
+                logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
+                hasInitialFitRef.current = true;
+            });
+        }
+    }, [loading, sorted, ma7, ma21, showMa, timeframeLabel]);
 
-    if (loading) {
-        return <div className="terminal-chart-empty">Grafik yükleniyor...</div>;
-    }
-    if (!sorted.length) {
-        return <div className="terminal-chart-empty">VİOP veri noktası bulunamadı.</div>;
-    }
-    if (sorted.length < 2) {
-        return <div className="terminal-chart-empty">Bu kontrat için çizim yapacak yeterli VİOP geçmişi yok (en az 2 nokta gerekli).</div>;
-    }
+    // Erken-return YOK: chart div'ini her zaman mount edelim. Aksi halde ilk renderda div bulunmaz,
+    // mount useEffect chartRef.current === null görür ve `[]` deps olduğu için bir daha tetiklenmez,
+    // veri sonra gelse de chart hiç kurulmaz. Boş/eksik durumlarda chart container'ı `display:none`
+    // ile gizlenir; mesajları üstte gösteririz.
+    const showChart = !loading && sorted.length >= 2;
+    const emptyMessage = loading
+        ? 'Grafik yükleniyor...'
+        : !sorted.length
+            ? 'VİOP veri noktası bulunamadı.'
+            : sorted.length < 2
+                ? 'Bu kontrat için çizim yapacak yeterli VİOP geçmişi yok (en az 2 nokta gerekli).'
+                : null;
 
     return (
         <div className="terminal-chart-wrap">
@@ -293,14 +343,30 @@ export function ViopTerminalChart({ points, ma7, ma21, showMa, loading, timefram
                     <div className="terminal-ohlc muted">Fiyat/baz/carry için imleci grafik üzerine getir</div>
                 )}
             </div>
-            {limitedData ? (
+            {emptyMessage ? (
+                <div className="terminal-chart-empty">{emptyMessage}</div>
+            ) : null}
+            {showChart && limitedData ? (
                 <div style={{ color: tokens.textMuted, marginBottom: 8, fontSize: 12 }}>Bu periyotta sınırlı VİOP verisi.</div>
             ) : null}
             <div
                 ref={chartRef}
-                style={{ width: '100%', maxWidth: '100%', height: chartHeight, overflow: 'hidden' }}
+                style={{
+                    width: '100%',
+                    maxWidth: '100%',
+                    height: chartHeight,
+                    overflow: 'hidden',
+                    display: showChart ? 'block' : 'none',
+                }}
             />
         </div>
     );
 }
+
+/*
+ * React.memo: Parent state (trendPeriod vb.) re-renderlarinda VİOP chart'in titremesini
+ * engeller. Prop'lar parent'ta useMemo ile stabil; memo "esit referans" karsilastirmasi yapip
+ * gereksiz unmount/mount onler.
+ */
+export const ViopTerminalChart = memo(ViopTerminalChartImpl);
 

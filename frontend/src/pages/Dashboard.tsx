@@ -12,13 +12,25 @@ import {
 import { useNavigate } from 'react-router-dom';
 import type { AxiosResponse } from 'axios';
 import DOMPurify from 'dompurify';
-import { financeClient, marketClient, readFinanceBinaryErrorMessage } from '../api/client';
+import { financeClient, marketClient, notificationClient, readFinanceBinaryErrorMessage } from '../api/client';
 import type { MarketDashboard } from '../components/market/marketTypes';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import { Activity, Bell, ChevronRight, CircleAlert, Coins, DollarSign, TrendingUp, Wallet, type LucideIcon } from 'lucide-react';
+import {
+    Activity,
+    Bell,
+    CheckCircle2,
+    ChevronRight,
+    Coins,
+    DollarSign,
+    Info,
+    ShieldAlert,
+    TrendingUp,
+    Wallet,
+    type LucideIcon,
+} from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatAssetLabel, getDynamicLogoUrl, type MarketType } from '../lib/assetBranding';
 import { AssetLogo } from '../components/AssetLogo';
@@ -118,6 +130,97 @@ type NewsDetailItem = NewsItem & {
 };
 type NewsPage = { content: NewsItem[]; totalElements?: number };
 type TimeFilter = '1A' | '3A';
+
+/**
+ * Dashboard'un sag panelindeki "Son Bildirimler" kartinda gosterdigimiz bildirim satiri.
+ * Notifications sayfasindaki tam DTO'nun bir alt kumesi; Dashboard'da uzun body/referans
+ * alanlarini render etmiyoruz, tikladiginda zaten Bildirimler sayfasina yonlendiriyoruz.
+ */
+type NotificationSummary = {
+    id: number;
+    title: string;
+    type: string;
+    readAt: string | null;
+    createdAt: string;
+    lastOccurredAt: string | null;
+};
+
+// Spring Data 3.3+ VIA_DTO sekli (bkz. NotificationServiceApplication).
+type NotificationPage = {
+    content: NotificationSummary[];
+    page?: { totalElements?: number; size?: number; number?: number; totalPages?: number };
+};
+
+type NotifCategory = 'APPROVAL' | 'SECURITY' | 'REVIEW' | 'INFO';
+
+/**
+ * Bildirim turunden (string) UI kategorisi cikariyoruz; Notifications sayfasindaki
+ * `classifyNotification` ile ayni anahtar kelimeleri kullaniyoruz ki dashboard'daki
+ * mini liste ile detay sayfasi tutarli renk/ikon gostersin.
+ */
+function classifyNotification(type: string): NotifCategory {
+    const t = (type ?? '').toUpperCase();
+    if (
+        t.includes('APPROVED') ||
+        t.includes('APPROVAL') ||
+        t.includes('SUCCESS') ||
+        t.includes('COMPLETED') ||
+        t.includes('CONFIRM') ||
+        t.includes('ONAY')
+    ) {
+        return 'APPROVAL';
+    }
+    if (
+        t.includes('SUSPICIOUS') ||
+        t.includes('SECURITY') ||
+        t.includes('RISK') ||
+        t.includes('REJECT') ||
+        t.includes('FAIL') ||
+        t.includes('FRAUD') ||
+        t.includes('BLOCK') ||
+        t.includes('FROZEN') ||
+        t.includes('GUVENL')
+    ) {
+        return 'SECURITY';
+    }
+    if (
+        t.includes('REVIEW') ||
+        t.includes('PENDING') ||
+        t.includes('REGISTERED') ||
+        t.includes('REQUEST') ||
+        t.includes('TASK') ||
+        t.includes('INCELE')
+    ) {
+        return 'REVIEW';
+    }
+    return 'INFO';
+}
+
+function notifCategoryColor(category: NotifCategory): string {
+    switch (category) {
+        case 'APPROVAL':
+            return '#22c55e';
+        case 'SECURITY':
+            return '#ef4444';
+        case 'REVIEW':
+            return '#38bdf8';
+        default:
+            return '#c0c0c0';
+    }
+}
+
+function NotifCategoryIcon({ category, size = 14 }: { category: NotifCategory; size?: number }) {
+    switch (category) {
+        case 'APPROVAL':
+            return <CheckCircle2 size={size} aria-hidden />;
+        case 'SECURITY':
+            return <ShieldAlert size={size} aria-hidden />;
+        case 'REVIEW':
+            return <Info size={size} aria-hidden />;
+        default:
+            return <Bell size={size} aria-hidden />;
+    }
+}
 type StarredAssetsResponse = {
     maxItems: number;
     selected: { marketType: string; symbol: string; position: number }[];
@@ -379,6 +482,62 @@ const StarredAssetRow = memo(function StarredAssetRow({
     );
 });
 
+/**
+ * Dashboard'daki tum sayisal degerleri (TRY tutarlari, yuzdeler, PNL...) ilk
+ * render'da 0'dan akarak gosteren generic CountUp hook'u. Mevcut kod yalnizca
+ * portfoy/bakiye icin elle bir easing yapiyordu; bu hook ile *tum* metrikleri
+ * tek seferde ve sade ekiple animate ediyoruz.
+ *
+ * Davranis:
+ * - Ilk gercerli (>=0) deger gelene kadar 0 dondurur (skeleton sirasinda gozu
+ *   yanlis bir rakam tirpaniyla yormasin).
+ * - Sonraki guncellemelerde (polling/refresh) animasyon yapmadan dogrudan
+ *   hedef degere atlar -- yoksa her 3 dakikada bir butun rakamlar tekrar
+ *   "akiyor" gibi gozukurdu.
+ * - prefers-reduced-motion AC: kullanici hareket azaltma istedigi anda hicbir
+ *   animasyon olmadan an'a-an deger basariz.
+ */
+function useCountUp(value: number, durationMs = 720): number {
+    const [display, setDisplay] = useState(0);
+    const introDoneRef = useRef(false);
+    const rafRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        if (!Number.isFinite(value)) {
+            setDisplay(0);
+            return;
+        }
+        const reduceMotion =
+            typeof window !== 'undefined' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduceMotion || introDoneRef.current) {
+            introDoneRef.current = true;
+            setDisplay(value);
+            return;
+        }
+        introDoneRef.current = true;
+        const startTs = performance.now();
+        const startVal = 0;
+        const tick = (now: number) => {
+            const tNorm = Math.min(1, (now - startTs) / durationMs);
+            const eased = 1 - (1 - tNorm) ** 3;
+            setDisplay(startVal + (value - startVal) * eased);
+            if (tNorm < 1) {
+                rafRef.current = requestAnimationFrame(tick);
+            }
+        };
+        rafRef.current = requestAnimationFrame(tick);
+        return () => {
+            if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+        };
+        // Sadece *yeni bir gercerli deger* tetikleyince animasyon basliyor.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [value]);
+
+    return display;
+}
+
 export function Dashboard() {
     const navigate = useNavigate();
     const { theme, tokens } = useTheme();
@@ -393,13 +552,20 @@ export function Dashboard() {
     const [newsDetailOpen, setNewsDetailOpen] = useState(false);
     const [newsDetail, setNewsDetail] = useState<NewsDetailItem | null>(null);
     const [newsDetailLoading, setNewsDetailLoading] = useState(false);
-    const [displayPortfolio, setDisplayPortfolio] = useState(0);
-    const [displayBalance, setDisplayBalance] = useState(0);
+    const [recentNotifications, setRecentNotifications] = useState<NotificationSummary[]>([]);
+    const [notificationsLoading, setNotificationsLoading] = useState(true);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const portfolioDistRef = useRef<HTMLDivElement>(null);
     const newsListRef = useRef<HTMLDivElement>(null);
+    /*
+     * Haberler kartinin kendi yuksekligi, ust kolonlarin (Yildizlanan / Portfoy+Aktivite)
+     * yuksegine gore stretch ile belirleniyor. Bunu doğrudan ölçüp haber sayısını adapte
+     * ediyoruz; portfolioDistRef parent zincirine guvenmek artik dogru olmaz (Son Bildirimler
+     * sag kolona tasindi). Bkz. news useLayoutEffect.
+     */
+    const newsCardRef = useRef<HTMLDivElement>(null);
     const [portfolioDistLayoutTick, setPortfolioDistLayoutTick] = useState(0);
 
     const fallbackIconMap = useMemo<Record<string, { Icon: LucideIcon; color: string }>>(
@@ -616,6 +782,31 @@ export function Dashboard() {
     useRefetchOnFocus(() => fetchDashboard(true));
     usePolling(() => fetchDashboard(true), 180_000);
 
+    // "Son Bildirimler" karti icin notification-service'ten en yeni 4 bildirimi cekiyoruz.
+    // Hata durumunda sessizce yutuyoruz cunku dashboard'un kalan kismi calismaya devam
+    // etmeli. Async kullanim: ana ekran first paint'i bloklamaz, skeleton kisa surer.
+    const fetchRecentNotifications = useCallback(async () => {
+        setNotificationsLoading(true);
+        try {
+            const res = await notificationClient.get<NotificationPage>('/api/notifications/me', {
+                params: { page: 0, size: 4, unreadOnly: false, sort: ['lastOccurredAt,desc', 'createdAt,desc'] },
+            });
+            const content = res?.data?.content;
+            const list = Array.isArray(content) ? content : [];
+            setRecentNotifications(list);
+        } catch {
+            setRecentNotifications([]);
+        } finally {
+            setNotificationsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        void fetchRecentNotifications();
+    }, [fetchRecentNotifications]);
+    useRefetchOnFocus(fetchRecentNotifications);
+    usePolling(fetchRecentNotifications, 180_000);
+
     const formatMoney = useCallback(
         (v: number) => '₺' + v.toLocaleString('tr-TR', { maximumFractionDigits: 2 }),
         []
@@ -640,28 +831,16 @@ export function Dashboard() {
         }));
     }, [summary?.portfolio?.distribution, totalPortfolio]);
 
-    const kpiIntroDoneRef = useRef(false);
-    useEffect(() => {
-        if (loading || !summary) return;
-        if (!kpiIntroDoneRef.current) {
-            kpiIntroDoneRef.current = true;
-            let raf = 0;
-            const start = performance.now();
-            const dur = 680;
-            const tick = (now: number) => {
-                const t = Math.min(1, (now - start) / dur);
-                const eased = 1 - (1 - t) ** 2;
-                setDisplayPortfolio(totalPortfolio * eased);
-                setDisplayBalance(totalBalance * eased);
-                if (t < 1) raf = requestAnimationFrame(tick);
-            };
-            raf = requestAnimationFrame(tick);
-            return () => cancelAnimationFrame(raf);
-        }
-        setDisplayPortfolio(totalPortfolio);
-        setDisplayBalance(totalBalance);
-        return undefined;
-    }, [loading, summary, totalPortfolio, totalBalance]);
+    // Tum kritik metrikleri tek bir CountUp hook'u uzerinden animasyonla 0'dan akit;
+    // boylece "Toplam portfoy", "Nakit", "Toplam bakiye", "Maliyet", "PNL" gibi kartlar
+    // ilk render'da birlikte yumusakca dolar. Polling sonraki guncellemelerde animasyon
+    // calismaz, kullanici sayfa basinda bir defa goz keyfiyle karsilanir.
+    const displayPortfolio = useCountUp(totalPortfolio);
+    const displayCash = useCountUp(totalCash);
+    const displayBalance = useCountUp(totalBalance);
+    const displayCost = useCountUp(Number(summary?.portfolio?.totalCostTry ?? 0));
+    const displayPnlValue = useCountUp(Number(summary?.portfolio?.totalPnlTry ?? 0));
+    const displayPnlPct = useCountUp(Number(summary?.portfolio?.totalPnlPct ?? 0));
 
     useEffect(() => {
         const el = portfolioDistRef.current;
@@ -684,17 +863,22 @@ export function Dashboard() {
         setNewsLoading(true);
         setNewsFadeIn(false);
 
-        const measureDist = () => portfolioDistRef.current?.getBoundingClientRect().height ?? 0;
+        // Haberler kartı artık sağ kolonda kendi yüksekliğini diğer kolonlarla stretch
+        // alıyor. Hedef alanı doğrudan news-card'ın kendi yüksekliği belirliyor; bu sayede
+        // "Son Bildirimler" kartının sağ kolonda altında ne kadar yer kapladığından bağımsız
+        // olarak haber sayısı doğru ölçeklenir.
+        const measureTarget = () => newsCardRef.current?.getBoundingClientRect().height ?? 0;
 
         const run = async () => {
             await Promise.resolve();
             if (!alive) return;
 
-            const rowApprox = 80;
-            let size = Math.min(5, Math.max(2, Math.floor(Math.max(measureDist(), 220) / rowApprox)));
+            const rowApprox = 58;
+            const headerOffset = 56; // baslik + ust padding
+            let size = Math.min(10, Math.max(5, Math.floor(Math.max(measureTarget() - headerOffset, 240) / rowApprox)));
             let items: NewsItem[] = [];
 
-            for (let attempt = 0; attempt < 8; attempt++) {
+            for (let attempt = 0; attempt < 6; attempt++) {
                 if (!alive) return;
                 try {
                     const res = await marketClient.get<NewsPage>('/api/news', { params: { page: 0, size, detail: false } });
@@ -707,11 +891,12 @@ export function Dashboard() {
                 if (!alive) return;
                 setLatestNews(items);
                 await new Promise<void>((r) => requestAnimationFrame(() => r()));
-                const distH = measureDist();
+                const targetH = measureTarget();
                 const listH = newsListRef.current?.scrollHeight ?? 0;
-                const fitsWell = listH <= distH - 28;
-                if (distH <= 0 || fitsWell || size <= 2 || items.length < size) break;
-                size = Math.max(2, size - 1);
+                // 10px tolerans: ufak overflow varsa size'i azalt; alt bosluk varsa devam.
+                const overflows = targetH > 0 && listH > targetH - headerOffset + 10;
+                if (!overflows || size <= 5 || items.length < size) break;
+                size = Math.max(5, size - 1);
             }
 
             if (!alive) return;
@@ -814,9 +999,9 @@ export function Dashboard() {
                                 <div className="skeleton-line skeleton-sub" />
                             </div>
                         </div>
-                        <div className="dashboard-card loading-card">
+                        <div className="dashboard-card loading-card dashboard-news-card-skel">
                             <div className="skeleton-line skeleton-section-title" />
-                            {Array.from({ length: 4 }).map((_, i) => (
+                            {Array.from({ length: 8 }).map((_, i) => (
                                 <div key={i} className="skeleton-news-row">
                                     <div className="skeleton-dot" />
                                     <div className="skeleton-line skeleton-row-main" />
@@ -859,7 +1044,7 @@ export function Dashboard() {
                     label={t('dashboard.totalPortfolioValue', 'Toplam portföy değeri')}
                     value={formatMoney(displayPortfolio)}
                 />
-                <DashboardKpiCard label={t('dashboard.cashTry', 'Nakit (TRY)')} value={formatMoney(totalCash)} />
+                <DashboardKpiCard label={t('dashboard.cashTry', 'Nakit (TRY)')} value={formatMoney(displayCash)} />
                 <DashboardKpiCard label="Toplam bakiye (portföy + nakit)" value={formatMoney(displayBalance)} />
                 <DashboardKpiCard
                     label="Balina seviyesi"
@@ -949,11 +1134,11 @@ export function Dashboard() {
                                 <div className="portfolio-pnl-summary">
                                     <div className="portfolio-pnl-row">
                                         <span>Toplam maliyet</span>
-                                        <span>{formatMoney(summary.portfolio?.totalCostTry ?? 0)}</span>
+                                        <span>{formatMoney(displayCost)}</span>
                                     </div>
                                     <div className="portfolio-pnl-row">
                                         <span>Güncel değer</span>
-                                        <span>{formatMoney(summary.portfolio?.totalValueTry ?? totalPortfolio)}</span>
+                                        <span>{formatMoney(displayPortfolio)}</span>
                                     </div>
                                     <div className="portfolio-pnl-row">
                                         <span>Toplam kar (PNL)</span>
@@ -962,7 +1147,7 @@ export function Dashboard() {
                                                 (summary.portfolio?.totalPnlTry ?? 0) >= 0 ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'
                                             }
                                         >
-                                            {formatMoney(summary.portfolio?.totalPnlTry ?? 0)}
+                                            {formatMoney(displayPnlValue)}
                                         </span>
                                     </div>
                                     <div className="portfolio-pnl-row">
@@ -972,7 +1157,7 @@ export function Dashboard() {
                                                 (summary.portfolio?.totalPnlPct ?? 0) >= 0 ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'
                                             }
                                         >
-                                            {Number(summary.portfolio?.totalPnlPct ?? 0).toLocaleString('tr-TR', {
+                                            {displayPnlPct.toLocaleString('tr-TR', {
                                                 maximumFractionDigits: 2,
                                             })}
                                             %
@@ -1013,36 +1198,33 @@ export function Dashboard() {
                         <h2 className="section-title">Son aktivite</h2>
                         <div className="activity-row">
                             <Activity size={14} className="activity-icon" />
-                            <p>
-                                Son işlem:{' '}
-                                {summary.activity?.lastTradeAt
-                                    ? new Date(summary.activity.lastTradeAt).toLocaleString('tr-TR')
-                                    : 'Kayıt bulunamadı'}
-                            </p>
+                            <div className="activity-text">
+                                <p className="activity-label">Son işlem</p>
+                                <p className="activity-value">
+                                    {summary.activity?.lastTradeAt
+                                        ? new Date(summary.activity.lastTradeAt).toLocaleString('tr-TR')
+                                        : 'Kayıt bulunamadı'}
+                                </p>
+                            </div>
                         </div>
                         <div className="activity-row">
                             <Wallet size={14} className="activity-icon" />
-                            <p>
-                                Toplam bakiye güncellendi: {formatMoney(totalBalance)}
-                            </p>
-                        </div>
-                    </div>
-                    <div className="dashboard-card dashboard-compact-card">
-                        <h2 className="section-title">Uyarılar</h2>
-                        <div className="activity-row">
-                            <Bell size={14} className="activity-icon" />
-                            <p>Balina seviyesi: {summary.whale?.level ?? 'L1_LARGE_TRADER'}</p>
-                        </div>
-                        <div className="activity-row">
-                            <CircleAlert size={14} className="activity-icon" />
-                            <p>
-                                Etki skoru: {typeof summary.whale?.impactScore === 'number' ? summary.whale.impactScore : 'Veri bekleniyor'}
-                            </p>
+                            <div className="activity-text">
+                                <p className="activity-label">Toplam bakiye güncellendi</p>
+                                <p className="activity-value">{formatMoney(displayBalance)}</p>
+                            </div>
                         </div>
                     </div>
                     </div>
 
-                    <div className="dashboard-card dashboard-news-card">
+                    {/*
+                     * Sag kolon: Haberler (esnek/uzun) + Son Bildirimler (alt, sabit). Kullanici
+                     * istegi: bildirim karti bos kalan sag alti doldursun, sayfanin tum
+                     * kolonlari ayni alt cizgide bitsin. Haber sayisi hesabi dinamik (newsCardRef
+                     * uzerinden olculur), yetersizse scroll uyutulur.
+                     */}
+                    <div className="dashboard-right-column">
+                    <div ref={newsCardRef} className="dashboard-card dashboard-news-card dashboard-news-card--fill">
                         <h2 className="section-title">{t('dashboard.latestNews', 'En Son Haberler')}</h2>
                         <div
                             ref={newsListRef}
@@ -1052,7 +1234,7 @@ export function Dashboard() {
                         >
                             {newsLoading && latestNews.length === 0 ? (
                                 <div className="news-skeleton-block" aria-hidden="true">
-                                    {Array.from({ length: 7 }).map((_, i) => (
+                                    {Array.from({ length: 8 }).map((_, i) => (
                                         <div key={i} className="skeleton-news-row dashboard-news-skel-row">
                                             <div className="skeleton-dot" />
                                             <div className="skeleton-line skeleton-row-main" />
@@ -1084,6 +1266,79 @@ export function Dashboard() {
                                 </button>
                             ))}
                         </div>
+                    </div>
+                    <div className="dashboard-card dashboard-compact-card dashboard-notif-card">
+                        <div className="dashboard-notif-card__header">
+                            <span className="dashboard-notif-card__icon" aria-hidden>
+                                <Bell size={14} />
+                            </span>
+                            <h2 className="section-title dashboard-notif-card__title">
+                                {t('dashboard.recentNotifications', 'Son Bildirimler')}
+                            </h2>
+                            <button
+                                type="button"
+                                className="dashboard-notif-card__all"
+                                onClick={() => navigate('/notifications')}
+                                title={t('dashboard.allNotifications', 'Tümünü gör')}
+                            >
+                                {t('dashboard.allNotifications', 'Tümü')}
+                                <ChevronRight size={12} strokeWidth={2.5} aria-hidden />
+                            </button>
+                        </div>
+                        {notificationsLoading && recentNotifications.length === 0 ? (
+                            <div className="dashboard-notif-skeleton" aria-hidden="true">
+                                {Array.from({ length: 3 }).map((_, i) => (
+                                    <div key={i} className="dashboard-notif-skel-row">
+                                        <div className="skeleton-dot" />
+                                        <div className="skeleton-line skeleton-row-main" />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : null}
+                        {!notificationsLoading && recentNotifications.length === 0 ? (
+                            <p className="dashboard-muted dashboard-notif-empty">
+                                {t('dashboard.noNotifications', 'Henüz bildirim yok.')}
+                            </p>
+                        ) : null}
+                        <ul className="dashboard-notif-list">
+                            {recentNotifications.map((n) => {
+                                const cat = classifyNotification(n.type);
+                                const color = notifCategoryColor(cat);
+                                const occurredAt = n.lastOccurredAt ?? n.createdAt;
+                                const isUnread = !n.readAt;
+                                return (
+                                    <li
+                                        key={n.id}
+                                        className={`dashboard-notif-item${isUnread ? ' is-unread' : ''}`}
+                                    >
+                                        <button
+                                            type="button"
+                                            className="dashboard-notif-item__btn"
+                                            onClick={() => navigate('/notifications')}
+                                            title={t('notifications.viewDetail', 'Detayı gör')}
+                                        >
+                                            <span
+                                                className="dashboard-notif-item__icon"
+                                                style={{ color }}
+                                                aria-hidden
+                                            >
+                                                <NotifCategoryIcon category={cat} size={14} />
+                                            </span>
+                                            <span className="dashboard-notif-item__title">{n.title}</span>
+                                            <span className="dashboard-notif-item__date">
+                                                {new Date(occurredAt).toLocaleString(uiLocale, {
+                                                    day: '2-digit',
+                                                    month: '2-digit',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                })}
+                                            </span>
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
                     </div>
                 </div>
             </div>

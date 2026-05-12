@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import type { Time, CandlestickData, LogicalRange } from 'lightweight-charts';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
@@ -53,7 +53,13 @@ function toChartTime(value: string): Time {
     }
     return d.toISOString().slice(0, 10) as Time;
 }
-export function MarketTerminalChart({
+/*
+ * React.memo: Parent (Market.tsx) state'i (orn. trendPeriod selector) degisince sayfa yeniden
+ * render olur. Chart prop'lari (candles/ma/markers/tokens) parent'ta useMemo ile stabilize
+ * edildiginden, memo ile sarinca chart hic dokunulmadan birakilir; bu da trend periyodunu
+ * her tikladigimizda yasanan "ortadaki grafik titriyor" davranisinin onune gecer.
+ */
+function MarketTerminalChartImpl({
     candles,
     ma7,
     ma21,
@@ -77,6 +83,15 @@ export function MarketTerminalChart({
     const candleByTimeRef = useRef<Record<string, CandleVM>>({});
     const barCountRef = useRef(0);
     const rangeRef = useRef(parseTerminalChartRange(timeframeLabel));
+    // rAF-throttle'lı crosshair handler cleanup (bkz. subscribeCrosshairMove yorumu).
+    const crosshairRafRef = useRef<(() => void) | null>(null);
+    // Parent her renderda yeni `tokens` literal'i veriyor; useEffect deps'e koyarsak chart sonsuz
+    // destroy+create dongusune giriyor (titreme + ana thread kilitlenmesi + sayfa gecisi engellenme).
+    // Ref ile en guncel tokens'i tutuyoruz; mount yalnizca bir kez.
+    const tokensRef = useRef(tokens);
+    useEffect(() => {
+        tokensRef.current = tokens;
+    });
     const [hoverData, setHoverData] = useState<CandleVM | null>(null);
     const sortedCandles = useMemo(() => {
         const byTime = new Map<string, CandleVM>();
@@ -99,20 +114,21 @@ export function MarketTerminalChart({
         const el = chartRef.current;
         if (!el || chartApiRef.current) return;
         const widthPx = Math.max(320, el.clientWidth);
+        const t = tokensRef.current;
         const chart = createChart(el, {
             width: widthPx,
             height: chartHeight,
             layout: {
-                background: { color: tokens.bgCard },
-                textColor: tokens.text,
+                background: { color: t.bgCard },
+                textColor: t.text,
             },
             grid: {
                 vertLines: { color: 'rgba(71, 85, 105, 0.3)' },
                 horzLines: { color: 'rgba(71, 85, 105, 0.3)' },
             },
-            rightPriceScale: { borderColor: tokens.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
+            rightPriceScale: { borderColor: t.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
             timeScale: {
-                borderColor: tokens.border,
+                borderColor: t.border,
                 timeVisible: true,
                 secondsVisible: false,
                 lockVisibleTimeRangeOnResize: true,
@@ -151,15 +167,36 @@ export function MarketTerminalChart({
         });
         ma21SeriesRef.current = ma21Series;
 
+        // Lightweight-charts crosshair handler saniyede 60+ kez tetikleniyor. Idempotent setState'e
+        // ragmen React scheduler her cagrida dispatch isi yapip ana thread'i mesgul ediyor, navigasyon
+        // click'leri kuyrukta beklemis kaliyor (VİOP'tan baska sayfaya gecis yapilamiyor bug'i).
+        // rAF ile frame basina 1 kez calistir.
+        let crosshairRaf = 0;
+        let pendingParam: Parameters<Parameters<typeof chart.subscribeCrosshairMove>[0]>[0] | null = null;
         chart.subscribeCrosshairMove((param) => {
-            if (!param?.time) {
-                setHoverData(null);
-                return;
-            }
-            const key = String(param.time);
-            const row = candleByTimeRef.current[key];
-            setHoverData(row ?? null);
+            pendingParam = param;
+            if (crosshairRaf) return;
+            crosshairRaf = window.requestAnimationFrame(() => {
+                crosshairRaf = 0;
+                const p = pendingParam;
+                pendingParam = null;
+                if (!p?.time) {
+                    setHoverData((prev) => (prev == null ? prev : null));
+                    return;
+                }
+                const key = String(p.time);
+                const row = candleByTimeRef.current[key] ?? null;
+                setHoverData((prev) => {
+                    if (prev?.time === row?.time && prev?.close === row?.close) return prev;
+                    return row;
+                });
+            });
         });
+        crosshairRafRef.current = () => {
+            if (crosshairRaf) window.cancelAnimationFrame(crosshairRaf);
+            crosshairRaf = 0;
+            pendingParam = null;
+        };
         chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
             if (range) logicalRangeRef.current = range;
         });
@@ -170,7 +207,7 @@ export function MarketTerminalChart({
             chart.applyOptions({
                 width: w,
                 timeScale: {
-                    borderColor: tokens.border,
+                    borderColor: tokensRef.current.border,
                     timeVisible: true,
                     secondsVisible: false,
                     lockVisibleTimeRangeOnResize: true,
@@ -188,6 +225,7 @@ export function MarketTerminalChart({
         window.addEventListener('resize', onResize);
         return () => {
             window.removeEventListener('resize', onResize);
+            crosshairRafRef.current?.();
             chart.remove();
             chartApiRef.current = null;
             candleSeriesRef.current = null;
@@ -195,7 +233,19 @@ export function MarketTerminalChart({
             ma21SeriesRef.current = null;
             hasInitialFitRef.current = false;
         };
-    }, [tokens, timeframeLabel]);
+        // Mount tek seferli; tema/timeframe degisikligi ayri effect'lerde yansir.
+    }, []);
+
+    /** Tema degisince chart'i destroy etmek yerine sadece renkleri uygula. */
+    useEffect(() => {
+        const chart = chartApiRef.current;
+        if (!chart) return;
+        chart.applyOptions({
+            layout: { background: { color: tokens.bgCard }, textColor: tokens.text },
+            rightPriceScale: { borderColor: tokens.border },
+            timeScale: { borderColor: tokens.border },
+        });
+    }, [tokens.bgCard, tokens.border, tokens.text, tokens.textMuted]);
 
     useEffect(() => {
         const chart = chartApiRef.current;
@@ -205,6 +255,10 @@ export function MarketTerminalChart({
         const chartRange = parseTerminalChartRange(timeframeLabel);
         const widthPx = Math.max(320, chartRef.current?.clientWidth ?? 320);
         const tsLay = computeTerminalTimeScaleLayout(widthPx, sortedCandles.length, chartRange);
+        // Timeframe degisiminde (orn. 1M -> 1Y) tum yeni veriyi sigdirmak icin
+        // fitContent zorlanmali; aksi halde onceki pencereye kalitsal zoom kaliyor
+        // ve kullanici 1Y'i 1M zoom seviyesinde gormeye devam ediyordu.
+        const rangeChanged = rangeRef.current !== chartRange;
         rangeRef.current = chartRange;
         barCountRef.current = sortedCandles.length;
 
@@ -232,8 +286,10 @@ export function MarketTerminalChart({
         ma21SeriesRef.current?.setData(showMa ? ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
 
         chart.applyOptions({
+            // display:none -> block gecisinde container genisligi degisiyor; tekrar uygula.
+            width: widthPx,
             timeScale: {
-                borderColor: tokens.border,
+                borderColor: tokensRef.current.border,
                 timeVisible: true,
                 secondsVisible: false,
                 lockVisibleTimeRangeOnResize: true,
@@ -245,28 +301,30 @@ export function MarketTerminalChart({
             },
         });
 
-        if (!hasInitialFitRef.current) {
-            hasInitialFitRef.current = true;
+        if (!hasInitialFitRef.current || rangeChanged) {
             requestAnimationFrame(() => {
                 chart.timeScale().fitContent();
                 logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
+                hasInitialFitRef.current = true;
             });
             return;
         }
         if (logicalRangeRef.current) {
             chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
         }
-    }, [loading, sortedCandles, markers, showMa, ma7, ma21, tokens, timeframeLabel]);
+    }, [loading, sortedCandles, markers, showMa, ma7, ma21, timeframeLabel]);
 
-    if (loading) {
-        return <div className="terminal-chart-empty">Grafik yükleniyor...</div>;
-    }
-    if (!sortedCandles.length) {
-        return <div className="terminal-chart-empty">`{symbol}` için mum verisi bulunamadı.</div>;
-    }
-    if (sortedCandles.length < 2) {
-        return <div className="terminal-chart-empty">`{symbol}` için mum grafik için en az 2 veri noktası gerekli.</div>;
-    }
+    // Erken-return YOK: chart container hep DOM'da kalsin, aksi halde ilk renderda mount useEffect
+    // chartRef.current = null gorur ve [] deps oldugu icin bir daha tetiklenmez, veri sonra gelse
+    // de chart hic kurulmaz (eski regresyon). Bos/eksik durumlarda chart `display:none` ile gizlenir.
+    const showChart = !loading && sortedCandles.length >= 2;
+    const emptyMessage = loading
+        ? 'Grafik yükleniyor...'
+        : !sortedCandles.length
+            ? `${symbol} için mum verisi bulunamadı.`
+            : sortedCandles.length < 2
+                ? `${symbol} için mum grafik için en az 2 veri noktası gerekli.`
+                : null;
 
     return (
         <div className="terminal-chart-wrap">
@@ -291,7 +349,11 @@ export function MarketTerminalChart({
                     <div className="terminal-ohlc muted">OHLC için imleci grafik üzerine getir</div>
                 )}
             </div>
-            <div ref={chartRef} style={{ width: '100%', height: chartHeight }} />
+            {emptyMessage ? <div className="terminal-chart-empty">{emptyMessage}</div> : null}
+            <div
+                ref={chartRef}
+                style={{ width: '100%', height: chartHeight, display: showChart ? 'block' : 'none' }}
+            />
             {showRsi ? (
                 <div className="terminal-rsi">
                 <div className="terminal-rsi-head">RSI (14)</div>
@@ -318,4 +380,6 @@ export function MarketTerminalChart({
         </div>
     );
 }
+
+export const MarketTerminalChart = memo(MarketTerminalChartImpl);
 
