@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Pattern;
 
 public record AssignRoleRequest(
         @NotBlank
-        @Pattern(regexp = "USER|FINANCE_MANAGER", message = "Geçerli roller: USER, FINANCE_MANAGER (ADMIN atanamaz)")
+        @Pattern(regexp = "USER", message = "Geçerli rol: USER (ADMIN atanamaz)")
         String role
 ) {
     public Role toDomainRole() {

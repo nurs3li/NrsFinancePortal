@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import type { LogicalRange, Time } from 'lightweight-charts';
+import { apiDatetimeToChartTime as toChartTime } from '../../lib/chartApiTime';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type BondPoint = {
@@ -28,16 +29,6 @@ type Props = {
     tokens: ThemeSlice;
 };
 
-function toChartTime(value: string): Time {
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value.slice(0, 10) as Time;
-    const hasClock = /T\d{2}:\d{2}:\d{2}/.test(value);
-    if (hasClock) {
-        return Math.floor(d.getTime() / 1000) as Time;
-    }
-    return d.toISOString().slice(0, 10) as Time;
-}
-
 function chartTimeKey(value: Time): string {
     if (typeof value === 'number') {
         return new Date(value * 1000).toISOString();
@@ -54,6 +45,8 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
     const ma21Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
     const volumeRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
     const hasInitialFitRef = useRef(false);
+    /** Seri uzunluğu / uç zamanları değişince yeniden fitContent (ilk 2 noktada fit alınıp tam hafta gelince zoom takılı kalmasın). */
+    const lastFitSeriesKeyRef = useRef<string>('');
     const logicalRangeRef = useRef<LogicalRange | null>(null);
     const dataByKeyRef = useRef<Record<string, BondPoint>>({});
     const barCountRef = useRef(0);
@@ -209,9 +202,8 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
                     shiftVisibleRangeOnNewBar: false,
                 },
             });
-            if (logicalRangeRef.current) {
-                chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
-            }
+            chart.timeScale().fitContent();
+            logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
         };
         window.addEventListener('resize', onResize);
         return () => {
@@ -225,6 +217,7 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
             ma21Ref.current = null;
             volumeRef.current = null;
             hasInitialFitRef.current = false;
+            lastFitSeriesKeyRef.current = '';
         };
     }, []);
 
@@ -249,6 +242,15 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
         const rangeChanged = rangeRef.current !== chartRange;
         rangeRef.current = chartRange;
         barCountRef.current = sorted.length;
+
+        const seriesFitKey =
+            sorted.length > 0
+                ? `${sorted.length}|${String(sorted[0]!.time)}|${String(sorted[sorted.length - 1]!.time)}`
+                : '';
+        const seriesChanged = lastFitSeriesKeyRef.current !== seriesFitKey;
+        if (seriesChanged) {
+            lastFitSeriesKeyRef.current = seriesFitKey;
+        }
 
         const byKey: Record<string, BondPoint> = {};
         sorted.forEach((p) => {
@@ -287,7 +289,7 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
             },
         });
 
-        if (!hasInitialFitRef.current || rangeChanged) {
+        if (!hasInitialFitRef.current || rangeChanged || seriesChanged) {
             requestAnimationFrame(() => {
                 chart.timeScale().fitContent();
                 logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();

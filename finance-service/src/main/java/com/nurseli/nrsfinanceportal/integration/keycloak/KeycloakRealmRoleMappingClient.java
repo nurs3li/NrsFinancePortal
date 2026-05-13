@@ -21,7 +21,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Realm rollerini (USER, FINANCE_MANAGER, ADMIN) Keycloak kullanıcısına map'ler.
+ * Realm rollerini (USER, ADMIN) Keycloak kullanıcısına map'ler.
  */
 @Service
 @Slf4j
@@ -29,7 +29,7 @@ import java.util.Set;
 public class KeycloakRealmRoleMappingClient {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(15);
-    private static final Set<String> APP_REALM_ROLES = Set.of("USER", "FINANCE_MANAGER", "ADMIN");
+    private static final Set<String> APP_REALM_ROLES = Set.of("USER", "ADMIN");
 
     private final KeycloakAdminProperties properties;
     private final KeycloakAdminTokenProvider tokenProvider;

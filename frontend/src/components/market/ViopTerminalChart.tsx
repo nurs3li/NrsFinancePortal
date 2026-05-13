@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
-import type { LogicalRange, Time, UTCTimestamp } from 'lightweight-charts';
+import type { LogicalRange, Time } from 'lightweight-charts';
+import { apiDatetimeToChartTime as toChartTime } from '../../lib/chartApiTime';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type ViopPoint = {
@@ -35,16 +36,6 @@ type Props = {
  * date-string ("YYYY-MM-DD") veriyordu: chart bunu BusinessDay gibi sıkı 1‑bar/1‑gün konumlandırıyor,
  * az noktada (1Y'de sparse) aralar orantısız görünüyor ve x ekseninde takvim eşitsizliği kayboluyordu.
  */
-function toChartTime(value: string): Time {
-    const d = new Date(value);
-    const ms = d.getTime();
-    if (Number.isNaN(ms)) {
-        // Geçersizse epoch döndür: chart noktayı zaten setData'da filtreleyecek.
-        return 0 as UTCTimestamp;
-    }
-    return Math.floor(ms / 1000) as UTCTimestamp;
-}
-
 function chartTimeKey(value: Time): string {
     if (typeof value === 'number') {
         return String(value);

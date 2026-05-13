@@ -14,19 +14,11 @@ import { News } from './pages/News';
 import { Market } from './pages/Market';
 import { MarketHeatmap } from './pages/MarketHeatmap';
 import { Portfolio } from './pages/Portfolio';
-import { Trade } from './pages/Trade';
 import { Transactions } from './pages/Transactions';
-import { Wallet } from './pages/Wallet';
 import { Simulation } from './pages/Simulation';
-import { FmTasks } from './pages/FmTasks';
-import { FmRisk } from './pages/FmRisk';
-import { FmTaskDetail } from './pages/FmTaskDetail';
-import { FmFundRequests } from './pages/FmFundRequests';
 import { AdminDashboard } from './pages/AdminDashboard';
-import { AdminTasks } from './pages/AdminTasks';
 import { AdminUsersAndAccounts } from './pages/AdminUsersAndAccounts';
 import { Notifications } from './pages/Notifications';
-import { AdminSuspicious } from './pages/AdminSuspicious';
 import { AdminAudit } from './pages/AdminAudit';
 
 // NOT: Onceden agir sayfalari React.lazy ile sarmaliyorduk. Ancak React 18 Suspense'in
@@ -99,7 +91,7 @@ function App() {
                                     path="/trade"
                                     element={
                                         <ProtectedRoute>
-                                            <Trade />
+                                            <Navigate to="/portfolio" replace />
                                         </ProtectedRoute>
                                     }
                                 />
@@ -115,7 +107,7 @@ function App() {
                                     path="/wallet"
                                     element={
                                         <ProtectedRoute>
-                                            <Wallet />
+                                            <Navigate to="/portfolio" replace />
                                         </ProtectedRoute>
                                     }
                                 />
@@ -125,46 +117,6 @@ function App() {
                                         <ProtectedRoute>
                                             <Simulation />
                                         </ProtectedRoute>
-                                    }
-                                />
-                                <Route
-                                    path="/fm/tasks"
-                                    element={
-                                        <RoleProtectedRoute
-                                            allowedRoles={['FINANCE_MANAGER']}
-                                        >
-                                            <FmTasks />
-                                        </RoleProtectedRoute>
-                                    }
-                                />
-                                <Route
-                                    path="/fm/tasks/:id"
-                                    element={
-                                        <RoleProtectedRoute
-                                            allowedRoles={['FINANCE_MANAGER']}
-                                        >
-                                            <FmTaskDetail />
-                                        </RoleProtectedRoute>
-                                    }
-                                />
-                                <Route
-                                    path="/fm/risk"
-                                    element={
-                                        <RoleProtectedRoute
-                                            allowedRoles={['FINANCE_MANAGER']}
-                                        >
-                                            <FmRisk />
-                                        </RoleProtectedRoute>
-                                    }
-                                />
-                                <Route
-                                    path="/fm/fund-requests"
-                                    element={
-                                        <RoleProtectedRoute
-                                            allowedRoles={['FINANCE_MANAGER']}
-                                        >
-                                            <FmFundRequests />
-                                        </RoleProtectedRoute>
                                     }
                                 />
                                 <Route
@@ -181,16 +133,6 @@ function App() {
                                         <ProtectedRoute>
                                             <Notifications />
                                         </ProtectedRoute>
-                                    }
-                                />
-                                <Route
-                                    path="/operasyon/suspicious"
-                                    element={
-                                        <RoleProtectedRoute
-                                            allowedRoles={['FINANCE_MANAGER']}
-                                        >
-                                            <AdminSuspicious />
-                                        </RoleProtectedRoute>
                                     }
                                 />
                                 <Route
@@ -223,11 +165,27 @@ function App() {
                                 />
                                 <Route
                                     path="/admin/tasks"
-                                    element={
-                                        <RoleProtectedRoute allowedRoles={['ADMIN']}>
-                                            <AdminTasks />
-                                        </RoleProtectedRoute>
-                                    }
+                                    element={<Navigate to="/admin" replace />}
+                                />
+                                <Route
+                                    path="/fm/tasks"
+                                    element={<Navigate to="/dashboard" replace />}
+                                />
+                                <Route
+                                    path="/fm/tasks/:id"
+                                    element={<Navigate to="/dashboard" replace />}
+                                />
+                                <Route
+                                    path="/fm/risk"
+                                    element={<Navigate to="/dashboard" replace />}
+                                />
+                                <Route
+                                    path="/fm/fund-requests"
+                                    element={<Navigate to="/dashboard" replace />}
+                                />
+                                <Route
+                                    path="/operasyon/suspicious"
+                                    element={<Navigate to="/dashboard" replace />}
                                 />
                             </Route>
                             <Route path="*" element={<Navigate to="/" replace />} />

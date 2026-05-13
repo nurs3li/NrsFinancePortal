@@ -25,7 +25,7 @@ public class UserController {
 
     // GET /api/users
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','FINANCE_MANAGER')")
+    @PreAuthorize("hasRole('ADMIN')")
 
     public ResponseEntity<ApiResponse<List<UserResponse>>> getUsers() {
         return ResponseEntity.ok(
@@ -34,7 +34,7 @@ public class UserController {
     }
 
     // GET /api/users/me
-    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping("/me")
 
     public ResponseEntity<ApiResponse<UserResponse>> getMe() {

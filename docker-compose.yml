@@ -181,6 +181,7 @@ services:
       retries: 3
       start_period: 40s
     environment:
+      TZ: Europe/Istanbul
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://nrs-postgres:5432/nrs_market
       SPRING_KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
@@ -306,7 +307,7 @@ services:
       KEYCLOAK_SECURITY_OTP_ENFORCEMENT_ENABLED: ${KEYCLOAK_SECURITY_OTP_ENFORCEMENT_ENABLED:-false}
       # Remember me realm senkronu (SSO süreleri + rememberMe bayrağı). .env'de false yazarsanız kapanır.
       KEYCLOAK_SECURITY_REMEMBER_ME_ENFORCEMENT_ENABLED: ${KEYCLOAK_SECURITY_REMEMBER_ME_ENFORCEMENT_ENABLED:-true}
-      KEYCLOAK_SECURITY_ENFORCED_ROLES: ${KEYCLOAK_SECURITY_ENFORCED_ROLES:-ADMIN,FINANCE_MANAGER}
+      KEYCLOAK_SECURITY_ENFORCED_ROLES: ${KEYCLOAK_SECURITY_ENFORCED_ROLES:-ADMIN}
       KEYCLOAK_SECURITY_REQUIRED_ACTION: ${KEYCLOAK_SECURITY_REQUIRED_ACTION:-CONFIGURE_TOTP}
       KEYCLOAK_SECURITY_REMEMBER_ME: ${KEYCLOAK_SECURITY_REMEMBER_ME:-true}
       KEYCLOAK_SECURITY_SSO_IDLE: ${KEYCLOAK_SECURITY_SSO_IDLE:-PT30M}
@@ -348,6 +349,7 @@ services:
       SPRING_DATA_REDIS_HOST: nrs-redis
       KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      APP_KAFKA_LEGACY_FINANCE_INGESTION_ENABLED: "false"
     logging:
       driver: "json-file"
       options:
@@ -405,6 +407,7 @@ services:
       OPENSEARCH_PORT: 9200
       KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      APP_KAFKA_LEGACY_FINANCE_INGESTION_ENABLED: "false"
     logging:
       driver: "json-file"
       options:

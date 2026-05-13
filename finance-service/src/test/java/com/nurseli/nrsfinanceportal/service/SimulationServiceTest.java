@@ -31,14 +31,22 @@ class SimulationServiceTest {
                         new MarketPriceHistoryDto(new BigDecimal("100"), new BigDecimal("100"), buyDate.atStartOfDay()),
                         new MarketPriceHistoryDto(new BigDecimal("120"), new BigDecimal("120"), LocalDateTime.now().minusDays(1))
                 ));
+        Mockito.when(marketDataClient.getHistory(eq(AssetType.FX), eq("USDTRY"), anyInt()))
+                .thenReturn(List.of(
+                        new MarketPriceHistoryDto(new BigDecimal("30"), new BigDecimal("30"), buyDate.atStartOfDay()),
+                        new MarketPriceHistoryDto(new BigDecimal("40"), new BigDecimal("40"), LocalDateTime.now().minusDays(1))
+                ));
         Mockito.when(marketDataClient.getPriceTry(eq(AssetType.CRYPTO), eq("BTCUSDT")))
                 .thenReturn(new BigDecimal("125"));
+        Mockito.when(marketDataClient.getPriceTry(eq(AssetType.FX), eq("USDTRY")))
+                .thenReturn(new BigDecimal("35"));
 
         SimulationResponseDto response = service.simulate(
                 AssetType.CRYPTO, "BTCUSDT", new BigDecimal("1000"), buyDate, null
         );
 
         assertEquals("EXACT", response.getQualityFlag());
+        assertEquals(SimulationService.NOTICE_USD_DENOMINATED, response.getApproximationNoticeCode());
     }
 
     @Test
@@ -62,6 +70,7 @@ class SimulationServiceTest {
         );
 
         assertEquals("PREVIOUS_DAY", response.getQualityFlag());
+        assertEquals(null, response.getApproximationNoticeCode());
     }
 
     @Test
@@ -83,6 +92,46 @@ class SimulationServiceTest {
         );
 
         assertEquals("USER_INPUT", response.getBuyPriceSource());
+        assertEquals("EXACT", response.getQualityFlag());
+        assertEquals(null, response.getApproximationNoticeCode());
+    }
+
+    /**
+     * Geçmiş seri: iki günde farklı USDTRY; alım gününde BTC 10 USD ve kur 32 → TRY alış birimi 320 TRY.
+     * Güncel fiyat TRY spot ile (ör. 12 USD × 50 = 600) verilir; geçmiş çarpan gün bazlı olmalıdır.
+     */
+    @Test
+    void shouldNormalizeCryptoHistoryWithHistoricalUsdTryPerTimestamp() {
+        MarketDataClient marketDataClient = Mockito.mock(MarketDataClient.class);
+        DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
+        SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
+
+        LocalDate buyDate = LocalDate.of(2024, 6, 10);
+        LocalDate later = buyDate.plusDays(3);
+
+        Mockito.when(marketDataClient.getHistory(eq(AssetType.CRYPTO), eq("BTCUSDT"), anyInt()))
+                .thenReturn(List.of(
+                        new MarketPriceHistoryDto(new BigDecimal("10"), new BigDecimal("10"), buyDate.atStartOfDay()),
+                        new MarketPriceHistoryDto(new BigDecimal("12"), new BigDecimal("12"), later.atStartOfDay())
+                ));
+        Mockito.when(marketDataClient.getHistory(eq(AssetType.FX), eq("USDTRY"), anyInt()))
+                .thenReturn(List.of(
+                        new MarketPriceHistoryDto(new BigDecimal("30"), new BigDecimal("34"), buyDate.minusDays(1).atStartOfDay()),
+                        new MarketPriceHistoryDto(new BigDecimal("32"), new BigDecimal("32"), buyDate.atStartOfDay()),
+                        new MarketPriceHistoryDto(new BigDecimal("40"), new BigDecimal("40"), later.atStartOfDay())
+                ));
+        Mockito.when(marketDataClient.getPriceTry(eq(AssetType.CRYPTO), eq("BTCUSDT")))
+                .thenReturn(new BigDecimal("600"));
+        Mockito.when(marketDataClient.getPriceTry(eq(AssetType.FX), eq("USDTRY")))
+                .thenReturn(new BigDecimal("50"));
+
+        SimulationResponseDto response = service.simulate(
+                AssetType.CRYPTO, "BTCUSDT", new BigDecimal("3200"), buyDate, null
+        );
+
+        // units = 3200 / (10 * 32) = 10; currentValue = 10 * 600 = 6000
+        assertEquals(0, response.getHistoricalPriceTry().compareTo(new BigDecimal("320")));
+        assertEquals(0, response.getCurrentValueTry().compareTo(new BigDecimal("6000.00")));
         assertEquals("EXACT", response.getQualityFlag());
     }
 }

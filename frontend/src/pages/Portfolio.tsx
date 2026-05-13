@@ -39,7 +39,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 type AssetType = 'STOCK' | 'CRYPTO' | 'FX' | 'METAL' | 'FUND';
 
 type UnifiedPortfolioItem = {
-    source: 'TRADE' | 'MANUAL' | string;
+    source: 'MANUAL' | string;
     type: AssetType | string;
     symbol: string;
     quantity: number;
@@ -276,9 +276,9 @@ const PIE_COLOR_BY_TYPE: Record<string, string> = {
 const PNL_POSITIVE = '#10b981';
 const PNL_NEGATIVE = '#f43f5e';
 
-type DistMode = 'COMBINED' | 'TRADE' | 'MANUAL';
-type PnlMode = 'COMBINED' | 'TRADE' | 'MANUAL';
-type ListFilter = 'ALL' | 'TRADE' | 'MANUAL';
+type DistMode = 'COMBINED' | 'MANUAL';
+type PnlMode = 'COMBINED' | 'MANUAL';
+type ListFilter = 'ALL' | 'MANUAL';
 
 const TABLE_PAGE = 10;
 
@@ -287,8 +287,7 @@ function aggregateValueByAssetType(items: PerformanceItem[] | undefined, mode: D
     const filtered = items.filter((it) => {
         const src = String(it.source ?? '').toUpperCase();
         if (mode === 'COMBINED') return true;
-        if (mode === 'MANUAL') return src === 'MANUAL';
-        return src !== 'MANUAL';
+        return src === 'MANUAL';
     });
     const map = new Map<string, number>();
     for (const it of filtered) {
@@ -311,8 +310,7 @@ function aggregatePnlByAsset(items: PerformanceItem[] | undefined, mode: PnlMode
     const filtered = items.filter((it) => {
         const src = String(it.source ?? '').toUpperCase();
         if (mode === 'COMBINED') return true;
-        if (mode === 'MANUAL') return src === 'MANUAL';
-        return src !== 'MANUAL';
+        return src === 'MANUAL';
     });
 
     const map = new Map<string, { pnl: number; cost: number }>();
@@ -603,18 +601,15 @@ export function Portfolio() {
     }, [perf]);
 
     const distributionCombined = useMemo(() => aggregateValueByAssetType(perf?.items, 'COMBINED'), [perf]);
-    const distributionTrade = useMemo(() => aggregateValueByAssetType(perf?.items, 'TRADE'), [perf]);
     const distributionManual = useMemo(() => aggregateValueByAssetType(perf?.items, 'MANUAL'), [perf]);
     const pnlCombined = useMemo(() => aggregatePnlByAsset(perf?.items, 'COMBINED'), [perf]);
-    const pnlTrade = useMemo(() => aggregatePnlByAsset(perf?.items, 'TRADE'), [perf]);
     const pnlManual = useMemo(() => aggregatePnlByAsset(perf?.items, 'MANUAL'), [perf]);
 
     const filteredUnified = useMemo(() => {
         return unifiedItems.filter((row) => {
             const src = String(row.source ?? '').toUpperCase();
             if (listFilter === 'ALL') return true;
-            if (listFilter === 'MANUAL') return src === 'MANUAL';
-            return src !== 'MANUAL';
+            return src === 'MANUAL';
         });
     }, [unifiedItems, listFilter]);
 
@@ -871,7 +866,7 @@ export function Portfolio() {
         if (src === 'MANUAL') {
             return { label: t('portfolio.sourceManual', 'Manuel kayıt'), cls: 'pf-source-badge--manual' };
         }
-        return { label: t('portfolio.sourceTrade', 'Borsa işlemi'), cls: 'pf-source-badge--trade' };
+        return { label: t('portfolio.sourceOther', 'Kayıt'), cls: 'pf-source-badge--trade' };
     };
 
     const pageStyle: CSSProperties = {
@@ -923,15 +918,17 @@ export function Portfolio() {
             <div className="portfolio-fade-in">
                 <h1 style={{ fontSize: '1.65rem', fontWeight: 800, marginBottom: 6 }}>{t('portfolio.myPortfolios', 'Portföy analizi')}</h1>
                 <p style={{ color: tokens.textMuted, fontSize: '0.875rem', marginBottom: 12 }}>
-                    {t('portfolio.heroSubtitle', 'Trade ve manuel kayıtlar birleşik görünüm; dağılım ve performans özeti.')}
+                    {t(
+                        'portfolio.heroSubtitle',
+                        'Manuel pozisyonlarınız ve güncel piyasa fiyatlarıyla hesaplanan dağılım ve performans. (Canlı borsa işlem portföyü bu sürümde yok.)',
+                    )}
                 </p>
             </div>
 
-            <div className="pf-list-tabs pf-segment portfolio-fade-in portfolio-fade-in--delay-1" role="tablist" aria-label={t('portfolio.listFilterAria', 'Varlık listesi kaynağı')}>
+            <div className="pf-list-tabs pf-segment portfolio-fade-in portfolio-fade-in--delay-1" role="tablist" aria-label={t('portfolio.listFilterAria', 'Holdings list filter')}>
                 {(
                     [
                         ['ALL', t('portfolio.tabAll', 'Tüm varlıklar')],
-                        ['TRADE', t('portfolio.tabTrade', 'Borsa işlemleri')],
                         ['MANUAL', t('portfolio.tabManual', 'Manuel kayıtlar')],
                     ] as const
                 ).map(([k, label]) => (
@@ -962,7 +959,10 @@ export function Portfolio() {
                 </summary>
                 <div className="pf-reading-accordion-body">
                     <p style={{ margin: 0, fontSize: '0.8125rem', color: tokens.textMuted, lineHeight: 1.45 }}>
-                        {t('portfolio.readingGuideBody', 'Halka grafiklerde üzerine gelerek dilim oranı ve tutarı görün. Tabloda kaynak filtresi ve sayfalama kullanın.')}
+                        {t(
+                            'portfolio.readingGuideBody',
+                            'Halka grafiklerde üzerine gelerek dilim oranı ve tutarı görün. Liste yalnızca manuel kayıtlarınızı gösterir; tabloda sayfalama kullanın.',
+                        )}
                     </p>
                 </div>
             </details>
@@ -1302,17 +1302,9 @@ export function Portfolio() {
                 <div className="pf-dist-grid">
                     <AssetPiePanel
                         title={t('portfolio.distCombined', 'Birleşik')}
-                        subtitle={t('portfolio.distCombinedSub', 'Tüm kaynaklar')}
+                        subtitle={t('portfolio.distCombinedSubManual', 'Tüm manuel pozisyonlar')}
                         data={distributionCombined}
                         chartKey="combined"
-                        fmtMoney={fmtMoney}
-                        totalLabel={t('portfolio.pieCenterTry', 'TRY')}
-                    />
-                    <AssetPiePanel
-                        title={t('portfolio.distTrade', 'Borsa işlemleri')}
-                        subtitle={t('portfolio.distTradeSub', 'Otomatik kayıtlar')}
-                        data={distributionTrade}
-                        chartKey="trade"
                         fmtMoney={fmtMoney}
                         totalLabel={t('portfolio.pieCenterTry', 'TRY')}
                     />
@@ -1334,7 +1326,6 @@ export function Portfolio() {
                     {(
                         [
                             { key: 'pnl-combined', title: t('portfolio.distCombined', 'Birleşik'), data: pnlCombined },
-                            { key: 'pnl-trade', title: t('portfolio.distTrade', 'Borsa işlemleri'), data: pnlTrade },
                             { key: 'pnl-manual', title: t('portfolio.distManual', 'Manuel'), data: pnlManual },
                         ] as const
                     ).map(({ key, title, data }) => (

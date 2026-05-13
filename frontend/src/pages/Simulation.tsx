@@ -44,6 +44,7 @@ type SimulationResponse = {
     qualityFlag?: 'EXACT' | 'PREVIOUS_DAY' | 'FALLBACK' | 'MISSING' | string;
     performanceSeries: SimulationPerformancePoint[];
     message: string;
+    approximationNoticeCode?: string | null;
 };
 
 type SimulationResultItem = {
@@ -63,7 +64,11 @@ type SimulationResultItem = {
     series: SimulationPerformancePoint[];
     visible: boolean;
     message: string;
+    approximationNoticeCode?: string | null;
 };
+
+/** finance-service SimulationService.NOTICE_USD_DENOMINATED ile aynı */
+const SIMULATION_USD_DENOMINATED = 'SIMULATION_USD_DENOMINATED';
 
 type SortMode = 'LATEST' | 'PNL_DESC' | 'PNL_ASC' | 'PNL_PCT_DESC' | 'PNL_PCT_ASC' | 'NAME_ASC';
 type BuyPriceMode = 'SYSTEM' | 'MANUAL';
@@ -419,6 +424,7 @@ export function Simulation() {
             })),
             visible: true,
             message: dto.message ?? '',
+            approximationNoticeCode: dto.approximationNoticeCode ?? null,
         };
     };
 
@@ -444,6 +450,11 @@ export function Simulation() {
     const visibleResults = useMemo(
         () => simulationResults.filter((r) => r.visible),
         [simulationResults]
+    );
+
+    const showUsdHistoricalNotice = useMemo(
+        () => visibleResults.some((r) => r.approximationNoticeCode === SIMULATION_USD_DENOMINATED),
+        [visibleResults],
     );
 
     /** Ortak zaman ekseninde her serinin son bilinen kümülatif %-ini taşıyarak çizgilerin kopmamasını sağla */
@@ -659,8 +670,28 @@ export function Simulation() {
                 Çoklu simülasyon ekle, varlıkları karşılaştır, kümülatif getiri eğrilerini aynı grafikte takip et.
             </p>
             <div className="card-premium" style={{ marginBottom: 12, fontSize: '0.8125rem', padding: 14, color: 'rgba(255,255,255,0.72)' }}>
-                Simülasyon hesapları TRY bazında yapılır. USD bazlı varlıklarda geçmiş fiyatlar simülasyon sırasında USDTRY ile normalize edilir.
+                {t(
+                    'simulation.tryBasisInfo',
+                    'Simülasyon hesapları TRY bazındadır. Hisse ve kripto için geçmiş USD fiyatlar, ilgili güne kadarki USDTRY günlük serisi ile çevrilir; güncel birim fiyat ise canlı USDTRY (spot) ile TRY’ye alınır.',
+                )}
             </div>
+            {showUsdHistoricalNotice ? (
+                <div
+                    className="card-premium"
+                    style={{
+                        marginBottom: 12,
+                        fontSize: '0.8125rem',
+                        padding: 12,
+                        borderLeft: '3px solid rgba(56,189,248,0.85)',
+                        color: tokens.textMuted,
+                    }}
+                >
+                    {t(
+                        'simulation.approximationNotice',
+                        'Sonuçlar yaklaşıktır: geçmiş performans serisi tarihsel USDTRY ile, bugünkü değer ve birim fiyat ise güncel kur ile hesaplanmıştır. Kesin yatırım tavsiyesi değildir.',
+                    )}
+                </div>
+            ) : null}
 
             <div
                 className="card-premium card-premium--static tp-card"

@@ -7,14 +7,7 @@ public record PortfolioSnapshotPointDto(
         Long id,
         Instant snapshotAt,
         String triggerType,
-        Long tradeId,
-        BigDecimal combinedValueTry,
-        BigDecimal combinedCostTry,
-        BigDecimal combinedPnlTry,
-        BigDecimal tradeValueTry,
-        BigDecimal tradeCostTry,
-        BigDecimal tradePnlTry,
-        BigDecimal manualValueTry,
-        BigDecimal manualCostTry,
-        BigDecimal manualPnlTry
+        BigDecimal portfolioValueTry,
+        BigDecimal portfolioCostTry,
+        BigDecimal portfolioPnlTry
 ) {}

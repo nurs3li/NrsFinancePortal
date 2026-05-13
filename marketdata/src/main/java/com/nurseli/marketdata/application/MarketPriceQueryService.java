@@ -31,6 +31,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -45,6 +48,18 @@ public class MarketPriceQueryService {
     private static final Set<Integer> ALLOWED_DAYS = Set.of(1, 3, 5, 7, 14, 30, 90, 180, 365);
     private static final int MAX_SYMBOLS = 8;
     private static final BigDecimal ZERO_VOLUME = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
+    /**
+     * Piyasa terminali 1G/1H/1A: günlük mum tablosunda boş gün kalmasın; scheduler'ın yazdığı
+     * {@code market_price_history} satırlarından takvim günü bazlı OHLC ile doldurulur. 1Y+ aynı kalır.
+     */
+    private static final int MERGE_TICK_GAP_FILL_MAX_DAYS = 30;
+    /** Boş saatlere taşınan son fiyat için tick aralığı (ör. 20:58 → 21:00 mumu). */
+    private static final int HOURLY_CARRY_LOOKBACK_DAYS = 7;
+    /**
+     * TCMB/kripto tick ve saatlik grafik: {@code LocalDateTime.now()} JVM varsayılanında Docker'da UTC olur;
+     * İstanbul duvar saati ile hem ingest hem sorgu aynı takvim saatine hizalanır.
+     */
+    private static final ZoneId MARKET_WALL_CLOCK_ZONE = ZoneId.of("Europe/Istanbul");
 
     private final MarketPriceHistoryRepository repository;
     private final CryptoDailyCandleRepository cryptoDailyCandleRepository;
@@ -157,7 +172,7 @@ public class MarketPriceQueryService {
             return List.of();
         }
         String sym = symbol.trim().toUpperCase();
-        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
 
         List<MarketPriceBucketView> buckets = repository.findBucketedHistory(sym, start, end);
@@ -185,10 +200,13 @@ public class MarketPriceQueryService {
         if (!isAllowedSymbol(MarketType.EQUITY, symbol)) {
             throw new InvalidRequestException("type=EQUITY için geçersiz symbol: " + symbol);
         }
-        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
         List<CandlePointResponse> candles = toEquityCandles(symbol, start.toLocalDate(), end.toLocalDate());
         if (!candles.isEmpty()) {
+            if (useTickGapFillForLookbackDays(days)) {
+                candles = mergeDailyPreferDailyFillGapsFromTicks(symbol, candles, start.toLocalDate(), end.toLocalDate());
+            }
             return toHistoryFromCandles(candles);
         }
         return getHistory(symbol, days);
@@ -207,10 +225,13 @@ public class MarketPriceQueryService {
                 throw new InvalidRequestException("type=CRYPTO için geçersiz symbol: " + symbol);
             }
         }
-        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
         List<CandlePointResponse> candles = toCryptoCandles(symbol, start.toLocalDate(), end.toLocalDate());
         if (!candles.isEmpty()) {
+            if (useTickGapFillForLookbackDays(days)) {
+                candles = mergeDailyPreferDailyFillGapsFromTicks(symbol, candles, start.toLocalDate(), end.toLocalDate());
+            }
             return toHistoryFromCandles(candles);
         }
         return getHistory(symbol, days);
@@ -233,7 +254,7 @@ public class MarketPriceQueryService {
             return List.of();
         }
         metalPriceIngestService.ensureHistoricalBackfill(days);
-        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
         List<MarketPriceHistory> rows =
                 repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
@@ -260,10 +281,13 @@ public class MarketPriceQueryService {
         if (days <= 0) {
             return List.of();
         }
-        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
         List<CandlePointResponse> candles = toFxCandles(symbol, start.toLocalDate(), end.toLocalDate());
         if (!candles.isEmpty()) {
+            if (useTickGapFillForLookbackDays(days)) {
+                candles = mergeDailyPreferDailyFillGapsFromTicks(symbol, candles, start.toLocalDate(), end.toLocalDate());
+            }
             return toHistoryFromCandles(candles);
         }
         return getHistory(symbol, days);
@@ -274,40 +298,76 @@ public class MarketPriceQueryService {
     // =========================
     @Cacheable(
             cacheNames = "market:batch",
-            key = "T(String).format('%s|%s|%d', #rawType, #rawSymbols != null ? #rawSymbols.toString() : '', #days)",
-            condition = "#days <= 14"
+            key = "T(String).format('%s|%s|%d|%s', #rawType, #rawSymbols != null ? #rawSymbols.toString() : '', #days, #rawBucket != null ? #rawBucket : 'daily')",
+            // Saatlik seri "şimdi"e göre yeniden hesaplanmalı; Redis'te zamansız anahtarla önbellek grafikleri saatlerce donduruyordu.
+            condition = "#days <= 14 && (#rawBucket == null || #rawBucket.isBlank() || !#rawBucket.trim().equalsIgnoreCase(\"hourly\"))"
     )
-    public BatchHistoryResponse getBatchHistory(String rawType, List<String> rawSymbols, int days) {
+    public BatchHistoryResponse getBatchHistory(String rawType, List<String> rawSymbols, int days, String rawBucket) {
         MarketType type = MarketType.from(rawType);
         validateDays(days);
+        String bucket = normalizeBucket(rawBucket);
+        validateBucketForType(type, bucket);
 
         List<String> symbols = normalizeAndValidateSymbols(type, rawSymbols);
 
-        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
+        LocalDate from = start.toLocalDate();
+        LocalDate to = end.toLocalDate();
+        boolean fillTickGaps = useTickGapFillForLookbackDays(days);
 
         Map<String, List<CandlePointResponse>> series = new LinkedHashMap<>();
 
         for (String symbol : symbols) {
             if (type == MarketType.FX) {
-                List<CandlePointResponse> fxCandles = toFxCandles(symbol, start.toLocalDate(), end.toLocalDate());
+                if ("hourly".equals(bucket)) {
+                    List<CandlePointResponse> hourly = hourlyStripFromPriceHistory(symbol, days);
+                    if (hourly.size() >= 2) {
+                        series.put(symbol, hourly);
+                        continue;
+                    }
+                }
+                List<CandlePointResponse> fxCandles = toFxCandles(symbol, from, to);
                 if (!fxCandles.isEmpty()) {
-                    series.put(symbol, fxCandles);
+                    series.put(symbol, fillTickGaps ? mergeDailyPreferDailyFillGapsFromTicks(symbol, fxCandles, from, to) : fxCandles);
                     continue;
                 }
             }
             if (type == MarketType.CRYPTO) {
-                List<CandlePointResponse> cryptoCandles = toCryptoCandles(symbol, start.toLocalDate(), end.toLocalDate());
+                if ("hourly".equals(bucket)) {
+                    List<CandlePointResponse> hourly = hourlyStripFromPriceHistory(symbol, days);
+                    if (hourly.size() >= 2) {
+                        series.put(symbol, hourly);
+                        continue;
+                    }
+                }
+                List<CandlePointResponse> cryptoCandles = toCryptoCandles(symbol, from, to);
                 if (!cryptoCandles.isEmpty()) {
-                    series.put(symbol, cryptoCandles);
+                    series.put(symbol, fillTickGaps ? mergeDailyPreferDailyFillGapsFromTicks(symbol, cryptoCandles, from, to) : cryptoCandles);
                     continue;
                 }
             }
             if (type == MarketType.EQUITY) {
-                List<CandlePointResponse> equityCandles = toEquityCandles(symbol, start.toLocalDate(), end.toLocalDate());
+                if ("hourly".equals(bucket)) {
+                    List<CandlePointResponse> hourly = hourlyStripFromPriceHistory(symbol, days);
+                    if (hourly.size() >= 2) {
+                        series.put(symbol, hourly);
+                        continue;
+                    }
+                }
+                List<CandlePointResponse> equityCandles = toEquityCandles(symbol, from, to);
                 if (!equityCandles.isEmpty()) {
-                    series.put(symbol, equityCandles);
+                    series.put(symbol, fillTickGaps ? mergeDailyPreferDailyFillGapsFromTicks(symbol, equityCandles, from, to) : equityCandles);
                     continue;
+                }
+            }
+            if (type == MarketType.METALS) {
+                if ("hourly".equals(bucket)) {
+                    List<CandlePointResponse> hourly = hourlyStripFromPriceHistory(symbol, days);
+                    if (hourly.size() >= 2) {
+                        series.put(symbol, hourly);
+                        continue;
+                    }
                 }
             }
             List<MarketPriceHistory> rows = repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
@@ -315,6 +375,199 @@ public class MarketPriceQueryService {
         }
 
         return new BatchHistoryResponse(series);
+    }
+
+    private static String normalizeBucket(String rawBucket) {
+        if (rawBucket == null || rawBucket.isBlank()) {
+            return "daily";
+        }
+        return rawBucket.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void validateBucketForType(MarketType type, String bucket) {
+        if ("daily".equals(bucket)) {
+            return;
+        }
+        if ("hourly".equals(bucket)) {
+            if (type != MarketType.FX
+                    && type != MarketType.CRYPTO
+                    && type != MarketType.EQUITY
+                    && type != MarketType.METALS) {
+                throw new InvalidRequestException("bucket=hourly yalnızca type=FX, CRYPTO, EQUITY veya METALS için desteklenir.");
+            }
+            return;
+        }
+        throw new InvalidRequestException("bucket yalnızca daily veya hourly olabilir.");
+    }
+
+    /**
+     * {@code market_price_history} tick'lerinden saatlik mum (FX + kripto + hisse FINHUB tick + altın XAU_TRY tick).
+     * <ul>
+     *   <li>{@code days < 7} (1G): Tam 24 saatlik seri (seyrek tick → önceki kapanışla doldurulur).</li>
+     *   <li>{@code days >= 7} (1H): Son {@code days} gün; her tick en yakın takvim saatine atanır (örn. 20:58 → 21:00 dilimi);
+     *       o saatte tick yoksa son bilinen fiyat taşınır (FX, CRYPTO, EQUITY aynı mantık).</li>
+     * </ul>
+     */
+    private List<CandlePointResponse> hourlyStripFromPriceHistory(String symbol, int days) {
+        if (symbol == null || symbol.isBlank() || days < 1) {
+            return List.of();
+        }
+        LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
+        if (days < 7) {
+            LocalDateTime endHour = end.withMinute(0).withSecond(0).withNano(0);
+            LocalDateTime queryStart = endHour.minusHours(96);
+            List<CandlePointResponse> sparse = hourlyCandlesFromTicks(symbol, queryStart, end);
+            if (sparse.isEmpty()) {
+                sparse = hourlyCandlesFromTicks(symbol, end.minusHours(168), end);
+            }
+            if (sparse.isEmpty()) {
+                return List.of();
+            }
+            return densifyHourlyLast24Hours(sparse, end);
+        }
+        LocalDateTime rangeStart = end.minusDays(days).withMinute(0).withSecond(0).withNano(0);
+        List<CandlePointResponse> candles = hourlyCandlesFromTicks(symbol, rangeStart, end);
+        if (candles.size() >= 2) {
+            return candles;
+        }
+        LocalDateTime wider = end.minusDays(days + 2).withMinute(0).withSecond(0).withNano(0);
+        candles = hourlyCandlesFromTicks(symbol, wider, end);
+        return candles.size() >= 2 ? candles : List.of();
+    }
+
+    /**
+     * Son 24 takvim saati (end'in bulunduğu saat dahil, geriye 23 saat) için her saatte bir mum.
+     * Veri yoksa bir önceki gerçek kapanışla düz mum üretir (grafikte 24 nokta).
+     */
+    private List<CandlePointResponse> densifyHourlyLast24Hours(List<CandlePointResponse> sparse, LocalDateTime end) {
+        if (sparse == null || sparse.isEmpty()) {
+            return List.of();
+        }
+        List<CandlePointResponse> sorted = sparse.stream()
+                .filter(Objects::nonNull)
+                .filter(c -> c.t() != null)
+                .sorted(Comparator.comparing(CandlePointResponse::t))
+                .toList();
+        if (sorted.isEmpty()) {
+            return List.of();
+        }
+        ZoneId iz = MARKET_WALL_CLOCK_ZONE;
+        LocalDateTime endHourLdt = end.withMinute(0).withSecond(0).withNano(0);
+        OffsetDateTime endHour = endHourLdt.atZone(iz).toOffsetDateTime();
+        OffsetDateTime startHour = endHour.minusHours(23);
+        Map<OffsetDateTime, CandlePointResponse> byHour = new TreeMap<>();
+        for (CandlePointResponse c : sorted) {
+            OffsetDateTime hk = c.t().truncatedTo(ChronoUnit.HOURS);
+            byHour.put(hk, c);
+        }
+        BigDecimal carry = null;
+        for (CandlePointResponse c : sorted) {
+            OffsetDateTime hk = c.t().truncatedTo(ChronoUnit.HOURS);
+            if (hk.isBefore(startHour)) {
+                carry = c.c();
+            }
+        }
+        if (carry == null) {
+            carry = sorted.get(0).c();
+        }
+        List<CandlePointResponse> out = new ArrayList<>(24);
+        for (OffsetDateTime h = startHour; !h.isAfter(endHour); h = h.plusHours(1)) {
+            CandlePointResponse hit = byHour.get(h);
+            if (hit != null) {
+                carry = hit.c();
+                out.add(hit);
+            } else {
+                out.add(CandlePointResponse.of(h, carry, carry, carry, carry, ZERO_VOLUME));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Tick zamanını en yakın takvim saatine yuvarlar (20:58 → 21:00, 20:27 → 20:00; 14:30 → 15:00).
+     * 23:30–23:59 gibi yuvarlamanın ertesi güne taşmaması için aynı takvim gününde kalır (23:xx → 23:00).
+     */
+    private static LocalDateTime hourKeyNearest(LocalDateTime t) {
+        LocalDateTime floor = t.truncatedTo(ChronoUnit.HOURS);
+        if (t.isBefore(floor.plusMinutes(30))) {
+            return floor;
+        }
+        LocalDateTime ceil = floor.plusHours(1);
+        if (ceil.toLocalDate().isAfter(floor.toLocalDate())) {
+            return floor;
+        }
+        return ceil;
+    }
+
+    private List<CandlePointResponse> hourlyCandlesFromTicks(String symbol, LocalDateTime rangeStart, LocalDateTime rangeEnd) {
+        if (symbol == null || symbol.isBlank() || rangeStart == null || rangeEnd == null) {
+            return List.of();
+        }
+        if (!rangeStart.isBefore(rangeEnd)) {
+            return List.of();
+        }
+        LocalDateTime startHour = rangeStart.withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime endHour = rangeEnd.withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime bufferStart = startHour.minusDays(HOURLY_CARRY_LOOKBACK_DAYS);
+        List<MarketPriceHistory> rows = repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(
+                symbol.trim().toUpperCase(), bufferStart, rangeEnd);
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+        Map<LocalDateTime, List<MarketPriceHistory>> byHour = new TreeMap<>();
+        for (MarketPriceHistory r : rows) {
+            LocalDateTime t = r.getTimestamp();
+            if (t == null) {
+                continue;
+            }
+            LocalDateTime hourKey = hourKeyNearest(t);
+            byHour.computeIfAbsent(hourKey, k -> new ArrayList<>()).add(r);
+        }
+        BigDecimal carry = null;
+        for (MarketPriceHistory r : rows) {
+            LocalDateTime t = r.getTimestamp();
+            if (t == null) {
+                continue;
+            }
+            if (t.isBefore(startHour)) {
+                carry = mid(r);
+            } else {
+                break;
+            }
+        }
+        List<CandlePointResponse> out = new ArrayList<>();
+        for (LocalDateTime h = startHour; !h.isAfter(endHour); h = h.plusHours(1)) {
+            List<MarketPriceHistory> hourRows = byHour.get(h);
+            if (hourRows != null && !hourRows.isEmpty()) {
+                hourRows.sort(Comparator.comparing(MarketPriceHistory::getTimestamp));
+                BigDecimal open = mid(hourRows.get(0));
+                BigDecimal close = mid(hourRows.get(hourRows.size() - 1));
+                BigDecimal highAsk = hourRows.stream()
+                        .map(MarketPriceHistory::getSellPrice)
+                        .filter(Objects::nonNull)
+                        .max(Comparator.naturalOrder())
+                        .orElse(open.max(close));
+                BigDecimal lowBid = hourRows.stream()
+                        .map(MarketPriceHistory::getBuyPrice)
+                        .filter(Objects::nonNull)
+                        .min(Comparator.naturalOrder())
+                        .orElse(open.min(close));
+                BigDecimal high = highAsk.max(open).max(close);
+                BigDecimal low = lowBid.min(open).min(close);
+                out.add(CandlePointResponse.atIstanbul(
+                        h,
+                        open,
+                        high,
+                        low,
+                        close,
+                        deriveSyntheticVolume(hourRows, open, high, low, close)
+                ));
+                carry = close;
+            } else if (carry != null) {
+                out.add(CandlePointResponse.atIstanbul(h, carry, carry, carry, carry, ZERO_VOLUME));
+            }
+        }
+        return out;
     }
 
     private void validateDays(int days) {
@@ -398,8 +651,8 @@ public class MarketPriceQueryService {
                     .min(Comparator.naturalOrder())
                     .orElse(open);
 
-            candles.add(new CandlePointResponse(
-                    entry.getKey().atStartOfDay(),
+            candles.add(CandlePointResponse.atIstanbulMidnight(
+                    entry.getKey(),
                     open,
                     high,
                     low,
@@ -411,14 +664,59 @@ public class MarketPriceQueryService {
         return candles;
     }
 
+    private static boolean useTickGapFillForLookbackDays(int days) {
+        return days > 0 && days <= MERGE_TICK_GAP_FILL_MAX_DAYS;
+    }
+
+    /**
+     * Günlük mum (fx/equity/crypto tabloları) öncelikli; aralıktaki eksik takvim günleri için
+     * aynı sembolün {@code market_price_history} kayıtlarından günlük OHLC üretilir (21:00 vb. toplu job).
+     */
+    private List<CandlePointResponse> mergeDailyPreferDailyFillGapsFromTicks(
+            String symbol,
+            List<CandlePointResponse> dailyPreferred,
+            LocalDate fromInclusive,
+            LocalDate toInclusive
+    ) {
+        if (symbol == null || symbol.isBlank() || fromInclusive == null || toInclusive == null || fromInclusive.isAfter(toInclusive)) {
+            return dailyPreferred == null ? List.of() : dailyPreferred;
+        }
+        List<CandlePointResponse> daily = dailyPreferred == null ? List.of() : dailyPreferred;
+
+        LocalDateTime rangeStart = fromInclusive.atStartOfDay();
+        LocalDateTime rangeEnd = toInclusive.plusDays(1).atStartOfDay().minusNanos(1);
+        List<MarketPriceHistory> raw = repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(
+                symbol.trim().toUpperCase(), rangeStart, rangeEnd);
+        List<CandlePointResponse> tickDaily = toDailyCandles(raw);
+        Map<LocalDate, CandlePointResponse> tickByDay = tickDaily.stream()
+                .filter(c -> c != null && c.t() != null)
+                .collect(Collectors.toMap(c -> c.t().toLocalDate(), c -> c, (a, b) -> a));
+
+        Map<LocalDate, CandlePointResponse> merged = new TreeMap<>();
+        for (CandlePointResponse d : daily) {
+            if (d != null && d.t() != null) {
+                merged.put(d.t().toLocalDate(), d);
+            }
+        }
+        for (LocalDate d = fromInclusive; !d.isAfter(toInclusive); d = d.plusDays(1)) {
+            if (!merged.containsKey(d)) {
+                CandlePointResponse t = tickByDay.get(d);
+                if (t != null) {
+                    merged.put(d, t);
+                }
+            }
+        }
+        return new ArrayList<>(merged.values());
+    }
+
     private List<MarketPriceHistoryResponse> toHistoryFromCandles(List<CandlePointResponse> candles) {
         return candles.stream()
                 .map(c -> new MarketPriceHistoryResponse(
                         c.c(),
                         c.c(),
-                        c.t(),
+                        c.t().toLocalDateTime(),
                         "SYSTEM",
-                        c.t(),
+                        c.t().toLocalDateTime(),
                         DataQualityFlag.EXACT
                 ))
                 .toList();
@@ -430,8 +728,8 @@ public class MarketPriceQueryService {
             return List.of();
         }
         return rows.stream()
-                .map(row -> new CandlePointResponse(
-                        row.getAsOf().atStartOfDay(),
+                .map(row -> CandlePointResponse.atIstanbulMidnight(
+                        row.getAsOf(),
                         row.getOpenPrice(),
                         row.getHighPrice(),
                         row.getLowPrice(),
@@ -447,8 +745,8 @@ public class MarketPriceQueryService {
             return List.of();
         }
         return rows.stream()
-                .map(row -> new CandlePointResponse(
-                        row.getAsOf().atStartOfDay(),
+                .map(row -> CandlePointResponse.atIstanbulMidnight(
+                        row.getAsOf(),
                         row.getOpenPrice(),
                         row.getHighPrice(),
                         row.getLowPrice(),
@@ -464,8 +762,8 @@ public class MarketPriceQueryService {
             return List.of();
         }
         return rows.stream()
-                .map(row -> new CandlePointResponse(
-                        row.getAsOf().atStartOfDay(),
+                .map(row -> CandlePointResponse.atIstanbulMidnight(
+                        row.getAsOf(),
                         row.getOpenPrice(),
                         row.getHighPrice(),
                         row.getLowPrice(),
@@ -516,17 +814,28 @@ public class MarketPriceQueryService {
     // =========================
     @Cacheable(
             cacheNames = "market:indicators",
-            key = "#rawType + '|' + #rawSymbol + '|' + #days + '|' + (#rawMa != null ? #rawMa : '')",
-            condition = "#days <= 14"
+            key = "#rawType + '|' + #rawSymbol + '|' + #days + '|' + (#rawMa != null ? #rawMa : '') + '|' + (#rawBucket != null ? #rawBucket : 'daily')",
+            condition = "#days <= 14 && (#rawBucket == null || #rawBucket.isBlank() || !#rawBucket.trim().equalsIgnoreCase(\"hourly\"))"
     )
-    public MarketIndicatorsResponse getIndicators(String rawType, String rawSymbol, int days, String rawMa) {
+    public MarketIndicatorsResponse getIndicators(String rawType, String rawSymbol, int days, String rawMa, String rawBucket) {
         MarketType type = MarketType.from(rawType);
         validateDays(days);
+        String bucket = normalizeBucket(rawBucket);
+        validateBucketForType(type, bucket);
 
         String symbol = normalizeAndValidateSingleSymbol(type, rawSymbol);
-        List<Integer> maWindows = parseMaWindows(rawMa, days);
 
-        LocalDateTime end = LocalDateTime.now();
+        if ((type == MarketType.FX || type == MarketType.CRYPTO || type == MarketType.EQUITY || type == MarketType.METALS)
+                && "hourly".equals(bucket)) {
+            List<CandlePointResponse> hourly = hourlyStripFromPriceHistory(symbol, days);
+            if (hourly.size() >= 2) {
+                List<Integer> maWindows = parseMaWindowsCappedToSeriesLength(rawMa, hourly.size());
+                return buildIndicatorsResponse(type, symbol, days, hourly, maWindows);
+            }
+            // Yeterli saatlik bar yoksa günlük yola düş.
+        }
+
+        LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
 
         List<MarketPriceHistory> rows =
@@ -540,11 +849,25 @@ public class MarketPriceQueryService {
         };
         if (candles.isEmpty()) {
             candles = toDailyCandles(rows);
+        } else if (useTickGapFillForLookbackDays(days)
+                && (type == MarketType.EQUITY || type == MarketType.CRYPTO || type == MarketType.FX)) {
+            candles = mergeDailyPreferDailyFillGapsFromTicks(symbol, candles, start.toLocalDate(), end.toLocalDate());
         }
         if (candles.isEmpty()) {
             throw new InvalidRequestException("Gosterge hesaplamak icin en az 1 gunluk veri gerekli.");
         }
 
+        List<Integer> maWindows = parseMaWindowsCappedToSeriesLength(rawMa, candles.size());
+        return buildIndicatorsResponse(type, symbol, days, candles, maWindows);
+    }
+
+    private MarketIndicatorsResponse buildIndicatorsResponse(
+            MarketType type,
+            String symbol,
+            int days,
+            List<CandlePointResponse> candles,
+            List<Integer> maWindows
+    ) {
         List<IndicatorPointResponse> closeSeries = candles.stream()
                 .map(c -> new IndicatorPointResponse(c.t(), c.c()))
                 .toList();
@@ -562,6 +885,38 @@ public class MarketPriceQueryService {
         return new MarketIndicatorsResponse(type.name(), symbol, days, closeSeries, maSeries, trend);
     }
 
+    /**
+     * Saatlik mum sayısı kısa olduğunda MA pencerelerini seri uzunluğuna göre süzer (ör. 12 bar iken MA21 istenmez).
+     */
+    private List<Integer> parseMaWindowsCappedToSeriesLength(String rawMa, int barCount) {
+        if (barCount < 2) {
+            return List.of();
+        }
+        String value = (rawMa == null || rawMa.isBlank()) ? "7,21" : rawMa;
+        List<Integer> parsed = Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .map(s -> {
+                    try {
+                        return Integer.parseInt(s);
+                    } catch (NumberFormatException ex) {
+                        throw new InvalidRequestException("ma parametresi sayı olmalı. Örnek: 7,21");
+                    }
+                })
+                .distinct()
+                .sorted()
+                .filter(w -> w >= 2 && w <= barCount)
+                .toList();
+        if (!parsed.isEmpty()) {
+            return parsed;
+        }
+        int fallback = Math.min(5, barCount);
+        if (fallback >= 2) {
+            return List.of(fallback);
+        }
+        return List.of();
+    }
+
     private String normalizeAndValidateSingleSymbol(MarketType type, String rawSymbol) {
         if (rawSymbol == null || rawSymbol.isBlank()) {
             throw new InvalidRequestException("symbol zorunludur.");
@@ -571,42 +926,6 @@ public class MarketPriceQueryService {
             throw new InvalidRequestException("type=" + type + " için geçersiz symbol: " + symbol);
         }
         return symbol;
-    }
-
-    private List<Integer> parseMaWindows(String rawMa, int days) {
-        if (days < 2) {
-            return List.of();
-        }
-        String value = (rawMa == null || rawMa.isBlank()) ? "7,30,90" : rawMa;
-
-        List<Integer> windows = Arrays.stream(value.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isBlank())
-                .map(s -> {
-                    try {
-                        return Integer.parseInt(s);
-                    } catch (NumberFormatException ex) {
-                        throw new InvalidRequestException("ma parametresi sayı olmalı. Örnek: 7,30,90");
-                    }
-                })
-                .distinct()
-                .sorted()
-                .toList();
-
-        if (windows.isEmpty()) {
-            throw new InvalidRequestException("En az bir MA değeri gönderilmelidir.");
-        }
-
-        for (Integer w : windows) {
-            if (w < 2) {
-                throw new InvalidRequestException("MA değeri 2 veya daha büyük olmalı.");
-            }
-            if (w > days) {
-                throw new InvalidRequestException("MA değeri days parametresinden büyük olamaz. MA=" + w + ", days=" + days);
-            }
-        }
-
-        return windows;
     }
 
     private Map<Integer, List<IndicatorPointResponse>> buildMovingAverages(

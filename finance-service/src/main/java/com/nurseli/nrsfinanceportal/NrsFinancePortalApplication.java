@@ -1,8 +1,10 @@
 package com.nurseli.nrsfinanceportal;
 
+import com.nurseli.nrsfinanceportal.config.FinanceKafkaTopicProperties;
 import jakarta.annotation.PostConstruct;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.data.web.config.EnableSpringDataWebSupport;
 import org.springframework.data.web.config.EnableSpringDataWebSupport.PageSerializationMode;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -10,9 +12,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import java.util.TimeZone;
 
 @SpringBootApplication
+@EnableConfigurationProperties(FinanceKafkaTopicProperties.class)
 @EnableScheduling
-// Bkz. NotificationServiceApplication: PageImpl serialization icin VIA_DTO modu;
-// frontend (Trade.tsx vs.) yeni page.* shape'ini kullaniyor.
+// PageImpl serialization icin VIA_DTO modu (admin listeleri vb.).
 @EnableSpringDataWebSupport(pageSerializationMode = PageSerializationMode.VIA_DTO)
 public class NrsFinancePortalApplication {
 

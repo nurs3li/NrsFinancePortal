@@ -37,16 +37,9 @@ public class PortfolioSnapshotQueryService {
                 s.getId(),
                 s.getSnapshotAt(),
                 s.getTriggerType().name(),
-                s.getTradeId(),
-                s.getCombinedValueTry(),
-                s.getCombinedCostTry(),
-                s.getCombinedPnlTry(),
-                s.getTradeValueTry(),
-                s.getTradeCostTry(),
-                s.getTradePnlTry(),
-                s.getManualValueTry(),
-                s.getManualCostTry(),
-                s.getManualPnlTry()
+                s.getPortfolioValueTry(),
+                s.getPortfolioCostTry(),
+                s.getPortfolioPnlTry()
         );
     }
 }

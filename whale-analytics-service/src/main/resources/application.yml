@@ -31,9 +31,9 @@ management:
 whale:
   thresholds:
     l1:
-      single-tx: 250
+      single-tx: 5000
       daily-volume: 1000000
-      hourly-count: 1
+      hourly-count: 10
     l2:
       single-tx: 500000
       daily-volume: 5000000
@@ -42,3 +42,29 @@ whale:
       single-tx: 1000000
       daily-volume: 20000000
       hourly-count: 50
+
+# finance-service v22+ transaction topic yok. Eski whale tüketimi: app.whale.legacy-transaction-analysis-enabled
+# veya app.kafka.legacy-finance-ingestion-enabled (geriye dönük).
+app:
+  kafka:
+    legacy-finance-ingestion-enabled: false
+    topics:
+      investment-position-created: ${KAFKA_TOPIC_INVESTMENT_POSITION_CREATED:finance.investment.position.created}
+      investment-position-updated: ${KAFKA_TOPIC_INVESTMENT_POSITION_UPDATED:finance.investment.position.updated}
+      investment-position-closed: ${KAFKA_TOPIC_INVESTMENT_POSITION_CLOSED:finance.investment.position.closed}
+      investor-behavior-updated: ${KAFKA_TOPIC_INVESTOR_BEHAVIOR_UPDATED:investor.behavior.updated}
+      whale-alert-triggered: ${KAFKA_TOPIC_WHALE_ALERT_TRIGGERED:whale.alert.triggered}
+  whale:
+    legacy-transaction-analysis-enabled: false
+    portfolio-behavior-analysis-enabled: true
+  investor-behavior:
+    thresholds:
+      l1-portfolio-try: 250000
+      l2-portfolio-try: 1000000
+      l3-portfolio-try: 5000000
+      l1-largest-position-try: 100000
+      l3-largest-position-try: 2000000
+      l2-concentration-ratio: 0.40
+      l1-score: 35
+      l2-score: 65
+      l3-score: 85

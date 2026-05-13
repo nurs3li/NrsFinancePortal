@@ -4,7 +4,6 @@ spring:
 
   mvc:
     async:
-      # SseEmitter ile uyum: varsayılan ~30s AsyncRequestTimeoutException üretir; FM görev SSE uzun süre açık kalır
       request-timeout: 31m
 
   jackson:
@@ -38,16 +37,6 @@ spring:
       properties:
         spring.json.add.type.headers: false
         spring.json.use.type.headers: false
-    consumer:
-      group-id: finance-whale-consumer
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
-      properties:
-        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
-        spring.json.trusted.packages: com.nurseli.nrsfinanceportal.integration.kafka.event
-        spring.json.use.type.headers: false
-        spring.json.value.default.type: com.nurseli.nrsfinanceportal.integration.kafka.event.WhaleAlertTriggeredEvent
 
 market-data:
   base-url: http://localhost:8083
@@ -63,6 +52,12 @@ management:
     health:
       show-details: when_authorized
 app:
+  kafka:
+    listeners-enabled: ${APP_KAFKA_LISTENERS_ENABLED:true}
+    topics:
+      investment-position-created: ${KAFKA_TOPIC_INVESTMENT_POSITION_CREATED:finance.investment.position.created}
+      investment-position-updated: ${KAFKA_TOPIC_INVESTMENT_POSITION_UPDATED:finance.investment.position.updated}
+      investment-position-closed: ${KAFKA_TOPIC_INVESTMENT_POSITION_CLOSED:finance.investment.position.closed}
   observability:
     enabled: ${APP_OBSERVABILITY_ENABLED:true}
     open-search:
@@ -78,21 +73,10 @@ app:
       tempo-datasource-uid: ${APP_OBSERVABILITY_GRAFANA_TEMPO_UID:nrs-tempo}
   notification:
     base-url: ${NOTIFICATION_SERVICE_URL:http://localhost:8089}
-  trade:
-    order-form-v2-enabled: false
   rate-limit:
     enabled: true
     max-requests-per-minute: 40
     window-sec: 60
-  suspicious:
-    enabled: true
-    max-transactions-per-minute: 8
-    high-amount-threshold: 40000
-  fund-request:
-    auto-approval-enabled: true
-    deposit-auto-approve-limit-try: 50000
-    withdrawal-auto-approve-limit-try: 3000
-    require-iban-for-deposit: true
   # Dekont dosyaları. Boşsa: ${user.home}/.nrs-finance/receipts. Docker: /data/receipts + volume önerilir (tmp silinmez).
   receipt-storage:
     root: ${NRS_RECEIPT_STORAGE_ROOT:}
@@ -107,7 +91,7 @@ app:
       otp-enforcement-enabled: ${KEYCLOAK_SECURITY_OTP_ENFORCEMENT_ENABLED:false}
       # Realm rememberMe + oturum süreleri otomasyonu. Keycloak: Realm settings → Login → Remember me = ON
       remember-me-enforcement-enabled: ${KEYCLOAK_SECURITY_REMEMBER_ME_ENFORCEMENT_ENABLED:false}
-      enforced-roles: ${KEYCLOAK_SECURITY_ENFORCED_ROLES:ADMIN,FINANCE_MANAGER}
+      enforced-roles: ${KEYCLOAK_SECURITY_ENFORCED_ROLES:ADMIN}
       required-action: ${KEYCLOAK_SECURITY_REQUIRED_ACTION:CONFIGURE_TOTP}
       remember-me: ${KEYCLOAK_SECURITY_REMEMBER_ME:true}
       sso-idle: ${KEYCLOAK_SECURITY_SSO_IDLE:PT30M}

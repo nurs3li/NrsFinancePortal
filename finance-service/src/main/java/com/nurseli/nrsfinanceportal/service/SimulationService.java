@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -21,6 +22,12 @@ import java.util.Objects;
 @Service
 @RequiredArgsConstructor
 public class SimulationService {
+
+    /**
+     * USD cinsinden hisse/kripto geçmiş serisi TRY'ye çevrilirken kullanıcıya gösterilecek kısa uyarı kodu
+     * (frontend i18n anahtarı ile eşlenir). Fon/TL varlıkları için kullanılmaz.
+     */
+    public static final String NOTICE_USD_DENOMINATED = "SIMULATION_USD_DENOMINATED";
 
     private final MarketDataClient marketDataClient;
     private final DateToDaysHelper dateToDaysHelper;
@@ -55,8 +62,15 @@ public class SimulationService {
             history = List.of();
         }
 
-        BigDecimal usdTryRate = resolveUsdTryRate();
-        List<MarketPriceHistoryDto> normalizedHistory = normalizeHistoryPricesToTry(history, type, usdTryRate);
+        BigDecimal spotUsdTry = resolveUsdTryRate();
+        List<MarketPriceHistoryDto> usdTryHistory = List.of();
+        if (needsHistoricalUsdTrySeries(type)) {
+            List<MarketPriceHistoryDto> fx = marketDataClient.getHistory(AssetType.FX, "USDTRY", days);
+            usdTryHistory = fx != null ? fx : List.of();
+        }
+
+        List<MarketPriceHistoryDto> normalizedHistory =
+                normalizeHistoryPricesToTry(history, type, usdTryHistory, spotUsdTry);
         BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, symbol));
         if (currentPrice.signum() <= 0) {
             throw new IllegalStateException("Current price not found");
@@ -110,6 +124,8 @@ public class SimulationService {
                 currentPrice
         );
 
+        String approximationNoticeCode = needsHistoricalUsdTrySeries(type) ? NOTICE_USD_DENOMINATED : null;
+
         return new SimulationResponseDto(
                 type.name(),
                 symbol,
@@ -125,6 +141,7 @@ public class SimulationService {
                 historicalRef.priceDate(),
                 historicalRef.qualityFlag(),
                 performanceSeries,
+                approximationNoticeCode,
                 message
         );
     }
@@ -208,8 +225,8 @@ public class SimulationService {
         SimulationPerformancePointDto last = points.get(points.size() - 1);
         // Günlük mum son noktası bugün olsa bile alış anındaki kapanıştan farklı olabilir; canlı kotasyonu yansıt.
         if (last.date().equals(today)) {
-            java.util.ArrayList<SimulationPerformancePointDto> head =
-                    new java.util.ArrayList<>(points.subList(0, points.size() - 1));
+            ArrayList<SimulationPerformancePointDto> head =
+                    new ArrayList<>(points.subList(0, points.size() - 1));
             head.add(todayPoint);
             return List.copyOf(head);
         }
@@ -251,6 +268,11 @@ public class SimulationService {
         return v == null ? BigDecimal.ZERO : v;
     }
 
+    /** Hisse ve kripto: geçmiş USD fiyat × tarihsel USDTRY; fon: eski davranış (tüm seri × güncel spot USDTRY). */
+    private static boolean needsHistoricalUsdTrySeries(AssetType type) {
+        return type == AssetType.STOCK || type == AssetType.CRYPTO;
+    }
+
     private BigDecimal resolveUsdTryRate() {
         BigDecimal rate = nz(marketDataClient.getPriceTry(AssetType.FX, "USDTRY"));
         if (rate.signum() <= 0) {
@@ -260,24 +282,112 @@ public class SimulationService {
         return rate;
     }
 
+    /**
+     * USD kotasyonlu varlık geçmişini TRY'ye çevirir.
+     * <p><b>STOCK / CRYPTO:</b> market-data günlük USDTRY geçmişi çekilir; her varlık mumunun {@code timestamp}
+     * değeri için, aynı veya önceki zamandaki son USDTRY kapanışı (mid) çarpan olarak kullanılır
+     * ({@code usdTry.timestamp <= asset.timestamp}). Günlük mumlar genelde gün başına hizalı {@code LocalDateTime}
+     * taşır; kural bu yüzden takvim günü ile tutarlıdır.</p>
+     * <p>Eksik kur: önce tüm USDTRY noktaları varlık zamanından sonraysa serinin en erken kuru; hâlâ geçersizse
+     * güncel spot {@code spotUsdTryFallback}; o da yoksa {@code 1} (geriye dönük).</p>
+     * <p><b>FUND:</b> Önceki tek çarpan davranışı korunur (tüm noktalar × güncel spot USDTRY).</p>
+     */
     private List<MarketPriceHistoryDto> normalizeHistoryPricesToTry(
             List<MarketPriceHistoryDto> history,
             AssetType type,
-            BigDecimal usdTryRate
+            List<MarketPriceHistoryDto> usdTryHistory,
+            BigDecimal spotUsdTryFallback
     ) {
-        if (history == null || history.isEmpty()) return List.of();
-        boolean usdQuoted = type == AssetType.CRYPTO || type == AssetType.FUND || type == AssetType.STOCK;
-        if (!usdQuoted) return history;
-        if (usdTryRate == null || usdTryRate.signum() <= 0) return history;
+        if (history == null || history.isEmpty()) {
+            return List.of();
+        }
+        if (type == AssetType.FUND) {
+            return multiplyHistoryByFlatRate(history, spotUsdTryFallback);
+        }
+        if (!needsHistoricalUsdTrySeries(type)) {
+            return history;
+        }
+
+        List<MarketPriceHistoryDto> fxSorted = (usdTryHistory == null ? List.<MarketPriceHistoryDto>of() : usdTryHistory)
+                .stream()
+                .filter(Objects::nonNull)
+                .filter(h -> h.timestamp() != null)
+                .sorted(Comparator.comparing(MarketPriceHistoryDto::timestamp))
+                .toList();
 
         return history.stream()
                 .filter(Objects::nonNull)
+                .map(h -> {
+                    BigDecimal rate = resolveUsdTryAt(h.timestamp(), fxSorted, spotUsdTryFallback);
+                    return new MarketPriceHistoryDto(
+                            nz(h.buyPrice()).multiply(rate),
+                            nz(h.sellPrice()).multiply(rate),
+                            h.timestamp()
+                    );
+                })
+                .toList();
+    }
+
+    private List<MarketPriceHistoryDto> multiplyHistoryByFlatRate(
+            List<MarketPriceHistoryDto> history,
+            BigDecimal rate
+    ) {
+        if (rate == null || rate.signum() <= 0) {
+            return history;
+        }
+        return history.stream()
+                .filter(Objects::nonNull)
                 .map(h -> new MarketPriceHistoryDto(
-                        nz(h.buyPrice()).multiply(usdTryRate),
-                        nz(h.sellPrice()).multiply(usdTryRate),
+                        nz(h.buyPrice()).multiply(rate),
+                        nz(h.sellPrice()).multiply(rate),
                         h.timestamp()
                 ))
                 .toList();
+    }
+
+    /**
+     * Son USDTRY mid değeri: {@code fxSorted} artan sırada; {@code assetTs} için
+     * {@code fx.timestamp <= assetTs} koşulunu sağlayan en son kayıt.
+     */
+    private BigDecimal resolveUsdTryAt(
+            LocalDateTime assetTs,
+            List<MarketPriceHistoryDto> fxSorted,
+            BigDecimal spotUsdTryFallback
+    ) {
+        if (assetTs == null || fxSorted.isEmpty()) {
+            return positiveOrOne(spotUsdTryFallback);
+        }
+        int lo = 0;
+        int hi = fxSorted.size() - 1;
+        int ans = -1;
+        while (lo <= hi) {
+            int mid = (lo + hi) >>> 1;
+            LocalDateTime fts = fxSorted.get(mid).timestamp();
+            if (!fts.isAfter(assetTs)) {
+                ans = mid;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        if (ans >= 0) {
+            BigDecimal m = midPrice(fxSorted.get(ans));
+            if (m != null && m.signum() > 0) {
+                return m;
+            }
+        }
+        BigDecimal earliest = midPrice(fxSorted.get(0));
+        if (earliest != null && earliest.signum() > 0) {
+            return earliest;
+        }
+        return positiveOrOne(spotUsdTryFallback);
+    }
+
+    private static BigDecimal positiveOrOne(BigDecimal spot) {
+        if (spot != null && spot.signum() > 0) {
+            return spot;
+        }
+        return BigDecimal.ONE;
     }
 
     private record HistoricalPriceRef(

@@ -55,7 +55,7 @@ public class JwtIdentityReader {
     }
     /**
      * JWT realm_access.roles'dan uygulama rolünü döner.
-     * Öncelik: ADMIN > FINANCE_MANAGER > USER (ilk eşleşen kullanılır).
+     * Öncelik: ADMIN > USER.
      */
     public Role getRealmRole() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -64,7 +64,6 @@ public class JwtIdentityReader {
         }
         List<String> roles = extractRealmRoles(jwt);
         if (roles.contains("ADMIN")) return Role.ADMIN;
-        if (roles.contains("FINANCE_MANAGER")) return Role.FINANCE_MANAGER;
         return Role.USER;
     }
 

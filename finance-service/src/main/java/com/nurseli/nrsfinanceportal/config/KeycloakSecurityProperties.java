@@ -19,7 +19,7 @@ public class KeycloakSecurityProperties {
      * Env: {@code KEYCLOAK_SECURITY_REMEMBER_ME_ENFORCEMENT_ENABLED}
      */
     private boolean rememberMeEnforcementEnabled = false;
-    private List<String> enforcedRoles = List.of("ADMIN", "FINANCE_MANAGER");
+    private List<String> enforcedRoles = List.of("ADMIN");
     private String requiredAction = "CONFIGURE_TOTP";
     private boolean rememberMe = true;
     private Duration ssoIdle = Duration.ofMinutes(30);

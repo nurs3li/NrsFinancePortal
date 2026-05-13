@@ -20,6 +20,7 @@ public class SimulationResponseDto {
     private final LocalDate historicalPriceDate;
     private final String qualityFlag; // EXACT | PREVIOUS_DAY | FALLBACK | MISSING
     private final List<SimulationPerformancePointDto> performanceSeries;
+    private final String approximationNoticeCode;
     private final String message;
 
     public SimulationResponseDto(
@@ -37,6 +38,7 @@ public class SimulationResponseDto {
             LocalDate historicalPriceDate,
             String qualityFlag,
             List<SimulationPerformancePointDto> performanceSeries,
+            String approximationNoticeCode,
             String message
     ) {
         this.type = type;
@@ -53,6 +55,7 @@ public class SimulationResponseDto {
         this.historicalPriceDate = historicalPriceDate;
         this.qualityFlag = qualityFlag;
         this.performanceSeries = performanceSeries;
+        this.approximationNoticeCode = approximationNoticeCode;
         this.message = message;
     }
 
@@ -70,5 +73,6 @@ public class SimulationResponseDto {
     public LocalDate getHistoricalPriceDate() { return historicalPriceDate; }
     public String getQualityFlag() { return qualityFlag; }
     public List<SimulationPerformancePointDto> getPerformanceSeries() { return performanceSeries; }
+    public String getApproximationNoticeCode() { return approximationNoticeCode; }
     public String getMessage() { return message; }
 }

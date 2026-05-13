@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
-import type { Time, CandlestickData, LogicalRange } from 'lightweight-charts';
+import type { CandlestickData, LogicalRange } from 'lightweight-charts';
+import { apiDatetimeToChartTime } from '../../lib/chartApiTime';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type CandleVM = {
@@ -42,16 +43,23 @@ type Props = {
     symbol: string;
     trendLabel?: 'UP' | 'DOWN';
     timeframeLabel?: string;
+    /** 1M/1Y günlük seri: İstanbul gece yarısı mumlarını `YYYY-MM-DD` iş günü zamanına çevirir. */
+    chartTimePreferIstanbulBusinessDay?: boolean;
 };
 
-function toChartTime(value: string): Time {
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value.slice(0, 10) as Time;
-    const hasClock = /T\d{2}:\d{2}:\d{2}/.test(value);
-    if (hasClock) {
-        return Math.floor(d.getTime() / 1000) as Time;
+/** Doji / sentetik (O≈C) mumlarda kütüphane varsayılanı hep yeşil; önceki kapanşa göre kırmızı/yeşil/nötr. */
+const CANDLE_PRICE_EPS = 1e-6;
+
+function terminalCandlestickColor(c: CandleVM, prevClose: number | null): string {
+    const o = c.open;
+    const cl = c.close;
+    if (cl < o - CANDLE_PRICE_EPS) return '#ef4444';
+    if (cl > o + CANDLE_PRICE_EPS) return '#22c55e';
+    if (prevClose != null && Number.isFinite(prevClose)) {
+        if (cl < prevClose - CANDLE_PRICE_EPS) return '#ef4444';
+        if (cl > prevClose + CANDLE_PRICE_EPS) return '#22c55e';
     }
-    return d.toISOString().slice(0, 10) as Time;
+    return '#64748b';
 }
 /*
  * React.memo: Parent (Market.tsx) state'i (orn. trendPeriod selector) degisince sayfa yeniden
@@ -72,6 +80,7 @@ function MarketTerminalChartImpl({
     symbol,
     trendLabel,
     timeframeLabel,
+    chartTimePreferIstanbulBusinessDay,
 }: Props) {
     const chartRef = useRef<HTMLDivElement>(null);
     const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null);
@@ -93,6 +102,13 @@ function MarketTerminalChartImpl({
         tokensRef.current = tokens;
     });
     const [hoverData, setHoverData] = useState<CandleVM | null>(null);
+    const toChartTime = useMemo(
+        () => (s: string) =>
+            apiDatetimeToChartTime(s, {
+                preferIstanbulBusinessDay: Boolean(chartTimePreferIstanbulBusinessDay),
+            }),
+        [chartTimePreferIstanbulBusinessDay],
+    );
     const sortedCandles = useMemo(() => {
         const byTime = new Map<string, CandleVM>();
         [...candles]
@@ -107,7 +123,7 @@ function MarketTerminalChartImpl({
             .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
             .forEach((c) => byTime.set(String(toChartTime(c.time)), c));
         return [...byTime.values()];
-    }, [candles]);
+    }, [candles, toChartTime]);
     const chartHeight = 520;
 
     useEffect(() => {
@@ -262,13 +278,18 @@ function MarketTerminalChartImpl({
         rangeRef.current = chartRange;
         barCountRef.current = sortedCandles.length;
 
-        const candleData: CandlestickData[] = sortedCandles.map((c) => ({
-            time: toChartTime(c.time),
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-        }));
+        const candleData: CandlestickData[] = sortedCandles.map((c, i) => {
+            const prevClose = i > 0 ? sortedCandles[i - 1]!.close : null;
+            const color = terminalCandlestickColor(c, prevClose);
+            return {
+                time: toChartTime(c.time),
+                open: c.open,
+                high: c.high,
+                low: c.low,
+                close: c.close,
+                color,
+            } satisfies CandlestickData;
+        });
         const byTime: Record<string, CandleVM> = {};
         sortedCandles.forEach((c) => {
             byTime[String(toChartTime(c.time))] = c;
@@ -312,7 +333,7 @@ function MarketTerminalChartImpl({
         if (logicalRangeRef.current) {
             chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
         }
-    }, [loading, sortedCandles, markers, showMa, ma7, ma21, timeframeLabel]);
+    }, [loading, sortedCandles, markers, showMa, ma7, ma21, timeframeLabel, toChartTime]);
 
     // Erken-return YOK: chart container hep DOM'da kalsin, aksi halde ilk renderda mount useEffect
     // chartRef.current = null gorur ve [] deps oldugu icin bir daha tetiklenmez, veri sonra gelse

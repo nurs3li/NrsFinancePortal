@@ -30,6 +30,7 @@ public class OpenSearchIndexInitializer {
         ensureIndex(OpenSearchIndexerService.INDEX_TRADES, tradesMapping());
         ensureIndex(OpenSearchIndexerService.INDEX_WHALES, whalesMapping());
         ensureIndex(OpenSearchIndexerService.INDEX_SUSPICIOUS, suspiciousMapping());
+        ensureIndex(OpenSearchIndexerService.INDEX_INVESTOR_BEHAVIOR, investorBehaviorMapping());
     }
 
     private void ensureIndex(String indexName, Map<String, Object> mapping) {
@@ -85,6 +86,36 @@ public class OpenSearchIndexInitializer {
         props.put("thresholdAmount", Map.of("type", "double"));
         props.put("thresholdCount", Map.of("type", "integer"));
         props.put("occurredAt", Map.of("type", "date", "format", "strict_date_optional_time||epoch_millis"));
+        return Map.of("properties", props);
+    }
+
+    private Map<String, Object> investorBehaviorMapping() {
+        Map<String, Object> props = new HashMap<>();
+        props.put("eventId", Map.of("type", "keyword"));
+        props.put("occurredAt", Map.of("type", "date", "format", "strict_date_optional_time||epoch_millis"));
+        props.put("userId", Map.of("type", "long"));
+        props.put("investorLevel", Map.of("type", "keyword"));
+        props.put("portfolioImpactScore", Map.of("type", "integer"));
+        props.put("totalPortfolioValueTry", Map.of("type", "double"));
+        props.put("totalInvestedAmountTry", Map.of("type", "double"));
+        props.put("totalNominalProfitTry", Map.of("type", "double"));
+        props.put("totalRealProfitTry", Map.of("type", "double"));
+        props.put("largestPositionSymbol", Map.of("type", "keyword"));
+        props.put("largestPositionValueTry", Map.of("type", "double"));
+        props.put("largestPositionRatio", Map.of("type", "double"));
+        props.put("assetConcentrationScore", Map.of("type", "integer"));
+        props.put("profitScore", Map.of("type", "integer"));
+        props.put("realProfitScore", Map.of("type", "integer"));
+        props.put("riskExposureScore", Map.of("type", "integer"));
+        props.put("positionCount", Map.of("type", "integer"));
+        props.put("openPositionCount", Map.of("type", "integer"));
+        props.put("closedPositionCount", Map.of("type", "integer"));
+        props.put("cryptoExposureRatio", Map.of("type", "double"));
+        props.put("equityExposureRatio", Map.of("type", "double"));
+        props.put("fxExposureRatio", Map.of("type", "double"));
+        props.put("fundExposureRatio", Map.of("type", "double"));
+        props.put("metalExposureRatio", Map.of("type", "double"));
+        props.put("explanationMessages", Map.of("type", "text"));
         return Map.of("properties", props);
     }
 }

@@ -12,11 +12,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class MarketPriceIngestService {
+
+    private static final ZoneId MARKET_WALL_CLOCK_ZONE = ZoneId.of("Europe/Istanbul");
 
     private final TcmbClient tcmbClient;
     private final MarketPriceHistoryRepository repository;
@@ -36,7 +39,7 @@ public class MarketPriceIngestService {
     )
     public void fetchAndSaveTcmbRates() {
         var rates = tcmbClient.fetchRates();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         tcmbFxSnapshotCache.replaceFromTcmbRates(rates, now);
 
         rates.forEach(rate -> {

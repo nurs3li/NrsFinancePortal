@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +24,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Slf4j
 public class CryptoPriceIngestService {
+
+    private static final ZoneId MARKET_WALL_CLOCK_ZONE = ZoneId.of("Europe/Istanbul");
 
     private final CoinGeckoClient coinGeckoClient;
     private final MarketPriceHistoryRepository repository;
@@ -68,7 +71,7 @@ public class CryptoPriceIngestService {
             entity.setBuyPrice(SpreadCalculator.buyPrice(usdPrice));
             entity.setSellPrice(SpreadCalculator.sellPrice(usdPrice));
             entity.setSource("COINGECKO");
-            entity.setTimestamp(LocalDateTime.now());
+            entity.setTimestamp(LocalDateTime.now(MARKET_WALL_CLOCK_ZONE));
 
             repository.save(entity);
             log.info("[CRYPTO] Saved {}", symbol);

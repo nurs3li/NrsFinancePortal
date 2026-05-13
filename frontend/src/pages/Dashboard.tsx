@@ -16,13 +16,16 @@ import { financeClient, marketClient, notificationClient, readFinanceBinaryError
 import type { MarketDashboard } from '../components/market/marketTypes';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
+import { useDocumentVisibility } from '../hooks/useDocumentVisibility';
+import { notificationKeys } from '../queries/notificationKeys';
+import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
-    Activity,
     Bell,
     CheckCircle2,
     ChevronRight,
+    Clock3,
     Coins,
     DollarSign,
     Info,
@@ -37,7 +40,6 @@ import { AssetLogo } from '../components/AssetLogo';
 import './Dashboard.css';
 
 type WhaleSummary = { level?: string; impactScore?: number; triggeredAt?: string };
-type CashSummary = { amountTry?: number };
 type PortfolioCategoryBreakdown = {
     assetType: string;
     valueTry?: number;
@@ -53,7 +55,24 @@ type PortfolioSummary = {
     totalPnlPct?: number;
     categories?: PortfolioCategoryBreakdown[];
 };
-type ActivitySummary = { lastTradeAt?: string };
+type SummaryResponse = {
+    whale?: WhaleSummary;
+    portfolio?: PortfolioSummary;
+    /** Öncelikli toplam TRY; backend dashboard özeti */
+    totalPortfolioValueTry?: number;
+};
+
+const FALLBACK_SUMMARY: SummaryResponse = {
+    portfolio: {
+        totalValueTry: 0,
+        distribution: {},
+        totalCostTry: 0,
+        totalPnlTry: 0,
+        totalPnlPct: 0,
+        categories: [],
+    },
+    totalPortfolioValueTry: 0,
+};
 
 const DISTRIBUTION_COLORS: Record<string, string> = {
     CRYPTO: '#F7931A',
@@ -62,6 +81,8 @@ const DISTRIBUTION_COLORS: Record<string, string> = {
     FUND: '#6366F1',
     STOCK: '#3182CE',
 };
+
+type SnapshotRow = { snapshotAt: string; portfolioValueTry?: number };
 
 function assetTypeLabelTr(t: string): string {
     const m: Record<string, string> = {
@@ -93,27 +114,6 @@ function buildDistributionConicGradient(slices: { key: string; pct: number }[], 
     return `conic-gradient(${parts.join(', ')})`;
 }
 
-type SummaryResponse = {
-    whale?: WhaleSummary;
-    cash?: CashSummary;
-    portfolio?: PortfolioSummary;
-    activity?: ActivitySummary;
-};
-
-const FALLBACK_SUMMARY: SummaryResponse = {
-    cash: { amountTry: 0 },
-    portfolio: {
-        totalValueTry: 0,
-        distribution: {},
-        totalCostTry: 0,
-        totalPnlTry: 0,
-        totalPnlPct: 0,
-        categories: [],
-    },
-    activity: {},
-};
-
-type TxRow = { id: number; balanceAfter: number; createdAt: string };
 type LatestPrice = { symbol?: string; buyPrice?: number; sellPrice?: number; price?: number; status?: string };
 type NewsItem = {
     id: number;
@@ -396,7 +396,7 @@ const DashboardBalanceChart = memo(function DashboardBalanceChart({
     );
 
     if (balancePoints.length === 0) {
-        return <p className="dashboard-muted">Bu aralıkta işlem yok; grafik oluşturulamadı.</p>;
+        return <p className="dashboard-muted">Bu aralıkta portföy anlığı yok; grafik oluşturulamadı.</p>;
     }
     return (
         <ResponsiveContainer width="100%" height="100%">
@@ -552,8 +552,19 @@ export function Dashboard() {
     const [newsDetailOpen, setNewsDetailOpen] = useState(false);
     const [newsDetail, setNewsDetail] = useState<NewsDetailItem | null>(null);
     const [newsDetailLoading, setNewsDetailLoading] = useState(false);
-    const [recentNotifications, setRecentNotifications] = useState<NotificationSummary[]>([]);
-    const [notificationsLoading, setNotificationsLoading] = useState(true);
+    const tabVisible = useDocumentVisibility();
+    const { data: recentNotifications = [], isLoading: notificationsLoading } = useQuery({
+        queryKey: notificationKeys.dashboardRecent(),
+        queryFn: async () => {
+            const res = await notificationClient.get<NotificationPage>('/api/notifications/me', {
+                params: { page: 0, size: 4, unreadOnly: false, sort: ['lastOccurredAt,desc', 'createdAt,desc'] },
+            });
+            const content = res?.data?.content;
+            return Array.isArray(content) ? content : [];
+        },
+        staleTime: 120_000,
+        refetchInterval: tabVisible ? 180_000 : false,
+    });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -602,19 +613,16 @@ export function Dashboard() {
 
     const hasLoadedOnceRef = useRef(false);
 
-    const buildDailyBalanceSeries = (txList: TxRow[]): BalancePoint[] => {
-        if (!Array.isArray(txList) || txList.length === 0) return [];
-        const sorted = [...txList].sort(
-            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-        const latestByDay = new Map<string, { ts: number; balance: number }>();
-        sorted.forEach((tx) => {
-            const dt = new Date(tx.createdAt);
+    const buildSnapshotChartSeries = (rows: SnapshotRow[]): BalancePoint[] => {
+        if (!Array.isArray(rows) || rows.length === 0) return [];
+        const sorted = [...rows].sort((a, b) => new Date(a.snapshotAt).getTime() - new Date(b.snapshotAt).getTime());
+        const latestByDay = new Map<string, { balance: number }>();
+        sorted.forEach((row) => {
+            const dt = new Date(row.snapshotAt);
             if (Number.isNaN(dt.getTime())) return;
             const key = dt.toISOString().slice(0, 10);
             latestByDay.set(key, {
-                ts: dt.getTime(),
-                balance: Number(tx.balanceAfter ?? 0),
+                balance: Number(row.portfolioValueTry ?? 0),
             });
         });
         return [...latestByDay.entries()]
@@ -624,6 +632,13 @@ export function Dashboard() {
                 date: new Date(`${key}T00:00:00`).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }),
                 balance: value.balance,
             }));
+    };
+
+    const unwrapSnapshotEnvelope = (res: AxiosResponse<unknown>): SnapshotRow[] => {
+        const body = res.data as { data?: unknown };
+        if (body && Array.isArray(body.data)) return body.data as SnapshotRow[];
+        if (Array.isArray(res.data)) return res.data as SnapshotRow[];
+        return [];
     };
 
     const unwrapAxiosData = <T,>(res: AxiosResponse<T>): T => {
@@ -644,12 +659,20 @@ export function Dashboard() {
         try {
             const end = new Date();
             const start = getFilterStart(selectedFilter);
-            // Özet ve işlemler: biri hata verse bile diğerini göster; ikisini de all ile beklemek sayfayı gereksiz kilitlemez.
+            const loadSnapshotsInRange = async (): Promise<SnapshotRow[]> => {
+                try {
+                    const res = await financeClient.get('/api/portfolio/snapshots/me', {
+                        params: { from: start.toISOString(), to: end.toISOString() },
+                    });
+                    return unwrapSnapshotEnvelope(res);
+                } catch {
+                    return [];
+                }
+            };
+
             const phase1 = await Promise.allSettled([
                 financeClient.get<SummaryResponse>('/api/dashboard/summary'),
-                financeClient.get('/api/transactions/me/range', {
-                    params: { start: start.toISOString(), end: end.toISOString(), page: 0, size: 200 },
-                }),
+                loadSnapshotsInRange(),
             ]);
 
             if (phase1[0].status === 'fulfilled') {
@@ -658,15 +681,11 @@ export function Dashboard() {
                 if (!silent) {
                     console.warn('Dashboard özet isteği başarısız', phase1[0].reason);
                 }
-                // Sayfanın geri kalanı (yıldız, haber) yine yüklensin; KPI'lar geçici olarak sıfır.
                 setSummary(FALLBACK_SUMMARY);
             }
 
             if (phase1[1].status === 'fulfilled') {
-                const page = unwrapAxiosData(phase1[1].value) as { content?: TxRow[] };
-                const txContent = page?.content ?? [];
-                const txList = Array.isArray(txContent) ? txContent : [];
-                setBalancePoints(buildDailyBalanceSeries(txList));
+                setBalancePoints(buildSnapshotChartSeries(phase1[1].value));
             } else {
                 setBalancePoints([]);
             }
@@ -782,31 +801,6 @@ export function Dashboard() {
     useRefetchOnFocus(() => fetchDashboard(true));
     usePolling(() => fetchDashboard(true), 180_000);
 
-    // "Son Bildirimler" karti icin notification-service'ten en yeni 4 bildirimi cekiyoruz.
-    // Hata durumunda sessizce yutuyoruz cunku dashboard'un kalan kismi calismaya devam
-    // etmeli. Async kullanim: ana ekran first paint'i bloklamaz, skeleton kisa surer.
-    const fetchRecentNotifications = useCallback(async () => {
-        setNotificationsLoading(true);
-        try {
-            const res = await notificationClient.get<NotificationPage>('/api/notifications/me', {
-                params: { page: 0, size: 4, unreadOnly: false, sort: ['lastOccurredAt,desc', 'createdAt,desc'] },
-            });
-            const content = res?.data?.content;
-            const list = Array.isArray(content) ? content : [];
-            setRecentNotifications(list);
-        } catch {
-            setRecentNotifications([]);
-        } finally {
-            setNotificationsLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        void fetchRecentNotifications();
-    }, [fetchRecentNotifications]);
-    useRefetchOnFocus(fetchRecentNotifications);
-    usePolling(fetchRecentNotifications, 180_000);
-
     const formatMoney = useCallback(
         (v: number) => '₺' + v.toLocaleString('tr-TR', { maximumFractionDigits: 2 }),
         []
@@ -815,32 +809,30 @@ export function Dashboard() {
     const controlDate = summary?.whale?.triggeredAt
         ? new Date(summary.whale.triggeredAt).toLocaleDateString('tr-TR')
         : '12.01.2026';
-    const totalCash = summary?.cash?.amountTry ?? 0;
-    const totalPortfolio = summary?.portfolio?.totalValueTry ?? 0;
-    const totalBalance = totalCash + totalPortfolio;
+    const totalPortfolioTry = Number(summary?.totalPortfolioValueTry ?? summary?.portfolio?.totalValueTry ?? 0);
     const distributionSlices = useMemo(() => {
         const distribution = summary?.portfolio?.distribution ?? {};
         const rows = Object.entries(distribution)
             .map(([key, value]) => ({ key, value: Number(value) || 0 }))
             .filter((r) => r.value > 0)
             .sort((a, b) => b.value - a.value);
-        if (!rows.length || totalPortfolio <= 0) return [] as { key: string; value: number; pct: number }[];
+        if (!rows.length || totalPortfolioTry <= 0) return [] as { key: string; value: number; pct: number }[];
         return rows.map((r) => ({
             ...r,
-            pct: (r.value / totalPortfolio) * 100,
+            pct: (r.value / totalPortfolioTry) * 100,
         }));
-    }, [summary?.portfolio?.distribution, totalPortfolio]);
+    }, [summary?.portfolio?.distribution, totalPortfolioTry]);
 
-    // Tum kritik metrikleri tek bir CountUp hook'u uzerinden animasyonla 0'dan akit;
-    // boylece "Toplam portfoy", "Nakit", "Toplam bakiye", "Maliyet", "PNL" gibi kartlar
-    // ilk render'da birlikte yumusakca dolar. Polling sonraki guncellemelerde animasyon
-    // calismaz, kullanici sayfa basinda bir defa goz keyfiyle karsilanir.
-    const displayPortfolio = useCountUp(totalPortfolio);
-    const displayCash = useCountUp(totalCash);
-    const displayBalance = useCountUp(totalBalance);
+    // İlk yüklemede KPI animasyonu; sonraki polling'de sıçrama yok.
+    const displayPortfolio = useCountUp(totalPortfolioTry);
     const displayCost = useCountUp(Number(summary?.portfolio?.totalCostTry ?? 0));
     const displayPnlValue = useCountUp(Number(summary?.portfolio?.totalPnlTry ?? 0));
     const displayPnlPct = useCountUp(Number(summary?.portfolio?.totalPnlPct ?? 0));
+
+    const lastSnapshotDayLabel = useMemo(() => {
+        if (!balancePoints.length) return null;
+        return balancePoints[balancePoints.length - 1]?.date ?? null;
+    }, [balancePoints]);
 
     useEffect(() => {
         const el = portfolioDistRef.current;
@@ -1044,11 +1036,11 @@ export function Dashboard() {
                     label={t('dashboard.totalPortfolioValue', 'Toplam portföy değeri')}
                     value={formatMoney(displayPortfolio)}
                 />
-                <DashboardKpiCard label={t('dashboard.cashTry', 'Nakit (TRY)')} value={formatMoney(displayCash)} />
-                <DashboardKpiCard label="Toplam bakiye (portföy + nakit)" value={formatMoney(displayBalance)} />
+                <DashboardKpiCard label={t('dashboard.totalCostTry', 'Toplam maliyet (TRY)')} value={formatMoney(displayCost)} />
+                <DashboardKpiCard label={t('dashboard.totalPnlTry', 'Toplam kar (PNL)')} value={formatMoney(displayPnlValue)} />
                 <DashboardKpiCard
-                    label="Balina seviyesi"
-                    value={summary.whale?.level ?? 'L1_LARGE_TRADER'}
+                    label={t('dashboard.whaleLevel', 'Balina seviyesi')}
+                    value={summary.whale?.level ?? '—'}
                     valueClassName="kpi-value-small"
                     sub={<>Kontrol Tarihi: {controlDate}</>}
                 />
@@ -1057,7 +1049,8 @@ export function Dashboard() {
             <div className="dashboard-card dashboard-chart-card">
                 <div className="chart-card-header">
                     <h2 className="section-title">
-                        Bakiye grafiği (son {selectedFilter === '1A' ? '30' : '90'} gün)
+                        {t('dashboard.portfolioSnapshotsChart', 'Portföy değeri (günlük anlık, TRY)')} —{' '}
+                        {selectedFilter === '1A' ? '30' : '90'} {t('dashboard.days', 'gün')}
                     </h2>
                     <div className="chart-filter-group">
                         {TIME_FILTERS.map((filter) => (
@@ -1102,7 +1095,12 @@ export function Dashboard() {
                     <div className="dashboard-middle-column">
                         <div ref={portfolioDistRef} className="dashboard-card portfolio-dist-card">
                         <h2 className="section-title">Portföy dağılımı</h2>
-                        <p className="portfolio-dist-subtitle">Birleşik: gerçek işlemler + manuel pozisyonlar (TRY)</p>
+                        <p className="portfolio-dist-subtitle">
+                            {t(
+                                'dashboard.portfolioDistHint',
+                                'Manuel pozisyonlar ve güncel piyasa fiyatlarıyla hesaplanan analitik portföy (TRY).',
+                            )}
+                        </p>
                         {distributionSlices.length === 0 ? (
                             <>
                                 <div className="donut-placeholder donut-empty">
@@ -1195,23 +1193,21 @@ export function Dashboard() {
                     </div>
 
                     <div className="dashboard-card dashboard-compact-card">
-                        <h2 className="section-title">Son aktivite</h2>
+                        <h2 className="section-title">{t('dashboard.snapshotActivity', 'Portföy anlıkları')}</h2>
                         <div className="activity-row">
-                            <Activity size={14} className="activity-icon" />
+                            <Clock3 size={14} className="activity-icon" />
                             <div className="activity-text">
-                                <p className="activity-label">Son işlem</p>
+                                <p className="activity-label">{t('dashboard.lastSnapshotDay', 'Son günlük nokta')}</p>
                                 <p className="activity-value">
-                                    {summary.activity?.lastTradeAt
-                                        ? new Date(summary.activity.lastTradeAt).toLocaleString('tr-TR')
-                                        : 'Kayıt bulunamadı'}
+                                    {lastSnapshotDayLabel ?? t('dashboard.noSnapshotYet', 'Henüz anlık yok')}
                                 </p>
                             </div>
                         </div>
                         <div className="activity-row">
                             <Wallet size={14} className="activity-icon" />
                             <div className="activity-text">
-                                <p className="activity-label">Toplam bakiye güncellendi</p>
-                                <p className="activity-value">{formatMoney(displayBalance)}</p>
+                                <p className="activity-label">{t('dashboard.summaryPortfolioTry', 'Özet portföy (TRY)')}</p>
+                                <p className="activity-value">{formatMoney(displayPortfolio)}</p>
                             </div>
                         </div>
                     </div>

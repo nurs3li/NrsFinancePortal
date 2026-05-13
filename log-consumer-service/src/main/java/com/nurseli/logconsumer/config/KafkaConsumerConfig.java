@@ -109,6 +109,22 @@ public class KafkaConsumerConfig {
         factory.setConsumerFactory(suspiciousConsumerFactory());
         return factory;
     }
+    @Bean
+    public ConsumerFactory<String, String> domainEventsStringConsumerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), new StringDeserializer());
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, String> domainEventsStringKafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(domainEventsStringConsumerFactory());
+        return factory;
+    }
+
     /* ================= APPLICATION LOGS (String - JSON payload) ================= */
 
     @Bean

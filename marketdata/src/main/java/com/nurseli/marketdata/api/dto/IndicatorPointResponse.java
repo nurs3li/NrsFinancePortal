@@ -1,9 +1,9 @@
 package com.nurseli.marketdata.api.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 public record IndicatorPointResponse(
-        LocalDateTime t,
+        OffsetDateTime t,
         BigDecimal value
 ) {}

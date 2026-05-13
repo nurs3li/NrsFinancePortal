@@ -3,10 +3,14 @@ import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notificationClient } from '../api/client';
 import { Bell, ChevronDown, LogOut, Moon, Sun } from 'lucide-react';
 import { NrsBrandLockup } from './NrsBrandLockup';
 import { useHeaderInteractions } from './header';
+import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
+import { useDocumentVisibility } from '../hooks/useDocumentVisibility';
+import { notificationKeys } from '../queries/notificationKeys';
 import './Layout.css';
 
 type NavItem = {
@@ -21,46 +25,50 @@ export function Layout() {
     const { theme, toggleTheme, tokens } = useTheme();
     const location = useLocation();
     const navigate = useNavigate();
-    const [unreadCount, setUnreadCount] = useState(0);
-    const [dropdownItems, setDropdownItems] = useState<{ id: number; title: string; readAt: string | null; type: string }[]>([]);
+    const queryClient = useQueryClient();
+    const tabVisible = useDocumentVisibility();
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const { lang, setLang, t } = useLanguage();
     const notificationRef = useRef<HTMLDivElement>(null);
     const userMenuRef = useRef<HTMLDivElement>(null);
     const navRef = useRef<HTMLDivElement>(null);
 
-    const fetchUnreadCount = useCallback(() => {
-        if (!isAuthenticated) return;
-        notificationClient.get<{ count: number }>('/api/notifications/me/unread-count')
-            .then((res) => setUnreadCount(res.data?.count ?? 0))
-            .catch(() => setUnreadCount(0));
-    }, [isAuthenticated]);
+    const { data: unreadCount = 0 } = useQuery({
+        queryKey: notificationKeys.unreadCount(),
+        queryFn: async () => {
+            const res = await notificationClient.get<{ count: number }>('/api/notifications/me/unread-count');
+            return res.data?.count ?? 0;
+        },
+        enabled: isAuthenticated,
+        staleTime: 45_000,
+        refetchInterval: tabVisible && isAuthenticated ? 60_000 : false,
+    });
 
-    const fetchDropdownNotifications = useCallback(() => {
-        if (!isAuthenticated) return;
-        notificationClient.get<{ content: { id: number; title: string; readAt: string | null; type: string }[] }>('/api/notifications/me', {
-            params: {
-                size: 10,
-                unreadOnly: true,
-                sort: ['lastOccurredAt,desc', 'createdAt,desc'],
-            },
-        })
-            .then((res) => setDropdownItems(res.data?.content ?? []))
-            .catch(() => setDropdownItems([]));
-    }, [isAuthenticated]);
+    const { data: dropdownItems = [] } = useQuery({
+        queryKey: notificationKeys.headerDropdown(),
+        queryFn: async () => {
+            const res = await notificationClient.get<{
+                content: { id: number; title: string; readAt: string | null; type: string }[];
+            }>('/api/notifications/me', {
+                params: {
+                    size: 10,
+                    unreadOnly: true,
+                    sort: ['lastOccurredAt,desc', 'createdAt,desc'],
+                },
+            });
+            return res.data?.content ?? [];
+        },
+        enabled: isAuthenticated && isNotificationOpen,
+        staleTime: 20_000,
+    });
 
-    useEffect(() => {
-        fetchUnreadCount();
-        const t = setInterval(fetchUnreadCount, 60_000);
-        return () => clearInterval(t);
-    }, [fetchUnreadCount]);
-
-    useEffect(() => {
-        if (isNotificationOpen && isAuthenticated) {
-            fetchDropdownNotifications();
-            fetchUnreadCount();
-        }
-    }, [isNotificationOpen, isAuthenticated, fetchDropdownNotifications, fetchUnreadCount]);
+    useRefetchOnFocus(
+        useCallback(() => {
+            if (!isAuthenticated) return;
+            void queryClient.invalidateQueries({ queryKey: notificationKeys.all });
+        }, [isAuthenticated, queryClient]),
+        isAuthenticated
+    );
 
     useEffect(() => {
         const close = (e: MouseEvent) => {
@@ -72,8 +80,7 @@ export function Layout() {
 
     const markNotificationRead = (id: number) => {
         notificationClient.patch(`/api/notifications/${id}/read`).then(() => {
-            fetchUnreadCount();
-            fetchDropdownNotifications();
+            void queryClient.invalidateQueries({ queryKey: notificationKeys.all });
         });
     };
     const handleLogout = () => {
@@ -81,7 +88,6 @@ export function Layout() {
     };
     const handleNewsLangChange = (value: string) => setLang(value === 'en' ? 'en' : 'tr');
 
-    const isFm = role === 'FINANCE_MANAGER';
     const isAdmin = role === 'ADMIN';
 
     const navItems = useMemo<NavItem[]>(() => {
@@ -90,19 +96,8 @@ export function Layout() {
                 { key: 'market', to: '/market', label: t('nav.market', 'Piyasa'), show: true },
                 { key: 'news', to: '/news', label: t('nav.news', 'Haberler'), show: true },
                 { key: 'admin', to: '/admin', label: t('nav.admin', 'Yönetim Paneli'), show: true },
-                { key: 'admin-tasks', to: '/admin/tasks', label: t('nav.adminTasks', 'Admin Görevler'), show: true },
                 { key: 'admin-users', to: '/admin/users', label: t('nav.userManagement', 'Kullanıcı Yönetimi'), show: true },
                 { key: 'admin-audit', to: '/admin/audit', label: t('nav.auditLogs', 'Audit Logs'), show: true },
-            ];
-        }
-        if (isFm) {
-            return [
-                { key: 'market', to: '/market', label: t('nav.market', 'Piyasa'), show: true },
-                { key: 'news', to: '/news', label: t('nav.news', 'Haberler'), show: true },
-                { key: 'fm-tasks', to: '/fm/tasks', label: t('nav.tasks', 'Görevler'), show: true },
-                { key: 'fm-funds', to: '/fm/fund-requests', label: t('nav.fundRequests', 'Para Talepleri'), show: true },
-                { key: 'fm-risk', to: '/fm/risk', label: t('nav.riskMonitor', 'Risk Monitor'), show: true },
-                { key: 'fm-suspicious', to: '/operasyon/suspicious', label: t('nav.suspiciousEvents', 'Şüpheli Olaylar'), show: true },
             ];
         }
         return [
@@ -110,12 +105,10 @@ export function Layout() {
             { key: 'market', to: '/market', label: t('nav.market', 'Piyasa'), show: true },
             { key: 'news', to: '/news', label: t('nav.news', 'Haberler'), show: true },
             { key: 'portfolio', to: '/portfolio', label: t('nav.portfolio', 'Portföy Analizi'), show: true },
-            { key: 'trade', to: '/trade', label: t('nav.trade', 'Alım Satım'), show: true },
             { key: 'transactions', to: '/transactions', label: t('nav.transactions', 'İşlem Geçmişi'), show: true },
-            { key: 'wallet', to: '/wallet', label: t('nav.wallet', 'Cüzdan'), show: true },
             { key: 'simulation', to: '/simulation', label: t('nav.simulation', 'Simülasyon'), show: true },
         ];
-    }, [isAdmin, isFm, t]);
+    }, [isAdmin, t]);
     const visibleNavItems = navItems.filter((item) => item.show);
     const activeNavKey = useMemo(() => {
         let best: NavItem | undefined;
@@ -262,24 +255,6 @@ export function Layout() {
                             onClick={() => setIsUserMenuOpen((open) => !open)}
                             onMouseEnter={() => setIsUserMenuOpen(true)}
                         >
-                            {isFm && (
-                                <span
-                                    title="Finance Manager"
-                                    style={{
-                                        marginRight: 8,
-                                        padding: '3px 9px',
-                                        borderRadius: 999,
-                                        background: 'linear-gradient(135deg, rgba(16,185,129,0.25), rgba(52,211,153,0.12))',
-                                        border: '1px solid rgba(52,211,153,0.45)',
-                                        color: '#a7f3d0',
-                                        fontSize: '0.68rem',
-                                        fontWeight: 700,
-                                        letterSpacing: '0.04em',
-                                    }}
-                                >
-                                    FM
-                                </span>
-                            )}
                             <span>{(user?.username ?? user?.email ?? '—')} — {role ?? user?.role ?? 'USER'}</span>
                             <ChevronDown size={14} className={isUserMenuOpen ? 'rotated' : ''} />
                         </button>

@@ -925,6 +925,10 @@ export function Market() {
         [activeCategory, starredAssets, starMutation]
     );
 
+    /** Tahvil / VİOP: 1G seçeneği UI'de yok; `range` state tutarsız kalırsa istek gün sayısı 1A'ya normalize edilir. */
+    const dataRangeForChart =
+        (activeCategory === 'BOND' || activeCategory === 'FUTURES') && range === '1D' ? '1M' : range;
+
     const {
         data: dashboard,
         isLoading: loadingDashboard,
@@ -1082,7 +1086,7 @@ export function Market() {
         refetchOnReconnect: false,
         staleTime: Infinity,
     });
-    const viopRangeDays = RANGE_TO_DAYS[range];
+    const viopRangeDays = RANGE_TO_DAYS[dataRangeForChart];
 
     const viopContractBySymbol = useMemo(() => {
         const m: Record<string, ViopContract> = {};
@@ -1099,7 +1103,7 @@ export function Market() {
      * istek üretip VIOP sekmesini ve sayfa geçişlerini kilitliyordu.
      */
     const { data: viopLatestFromHistory = {} } = useQuery({
-        queryKey: ['market', 'viop', 'history-latest', 'terminal', range, viopContracts.length],
+        queryKey: ['market', 'viop', 'history-latest', 'terminal', dataRangeForChart, viopContracts.length],
         enabled:
             activeCategory === 'FUTURES' &&
             viopLatestSucceeded &&
@@ -1152,14 +1156,14 @@ export function Market() {
         refetchInterval: activeCategory === 'BOND' ? 60_000 : false,
     });
     const { data: debtHistoryByIsin = {} } = useQuery({
-        queryKey: ['market', 'debt', 'history-by-isin', 'terminal', range, debtCatalog.length],
+        queryKey: ['market', 'debt', 'history-by-isin', 'terminal', dataRangeForChart, debtCatalog.length],
         enabled: activeCategory === 'BOND' && debtCatalog.length > 0,
         queryFn: async ({ signal }) => {
             const uniq = [...new Set(debtCatalog.map((d) => normalizeSymbolKey(d.isin)).filter(Boolean))];
             const entries = await mapPool(uniq, 4, async (isin) => {
                 const rows = await marketClient
                     .get<DebtSnapshot[]>('/api/market/debt/history', {
-                        params: { isin, days: Math.max(180, RANGE_TO_DAYS[range]) },
+                        params: { isin, days: Math.max(180, RANGE_TO_DAYS[dataRangeForChart]) },
                         signal,
                     })
                     .then((r) => r.data);
@@ -1361,7 +1365,7 @@ export function Market() {
         viopLatestFromHistory,
         viopContracts,
         viopContractBySymbol,
-        range,
+        dataRangeForChart,
         debtLatest,
         debtHistoryByIsin,
         fxSpreadMap,
@@ -1413,7 +1417,7 @@ export function Market() {
         }
     }, [instruments, activeCategory]);
 
-    const days = RANGE_TO_DAYS[range];
+    const days = RANGE_TO_DAYS[dataRangeForChart];
     const marketType =
         activeCategory === 'EQUITY'
             ? 'EQUITY'
@@ -1427,13 +1431,34 @@ export function Market() {
             ? 'FUNDS'
             : null;
 
+    const metalsApiSymbol =
+        activeCategory === 'METALS'
+            ? normalizeSymbolKey(selectedSymbol) === 'ALTIN_TRY'
+                ? 'XAU_TRY'
+                : normalizeSymbolKey(selectedSymbol) || selectedSymbol
+            : selectedSymbol;
+
+    /** Hisse / döviz / kripto / altın: backend `bucket=hourly`. Tahvil / VİOP: yalnızca snapshot/günlük seri (saatlik istemci uydurması yok). */
+    const terminalHourlyRange =
+        (activeCategory === 'EQUITY' ||
+            activeCategory === 'FX' ||
+            activeCategory === 'CRYPTO' ||
+            activeCategory === 'METALS') &&
+        (range === '1D' || range === '1W');
+
     const { data: indicatorData, isLoading: loadingIndicators } = useQuery({
-        queryKey: ['market', 'indicators', 'terminal', activeCategory, selectedSymbol, days],
+        queryKey: ['market', 'indicators', 'terminal', activeCategory, selectedSymbol, days, terminalHourlyRange ? `hourly:${range}` : 'daily'],
         enabled: Boolean(selectedSymbol && marketType),
         queryFn: ({ signal }) =>
             marketClient
                 .get<IndicatorsResponse>('/api/market/indicators', {
-                    params: { type: marketType, symbol: selectedSymbol, days, ma: '7,21' },
+                    params: {
+                        type: marketType,
+                        symbol: activeCategory === 'METALS' ? metalsApiSymbol : selectedSymbol,
+                        days,
+                        ma: '7,21',
+                        ...(terminalHourlyRange ? { bucket: 'hourly' } : {}),
+                    },
                     signal,
                 })
                 .then((r) => r.data),
@@ -1441,10 +1466,10 @@ export function Market() {
     });
 
     const { data: batchData, isLoading: loadingCandles } = useQuery({
-        queryKey: ['market', 'candles', 'terminal', activeCategory, selectedSymbol, days],
+        queryKey: ['market', 'candles', 'terminal', activeCategory, selectedSymbol, days, terminalHourlyRange ? `hourly:${range}` : 'daily'],
         enabled: Boolean(selectedSymbol && marketType),
         queryFn: async ({ signal }) => {
-            if (activeCategory === 'METALS') {
+            if (activeCategory === 'METALS' && !terminalHourlyRange) {
                 const symbolCandidates = [selectedSymbol, selectedSymbol === 'ALTIN_TRY' ? 'XAU_TRY' : 'ALTIN_TRY']
                     .map((s) => normalizeSymbolKey(s))
                     .filter(Boolean);
@@ -1466,13 +1491,30 @@ export function Market() {
                     }
                 }
             }
+            const batchSymbol = activeCategory === 'METALS' ? metalsApiSymbol : selectedSymbol;
             const batch = await marketClient
                 .get<BatchHistoryResponse>('/api/market/history/batch', {
-                    params: { type: marketType, symbols: selectedSymbol, days },
+                    params: {
+                        type: marketType,
+                        symbols: batchSymbol,
+                        days,
+                        ...(terminalHourlyRange ? { bucket: 'hourly' } : {}),
+                    },
                     signal,
                 })
                 .then((r) => r.data);
-            const existing = batch?.series?.[selectedSymbol] ?? [];
+            if (activeCategory === 'METALS' && batchSymbol !== selectedSymbol) {
+                const sMetal = batch?.series?.[batchSymbol] ?? [];
+                if (sMetal.length > 0) {
+                    return {
+                        series: {
+                            ...(batch?.series ?? {}),
+                            [selectedSymbol]: sMetal,
+                        },
+                    } satisfies BatchHistoryResponse;
+                }
+            }
+            const existing = batch?.series?.[selectedSymbol] ?? batch?.series?.[batchSymbol] ?? [];
             const shouldTryAltHistory =
                 Boolean(selectedSymbol) && (activeCategory === 'METALS' || activeCategory === 'FUNDS');
             if (!shouldTryAltHistory) {
@@ -1512,9 +1554,15 @@ export function Market() {
             }
         },
         // Günlük ingest sonrası grafik güncellensin: aynı sekmede kalınca da periyodik tazele.
-        refetchInterval: Boolean(selectedSymbol && marketType) ? 120_000 : false,
+        refetchInterval: Boolean(selectedSymbol && marketType)
+            ? terminalHourlyRange
+                ? range === '1W'
+                    ? 90_000
+                    : 60_000
+                : 120_000
+            : false,
         refetchOnWindowFocus: true,
-        staleTime: 45_000,
+        staleTime: terminalHourlyRange ? (range === '1W' ? 45_000 : 30_000) : 45_000,
     });
 
     const { data: viopHistory = [], isLoading: loadingViopHistory } = useQuery({
@@ -1569,6 +1617,7 @@ export function Market() {
                 })
                 .then((r) => r.data),
         refetchInterval: activeCategory === 'BOND' && Boolean(selectedSymbol) ? 15_000 : false,
+        refetchOnWindowFocus: activeCategory === 'BOND' && Boolean(selectedSymbol),
     });
 
     const candles = useMemo(() => {
@@ -1576,7 +1625,7 @@ export function Market() {
             const sorted = [...viopHistory]
                 .filter((x) => Number(x.price ?? 0) > 0)
                 .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
-            return sorted.map((x, idx) => {
+            const raw = sorted.map((x, idx) => {
                 const close = Number(x.price ?? 0);
                 const prev = idx > 0 ? Number(sorted[idx - 1]?.price ?? close) : close;
                 return {
@@ -1588,10 +1637,11 @@ export function Market() {
                     volume: Number(x.openInterest ?? 0),
                 };
             });
+            return raw;
         }
         if (activeCategory === 'BOND') {
             const sorted = [...debtHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
-            return sorted.map((x, idx) => {
+            const raw = sorted.map((x, idx) => {
                 const close = Number(x.dirtyPrice ?? 0);
                 const prev = idx > 0 ? Number(sorted[idx - 1]?.dirtyPrice ?? close) : close;
                 return {
@@ -1603,6 +1653,7 @@ export function Market() {
                     volume: close > 0 ? close * 100 : 0,
                 };
             });
+            return raw;
         }
         const series = batchData?.series?.[selectedSymbol] ?? [];
         if (series.length > 0) {
@@ -1639,7 +1690,7 @@ export function Market() {
             const prev = idx > 0 ? Number(closes[idx - 1]?.value ?? close) : close;
             return { time: p.t, open: prev, high: Math.max(prev, close), low: Math.min(prev, close), close, volume: 0 };
         });
-    }, [activeCategory, viopHistory, debtHistory, batchData, indicatorData, selectedSymbol]);
+    }, [activeCategory, viopHistory, debtHistory, batchData, indicatorData, selectedSymbol, terminalHourlyRange, days]);
     const bondDualPoints = useMemo(() => {
         if (activeCategory !== 'BOND') return [];
         const sorted = [...debtHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
@@ -2162,6 +2213,13 @@ export function Market() {
                               type: marketType,
                               symbols: symbols.join(','),
                               days,
+                              ...((activeCategory === 'EQUITY' ||
+                                  activeCategory === 'FX' ||
+                                  activeCategory === 'CRYPTO' ||
+                                  activeCategory === 'METALS') &&
+                              (range === '1D' || range === '1W')
+                                  ? { bucket: 'hourly' }
+                                  : {}),
                           },
                       })
                       .then((res) => res.data);
@@ -2199,7 +2257,7 @@ export function Market() {
             })
             .catch(() => setCompareRows([]))
             .finally(() => setLoadingCompare(false));
-    }, [compareSymbols, days, marketType, activeCategory]);
+    }, [compareSymbols, days, marketType, activeCategory, range]);
 
     useEffect(() => {
         if (compareSymbols.length >= 2) {
@@ -2840,7 +2898,7 @@ export function Market() {
                                     showMa={showMa}
                                     loading={loadingDebtHistory}
                                     trendLabel={hero?.trend}
-                                    timeframeLabel={range}
+                                    timeframeLabel={dataRangeForChart}
                                     tokens={chartTokens}
                                 />
                             ) : activeCategory === 'FUTURES' && viopChartMode === 'LINE' ? (
@@ -2851,7 +2909,7 @@ export function Market() {
                                     showMa={showMa}
                                     loading={loadingViopHistory}
                                     trendLabel={hero?.trend}
-                                    timeframeLabel={range}
+                                    timeframeLabel={dataRangeForChart}
                                     tokens={chartTokens}
                                 />
                             ) : activeCategory !== 'FUTURES' && activeCategory !== 'BOND' && spotChartMode === 'ANALYSIS' ? (
@@ -2863,7 +2921,8 @@ export function Market() {
                                     showMa={showMa}
                                     loading={loadingCandles || loadingIndicators}
                                     trendLabel={hero?.trend}
-                                    timeframeLabel={range}
+                                    timeframeLabel={dataRangeForChart}
+                                    chartTimePreferIstanbulBusinessDay={!terminalHourlyRange}
                                     tokens={chartTokens}
                                 />
                             ) : (
@@ -2878,7 +2937,8 @@ export function Market() {
                                     loading={loadingCandles || loadingIndicators || loadingViopHistory || loadingDebtHistory}
                                     symbol={selectedSymbol}
                                     trendLabel={hero?.trend}
-                                    timeframeLabel={range}
+                                    timeframeLabel={dataRangeForChart}
+                                    chartTimePreferIstanbulBusinessDay={!terminalHourlyRange}
                                     tokens={chartTokens}
                                 />
                             )}
@@ -2936,7 +2996,7 @@ export function Market() {
                                             symbols={compareSymbols.slice(0, 4)}
                                             colors={['#38bdf8', '#22c55e', '#eab308', '#f87171']}
                                             lineWidthBySymbol={lineWidthBySymbol}
-                                            timeframeLabel={range}
+                                            timeframeLabel={dataRangeForChart}
                                             tokens={chartTokens}
                                             height={250}
                                         />
@@ -3155,15 +3215,9 @@ export function Market() {
                             <button
                                 type="button"
                                 className="terminal-btn active"
-                                onClick={() =>
-                                    navigate(
-                                        `/trade?symbol=${encodeURIComponent(selectedInstrumentVm.symbol)}&kind=${encodeURIComponent(
-                                            selectedInstrumentVm.type
-                                        )}`
-                                    )
-                                }
+                                onClick={() => navigate('/portfolio')}
                             >
-                                Yeni Emir Gir
+                                {t('nav.portfolio', 'Portföy Analizi')}
                             </button>
                         </div>
                         <div style={{ marginTop: 12 }}>

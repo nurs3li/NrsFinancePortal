@@ -9,7 +9,7 @@ Bu runbook, Finans Portal icin OTP/2FA ve session politikasini hem otomatik (uyg
 - Otomasyon modulu: `finance-service` icinde, feature flag ile ac/kapa.
 
 ## 2) Zorunlu Roller ve OTP Politikasi
-- Varsayilan enforced roller: `ADMIN`, `FINANCE_MANAGER`
+- Varsayilan enforced roller: `ADMIN`
 - OTP required action: `CONFIGURE_TOTP`
 - Beklenen akis:
   1. Kullanici role sahip ve OTP configured degilse sonraki login'de TOTP setup zorlanir.
@@ -29,7 +29,7 @@ Onerilen varsayimlar:
 `finance-service` config anahtarlari:
 - `app.keycloak.security.otp-enforcement-enabled` (default: `false`)
 - `app.keycloak.security.remember-me-enforcement-enabled` (default: `false`)
-- `app.keycloak.security.enforced-roles` (default: `ADMIN,FINANCE_MANAGER`)
+- `app.keycloak.security.enforced-roles` (default: `ADMIN`)
 - `app.keycloak.security.required-action` (default: `CONFIGURE_TOTP`)
 - `app.keycloak.security.remember-me` (default: `true`)
 - `app.keycloak.security.sso-idle` (default: `PT30M`)

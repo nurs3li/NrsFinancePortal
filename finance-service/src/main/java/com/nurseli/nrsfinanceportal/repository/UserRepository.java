@@ -18,8 +18,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("""
             SELECT DISTINCT u.id FROM User u
-            WHERE EXISTS (SELECT 1 FROM PortfolioAsset pa WHERE pa.user = u)
-               OR EXISTS (SELECT 1 FROM ManualPortfolioPosition mp WHERE mp.user = u)
+            WHERE EXISTS (SELECT 1 FROM ManualPortfolioPosition mp WHERE mp.user = u)
             """)
     List<Long> findIdsWithPortfolioPositions();
 }

@@ -1,8 +1,16 @@
 HELP.md
-target/
+
+# Build output — not committed (see README)
+**/target/
+build/
+**/build/
+*.class
+*.log
+
+# Dependencies
+**/node_modules/
+
 .mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
 
 ### STS ###
 .apt_generated
@@ -25,9 +33,6 @@ target/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
 
 ### VS Code ###
 .vscode/
@@ -37,3 +42,5 @@ build/
 .env.local
 *.local.yml
 **/application-local.yml
+
+# VIOP: artifacts/viop/ altındaki CSV ve yardımcı .py dosyaları ingest için repoda izlenir; bu yolu ignore etmeyin.

@@ -12,7 +12,7 @@ public class MarketOverviewController {
 
     private final MarketOverviewService service;
 
-    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping("/api/market/overview")
     public MarketOverviewResponse overview() {
         return service.getOverview();

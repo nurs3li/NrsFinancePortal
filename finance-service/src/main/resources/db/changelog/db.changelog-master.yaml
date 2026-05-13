@@ -61,3 +61,12 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v21-fund-request-drop-reference-no.yaml
+
+  - include:
+      file: db/changelog/v22-jury-domain-cleanup.yaml
+
+  - include:
+      file: db/changelog/v23-drop-finance-manager-role.yaml
+
+  - include:
+      file: db/changelog/v24-restore-user-login-suspended.yaml

@@ -13,7 +13,7 @@ public class MarketDashboardController {
 
     private final MarketDashboardService service;
 
-    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping("/api/market/dashboard")
     public MarketDashboardResponse dashboard() {
         return service.buildDashboard();

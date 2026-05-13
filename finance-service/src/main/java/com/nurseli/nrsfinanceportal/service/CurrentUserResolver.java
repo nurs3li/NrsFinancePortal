@@ -2,22 +2,16 @@ package com.nurseli.nrsfinanceportal.service;
 
 import com.nurseli.nrsfinanceportal.common.identity.JwtIdentityReader;
 import com.nurseli.nrsfinanceportal.config.KeycloakSecurityProperties;
-import com.nurseli.nrsfinanceportal.domain.account.Account;
-import com.nurseli.nrsfinanceportal.domain.account.AccountType;
-import com.nurseli.nrsfinanceportal.domain.balance.Balance;
 import com.nurseli.nrsfinanceportal.domain.user.Role;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.integration.keycloak.KeycloakAdminTokenProvider;
 import com.nurseli.nrsfinanceportal.integration.keycloak.KeycloakRealmSecurityClient;
-import com.nurseli.nrsfinanceportal.repository.AccountRepository;
-import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
 import com.nurseli.nrsfinanceportal.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -28,17 +22,8 @@ import java.util.Optional;
 @Slf4j
 public class CurrentUserResolver {
 
-    /**
-     * Yeni kullanıcıya verilen "hoşgeldin" kredisi.
-     * Gerçek bankacılık flow'unu göstermek için düşük tutuldu;
-     * büyük trade'ler için kullanıcı fund-request ile bakiye yüklemeli.
-     */
-    private static final BigDecimal WELCOME_BONUS = new BigDecimal("30000");
-
     private final JwtIdentityReader jwtIdentityReader;
     private final UserRepository userRepository;
-    private final AccountRepository accountRepository;
-    private final BalanceRepository balanceRepository;
     private final UserRegistrationNotificationHelper userRegistrationNotificationHelper;
     private final KeycloakSecurityProperties keycloakSecurityProperties;
     private final KeycloakAdminTokenProvider keycloakAdminTokenProvider;
@@ -61,8 +46,6 @@ public class CurrentUserResolver {
             user = createNewUser(keycloakUserId, email, username, jwtRole);
             userRegistrationNotificationHelper.notifyAdminsNewUser(user, Instant.now());
         }
-
-        ensureCashAccount(user);
 
         boolean changed = false;
 
@@ -121,31 +104,10 @@ public class CurrentUserResolver {
         }
     }
 
-    private void ensureCashAccount(User user) {
-        if (accountRepository.findByUserAndType(user, AccountType.CASH).isEmpty()) {
-            Account cash = accountRepository.save(
-                    Account.create(AccountType.CASH, user)
-            );
-            balanceRepository.save(
-                    Balance.of(cash, WELCOME_BONUS)
-            );
-        }
-    }
-
     private User createNewUser(String keycloakUserId, String email, String username, Role role) {
-
-        User user = userRepository.save(
+        return userRepository.save(
                 User.createFromIdentity(keycloakUserId, email, username, role)
         );
-
-        Account cash = accountRepository.save(
-                Account.create(AccountType.CASH, user)
-        );
-        balanceRepository.save(
-                Balance.of(cash, WELCOME_BONUS)
-        );
-
-        return user;
     }
 
     public Long getCurrentUserId() {
