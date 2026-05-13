@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -28,27 +28,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(DashboardController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@SuppressWarnings("unused") // MockitoBean alanları Spring tarafından enjekte edilir; test gövdesinde doğrudan kullanılmayabilir.
 class DashboardEnvelopeContractTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private DashboardSummaryService dashboardSummaryService;
 
-    @MockBean
+    @MockitoBean
     private CurrentUserResolver currentUserResolver;
 
-    @MockBean
+    @MockitoBean
     private NotificationEventKafkaPublisher notificationEventKafkaPublisher;
 
-    @MockBean
+    @MockitoBean
     private UserRepository userRepository;
 
-    @MockBean
+    @MockitoBean
     private StringRedisTemplate stringRedisTemplate;
 
-    @MockBean
+    @MockitoBean
     private RateLimitProperties rateLimitProperties;
 
     @Test
@@ -59,7 +60,6 @@ class DashboardEnvelopeContractTest {
 
         DashboardSummaryResponse response = new DashboardSummaryResponse(
                 new DashboardSummaryResponse.WhaleSummary("NONE", 0, Instant.now()),
-                new DashboardSummaryResponse.CashSummary(BigDecimal.TEN),
                 new DashboardSummaryResponse.PortfolioSummary(
                         BigDecimal.ONE,
                         Map.of(),
@@ -68,7 +68,6 @@ class DashboardEnvelopeContractTest {
                         BigDecimal.ZERO,
                         List.of()
                 ),
-                new DashboardSummaryResponse.ActivitySummary(Instant.now(), 0),
                 BigDecimal.ONE
         );
         when(dashboardSummaryService.getSummary(1L)).thenReturn(response);
@@ -76,6 +75,6 @@ class DashboardEnvelopeContractTest {
         mockMvc.perform(get("/api/dashboard/summary"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.netWorthTry").exists());
+                .andExpect(jsonPath("$.data.totalPortfolioValueTry").exists());
     }
 }

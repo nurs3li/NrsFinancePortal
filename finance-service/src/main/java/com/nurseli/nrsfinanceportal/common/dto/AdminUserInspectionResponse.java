@@ -5,7 +5,5 @@ public record AdminUserInspectionResponse(
         String username,
         String email,
         String role,
-        DashboardSummaryResponse dashboardSummary,
-        RiskMonitorUserDetailResponse riskMonitorDetail,
-        FmTaskSummaryDto fmTaskSummary
+        DashboardSummaryResponse dashboardSummary
 ) {}

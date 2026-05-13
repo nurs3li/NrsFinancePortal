@@ -1,6 +1,9 @@
 # Logs
 logs
 *.log
+
+# Accidental Java build artifacts if tooling drops files here
+*.class
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

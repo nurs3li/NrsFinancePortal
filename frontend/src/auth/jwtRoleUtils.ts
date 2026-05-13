@@ -10,7 +10,6 @@ export function readRealmRolesFromTokenParsed(parsed: unknown): string[] {
 /** Keycloak realm_access.roles ile backend JwtIdentityReader aynı öncelik */
 export function effectiveRoleFromRealmRoles(roles: string[]): UserRole | null {
     if (roles.includes('ADMIN')) return 'ADMIN';
-    if (roles.includes('FINANCE_MANAGER')) return 'FINANCE_MANAGER';
     if (roles.includes('USER')) return 'USER';
     return null;
 }

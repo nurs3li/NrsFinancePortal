@@ -14,7 +14,7 @@ public class DashboardController {
 
     private final DashboardSummaryService dashboardSummaryService;
     private final CurrentUserResolver currentUserResolver;
-    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping("/summary")
 
     public DashboardSummaryResponse summary() {

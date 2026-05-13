@@ -21,7 +21,6 @@ public class JwtRealmAndDbRoleAuthoritiesConverter implements Converter<Jwt, Col
 
     private static final Set<String> APP_ROLE_AUTHORITIES = Set.of(
             "ROLE_USER",
-            "ROLE_FINANCE_MANAGER",
             "ROLE_ADMIN"
     );
 

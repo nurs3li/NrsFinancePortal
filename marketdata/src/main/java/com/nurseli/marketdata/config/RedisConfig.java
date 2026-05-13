@@ -44,8 +44,12 @@ public class RedisConfig {
                                 RedisSerializationContext.SerializationPair
                                         .fromSerializer(serializer)
                         );
+        Duration marketSeriesTtl = Duration.ofSeconds(90);
         Map<String, RedisCacheConfiguration> perCache = Map.of(
-                "market:equity-cap", config.entryTtl(Duration.ofDays(1))
+                "market:equity-cap", config.entryTtl(Duration.ofDays(1)),
+                // Batch/indicators: ingest aralığından bağımsız tazelik; uzun süreli Redis girişleri "grafik geçmişte kaldı" hissi yaratıyordu.
+                "market:batch", config.entryTtl(marketSeriesTtl),
+                "market:indicators", config.entryTtl(marketSeriesTtl)
         );
 
         return RedisCacheManager.builder(connectionFactory)

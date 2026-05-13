@@ -5,11 +5,12 @@ import com.nurseli.whaleanalytics.domain.WhaleLevel;
 import com.nurseli.whaleanalytics.event.TransactionCreatedEvent;
 import com.nurseli.whaleanalytics.event.WhaleAlertDetectedEvent;
 import com.nurseli.whaleanalytics.infrastructure.redis.RedisWhaleRepository;
+import com.nurseli.whaleanalytics.config.LegacyWhaleTransactionIngestionCondition;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,7 @@ import java.time.Instant;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@Conditional(LegacyWhaleTransactionIngestionCondition.class)
 public class WhaleDetectionConsumer {
 
     private final RedisWhaleRepository whaleRepository;

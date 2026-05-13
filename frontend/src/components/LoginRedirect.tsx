@@ -8,7 +8,6 @@ function destinationForUser(role: UserRole | null, fromPathname: string | undefi
         return fromPathname;
     }
     if (role === 'ADMIN') return '/admin';
-    if (role === 'FINANCE_MANAGER') return '/fm/tasks';
     if (role === 'USER') return '/dashboard';
     return '/dashboard';
 }

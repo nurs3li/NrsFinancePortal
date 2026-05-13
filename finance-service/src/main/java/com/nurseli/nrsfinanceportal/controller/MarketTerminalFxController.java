@@ -13,7 +13,7 @@ public class MarketTerminalFxController {
 
     private final MarketTerminalFxService marketTerminalFxService;
 
-    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping("/api/market/terminal/usd-try-rate")
     public UsdTryRateResponse usdTryRate() {
         return marketTerminalFxService.usdTryRate();

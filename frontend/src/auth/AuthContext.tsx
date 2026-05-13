@@ -3,7 +3,7 @@ import keycloak from './keycloak';
 import { financeClient } from '../api/client';
 import { effectiveRoleFromRealmRoles, readRealmRolesFromTokenParsed } from './jwtRoleUtils';
 
-export type UserRole = 'USER' | 'ADMIN' | 'FINANCE_MANAGER';
+export type UserRole = 'USER' | 'ADMIN';
 
 export type CurrentUser = {
     id: number;
@@ -30,7 +30,7 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 function parseRole(r: string | undefined): UserRole | null {
-    if (r === 'ADMIN' || r === 'FINANCE_MANAGER' || r === 'USER') return r;
+    if (r === 'ADMIN' || r === 'USER') return r;
     return null;
 }
 

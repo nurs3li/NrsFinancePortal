@@ -19,11 +19,6 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
         spring.json.add.type.headers: false
-    consumer:
-      group-id: finance-whale-consumer
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringSerializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
 
   datasource:
     url: jdbc:postgresql://nrs-postgres:5432/nrs_finance
@@ -72,23 +67,18 @@ market-data:
   response-timeout-ms: 20000
 
 app:
+  kafka:
+    listeners-enabled: ${APP_KAFKA_LISTENERS_ENABLED:true}
+    topics:
+      investment-position-created: ${KAFKA_TOPIC_INVESTMENT_POSITION_CREATED:finance.investment.position.created}
+      investment-position-updated: ${KAFKA_TOPIC_INVESTMENT_POSITION_UPDATED:finance.investment.position.updated}
+      investment-position-closed: ${KAFKA_TOPIC_INVESTMENT_POSITION_CLOSED:finance.investment.position.closed}
   notification:
     base-url: ${NOTIFICATION_SERVICE_URL:http://nrs-notification:8089}
-  trade:
-    order-form-v2-enabled: true
   rate-limit:
     enabled: true
     max-requests-per-minute: 40
     window-sec: 60
-  suspicious:
-    enabled: true
-    max-transactions-per-minute: 8
-    high-amount-threshold: 40000
-  fund-request:
-    auto-approval-enabled: true
-    deposit-auto-approve-limit-try: 50000
-    withdrawal-auto-approve-limit-try: 3000
-    require-iban-for-deposit: true
   receipt-storage:
     root: ${NRS_RECEIPT_STORAGE_ROOT:/data/receipts}
   keycloak:
@@ -102,7 +92,7 @@ app:
       otp-enforcement-enabled: ${KEYCLOAK_SECURITY_OTP_ENFORCEMENT_ENABLED:false}
       # Docker: .env'de true yapın veya docker-compose varsayılanına güvenin (env satırı yoksa açık)
       remember-me-enforcement-enabled: ${KEYCLOAK_SECURITY_REMEMBER_ME_ENFORCEMENT_ENABLED:true}
-      enforced-roles: ${KEYCLOAK_SECURITY_ENFORCED_ROLES:ADMIN,FINANCE_MANAGER}
+      enforced-roles: ${KEYCLOAK_SECURITY_ENFORCED_ROLES:ADMIN}
       required-action: ${KEYCLOAK_SECURITY_REQUIRED_ACTION:CONFIGURE_TOTP}
       remember-me: ${KEYCLOAK_SECURITY_REMEMBER_ME:true}
       sso-idle: ${KEYCLOAK_SECURITY_SSO_IDLE:PT30M}

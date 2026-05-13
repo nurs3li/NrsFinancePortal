@@ -1,5 +1,6 @@
 package com.nurseli.nrsfinanceportal.service;
 
+import com.nurseli.nrsfinanceportal.domain.user.Role;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.integration.keycloak.KeycloakUserEnablementClient;
 import com.nurseli.nrsfinanceportal.repository.UserRepository;
@@ -35,9 +36,13 @@ public class UserLoginSuspensionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Kendi hesabınızı askıya alamazsınız");
         }
 
+        if (target.getRole() == Role.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Yönetici hesapları askıya alınamaz");
+        }
+
         if (!keycloakUserEnablementClient.isConfigured()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "Keycloak admin client yapılandırılmadı (APP_KEYCLOAK_ADMIN_* / app.keycloak.admin).");
+                    "Keycloak admin client yapılandırılmadı (KEYCLOAK_ADMIN_* / app.keycloak.admin).");
         }
 
         if (target.isLoginSuspended()) {
@@ -73,7 +78,7 @@ public class UserLoginSuspensionService {
 
         if (!keycloakUserEnablementClient.isConfigured()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "Keycloak admin client yapılandırılmadı (APP_KEYCLOAK_ADMIN_* / app.keycloak.admin).");
+                    "Keycloak admin client yapılandırılmadı (KEYCLOAK_ADMIN_* / app.keycloak.admin).");
         }
 
         if (!target.isLoginSuspended()) {

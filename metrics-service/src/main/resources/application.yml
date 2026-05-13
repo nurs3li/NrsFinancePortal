@@ -33,5 +33,16 @@ management:
       exposure:
         include: health,metrics,prometheus
 
+# Eski whale/trade tüketimi: app.whale.legacy-transaction-analysis-enabled veya app.kafka.legacy-finance-ingestion-enabled
+app:
+  kafka:
+    legacy-finance-ingestion-enabled: false
+    topics:
+      investor-behavior-updated: ${KAFKA_TOPIC_INVESTOR_BEHAVIOR_UPDATED:investor.behavior.updated}
+  whale:
+    legacy-transaction-analysis-enabled: false
+  metrics:
+    investor-behavior-indexing-enabled: true
+
 
 

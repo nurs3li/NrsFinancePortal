@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { financeClient, metricsClient } from '../api/client';
+import { Link } from 'react-router-dom';
+import { metricsClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Activity, AlertTriangle, ShieldAlert } from 'lucide-react';
@@ -13,17 +14,13 @@ type DashboardMetricsDto = {
     totalSuspiciousEvents: number;
     topSymbols: TradeCountBySymbol[];
     whaleByLevel: WhaleCountByLevel[];
+    totalInvestorBehaviorEvents?: number;
+    investorByLevel?: WhaleCountByLevel[];
+    avgPortfolioImpactScore?: number;
+    maxPortfolioImpactScore?: number;
+    maxTotalPortfolioValueTry?: number;
 };
 type MetricsApiResponse = { success: boolean; data: DashboardMetricsDto | null; errors: unknown };
-
-type SuspiciousRow = {
-    userId: number;
-    username: string | null;
-    email: string | null;
-    reason: string;
-    amount: number;
-    occurredAt: string;
-};
 
 const COLORS = ['#64FFDA', '#22c55e', '#38bdf8', '#8892B0', '#eab308', '#f97316', '#a855f7', '#ef4444'];
 
@@ -31,27 +28,25 @@ export function AdminDashboard() {
     const { tokens } = useTheme();
     const { t, lang } = useLanguage();
     const [metrics, setMetrics] = useState<DashboardMetricsDto | null>(null);
-    const [recentEvents, setRecentEvents] = useState<SuspiciousRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        Promise.all([
-            metricsClient.get<MetricsApiResponse>('/api/admin/metrics/dashboard'),
-            financeClient.get('/api/admin/suspicious/events', { params: { limit: 5 } }),
-        ])
-            .then(([metricsRes, eventsRes]) => {
+        metricsClient
+            .get<MetricsApiResponse>('/api/admin/metrics/dashboard')
+            .then((metricsRes) => {
                 const raw = metricsRes.data as DashboardMetricsDto | MetricsApiResponse | null | undefined;
-                const m = raw && typeof raw === 'object' && 'data' in raw
-                    ? (raw as MetricsApiResponse).data
-                    : (raw as DashboardMetricsDto | null | undefined);
+                const m =
+                    raw && typeof raw === 'object' && 'data' in raw
+                        ? (raw as MetricsApiResponse).data
+                        : (raw as DashboardMetricsDto | null | undefined);
                 setMetrics(m ?? null);
-                const eventsRaw = eventsRes.data?.data ?? eventsRes.data;
-                setRecentEvents(Array.isArray(eventsRaw) ? eventsRaw.slice(0, 5) : []);
             })
-            .catch((err) => setError(err.response?.data?.message ?? err.message ?? t('admin.dashboardLoadFailed', 'Yönetim paneli verisi yüklenemedi')))
+            .catch((err) =>
+                setError(err.response?.data?.message ?? err.message ?? t('admin.dashboardLoadFailed', 'Yönetim paneli verisi yüklenemedi'))
+            )
             .finally(() => setLoading(false));
-    }, []);
+    }, [t]);
 
     const pageStyle: React.CSSProperties = {
         padding: 24,
@@ -77,23 +72,39 @@ export function AdminDashboard() {
         color: tokens.text,
     };
 
-    const kpis = useMemo(() => ([
-        { label: t('admin.totalTrade', 'Toplam Trade'), value: metrics?.totalTrades ?? 0, Icon: Activity, color: '#64FFDA' },
-        { label: t('admin.whaleAlerts', 'Whale Uyarıları'), value: metrics?.totalWhaleAlerts ?? 0, Icon: AlertTriangle, color: '#22c55e' },
-        { label: t('admin.suspiciousEvents', 'Şüpheli Olaylar'), value: metrics?.totalSuspiciousEvents ?? 0, Icon: ShieldAlert, color: '#f59e0b' },
-    ]), [metrics, t]);
+    const kpis = useMemo(
+        () => [
+            { label: t('admin.totalTrade', 'Toplam Trade'), value: metrics?.totalTrades ?? 0, Icon: Activity, color: '#64FFDA' },
+            { label: t('admin.whaleAlerts', 'Whale Uyarıları'), value: metrics?.totalWhaleAlerts ?? 0, Icon: AlertTriangle, color: '#22c55e' },
+            { label: t('admin.suspiciousEvents', 'Şüpheli Olaylar'), value: metrics?.totalSuspiciousEvents ?? 0, Icon: ShieldAlert, color: '#f59e0b' },
+        ],
+        [metrics, t]
+    );
 
     if (loading) {
-        return <div style={pageStyle}><h1 style={titleStyle}>{t('nav.admin', 'Yönetim Paneli')}</h1><p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p></div>;
+        return (
+            <div style={pageStyle}>
+                <h1 style={titleStyle}>{t('nav.admin', 'Yönetim Paneli')}</h1>
+                <p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p>
+            </div>
+        );
     }
     if (error) {
-        return <div style={pageStyle}><h1 style={titleStyle}>{t('nav.admin', 'Yönetim Paneli')}</h1><p style={{ ...mutedStyle, color: tokens.error }}>{t('news.errorPrefix', 'Hata')}: {error}</p></div>;
+        return (
+            <div style={pageStyle}>
+                <h1 style={titleStyle}>{t('nav.admin', 'Yönetim Paneli')}</h1>
+                <p style={{ ...mutedStyle, color: tokens.error }}>
+                    {t('news.errorPrefix', 'Hata')}: {error}
+                </p>
+            </div>
+        );
     }
 
     return (
         <div style={pageStyle}>
             <h1 style={titleStyle}>{t('nav.admin', 'Yönetim Paneli')}</h1>
-            <p style={{ ...mutedStyle, marginBottom: 18 }}>{t('admin.dashboardSubtitle', 'Back-office operasyonlarının canlı özeti ve hızlı aksiyon alanı.')}</p>
+            <p style={{ ...mutedStyle, marginBottom: 10 }}>{t('admin.dashboardSubtitle', 'Back-office operasyonlarının canlı özeti ve hızlı aksiyon alanı.')}</p>
+            <p style={{ ...mutedStyle, marginBottom: 18 }}>{t('admin.legacyMetricsHint')}</p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginBottom: 16 }}>
                 {kpis.map((kpi) => (
@@ -115,8 +126,16 @@ export function AdminDashboard() {
                     <div style={{ width: '100%', height: 280 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                                <Pie data={metrics?.topSymbols ?? []} dataKey="count" nameKey="symbol" outerRadius="78%" label={({ name }) => name}>
-                                    {(metrics?.topSymbols ?? []).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                                <Pie
+                                    data={metrics?.topSymbols ?? []}
+                                    dataKey="count"
+                                    nameKey="symbol"
+                                    outerRadius="78%"
+                                    label={({ name }) => name}
+                                >
+                                    {(metrics?.topSymbols ?? []).map((_, i) => (
+                                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                                    ))}
                                 </Pie>
                                 <Tooltip contentStyle={tooltipStyle} />
                             </PieChart>
@@ -143,47 +162,38 @@ export function AdminDashboard() {
             </div>
 
             <div style={panelStyle}>
-                <h2 style={{ marginTop: 0, fontSize: '1rem', color: tokens.text }}>Son Hareketler</h2>
-                {recentEvents.length === 0 ? (
-                    <p style={mutedStyle}>Kayıt bulunamadı.</p>
-                ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
-                        <thead>
-                        <tr style={{ borderBottom: `1px solid ${tokens.border}` }}>
-                            <th style={{ textAlign: 'left', padding: '8px 6px', color: tokens.textMuted }}>Kullanıcı</th>
-                            <th style={{ textAlign: 'left', padding: '8px 6px', color: tokens.textMuted }}>Sebep</th>
-                            <th style={{ textAlign: 'right', padding: '8px 6px', color: tokens.textMuted }}>Tutar</th>
-                            <th style={{ textAlign: 'right', padding: '8px 6px', color: tokens.textMuted }}>Zaman</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {recentEvents.map((row, idx) => (
-                            <tr key={`${row.userId}-${idx}`} style={{ borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                <td style={{ padding: '8px 6px' }}>{row.email ?? row.username ?? `Kullanıcı#${row.userId}`}</td>
-                                <td style={{ padding: '8px 6px' }}>{row.reason}</td>
-                                <td style={{ padding: '8px 6px', textAlign: 'right' }}>₺{Number(row.amount).toLocaleString('tr-TR')}</td>
-                                <td style={{ padding: '8px 6px', textAlign: 'right' }}>{new Date(row.occurredAt).toLocaleString('tr-TR')}</td>
-                            </tr>
-                        ))}
-                        </tbody>
-                    </table>
-                )}
+                <h2 style={{ marginTop: 0, fontSize: '1rem', color: tokens.text }}>Denetim ve güvenlik</h2>
+                <p style={{ ...mutedStyle, marginBottom: 12 }}>{t('admin.auditReplacesSuspiciousPanel')}</p>
+                <Link
+                    to="/admin/audit"
+                    style={{
+                        display: 'inline-block',
+                        padding: '10px 16px',
+                        borderRadius: 8,
+                        background: tokens.accentGradient ?? tokens.accent,
+                        color: '#fff',
+                        fontWeight: 600,
+                        textDecoration: 'none',
+                    }}
+                >
+                    {t('admin.auditLogsCta')}
+                </Link>
             </div>
 
-            {typeof import.meta.env.VITE_GRAFANA_DASHBOARD_EMBED_URL === 'string'
-                && import.meta.env.VITE_GRAFANA_DASHBOARD_EMBED_URL.trim() !== '' && (
-                <div style={panelStyle}>
-                    <h2 style={{ marginTop: 0, fontSize: '1rem', color: tokens.text }}>
-                        {t('admin.grafanaEmbedTitle', 'System health (Grafana)')}
-                    </h2>
-                    <iframe
-                        title="Grafana"
-                        src={import.meta.env.VITE_GRAFANA_DASHBOARD_EMBED_URL}
-                        style={{ width: '100%', height: 420, border: 0, borderRadius: 8 }}
-                        referrerPolicy="no-referrer-when-downgrade"
-                    />
-                </div>
-            )}
+            {typeof import.meta.env.VITE_GRAFANA_DASHBOARD_EMBED_URL === 'string' &&
+                import.meta.env.VITE_GRAFANA_DASHBOARD_EMBED_URL.trim() !== '' && (
+                    <div style={{ ...panelStyle, marginTop: 16 }}>
+                        <h2 style={{ marginTop: 0, fontSize: '1rem', color: tokens.text }}>
+                            {t('admin.grafanaEmbedTitle', 'System health (Grafana)')}
+                        </h2>
+                        <iframe
+                            title="Grafana"
+                            src={import.meta.env.VITE_GRAFANA_DASHBOARD_EMBED_URL}
+                            style={{ width: '100%', height: 420, border: 0, borderRadius: 8 }}
+                            referrerPolicy="no-referrer-when-downgrade"
+                        />
+                    </div>
+                )}
         </div>
     );
 }

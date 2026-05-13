@@ -22,7 +22,6 @@ export function RoleProtectedRoute({
 
     if (role == null || !allowedRoles.includes(role)) {
         if (role === 'USER') return <Navigate to="/dashboard" replace />;
-        if (role === 'FINANCE_MANAGER') return <Navigate to="/fm/tasks" replace />;
         if (role === 'ADMIN') return <Navigate to="/admin" replace />;
         return <Navigate to="/" replace />;
     }

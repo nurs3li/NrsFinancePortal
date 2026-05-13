@@ -1,6 +1,5 @@
 package com.nurseli.nrsfinanceportal.domain.user;
 
-import com.nurseli.nrsfinanceportal.domain.whale.WhaleLevel;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -21,9 +20,6 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Immutable identity reference from Keycloak (JWT sub)
-     */
     @Column(name = "keycloak_user_id", nullable = false, updatable = false)
     private String keycloakUserId;
 
@@ -43,20 +39,8 @@ public class User {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    // ===================== 🐋 WHALE FIELDS =====================
-
-    @Column(name = "is_whale", nullable = false)
-    private boolean whale;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "whale_level")
-    private WhaleLevel whaleLevel;
-
-    @Column(name = "whale_since")
-    private Instant whaleSince;
-
     /**
-     * Giriş (Keycloak) seviyesinde askıya alındı; mevcut JWT oturumlarını da finance API'de keser.
+     * Giriş (Keycloak) seviyesinde askıya alındı; mevcut JWT oturumlarını finance API'de keser.
      */
     @Column(name = "login_suspended", nullable = false)
     private boolean loginSuspended;
@@ -67,10 +51,7 @@ public class User {
     @Column(name = "login_suspended_reason", length = 500)
     private String loginSuspendedReason;
 
-    // ===================== JPA =====================
-
     protected User() {
-        // JPA only
     }
 
     private User(String keycloakUserId,
@@ -83,10 +64,7 @@ public class User {
         this.email = email;
         this.role = role;
         this.createdAt = Instant.now();
-
         this.emailVerified = false;
-        this.whale = false;
-        this.whaleLevel = WhaleLevel.NONE;
         this.loginSuspended = false;
     }
 
@@ -106,20 +84,6 @@ public class User {
                 email,
                 role != null ? role : Role.USER
         );
-    }
-
-    // ===================== 🧠 DOMAIN BEHAVIOR =====================
-
-    public void markAsWhale(WhaleLevel level, Instant triggeredAt) {
-        this.whale = true;
-        this.whaleLevel = level;
-        this.whaleSince = triggeredAt;
-    }
-
-    public void clearWhaleStatus() {
-        this.whale = false;
-        this.whaleLevel = WhaleLevel.NONE;
-        this.whaleSince = null;
     }
 
     public void suspendLogin(Instant at, String reason) {
@@ -158,8 +122,6 @@ public class User {
         }
     }
 
-    // ===================== GETTERS =====================
-
     public Long getId() {
         return id;
     }
@@ -188,17 +150,6 @@ public class User {
         return createdAt;
     }
 
-    public boolean isWhale() {
-        return whale;
-    }
-
-    public WhaleLevel getWhaleLevel() {
-        return whaleLevel;
-    }
-
-    public Instant getWhaleSince() {
-        return whaleSince;
-    }
     public void setEmail(String email) {
         if (email != null && !email.isBlank()) {
             this.email = email;

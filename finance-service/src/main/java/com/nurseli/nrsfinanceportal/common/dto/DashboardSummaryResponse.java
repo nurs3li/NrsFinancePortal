@@ -10,10 +10,8 @@ import java.util.Map;
 public record DashboardSummaryResponse(
 
         WhaleSummary whale,
-        CashSummary cash,
         PortfolioSummary portfolio,
-        ActivitySummary activity,
-        BigDecimal netWorthTry
+        BigDecimal totalPortfolioValueTry
 
 ) {
 
@@ -22,9 +20,7 @@ public record DashboardSummaryResponse(
             Integer impactScore,
             Instant triggeredAt
     ) {}
-    public record CashSummary(
-            BigDecimal amountTry
-    ) {}
+
     public record PortfolioSummary(
             BigDecimal totalValueTry,
             Map<AssetType, BigDecimal> distribution,
@@ -34,20 +30,11 @@ public record DashboardSummaryResponse(
             List<PortfolioCategoryBreakdown> categories
     ) {}
 
-    /**
-     * Birleşik portföy (TRADE + MANUAL) — varlık sınıfına göre toplamlar ve PnL.
-     */
     public record PortfolioCategoryBreakdown(
             AssetType assetType,
             BigDecimal valueTry,
             BigDecimal costTry,
             BigDecimal pnlTry,
             BigDecimal pnlPct
-    ) {}
-
-
-    public record ActivitySummary(
-            Instant lastTradeAt,
-            int todayTradeCount
     ) {}
 }

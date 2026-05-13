@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,6 +35,9 @@ import java.util.TreeMap;
 @RequiredArgsConstructor
 @Slf4j
 public class EquityPriceIngestService {
+
+    /** Finnhub {@code t} anlık UTC epoch; DB {@code timestamp without time zone} ile İstanbul duvar saati tutarlı olsun. */
+    private static final ZoneId MARKET_WALL_CLOCK_ZONE = ZoneId.of("Europe/Istanbul");
 
     /** Anlık Finnhub quote satırlarından türetilen günlük mum (harici mum API'si olmadan). */
     public static final String SOURCE_FINHUB_QUOTE_ROLLUP = "FINHUB_QUOTE_ROLLUP";
@@ -69,8 +73,8 @@ public class EquityPriceIngestService {
                 entity.setSellPrice(SpreadCalculator.sellPrice(mid));
                 entity.setSource("FINHUB");
                 LocalDateTime timestamp = quote.getT() != null
-                        ? LocalDateTime.ofInstant(Instant.ofEpochSecond(quote.getT()), ZoneId.systemDefault())
-                        : LocalDateTime.now();
+                        ? LocalDateTime.ofInstant(Instant.ofEpochSecond(quote.getT()), MARKET_WALL_CLOCK_ZONE)
+                        : LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
                 entity.setTimestamp(timestamp);
 
                 repository.save(entity);
@@ -79,7 +83,7 @@ public class EquityPriceIngestService {
                 log.error("[EQUITY] Failed for symbol={}: {}", symbol, e.getMessage());
             }
         }
-        LocalDate endDay = LocalDate.now();
+        LocalDate endDay = LocalDate.now(MARKET_WALL_CLOCK_ZONE);
         LocalDate startRollup = endDay.minusDays(2);
         for (String symbol : symbols) {
             try {
@@ -110,7 +114,7 @@ public class EquityPriceIngestService {
             log.debug("[EQUITY_HISTORY] No symbols configured for backfill");
             return;
         }
-        LocalDate to = LocalDate.now();
+        LocalDate to = LocalDate.now(MARKET_WALL_CLOCK_ZONE);
         LocalDate from = to.minusDays(Math.max(periodDays, 1));
         int size = Math.max(1, batchSize);
         for (int i = 0; i < symbols.size(); i += size) {
@@ -134,7 +138,7 @@ public class EquityPriceIngestService {
             log.debug("[EQUITY_HISTORY] No symbols configured for incremental ingest");
             return;
         }
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(MARKET_WALL_CLOCK_ZONE);
         for (String symbol : symbols) {
             try {
                 // Son satır market_price_history içinde çoğunlukla 10 dk'da bir gelen FINHUB quote'tur;
@@ -171,8 +175,8 @@ public class EquityPriceIngestService {
             return;
         }
         String sym = symbol.trim().toUpperCase();
-        LocalDateTime start = from.atStartOfDay();
-        LocalDateTime end = to.plusDays(1).atStartOfDay();
+        LocalDateTime start = from.atStartOfDay(MARKET_WALL_CLOCK_ZONE).toLocalDateTime();
+        LocalDateTime end = to.plusDays(1).atStartOfDay(MARKET_WALL_CLOCK_ZONE).toLocalDateTime();
         List<MarketPriceHistory> rows =
                 repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(sym, start, end);
         Map<LocalDate, List<MarketPriceHistory>> byDay = new TreeMap<>();
@@ -269,7 +273,7 @@ public class EquityPriceIngestService {
         }
         int inserted = 0;
         for (DailyBar bar : bars) {
-            LocalDateTime timestamp = bar.day().atStartOfDay();
+            LocalDateTime timestamp = bar.day().atStartOfDay(MARKET_WALL_CLOCK_ZONE).toLocalDateTime();
             if (repository.existsBySymbolAndTimestamp(symbol, timestamp)) {
                 saveDailyCandleIfAbsent(symbol, bar, source);
                 continue;
@@ -288,8 +292,8 @@ public class EquityPriceIngestService {
     }
 
     private List<DailyBar> fetchDailyBarsFromFinnhub(String symbol, LocalDate from, LocalDate to) {
-        long fromEpoch = from.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
-        long toEpoch = to.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toEpochSecond() - 1;
+        long fromEpoch = from.atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+        long toEpoch = to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond() - 1;
         FinHubCandleDto dto = finHubClient.fetchDailyCandles(symbol, fromEpoch, toEpoch).block();
         if (dto == null || dto.getT() == null || dto.getC() == null || dto.getT().isEmpty() || dto.getC().isEmpty()) {
             return List.of();
@@ -309,7 +313,7 @@ public class EquityPriceIngestService {
             if (epoch == null || close == null || close <= 0) {
                 continue;
             }
-            LocalDate day = Instant.ofEpochSecond(epoch).atZone(ZoneId.systemDefault()).toLocalDate();
+            LocalDate day = Instant.ofEpochSecond(epoch).atZone(ZoneOffset.UTC).toLocalDate();
             BigDecimal open = safePositiveDecimal(dto.getO(), i, close);
             BigDecimal high = safePositiveDecimal(dto.getH(), i, close);
             BigDecimal low = safePositiveDecimal(dto.getL(), i, close);

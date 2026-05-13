@@ -20,10 +20,6 @@ export function HomeRedirect() {
             navigate('/admin', { replace: true });
             return;
         }
-        if (role === 'FINANCE_MANAGER') {
-            navigate('/fm/tasks', { replace: true });
-            return;
-        }
         navigate('/dashboard', { replace: true });
     }, [ready, isAuthenticated, role, from, navigate]);
 

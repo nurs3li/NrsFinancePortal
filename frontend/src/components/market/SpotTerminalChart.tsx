@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import type { Time } from 'lightweight-charts';
+import { apiDatetimeToChartTime } from '../../lib/chartApiTime';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type CandlePoint = {
@@ -21,6 +22,7 @@ type Props = {
     loading: boolean;
     trendLabel?: 'UP' | 'DOWN';
     timeframeLabel?: string;
+    chartTimePreferIstanbulBusinessDay?: boolean;
     tokens: {
         bgCard: string;
         border: string;
@@ -29,20 +31,23 @@ type Props = {
     };
 };
 
-function toChartTime(value: string): Time {
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return value.slice(0, 10) as Time;
-    const hasClock = /T\d{2}:\d{2}:\d{2}/.test(value);
-    if (hasClock) return Math.floor(d.getTime() / 1000) as Time;
-    return d.toISOString().slice(0, 10) as Time;
-}
-
 function chartTimeKey(value: Time): string {
     if (typeof value === 'number') return new Date(value * 1000).toISOString();
     return String(value);
 }
 
-function SpotTerminalChartImpl({ title, candles, ma7, ma21, showMa, loading, trendLabel, timeframeLabel, tokens }: Props) {
+function SpotTerminalChartImpl({
+    title,
+    candles,
+    ma7,
+    ma21,
+    showMa,
+    loading,
+    trendLabel,
+    timeframeLabel,
+    chartTimePreferIstanbulBusinessDay,
+    tokens,
+}: Props) {
     const chartRef = useRef<HTMLDivElement>(null);
     const [hover, setHover] = useState<{ close: number } | null>(null);
     const chartHeight = 520;
@@ -51,6 +56,13 @@ function SpotTerminalChartImpl({ title, candles, ma7, ma21, showMa, loading, tre
     const crosshairRafRef = useRef<number | null>(null);
     const pendingHoverRef = useRef<{ key: string; close: number } | null>(null);
     const lastCommittedHoverKeyRef = useRef<string>('');
+    const toChartTime = useMemo(
+        () => (s: string) =>
+            apiDatetimeToChartTime(s, {
+                preferIstanbulBusinessDay: Boolean(chartTimePreferIstanbulBusinessDay),
+            }),
+        [chartTimePreferIstanbulBusinessDay],
+    );
     useEffect(
         () => () => {
             if (crosshairRafRef.current != null) {
@@ -68,7 +80,7 @@ function SpotTerminalChartImpl({ title, candles, ma7, ma21, showMa, loading, tre
             .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
             .forEach((c) => byTime.set(chartTimeKey(toChartTime(c.time)), c));
         return [...byTime.values()];
-    }, [candles]);
+    }, [candles, toChartTime]);
 
     useEffect(() => {
         const el = chartRef.current;
@@ -181,7 +193,7 @@ function SpotTerminalChartImpl({ title, candles, ma7, ma21, showMa, loading, tre
             window.removeEventListener('resize', onResize);
             chart.remove();
         };
-    }, [loading, sorted, ma7, ma21, showMa, timeframeLabel, tokens.bgCard, tokens.border, tokens.text, tokens.textMuted]);
+    }, [loading, sorted, ma7, ma21, showMa, timeframeLabel, toChartTime, tokens.bgCard, tokens.border, tokens.text, tokens.textMuted]);
 
     if (loading) return <div className="terminal-chart-empty">Grafik yükleniyor...</div>;
     if (!sorted.length) return <div className="terminal-chart-empty">Analiz grafiği için veri bulunamadı.</div>;

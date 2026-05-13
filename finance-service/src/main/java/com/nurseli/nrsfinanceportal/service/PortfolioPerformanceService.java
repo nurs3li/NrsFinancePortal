@@ -36,53 +36,24 @@ public class PortfolioPerformanceService {
         return computePerformance(unifiedPortfolioService.unifiedForUser(user));
     }
 
-    /**
-     * Snapshot / grafik için: trade ve manuel kovalarına ayrılmış değer-maliyet-kar.
-     */
     @Transactional(readOnly = true)
     public PortfolioSnapshotMetricsDto computeSnapshotMetricsForUser(User user) {
         List<UnifiedPortfolioItemView> portfolio = unifiedPortfolioService.unifiedForUser(user);
         LatestPricingSnapshot pricing = marketDataClient.loadLatestPricing();
 
-        BigDecimal tradeValue = BigDecimal.ZERO;
-        BigDecimal tradeCost = BigDecimal.ZERO;
-        BigDecimal manualValue = BigDecimal.ZERO;
-        BigDecimal manualCost = BigDecimal.ZERO;
+        BigDecimal value = BigDecimal.ZERO;
+        BigDecimal cost = BigDecimal.ZERO;
 
         for (UnifiedPortfolioItemView p : portfolio) {
             AssetType type = AssetType.valueOf(p.getType());
             BigDecimal quantity = nz(p.getQuantity());
             BigDecimal avgBuy = nz(p.getAvgBuyPrice());
             BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, p.getSymbol(), pricing));
-            BigDecimal cost = avgBuy.multiply(quantity);
-            BigDecimal currentValue = currentPrice.multiply(quantity);
-
-            if ("MANUAL".equalsIgnoreCase(p.getSource())) {
-                manualValue = manualValue.add(currentValue);
-                manualCost = manualCost.add(cost);
-            } else {
-                tradeValue = tradeValue.add(currentValue);
-                tradeCost = tradeCost.add(cost);
-            }
+            cost = cost.add(avgBuy.multiply(quantity));
+            value = value.add(currentPrice.multiply(quantity));
         }
 
-        BigDecimal combinedValue = tradeValue.add(manualValue);
-        BigDecimal combinedCost = tradeCost.add(manualCost);
-        BigDecimal tradePnl = tradeValue.subtract(tradeCost);
-        BigDecimal manualPnl = manualValue.subtract(manualCost);
-        BigDecimal combinedPnl = combinedValue.subtract(combinedCost);
-
-        return new PortfolioSnapshotMetricsDto(
-                combinedValue,
-                combinedCost,
-                combinedPnl,
-                tradeValue,
-                tradeCost,
-                tradePnl,
-                manualValue,
-                manualCost,
-                manualPnl
-        );
+        return new PortfolioSnapshotMetricsDto(value, cost, value.subtract(cost));
     }
 
     private BigDecimal nz(BigDecimal v) {

@@ -1,5 +1,6 @@
 package com.nurseli.metricsservice.config;
 
+import com.nurseli.metricsservice.event.InvestorBehaviorUpdatedEvent;
 import com.nurseli.metricsservice.event.SuspiciousActivityDetectedEvent;
 import com.nurseli.metricsservice.event.TradeCreatedEvent;
 import com.nurseli.metricsservice.event.WhaleAlertDetectedEvent;
@@ -25,7 +26,7 @@ public class KafkaConsumerConfig {
     private String bootstrapServers;
 
     private static final String TRUSTED_PACKAGES =
-            "com.nurseli.metricsservice.event,com.nurseli.nrsfinanceportal.integration.kafka.event,com.nurseli.whaleanalytics.event";
+            "com.nurseli.metricsservice.event,com.nurseli.nrsfinanceportal.integration.kafka.event,com.nurseli.whaleanalytics.event,com.nurseli.whaleanalytics.event.investment";
 
     /* ================= TRADE ================= */
 
@@ -59,6 +60,24 @@ public class KafkaConsumerConfig {
         ConcurrentKafkaListenerContainerFactory<String, WhaleAlertDetectedEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(whaleConsumerFactory());
+        factory.setCommonErrorHandler(new DefaultErrorHandler());
+        return factory;
+    }
+
+    /* ================= INVESTOR BEHAVIOR ================= */
+
+    @Bean
+    public ConsumerFactory<String, InvestorBehaviorUpdatedEvent> investorBehaviorConsumerFactory() {
+        Map<String, Object> props = eventConsumerProps("metrics-investor-behavior-factory", InvestorBehaviorUpdatedEvent.class);
+        return new DefaultKafkaConsumerFactory<>(props);
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, InvestorBehaviorUpdatedEvent>
+    investorBehaviorKafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, InvestorBehaviorUpdatedEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(investorBehaviorConsumerFactory());
         factory.setCommonErrorHandler(new DefaultErrorHandler());
         return factory;
     }

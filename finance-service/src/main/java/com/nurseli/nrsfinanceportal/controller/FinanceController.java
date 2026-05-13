@@ -20,11 +20,11 @@ public class FinanceController {
     }
 
     /**
-     * Sadece FINANCE_MANAGER
+     * Sadece ADMIN (demo korumalı endpoint)
      */
     @GetMapping("/secure")
-    @PreAuthorize("hasRole('FINANCE_MANAGER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<String> secureEndpoint() {
-        return ResponseEntity.ok("FINANCE MANAGER OK 💸");
+        return ResponseEntity.ok("ADMIN OK");
     }
 }

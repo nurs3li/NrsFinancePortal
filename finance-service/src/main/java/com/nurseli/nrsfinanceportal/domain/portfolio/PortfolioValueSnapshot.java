@@ -25,35 +25,14 @@ public class PortfolioValueSnapshot {
     @Column(name = "trigger_type", nullable = false, length = 20)
     private SnapshotTriggerType triggerType;
 
-    @Column(name = "trade_id")
-    private Long tradeId;
+    @Column(name = "portfolio_value_try", nullable = false, precision = 38, scale = 8)
+    private BigDecimal portfolioValueTry;
 
-    @Column(name = "combined_value_try", nullable = false, precision = 38, scale = 8)
-    private BigDecimal combinedValueTry;
+    @Column(name = "portfolio_cost_try", nullable = false, precision = 38, scale = 8)
+    private BigDecimal portfolioCostTry;
 
-    @Column(name = "combined_cost_try", nullable = false, precision = 38, scale = 8)
-    private BigDecimal combinedCostTry;
-
-    @Column(name = "combined_pnl_try", nullable = false, precision = 38, scale = 8)
-    private BigDecimal combinedPnlTry;
-
-    @Column(name = "trade_value_try", nullable = false, precision = 38, scale = 8)
-    private BigDecimal tradeValueTry;
-
-    @Column(name = "trade_cost_try", nullable = false, precision = 38, scale = 8)
-    private BigDecimal tradeCostTry;
-
-    @Column(name = "trade_pnl_try", nullable = false, precision = 38, scale = 8)
-    private BigDecimal tradePnlTry;
-
-    @Column(name = "manual_value_try", nullable = false, precision = 38, scale = 8)
-    private BigDecimal manualValueTry;
-
-    @Column(name = "manual_cost_try", nullable = false, precision = 38, scale = 8)
-    private BigDecimal manualCostTry;
-
-    @Column(name = "manual_pnl_try", nullable = false, precision = 38, scale = 8)
-    private BigDecimal manualPnlTry;
+    @Column(name = "portfolio_pnl_try", nullable = false, precision = 38, scale = 8)
+    private BigDecimal portfolioPnlTry;
 
     protected PortfolioValueSnapshot() {
     }
@@ -62,31 +41,17 @@ public class PortfolioValueSnapshot {
             User user,
             Instant snapshotAt,
             SnapshotTriggerType triggerType,
-            Long tradeId,
-            BigDecimal combinedValueTry,
-            BigDecimal combinedCostTry,
-            BigDecimal combinedPnlTry,
-            BigDecimal tradeValueTry,
-            BigDecimal tradeCostTry,
-            BigDecimal tradePnlTry,
-            BigDecimal manualValueTry,
-            BigDecimal manualCostTry,
-            BigDecimal manualPnlTry
+            BigDecimal portfolioValueTry,
+            BigDecimal portfolioCostTry,
+            BigDecimal portfolioPnlTry
     ) {
         PortfolioValueSnapshot s = new PortfolioValueSnapshot();
         s.user = user;
         s.snapshotAt = snapshotAt;
         s.triggerType = triggerType;
-        s.tradeId = tradeId;
-        s.combinedValueTry = combinedValueTry;
-        s.combinedCostTry = combinedCostTry;
-        s.combinedPnlTry = combinedPnlTry;
-        s.tradeValueTry = tradeValueTry;
-        s.tradeCostTry = tradeCostTry;
-        s.tradePnlTry = tradePnlTry;
-        s.manualValueTry = manualValueTry;
-        s.manualCostTry = manualCostTry;
-        s.manualPnlTry = manualPnlTry;
+        s.portfolioValueTry = portfolioValueTry;
+        s.portfolioCostTry = portfolioCostTry;
+        s.portfolioPnlTry = portfolioPnlTry;
         return s;
     }
 
@@ -106,43 +71,15 @@ public class PortfolioValueSnapshot {
         return triggerType;
     }
 
-    public Long getTradeId() {
-        return tradeId;
+    public BigDecimal getPortfolioValueTry() {
+        return portfolioValueTry;
     }
 
-    public BigDecimal getCombinedValueTry() {
-        return combinedValueTry;
+    public BigDecimal getPortfolioCostTry() {
+        return portfolioCostTry;
     }
 
-    public BigDecimal getCombinedCostTry() {
-        return combinedCostTry;
-    }
-
-    public BigDecimal getCombinedPnlTry() {
-        return combinedPnlTry;
-    }
-
-    public BigDecimal getTradeValueTry() {
-        return tradeValueTry;
-    }
-
-    public BigDecimal getTradeCostTry() {
-        return tradeCostTry;
-    }
-
-    public BigDecimal getTradePnlTry() {
-        return tradePnlTry;
-    }
-
-    public BigDecimal getManualValueTry() {
-        return manualValueTry;
-    }
-
-    public BigDecimal getManualCostTry() {
-        return manualCostTry;
-    }
-
-    public BigDecimal getManualPnlTry() {
-        return manualPnlTry;
+    public BigDecimal getPortfolioPnlTry() {
+        return portfolioPnlTry;
     }
 }

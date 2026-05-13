@@ -1,5 +1,6 @@
 package com.nurseli.metricsservice.opensearch;
 
+import com.nurseli.metricsservice.event.InvestorBehaviorUpdatedEvent;
 import com.nurseli.metricsservice.event.SuspiciousActivityDetectedEvent;
 import com.nurseli.metricsservice.event.TradeCreatedEvent;
 import com.nurseli.metricsservice.event.WhaleAlertDetectedEvent;
@@ -23,6 +24,7 @@ public class OpenSearchIndexerService {
     public static final String INDEX_TRADES = "metrics-trades";
     public static final String INDEX_WHALES = "metrics-whales";
     public static final String INDEX_SUSPICIOUS = "metrics-suspicious";
+    public static final String INDEX_INVESTOR_BEHAVIOR = "investor-behavior-events";
 
     private final RestHighLevelClient opensearchClient;
 
@@ -66,6 +68,41 @@ public class OpenSearchIndexerService {
         doc.put("occurredAt", event.occurredAt() != null ? event.occurredAt().toString() : null);
         String id = "susp-" + event.userId() + "-" + event.transactionId() + "-" + (event.occurredAt() != null ? event.occurredAt().toEpochMilli() : System.currentTimeMillis());
         index(INDEX_SUSPICIOUS, id, doc);
+    }
+
+    public void indexInvestorBehavior(InvestorBehaviorUpdatedEvent event) {
+        Map<String, Object> doc = new HashMap<>();
+        doc.put("eventId", event.eventId());
+        doc.put("occurredAt", event.occurredAt() != null ? event.occurredAt().toString() : null);
+        doc.put("userId", event.userId());
+        doc.put("investorLevel", event.investorLevel());
+        doc.put("portfolioImpactScore", event.portfolioImpactScore());
+        doc.put("totalPortfolioValueTry", bd(event.totalPortfolioValueTry()));
+        doc.put("totalInvestedAmountTry", bd(event.totalInvestedAmountTry()));
+        doc.put("totalNominalProfitTry", bd(event.totalNominalProfitTry()));
+        doc.put("totalRealProfitTry", bd(event.totalRealProfitTry()));
+        doc.put("largestPositionSymbol", event.largestPositionSymbol());
+        doc.put("largestPositionValueTry", bd(event.largestPositionValueTry()));
+        doc.put("largestPositionRatio", bd(event.largestPositionRatio()));
+        doc.put("assetConcentrationScore", event.assetConcentrationScore());
+        doc.put("profitScore", event.profitScore());
+        doc.put("realProfitScore", event.realProfitScore());
+        doc.put("riskExposureScore", event.riskExposureScore());
+        doc.put("positionCount", event.positionCount());
+        doc.put("openPositionCount", event.openPositionCount());
+        doc.put("closedPositionCount", event.closedPositionCount());
+        doc.put("cryptoExposureRatio", bd(event.cryptoExposureRatio()));
+        doc.put("equityExposureRatio", bd(event.equityExposureRatio()));
+        doc.put("fxExposureRatio", bd(event.fxExposureRatio()));
+        doc.put("fundExposureRatio", bd(event.fundExposureRatio()));
+        doc.put("metalExposureRatio", bd(event.metalExposureRatio()));
+        doc.put("explanationMessages", event.explanationMessages());
+        String id = "inv-" + event.userId() + "-" + (event.eventId() != null ? event.eventId() : String.valueOf(System.currentTimeMillis()));
+        index(INDEX_INVESTOR_BEHAVIOR, id, doc);
+    }
+
+    private static Double bd(java.math.BigDecimal v) {
+        return v != null ? v.doubleValue() : null;
     }
 
     private void index(String indexName, String id, Map<String, Object> source) {

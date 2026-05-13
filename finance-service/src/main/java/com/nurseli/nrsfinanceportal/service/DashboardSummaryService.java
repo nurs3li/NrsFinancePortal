@@ -3,22 +3,14 @@ package com.nurseli.nrsfinanceportal.service;
 import com.nurseli.nrsfinanceportal.common.dto.DashboardSummaryResponse;
 import com.nurseli.nrsfinanceportal.common.dto.PerformanceItemDto;
 import com.nurseli.nrsfinanceportal.common.dto.PortfolioPerformanceDto;
-import com.nurseli.nrsfinanceportal.domain.account.Account;
-import com.nurseli.nrsfinanceportal.domain.account.AccountType;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.domain.user.User;
-import com.nurseli.nrsfinanceportal.repository.AccountRepository;
-import com.nurseli.nrsfinanceportal.repository.BalanceRepository;
-import com.nurseli.nrsfinanceportal.repository.TradeRepository;
 import com.nurseli.nrsfinanceportal.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -31,10 +23,6 @@ public class DashboardSummaryService {
 
     private final WhaleStateCacheService whaleStateCacheService;
     private final PortfolioPerformanceService portfolioPerformanceService;
-
-    private final AccountRepository accountRepository;
-    private final BalanceRepository balanceRepository;
-    private final TradeRepository tradeRepository;
     private final UserRepository userRepository;
 
     public DashboardSummaryResponse getSummary(Long userId) {
@@ -43,26 +31,7 @@ public class DashboardSummaryService {
             return emptySummary();
         }
 
-        /* ======================
-           Demo account & balance – yoksa boş özet (ADMIN/FINANCE_MANAGER vb.)
-           ====================== */
-        List<Account> cashAccounts = accountRepository.findByUserIdAndType(userId, AccountType.CASH);
-        if (cashAccounts.isEmpty()) {
-            return emptySummary();
-        }
-        Account cashAccount = cashAccounts.get(0);
-
-        var balanceOpt = balanceRepository.findByAccount(cashAccount);
-        if (balanceOpt.isEmpty()) {
-            return emptySummary();
-        }
-        BigDecimal cashTry = balanceOpt.get().getAmount();
-
-        /* ======================
-           Whale (Redis)
-           ====================== */
         var whaleState = whaleStateCacheService.getLastWhaleState(userId);
-
         DashboardSummaryResponse.WhaleSummary whale =
                 whaleState == null
                         ? null
@@ -72,57 +41,19 @@ public class DashboardSummaryService {
                         whaleState.triggeredAt()
                 );
 
-        var cash =
-                new DashboardSummaryResponse.CashSummary(cashTry);
-
-        /* ======================
-           Portfolio — birleşik (TRADE + MANUAL), /api/portfolio/performance ile aynı mantık
-           ====================== */
         PortfolioPerformanceDto performance = portfolioPerformanceService.performanceForUser(user);
         var portfolio = buildPortfolioSummary(performance);
 
-        /* ======================
-          Activity
-           ====================== */
-        Instant todayStart =
-                LocalDate.now()
-                        .atStartOfDay()
-                        .toInstant(ZoneOffset.UTC);
-
-        int todayTradeCount =
-                tradeRepository.countTradesSince(userId, todayStart);
-
-        Instant lastTradeAt =
-                tradeRepository.findLastTradeTime(userId);
-
-        var activity =
-                new DashboardSummaryResponse.ActivitySummary(
-                        lastTradeAt,
-                        todayTradeCount
-                );
-
-        /* ======================
-           Net Worth
-           ====================== */
-        BigDecimal netWorthTry =
-                cashTry.add(performance.getTotalCurrentValue());
-
         return new DashboardSummaryResponse(
                 whale,
-                cash,
                 portfolio,
-                activity,
-                netWorthTry
+                nz(performance.getTotalCurrentValue())
         );
     }
 
-    /**
-     * Demo hesabı veya balance olmayan kullanıcılar için (ADMIN, FINANCE_MANAGER vb.).
-     */
     private static DashboardSummaryResponse emptySummary() {
         return new DashboardSummaryResponse(
                 null,
-                new DashboardSummaryResponse.CashSummary(BigDecimal.ZERO),
                 new DashboardSummaryResponse.PortfolioSummary(
                         BigDecimal.ZERO,
                         Map.of(),
@@ -131,7 +62,6 @@ public class DashboardSummaryService {
                         BigDecimal.ZERO,
                         List.of()
                 ),
-                new DashboardSummaryResponse.ActivitySummary(null, 0),
                 BigDecimal.ZERO
         );
     }

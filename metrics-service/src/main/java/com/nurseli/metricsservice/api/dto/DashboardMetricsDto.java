@@ -7,7 +7,12 @@ public record DashboardMetricsDto(
         long totalWhaleAlerts,
         long totalSuspiciousEvents,
         List<TradeCountBySymbol> topSymbols,
-        List<WhaleCountByLevel> whaleByLevel
+        List<WhaleCountByLevel> whaleByLevel,
+        long totalInvestorBehaviorEvents,
+        List<WhaleCountByLevel> investorByLevel,
+        double avgPortfolioImpactScore,
+        double maxPortfolioImpactScore,
+        double maxTotalPortfolioValueTry
 ) {
     public record TradeCountBySymbol(String symbol, long count) {}
     public record WhaleCountByLevel(String level, long count) {}

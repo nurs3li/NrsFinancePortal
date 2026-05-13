@@ -1,0 +1,7 @@
+databaseChangeLog:
+  - changeSet:
+      id: v23-fm-role-to-user
+      author: nrsfinance
+      changes:
+        - sql:
+            sql: UPDATE users SET role = 'USER' WHERE role = 'FINANCE_MANAGER'

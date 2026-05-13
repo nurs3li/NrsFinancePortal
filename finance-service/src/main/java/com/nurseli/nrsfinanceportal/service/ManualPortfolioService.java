@@ -5,6 +5,7 @@ import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPortfolioPosition;
 import com.nurseli.nrsfinanceportal.domain.pricing.SymbolNormalizer;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.domain.portfolio.SnapshotTriggerType;
+import com.nurseli.nrsfinanceportal.integration.kafka.InvestmentPositionEventPublisher;
 import com.nurseli.nrsfinanceportal.repository.ManualPortfolioPositionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,7 @@ public class ManualPortfolioService {
     private final ManualPortfolioPositionRepository manualRepo;
     private final CurrentUserResolver currentUserResolver;
     private final PortfolioSnapshotRecorder portfolioSnapshotRecorder;
+    private final InvestmentPositionEventPublisher investmentPositionEventPublisher;
 
     @Transactional
     public ManualPortfolioPosition create(ManualPortfolioCreateRequest request) {
@@ -43,6 +45,7 @@ public class ManualPortfolioService {
 
         ManualPortfolioPosition saved = manualRepo.save(p);
         recordManualSnapshot(user.getId());
+        investmentPositionEventPublisher.publishCreated(saved);
         return saved;
     }
 
@@ -67,6 +70,7 @@ public class ManualPortfolioService {
         );
         ManualPortfolioPosition saved = manualRepo.save(p);
         recordManualSnapshot(user.getId());
+        investmentPositionEventPublisher.publishUpdated(saved);
         return saved;
     }
 
@@ -75,6 +79,7 @@ public class ManualPortfolioService {
         User user = currentUserResolver.getOrCreateCurrentUser();
         ManualPortfolioPosition p = manualRepo.findByIdAndUser_Id(id, user.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Manuel pozisyon bulunamadi"));
+        investmentPositionEventPublisher.publishClosed(p);
         manualRepo.delete(p);
         recordManualSnapshot(user.getId());
     }
@@ -87,7 +92,7 @@ public class ManualPortfolioService {
 
     private void recordManualSnapshot(Long userId) {
         try {
-            portfolioSnapshotRecorder.record(userId, SnapshotTriggerType.MANUAL, null);
+            portfolioSnapshotRecorder.record(userId, SnapshotTriggerType.MANUAL);
         } catch (Exception e) {
             log.warn("[PORTFOLIO_SNAPSHOT] manual snapshot failed user={}: {}", userId, e.getMessage());
         }

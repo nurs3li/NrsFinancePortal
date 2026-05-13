@@ -14,13 +14,13 @@ public class UserStarredAssetController {
 
     private final UserStarredAssetService userStarredAssetService;
 
-    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping
     public StarredAssetsResponse getMyStarredAssets() {
         return userStarredAssetService.getCurrentUserStarredAssets();
     }
 
-    @PreAuthorize("hasAnyRole('USER', 'FINANCE_MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @PutMapping
     public StarredAssetsResponse updateMyStarredAssets(@RequestBody StarredAssetsUpdateRequest request) {
         return userStarredAssetService.updateCurrentUserStarredAssets(request);

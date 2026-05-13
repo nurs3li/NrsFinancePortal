@@ -27,7 +27,7 @@ public class PortfolioSnapshotRecorder {
     private final PortfolioPerformanceService portfolioPerformanceService;
 
     @Transactional
-    public void record(Long userId, SnapshotTriggerType trigger, Long tradeId) {
+    public void record(Long userId, SnapshotTriggerType trigger) {
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) {
             log.warn("[PORTFOLIO_SNAPSHOT] user not found id={}", userId);
@@ -38,24 +38,14 @@ public class PortfolioSnapshotRecorder {
                 user,
                 Instant.now(),
                 trigger,
-                tradeId,
-                m.combinedValueTry(),
-                m.combinedCostTry(),
-                m.combinedPnlTry(),
-                m.tradeValueTry(),
-                m.tradeCostTry(),
-                m.tradePnlTry(),
-                m.manualValueTry(),
-                m.manualCostTry(),
-                m.manualPnlTry()
+                m.portfolioValueTry(),
+                m.portfolioCostTry(),
+                m.portfolioPnlTry()
         );
         snapshotRepository.save(row);
-        log.info("[PORTFOLIO_SNAPSHOT] saved user={} trigger={} tradeId={}", userId, trigger, tradeId);
+        log.info("[PORTFOLIO_SNAPSHOT] saved user={} trigger={}", userId, trigger);
     }
 
-    /**
-     * Aynı takvim günü için tek günlük kayıt (İstanbul).
-     */
     @Transactional
     public void recordDailyIfMissingForUser(Long userId) {
         User user = userRepository.findById(userId).orElse(null);
@@ -68,6 +58,6 @@ public class PortfolioSnapshotRecorder {
         if (snapshotRepository.existsByUserAndTriggerBetween(userId, SnapshotTriggerType.DAILY, start, end)) {
             return;
         }
-        record(userId, SnapshotTriggerType.DAILY, null);
+        record(userId, SnapshotTriggerType.DAILY);
     }
 }

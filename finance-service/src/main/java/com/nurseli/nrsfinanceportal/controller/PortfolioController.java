@@ -22,7 +22,7 @@ public class PortfolioController {
     private final UnifiedPortfolioService unifiedPortfolioService;
 
     @PostMapping("/manual")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<ManualPortfolioView> addManualPosition(
             @Valid @RequestBody ManualPortfolioCreateRequest request
     ) {
@@ -32,7 +32,7 @@ public class PortfolioController {
     }
 
     @GetMapping("/manual/me")
-    @PreAuthorize("hasAnyRole('USER','FINANCE_MANAGER','ADMIN')")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<List<ManualPortfolioView>> myManualPositions() {
         return ApiResponse.success(
                 manualPortfolioService.listMine()
@@ -43,7 +43,7 @@ public class PortfolioController {
     }
 
     @PutMapping("/manual/{id}")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<ManualPortfolioView> updateManualPosition(
             @PathVariable Long id,
             @Valid @RequestBody ManualPortfolioCreateRequest request
@@ -54,14 +54,14 @@ public class PortfolioController {
     }
 
     @DeleteMapping("/manual/{id}")
-    @PreAuthorize("hasRole('USER')")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<Void> deleteManualPosition(@PathVariable Long id) {
         manualPortfolioService.delete(id);
         return ApiResponse.success(null);
     }
 
     @GetMapping("/me/unified")
-    @PreAuthorize("hasAnyRole('USER','FINANCE_MANAGER','ADMIN')")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<List<UnifiedPortfolioItemView>> myUnifiedPortfolio() {
         return ApiResponse.success(unifiedPortfolioService.myUnifiedPortfolio());
     }

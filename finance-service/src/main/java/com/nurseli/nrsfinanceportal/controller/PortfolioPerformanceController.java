@@ -15,7 +15,7 @@ public class PortfolioPerformanceController {
     private final PortfolioPerformanceService portfolioPerformanceService;
 
     @GetMapping("/me")
-    @PreAuthorize("hasAnyRole('USER','FINANCE_MANAGER','ADMIN')")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<PortfolioPerformanceDto> myPerformance() {
         return ApiResponse.success(portfolioPerformanceService.myPerformance());
     }

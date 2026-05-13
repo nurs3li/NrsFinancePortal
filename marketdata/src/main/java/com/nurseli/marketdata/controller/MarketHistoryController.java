@@ -21,16 +21,20 @@ public class MarketHistoryController {
             @RequestParam String type,
             @RequestParam String symbol,
             @RequestParam(defaultValue = "180") int days,
-            @RequestParam(defaultValue = "7,30,90") String ma
+            @RequestParam(defaultValue = "7,30,90") String ma,
+            /** EQUITY/FX/CRYPTO + saatlik mum: {@code hourly} ise göstergeler bu seriden hesaplanır. */
+            @RequestParam(defaultValue = "daily") String bucket
     ) {
-        return queryService.getIndicators(type, symbol, days, ma);
+        return queryService.getIndicators(type, symbol, days, ma, bucket);
     }
     @GetMapping("/history/batch")
     public BatchHistoryResponse batchHistory(
             @RequestParam String type,
             @RequestParam List<String> symbols,
-            @RequestParam(defaultValue = "90") int days
+            @RequestParam(defaultValue = "90") int days,
+            /** FX/CRYPTO/EQUITY/METALS {@code hourly}: tick → İstanbul saat dilimi + boş saat taşıma; 1G sonunda 24 nokta. */
+            @RequestParam(defaultValue = "daily") String bucket
     ) {
-        return queryService.getBatchHistory(type, symbols, days);
+        return queryService.getBatchHistory(type, symbols, days, bucket);
     }
 }
