@@ -25,6 +25,11 @@ type DashboardMetricsDto = {
     totalSuspiciousEvents: number;
     topSymbols: TradeCountBySymbol[];
     whaleByLevel: WhaleCountByLevel[];
+    totalInvestorBehaviorEvents?: number;
+    investorByLevel?: WhaleCountByLevel[];
+    avgPortfolioImpactScore?: number;
+    maxPortfolioImpactScore?: number;
+    maxTotalPortfolioValueTry?: number;
 };
 
 type MetricsApiResponse = {

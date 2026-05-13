@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - changeSet:
+      id: v24-restore-user-login-suspended
+      author: nrsfinance
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: login_suspended
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: login_suspended_at
+                  type: timestamptz
+                  constraints:
+                    nullable: true
+              - column:
+                  name: login_suspended_reason
+                  type: varchar(500)
+                  constraints:
+                    nullable: true

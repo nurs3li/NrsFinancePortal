@@ -6,11 +6,11 @@ import com.nurseli.nrsfinanceportal.integration.kafka.NotificationEventKafkaPubl
 import com.nurseli.nrsfinanceportal.repository.UserRepository;
 import com.nurseli.nrsfinanceportal.service.MarketOverviewService;
 import org.junit.jupiter.api.Test;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
@@ -23,24 +23,25 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(MarketOverviewController.class)
 @AutoConfigureMockMvc(addFilters = false)
+@SuppressWarnings("unused") // MockitoBean alanları Spring tarafından enjekte edilir; test gövdesinde doğrudan kullanılmayabilir.
 class MarketOverviewEnvelopeContractTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private MarketOverviewService marketOverviewService;
 
-    @MockBean
+    @MockitoBean
     private NotificationEventKafkaPublisher notificationEventKafkaPublisher;
 
-    @MockBean
+    @MockitoBean
     private UserRepository userRepository;
 
-    @MockBean
+    @MockitoBean
     private StringRedisTemplate stringRedisTemplate;
 
-    @MockBean
+    @MockitoBean
     private RateLimitProperties rateLimitProperties;
 
     @Test

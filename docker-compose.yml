@@ -322,6 +322,7 @@ services:
       APP_OBSERVABILITY_GRAFANA_PUBLIC_BASE_URL: ${APP_OBSERVABILITY_GRAFANA_PUBLIC_BASE_URL:-http://localhost:3001}
       APP_OBSERVABILITY_GRAFANA_TEMPO_UID: ${APP_OBSERVABILITY_GRAFANA_TEMPO_UID:-nrs-tempo}
       NRS_RECEIPT_STORAGE_ROOT: ${NRS_RECEIPT_STORAGE_ROOT:-/data/receipts}
+      APP_KAFKA_LISTENERS_ENABLED: ${APP_KAFKA_LISTENERS_ENABLED:-true}
     volumes:
       - finance_receipts_data:/data/receipts
     logging:
@@ -350,6 +351,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       APP_KAFKA_LEGACY_FINANCE_INGESTION_ENABLED: "false"
+      APP_WHALE_LEGACY_TRANSACTION_ANALYSIS_ENABLED: "false"
+      APP_WHALE_PORTFOLIO_BEHAVIOR_ANALYSIS_ENABLED: "true"
     logging:
       driver: "json-file"
       options:
@@ -408,6 +411,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       APP_KAFKA_LEGACY_FINANCE_INGESTION_ENABLED: "false"
+      APP_WHALE_LEGACY_TRANSACTION_ANALYSIS_ENABLED: "false"
+      APP_METRICS_INVESTOR_BEHAVIOR_INDEXING_ENABLED: "true"
     logging:
       driver: "json-file"
       options:

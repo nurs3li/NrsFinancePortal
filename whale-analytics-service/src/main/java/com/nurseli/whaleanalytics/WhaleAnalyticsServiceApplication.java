@@ -1,7 +1,6 @@
 package com.nurseli.whaleanalytics;
 
 import com.nurseli.whaleanalytics.config.InvestorBehaviorAnalysisProperties;
-import com.nurseli.whaleanalytics.config.LegacyWhaleTransactionIngestionCondition;
 import com.nurseli.whaleanalytics.config.WhaleFeatureProperties;
 import com.nurseli.whaleanalytics.config.WhaleKafkaTopicProperties;
 import jakarta.annotation.PostConstruct;
