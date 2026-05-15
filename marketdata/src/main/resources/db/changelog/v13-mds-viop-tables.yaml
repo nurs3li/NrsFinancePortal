@@ -1,0 +1,106 @@
+databaseChangeLog:
+  - changeSet:
+      id: v13-mds-viop-price-history
+      author: marketdata
+      changes:
+        - createTable:
+            tableName: mds_viop_price_history
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_mds_viop_price_history
+                    nullable: false
+              - column: { name: contract_code, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: underlying, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: asset_class, type: VARCHAR(32), constraints: { nullable: false } }
+              - column: { name: segment, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: price_time, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: price, type: "NUMERIC(24,8)", constraints: { nullable: false } }
+              - column: { name: period_minutes, type: INTEGER, constraints: { nullable: false } }
+              - column: { name: source, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: provider_timestamp, type: TIMESTAMP }
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints: { nullable: false }
+        - addUniqueConstraint:
+            tableName: mds_viop_price_history
+            columnNames: contract_code, price_time, period_minutes, source
+            constraintName: uq_mds_viop_price_history_natural
+        - createIndex:
+            tableName: mds_viop_price_history
+            indexName: idx_mds_viop_price_history_contract_time
+            columns:
+              - column:
+                  name: contract_code
+              - column:
+                  name: price_time
+
+  - changeSet:
+      id: v13-mds-viop-snapshot
+      author: marketdata
+      changes:
+        - createTable:
+            tableName: mds_viop_snapshot
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_mds_viop_snapshot
+                    nullable: false
+              - column: { name: contract_code, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: underlying, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: asset_class, type: VARCHAR(32), constraints: { nullable: false } }
+              - column: { name: segment, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: update_date, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: bid, type: "NUMERIC(24,8)" }
+              - column: { name: ask, type: "NUMERIC(24,8)" }
+              - column: { name: low, type: "NUMERIC(24,8)" }
+              - column: { name: high, type: "NUMERIC(24,8)" }
+              - column: { name: last, type: "NUMERIC(24,8)" }
+              - column: { name: day_close, type: "NUMERIC(24,8)" }
+              - column: { name: open_price, type: "NUMERIC(24,8)" }
+              - column: { name: change_amount, type: "NUMERIC(24,8)" }
+              - column: { name: change_percent, type: "NUMERIC(12,6)" }
+              - column: { name: quantity, type: "NUMERIC(24,8)" }
+              - column: { name: volume, type: "NUMERIC(24,8)" }
+              - column: { name: settlement, type: "NUMERIC(24,8)" }
+              - column: { name: pre_settlement, type: "NUMERIC(24,8)" }
+              - column: { name: limit_up, type: "NUMERIC(24,8)" }
+              - column: { name: limit_down, type: "NUMERIC(24,8)" }
+              - column: { name: price_step, type: "NUMERIC(24,8)" }
+              - column: { name: initial_margin, type: "NUMERIC(24,8)" }
+              - column: { name: week_low, type: "NUMERIC(24,8)" }
+              - column: { name: week_high, type: "NUMERIC(24,8)" }
+              - column: { name: week_close, type: "NUMERIC(24,8)" }
+              - column: { name: month_low, type: "NUMERIC(24,8)" }
+              - column: { name: month_high, type: "NUMERIC(24,8)" }
+              - column: { name: month_close, type: "NUMERIC(24,8)" }
+              - column: { name: year_close, type: "NUMERIC(24,8)" }
+              - column: { name: prev_year_close, type: "NUMERIC(24,8)" }
+              - column: { name: source, type: VARCHAR(64), constraints: { nullable: false } }
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints: { nullable: false }
+        - addUniqueConstraint:
+            tableName: mds_viop_snapshot
+            columnNames: contract_code, update_date, source
+            constraintName: uq_mds_viop_snapshot_natural
+        - createIndex:
+            tableName: mds_viop_snapshot
+            indexName: idx_mds_viop_snapshot_contract_update
+            columns:
+              - column:
+                  name: contract_code
+              - column:
+                  name: update_date

@@ -1,0 +1,97 @@
+databaseChangeLog:
+  - changeSet:
+      id: v16-inflation-index-monthly
+      author: nrs
+      changes:
+        - createTable:
+            tableName: inflation_index_monthly
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: indicator_type
+                  type: VARCHAR(8)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: series_code
+                  type: VARCHAR(48)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: category
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: frequency
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: unit
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: base_year
+                  type: SMALLINT
+                  constraints:
+                    nullable: true
+              - column:
+                  name: country
+                  type: VARCHAR(4)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: observation_month
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: index_value
+                  type: NUMERIC(19, 6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: monthly_change_pct
+                  type: NUMERIC(19, 6)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: annual_change_pct
+                  type: NUMERIC(19, 6)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: inflation_index_monthly
+            columnNames: indicator_type, series_code, observation_month
+            constraintName: uk_inflation_index_monthly_key
+        - createIndex:
+            tableName: inflation_index_monthly
+            indexName: idx_inflation_index_monthly_type_month
+            columns:
+              - column:
+                  name: indicator_type
+              - column:
+                  name: observation_month

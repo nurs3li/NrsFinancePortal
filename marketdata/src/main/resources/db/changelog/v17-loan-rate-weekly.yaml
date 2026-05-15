@@ -1,0 +1,77 @@
+databaseChangeLog:
+  - changeSet:
+      id: v17-loan-rate-weekly
+      author: nrs
+      changes:
+        - createTable:
+            tableName: loan_rate_weekly_observation
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: series_code
+                  type: VARCHAR(48)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sub_type
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: observed_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: rate_percent
+                  type: NUMERIC(19, 6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: frequency
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: unit
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: category
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: loan_rate_weekly_observation
+            columnNames: series_code, observed_date
+            constraintName: uk_loan_rate_weekly_series_date
+        - createIndex:
+            tableName: loan_rate_weekly_observation
+            indexName: idx_loan_rate_weekly_subtype_date
+            columns:
+              - column:
+                  name: sub_type
+              - column:
+                  name: observed_date

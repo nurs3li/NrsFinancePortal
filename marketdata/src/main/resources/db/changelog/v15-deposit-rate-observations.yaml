@@ -1,0 +1,87 @@
+databaseChangeLog:
+  - changeSet:
+      id: 015-deposit-rate-observation
+      author: marketdata
+      changes:
+        - createTable:
+            tableName: deposit_rate_observation
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: series_code
+                  type: VARCHAR(48)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: category
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: frequency
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: unit
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: flow_type
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: currency
+                  type: VARCHAR(8)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: term
+                  type: VARCHAR(8)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: observation_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: rate_value
+                  type: NUMERIC(19, 8)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: deposit_rate_observation
+            columnNames: series_code, observation_date
+            constraintName: uk_deposit_rate_series_date
+        - createIndex:
+            tableName: deposit_rate_observation
+            indexName: idx_deposit_rate_currency_term_date
+            columns:
+              - column:
+                  name: currency
+              - column:
+                  name: term
+              - column:
+                  name: observation_date
