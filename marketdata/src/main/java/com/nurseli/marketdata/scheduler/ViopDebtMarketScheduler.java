@@ -7,8 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * VIOP artık yalnızca CSV backfill ile beslenir; canlı ingest yok.
- * Borç enstrümanları için periyodik ingest burada kalır.
+ * Borç enstrümanları için periyodik ingest (VIOP canlı akışı ayrı servislerde).
  */
 @Component
 @RequiredArgsConstructor
@@ -17,7 +16,7 @@ public class ViopDebtMarketScheduler {
 
     private final DebtIngestService debtIngestService;
 
-    @Scheduled(fixedDelay = 300_000, initialDelay = 60_000)
+    @Scheduled(fixedDelay = 3_600_000, initialDelay = 60_000)
     public void ingestDebt() {
         try {
             debtIngestService.ingestLatest();

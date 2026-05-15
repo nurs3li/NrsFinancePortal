@@ -1,0 +1,62 @@
+databaseChangeLog:
+  - changeSet:
+      id: v25-manual-position-investment-analysis
+      author: nrsfinance
+      changes:
+        - addColumn:
+            tableName: manual_portfolio_positions
+            columns:
+              - column:
+                  name: status
+                  type: varchar(20)
+                  defaultValue: OPEN
+                  constraints:
+                    nullable: false
+              - column:
+                  name: buy_fee
+                  type: numeric(38, 8)
+                  defaultValueNumeric: 0
+              - column:
+                  name: sell_date
+                  type: date
+              - column:
+                  name: sell_price
+                  type: numeric(38, 8)
+              - column:
+                  name: sell_fee
+                  type: numeric(38, 8)
+                  defaultValueNumeric: 0
+              - column:
+                  name: buy_price_source
+                  type: varchar(40)
+                  defaultValue: USER_INPUT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: buy_price_resolved_date
+                  type: date
+              - column:
+                  name: buy_price_override
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sell_price_source
+                  type: varchar(40)
+              - column:
+                  name: sell_price_resolved_date
+                  type: date
+              - column:
+                  name: sell_price_override
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+        - sql:
+            sql: |
+              UPDATE manual_portfolio_positions
+              SET buy_price_source = 'USER_INPUT',
+                  buy_price_override = true,
+                  buy_price_resolved_date = buy_date
+              WHERE buy_price_resolved_date IS NULL;

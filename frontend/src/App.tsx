@@ -12,6 +12,7 @@ import { HomeRedirect } from './components/HomeRedirect';
 import { LoginRedirect } from './components/LoginRedirect';
 import { News } from './pages/News';
 import { Market } from './pages/Market';
+import { MarketMacroPage } from './pages/MarketMacroPage';
 import { MarketHeatmap } from './pages/MarketHeatmap';
 import { Portfolio } from './pages/Portfolio';
 import { Transactions } from './pages/Transactions';
@@ -68,6 +69,14 @@ function App() {
                                     element={
                                         <ProtectedRoute>
                                             <MarketHeatmap />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/market/macro"
+                                    element={
+                                        <ProtectedRoute>
+                                            <MarketMacroPage />
                                         </ProtectedRoute>
                                     }
                                 />

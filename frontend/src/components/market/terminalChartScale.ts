@@ -1,8 +1,24 @@
-export type TerminalChartRange = '1D' | '1W' | '1M' | '1Y';
+export type TerminalChartRange = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | '2Y';
 
+/** `chartTfLabel` / UI kısa etiket → iç aralık anahtarı */
 export function parseTerminalChartRange(label: string | undefined): TerminalChartRange {
-    if (label === '1D' || label === '1W' || label === '1M' || label === '1Y') return label;
-    return '1M';
+    if (!label) return '1M';
+    const k = label.trim();
+    const map: Record<string, TerminalChartRange> = {
+        '1D': '1D',
+        '1G': '1D',
+        '1W': '1W',
+        '1H': '1W',
+        '1M': '1M',
+        '1A': '1M',
+        '3M': '3M',
+        '3A': '3M',
+        '6M': '6M',
+        '6A': '6M',
+        '1Y': '1Y',
+        '2Y': '2Y',
+    };
+    return map[k] ?? '1M';
 }
 
 /**
@@ -26,6 +42,7 @@ export function computeTerminalTimeScaleLayout(
     barSpacing = Math.max(1.25, Math.min(48, barSpacing));
     const minBarSpacing = Math.max(0.5, Math.min(8, barSpacing * 0.4));
     const fewBars = n <= 6;
-    const rightOffset = fewBars ? 6 : range === '1Y' || range === '1M' ? 3 : 5;
+    const longHorizon = range === '1Y' || range === '2Y' || range === '6M' || range === '3M' || range === '1M';
+    const rightOffset = fewBars ? 6 : longHorizon ? 3 : 5;
     return { barSpacing, minBarSpacing, rightOffset };
 }

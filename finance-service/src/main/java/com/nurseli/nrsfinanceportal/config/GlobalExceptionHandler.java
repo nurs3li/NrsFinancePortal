@@ -1,5 +1,6 @@
 package com.nurseli.nrsfinanceportal.config;
 
+import com.nurseli.nrsfinanceportal.common.exception.ApiBusinessException;
 import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.common.response.ApiErrorCode;
 import com.nurseli.nrsfinanceportal.domain.user.Role;
@@ -73,6 +74,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(errorBody(ApiErrorCode.BAD_REQUEST, ex.getMessage(), request)));
+    }
+
+    @ExceptionHandler(ApiBusinessException.class)
+    public ResponseEntity<ApiResponse<?>> handleBusiness(ApiBusinessException ex, HttpServletRequest request) {
+        log.warn("[EXCEPTION] ApiBusinessException {}: {}", ex.getErrorCode(), ex.getMessage());
+        return ResponseEntity
+                .status(ex.getStatus())
+                .body(ApiResponse.error(errorBody(ex.getErrorCode(), ex.getMessage(), request)));
     }
 
     @ExceptionHandler(ResponseStatusException.class)

@@ -3,6 +3,7 @@ package com.nurseli.marketdata.application;
 import com.nurseli.marketdata.api.dto.ViopContractResponse;
 import com.nurseli.marketdata.api.dto.ViopMarketWatchResponse;
 import com.nurseli.marketdata.api.dto.ViopSnapshotResponse;
+import com.nurseli.marketdata.config.MarketViopProperties;
 import com.nurseli.marketdata.config.ViopQueryProperties;
 import com.nurseli.marketdata.domain.derivatives.DerivativeContract;
 import com.nurseli.marketdata.domain.derivatives.DerivativeSnapshot;
@@ -18,6 +19,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -30,6 +32,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -45,6 +48,7 @@ public class ViopQueryService {
     private final OpenInterestSnapshotRepository openInterestSnapshotRepository;
     private final ViopContractParser viopContractParser;
     private final ViopQueryProperties queryProperties;
+    private final MarketViopProperties marketViopProperties;
 
     /**
      * Whitelist'i normalize edilmiş kodlardan oluşan bir Set olarak sunar.
@@ -82,6 +86,28 @@ public class ViopQueryService {
     }
 
     public List<ViopContractResponse> contracts() {
+        boolean wlIndex = marketViopProperties.getWhitelist().getIndex() != null
+                && !marketViopProperties.getWhitelist().getIndex().isEmpty();
+        boolean wlFx = marketViopProperties.getWhitelist().getFx() != null
+                && !marketViopProperties.getWhitelist().getFx().isEmpty();
+        boolean wlPm = marketViopProperties.getWhitelist().getPreciousMetal() != null
+                && !marketViopProperties.getWhitelist().getPreciousMetal().isEmpty();
+        boolean wlEq = marketViopProperties.getWhitelist().getEquity() != null
+                && !marketViopProperties.getWhitelist().getEquity().isEmpty();
+        if (marketViopProperties.isEnabled() && (wlIndex || wlFx || wlPm || wlEq)) {
+            Stream<MarketViopProperties.IndexEntry> indexStream =
+                    wlIndex ? marketViopProperties.getWhitelist().getIndex().stream() : Stream.empty();
+            Stream<MarketViopProperties.IndexEntry> fxStream =
+                    wlFx ? marketViopProperties.getWhitelist().getFx().stream() : Stream.empty();
+            Stream<MarketViopProperties.IndexEntry> pmStream =
+                    wlPm ? marketViopProperties.getWhitelist().getPreciousMetal().stream() : Stream.empty();
+            Stream<MarketViopProperties.IndexEntry> eqStream =
+                    wlEq ? marketViopProperties.getWhitelist().getEquity().stream() : Stream.empty();
+            return Stream.concat(Stream.concat(Stream.concat(indexStream, fxStream), pmStream), eqStream)
+                    .filter(MarketViopProperties.IndexEntry::isEnabled)
+                    .map(this::contractFromWhitelist)
+                    .toList();
+        }
         Set<String> allowed = allowedNormalizedCodes();
         return contractRepository.findAll().stream()
                 .filter(c -> isWhitelisted(c.getContractCode(), allowed))
@@ -104,6 +130,23 @@ public class ViopQueryService {
                         c.getViopSeqMoveTrend()
                 ))
                 .toList();
+    }
+
+    private ViopContractResponse contractFromWhitelist(MarketViopProperties.IndexEntry e) {
+        String code = viopContractParser.normalizeContractCode(e.getContractCode());
+        String expiry = YearMonth.of(e.getMaturityYear(), e.getMaturityMonth()).atEndOfMonth().toString();
+        return new ViopContractResponse(
+                code,
+                e.getUnderlying(),
+                expiry,
+                "FUTURES",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     public List<ViopSnapshotResponse> latest() {

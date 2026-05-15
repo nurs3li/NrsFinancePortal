@@ -19,4 +19,9 @@ public class EquityProperties {
      * Örn. son mum 10 Mayıs iken 1–9 Mayıs boşsa, sadece 11 Mayıs'tan çekmek yetmez; Yahoo/Stooq penceresi geriye genişletilir.
      */
     private int incrementalGapHealDays = 21;
+
+    /**
+     * US equity günlük geçmişi için üst sınır (takvim günü): batch/history API, incremental penceresi ve startup seed ile uyumlu.
+     */
+    private int maxHistoryDays = 730;
 }

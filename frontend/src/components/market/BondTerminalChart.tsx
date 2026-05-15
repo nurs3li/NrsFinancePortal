@@ -27,6 +27,8 @@ type Props = {
     timeframeLabel?: string;
     trendLabel?: 'UP' | 'DOWN';
     tokens: ThemeSlice;
+    /** false: yalnızca piyasa fiyatı (TRY); sağ eksende yield / getiri serisi gösterilmez. */
+    showYieldSeries?: boolean;
 };
 
 function chartTimeKey(value: Time): string {
@@ -36,7 +38,17 @@ function chartTimeKey(value: Time): string {
     return String(value);
 }
 
-function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLabel, trendLabel, tokens }: Props) {
+function BondTerminalChartImpl({
+    points,
+    ma7,
+    ma21,
+    showMa,
+    loading,
+    timeframeLabel,
+    trendLabel,
+    tokens,
+    showYieldSeries = true,
+}: Props) {
     const chartRef = useRef<HTMLDivElement>(null);
     const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null);
     const priceAreaRef = useRef<ReturnType<ReturnType<typeof createChart>['addAreaSeries']> | null>(null);
@@ -53,10 +65,14 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
     const rangeRef = useRef(parseTerminalChartRange(timeframeLabel));
     const crosshairRafRef = useRef<(() => void) | null>(null);
     const tokensRef = useRef(tokens);
+    const showYieldRef = useRef(showYieldSeries);
     useEffect(() => {
         tokensRef.current = tokens;
     });
-    const [hover, setHover] = useState<{ time: string; price: number; yieldPct: number } | null>(null);
+    useEffect(() => {
+        showYieldRef.current = showYieldSeries;
+    });
+    const [hover, setHover] = useState<{ time: string; price: number; yieldPct: number | null } | null>(null);
     const chartHeight = 520;
 
     const sorted = useMemo(() => {
@@ -81,11 +97,11 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
                 textColor: t.text,
             },
             grid: {
-                vertLines: { color: 'rgba(71, 85, 105, 0.25)' },
-                horzLines: { color: 'rgba(71, 85, 105, 0.25)' },
+                vertLines: { color: 'rgba(148, 163, 184, 0.25)' },
+                horzLines: { color: 'rgba(148, 163, 184, 0.25)' },
             },
             leftPriceScale: { visible: true, borderColor: t.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
-            rightPriceScale: { visible: true, borderColor: t.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
+            rightPriceScale: { visible: showYieldSeries, borderColor: t.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
             timeScale: {
                 borderColor: t.border,
                 timeVisible: true,
@@ -116,6 +132,7 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
             lastValueVisible: true,
         });
         yieldLineRef.current = yieldLine;
+        yieldLine.applyOptions({ visible: showYieldSeries, lastValueVisible: showYieldSeries });
 
         const ma7Series = chart.addLineSeries({
             priceScaleId: 'left',
@@ -163,7 +180,11 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
                 const key = chartTimeKey(p.time);
                 const row = dataByKeyRef.current[key] ?? null;
                 const next = row
-                    ? { time: String(row.time).slice(0, 10), price: row.price, yieldPct: row.yieldPct }
+                    ? {
+                          time: String(row.time).slice(0, 10),
+                          price: row.price,
+                          yieldPct: showYieldRef.current ? row.yieldPct : null,
+                      }
                     : null;
                 setHover((prev) => {
                     if (!next) return prev == null ? prev : null;
@@ -263,11 +284,20 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
                 .filter((p) => Number.isFinite(p.price) && p.price > 0)
                 .map((p) => ({ time: toChartTime(p.time), value: p.price }))
         );
-        yieldLineRef.current?.setData(
-            sorted
-                .filter((p) => Number.isFinite(p.yieldPct))
-                .map((p) => ({ time: toChartTime(p.time), value: p.yieldPct }))
-        );
+        if (showYieldSeries) {
+            yieldLineRef.current?.setData(
+                sorted
+                    .filter((p) => Number.isFinite(p.yieldPct))
+                    .map((p) => ({ time: toChartTime(p.time), value: p.yieldPct }))
+            );
+        } else {
+            yieldLineRef.current?.setData([]);
+        }
+        try {
+            chart.priceScale('right').applyOptions({ visible: showYieldSeries });
+        } catch {
+            /* lightweight-charts sürümü */
+        }
         ma7Ref.current?.setData(showMa ? ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
         ma21Ref.current?.setData(showMa ? ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
         volumeRef.current?.setData(
@@ -296,21 +326,25 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
                 hasInitialFitRef.current = true;
             });
         }
-    }, [loading, sorted, ma7, ma21, showMa, timeframeLabel]);
+    }, [loading, sorted, ma7, ma21, showMa, timeframeLabel, showYieldSeries]);
 
     const showChart = !loading && sorted.length >= 2;
     const emptyMessage = loading
         ? 'Grafik yükleniyor...'
         : !sorted.length
-            ? 'Tahvil fiyat/getiri verisi bulunamadı.'
+            ? showYieldSeries
+                ? 'Tahvil fiyat / yield serisi bulunamadı.'
+                : 'Tahvil piyasa fiyatı verisi bulunamadı.'
             : sorted.length < 2
                 ? 'Tahvil grafik için en az 2 veri noktası gerekli.'
                 : null;
 
+    const chartTitle = showYieldSeries ? 'Tahvil — Piyasa fiyatı ve yield (veri varsa)' : 'Tahvil — Piyasa fiyatı (TRY)';
+
     return (
         <div className="terminal-chart-wrap">
             <div className="terminal-chart-header">
-                <div className="terminal-chart-title">Tahvil Analiz (Fiyat + Getiri)</div>
+                <div className="terminal-chart-title">{chartTitle}</div>
                 <div className="terminal-chart-badges">
                     {timeframeLabel ? <span className="terminal-chart-badge">Zaman: {timeframeLabel}</span> : null}
                     {trendLabel ? (
@@ -321,12 +355,18 @@ function BondTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
                 </div>
                 {hover ? (
                     <div className="terminal-ohlc">
-                        <span>Fiyat {hover.price.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</span>
-                        <span>YTM %{hover.yieldPct.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</span>
+                        <span>Piyasa fiyatı {hover.price.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</span>
+                        {showYieldSeries && hover.yieldPct != null ? (
+                            <span>Yield %{hover.yieldPct.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</span>
+                        ) : null}
                         <span>{hover.time}</span>
                     </div>
                 ) : (
-                    <div className="terminal-ohlc muted">Fiyat ve getiri için imleci grafik üzerine getir</div>
+                    <div className="terminal-ohlc muted">
+                        {showYieldSeries
+                            ? 'Piyasa fiyatı ve yield için imleci grafik üzerine getir'
+                            : 'Piyasa fiyatı (fiyat performansı) için imleci grafik üzerine getir'}
+                    </div>
                 )}
             </div>
             {emptyMessage ? <div className="terminal-chart-empty">{emptyMessage}</div> : null}

@@ -13,5 +13,13 @@ public record DebtSnapshotResponse(
         String source,
         LocalDateTime asOf,
         String quality,
-        Boolean synthetic
+        Boolean synthetic,
+        /** Yapılandırılmış YTM / simple / compound verisi yoksa {@code false}. */
+        Boolean hasStructuredYieldData,
+        /** Panel sınıflandırması — fiyat performansı bağlamı. */
+        String bondDataCategory,
+        /** Kirli fiyat birimi. */
+        String dirtyPriceUnit,
+        /** {@code yieldPct} alanı gerçek YTM değilse {@code false} (EVDS ORAN vb.). */
+        Boolean yieldFieldRepresentsYtm
 ) {}

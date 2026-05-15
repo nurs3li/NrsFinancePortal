@@ -15,6 +15,8 @@ type CandlePoint = {
 
 type Props = {
     title: string;
+    /** İkincil açıklama (ör. BIST günlük veri notu) */
+    subtitle?: string;
     candles: CandlePoint[];
     ma7: { time: string; value: number }[];
     ma21: { time: string; value: number }[];
@@ -38,6 +40,7 @@ function chartTimeKey(value: Time): string {
 
 function SpotTerminalChartImpl({
     title,
+    subtitle,
     candles,
     ma7,
     ma21,
@@ -203,6 +206,7 @@ function SpotTerminalChartImpl({
         <div className="terminal-chart-wrap">
             <div className="terminal-chart-header">
                 <div className="terminal-chart-title">{title}</div>
+                {subtitle ? <div className="terminal-chart-subtitle">{subtitle}</div> : null}
                 <div className="terminal-chart-badges">
                     {timeframeLabel ? <span className="terminal-chart-badge">Zaman: {timeframeLabel}</span> : null}
                     {trendLabel ? (

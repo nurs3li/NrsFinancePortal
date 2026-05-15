@@ -24,8 +24,8 @@ import java.util.Objects;
 public class SimulationService {
 
     /**
-     * USD cinsinden hisse/kripto geçmiş serisi TRY'ye çevrilirken kullanıcıya gösterilecek kısa uyarı kodu
-     * (frontend i18n anahtarı ile eşlenir). Fon/TL varlıkları için kullanılmaz.
+     * USD cinsinden hisse/kripto/fon geçmiş serisi TRY'ye çevrilirken kullanıcıya gösterilecek kısa uyarı kodu
+     * (frontend i18n anahtarı ile eşlenir). TRY kotasyonlu varlıklar (FX, METAL, BIST) için kullanılmaz.
      */
     public static final String NOTICE_USD_DENOMINATED = "SIMULATION_USD_DENOMINATED";
 
@@ -56,8 +56,15 @@ public class SimulationService {
         String symbol = SymbolNormalizer.normalize(type, rawSymbol.trim().toUpperCase());
         // Add a small buffer to avoid boundary misses from provider/day-cutoff behavior.
         int days = Math.min(dateToDaysHelper.toDays(buyDate) + 7, 3650);
+        LocalDate today = LocalDate.now();
 
-        List<MarketPriceHistoryDto> history = marketDataClient.getHistory(type, symbol, days);
+        List<MarketPriceHistoryDto> history;
+        if (type == AssetType.BIST) {
+            LocalDate from = buyDate.minusDays(30);
+            history = marketDataClient.getBistHistoryBetween(symbol, from, today);
+        } else {
+            history = marketDataClient.getHistory(type, symbol, days);
+        }
         if (history == null) {
             history = List.of();
         }
@@ -268,9 +275,9 @@ public class SimulationService {
         return v == null ? BigDecimal.ZERO : v;
     }
 
-    /** Hisse ve kripto: geçmiş USD fiyat × tarihsel USDTRY; fon: eski davranış (tüm seri × güncel spot USDTRY). */
+    /** USD kotasyonlu geçmiş: STOCK, CRYPTO, FUND — tarihsel USDTRY ile çarpılır. BIST/FX/METAL zaten TRY veya ayrı mantık. */
     private static boolean needsHistoricalUsdTrySeries(AssetType type) {
-        return type == AssetType.STOCK || type == AssetType.CRYPTO;
+        return type == AssetType.STOCK || type == AssetType.CRYPTO || type == AssetType.FUND;
     }
 
     private BigDecimal resolveUsdTryRate() {
@@ -284,13 +291,13 @@ public class SimulationService {
 
     /**
      * USD kotasyonlu varlık geçmişini TRY'ye çevirir.
-     * <p><b>STOCK / CRYPTO:</b> market-data günlük USDTRY geçmişi çekilir; her varlık mumunun {@code timestamp}
+     * <p><b>STOCK / CRYPTO / FUND:</b> market-data günlük USDTRY geçmişi çekilir; her varlık mumunun {@code timestamp}
      * değeri için, aynı veya önceki zamandaki son USDTRY kapanışı (mid) çarpan olarak kullanılır
      * ({@code usdTry.timestamp <= asset.timestamp}). Günlük mumlar genelde gün başına hizalı {@code LocalDateTime}
      * taşır; kural bu yüzden takvim günü ile tutarlıdır.</p>
      * <p>Eksik kur: önce tüm USDTRY noktaları varlık zamanından sonraysa serinin en erken kuru; hâlâ geçersizse
      * güncel spot {@code spotUsdTryFallback}; o da yoksa {@code 1} (geriye dönük).</p>
-     * <p><b>FUND:</b> Önceki tek çarpan davranışı korunur (tüm noktalar × güncel spot USDTRY).</p>
+     * <p><b>BIST / FX / METAL:</b> Geçmiş zaten TRY (veya FX için kur birimi); bu metotta değiştirilmez.</p>
      */
     private List<MarketPriceHistoryDto> normalizeHistoryPricesToTry(
             List<MarketPriceHistoryDto> history,
@@ -300,9 +307,6 @@ public class SimulationService {
     ) {
         if (history == null || history.isEmpty()) {
             return List.of();
-        }
-        if (type == AssetType.FUND) {
-            return multiplyHistoryByFlatRate(history, spotUsdTryFallback);
         }
         if (!needsHistoricalUsdTrySeries(type)) {
             return history;
@@ -325,23 +329,6 @@ public class SimulationService {
                             h.timestamp()
                     );
                 })
-                .toList();
-    }
-
-    private List<MarketPriceHistoryDto> multiplyHistoryByFlatRate(
-            List<MarketPriceHistoryDto> history,
-            BigDecimal rate
-    ) {
-        if (rate == null || rate.signum() <= 0) {
-            return history;
-        }
-        return history.stream()
-                .filter(Objects::nonNull)
-                .map(h -> new MarketPriceHistoryDto(
-                        nz(h.buyPrice()).multiply(rate),
-                        nz(h.sellPrice()).multiply(rate),
-                        h.timestamp()
-                ))
                 .toList();
     }
 

@@ -47,7 +47,22 @@ export default defineConfig(({ mode }) => {
 
     return {
         plugins: [react()],
+        test: {
+            globals: true,
+            environment: 'node',
+            include: ['src/**/*.test.ts'],
+        },
         envDir: fe,
         define: defineEnv,
+        server: {
+            /** Docker’da port publish için (tarayıcı host makineden bağlanır) */
+            host: true,
+            port: 5173,
+            strictPort: true,
+            watch:
+                process.env.CHOKIDAR_USEPOLLING === 'true'
+                    ? { usePolling: true, interval: 1000 }
+                    : undefined,
+        },
     }
 })

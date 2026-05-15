@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.equity.history-backfill")
 public class EquityHistoryBackfillProperties {
     private boolean enabled = false;
-    private int periodDays = 365;
+    private int periodDays = 730;
     private int batchSize = 20;
     private boolean shutdownOnComplete = false;
 }

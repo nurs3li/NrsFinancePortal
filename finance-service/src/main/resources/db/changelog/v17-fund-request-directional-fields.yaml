@@ -24,3 +24,15 @@ databaseChangeLog:
               - column:
                   name: destination_bank_name
                   type: varchar(200)
+
+
+
+
+
+
+
+
+
+
+
+

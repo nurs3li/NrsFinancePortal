@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -17,24 +19,29 @@ import java.util.stream.Collectors;
 public class MarketDashboardService {
 
     /*
-     * Sparkline için pencere: frontend "Trend" kolonu 1G/7G/14G arasında geçiş yapıyor; her
-     * dönemde farklı bir dilim üretebilmek için pencerede en az 14 işlem günü dolu kalmalı.
-     * Takvim günleri (hafta sonu + tatil dahil) ortalama %30 boş gelir, bu yüzden 30 takvim
-     * gününe çıkardık. Eskiden 14 günde Yahoo'dan ~7 nokta dönüyordu ve 7G/14G dilimler aynı
-     * tüm-diziyi alıyordu (kullanıcı şikayeti).
+     * Sparkline için pencere: FX/kripto/emtia/fon terminalde kısa aralıklar; takvim günlerinde
+     * hafta sonu boşlukları için 30 gün ≈ yeterli işlem günü.
      */
     private static final int HISTORY_DAYS = 30;
     /** FX / kripto / emtia / fon: kısa pencerede tek nokta kalırsa sparkline ve % için yeniden dene */
     private static final int HISTORY_DAYS_LONG = 90;
+    /**
+     * İş Yatırım USD/ons kıymetli madenler: günlük bar seyrek olabildiğinden dashboard spark / horizon
+     * için son 30g yerine 2Y penceresi (market-data {@code validateDays} ile uyumlu).
+     */
+    private static final int METAL_USD_OZ_HISTORY_DAYS = 730;
+    /** US hisse: marketdata ile uyumlu ~2Y günlük seri (dashboard sparkline / uzun aralık). */
+    private static final int EQUITY_HISTORY_DAYS = 730;
     /*
-     * Downsample hedefi 30: gün başına ~1 nokta. Frontend `slice(-7)` ve `slice(-14)` yaparken
-     * gerçek 7 ve 14 günlük dilimleri yakalar, dönemler arası fark net görünür.
+     * Downsample hedefi: kısa varlıklar ~30 nokta; equity için daha uzun seri (2Y) tek görselde
+     * anlamlı çözünürlük.
      */
     private static final int SPARKLINE_POINTS = 30;
+    private static final int EQUITY_SPARKLINE_POINTS = 280;
     private static final String MODE_EQUITY_FINVIZ = "EQUITY_FINVIZ";
     private static final String MODE_MULTI_ASSET = "MULTI_ASSET";
     private static final String HORIZON_1D = "1D";
-    private static final String HORIZON_14D = "14D";
+    private static final String HORIZON_UI_RANGE = "UI_RANGE";
     private static final String WEIGHT_MARKET_CAP = "MARKET_CAP";
     private static final String WEIGHT_EQUAL = "EQUAL";
     private static final String WEIGHT_PRICE_SQRT = "PRICE_SQRT";
@@ -67,6 +74,32 @@ public class MarketDashboardService {
             Map.entry("WMT", "DISCOUNT STORES")
     );
 
+    /** market-data BIST kataloğu ile aynı 20 sembol — tek batch HTTP. */
+    private static final String BIST_HEATMAP_SYMBOLS =
+            "THYAO,ASELS,KCHOL,SAHOL,GARAN,AKBNK,ISCTR,YKBNK,EREGL,TUPRS,BIMAS,MGROS,SISE,FROTO,TOASO,TCELL,ENKAI,PETKM,KOZAL,PGSUS";
+
+    private static final Map<String, String> BIST_INDUSTRY_TR = Map.ofEntries(
+            Map.entry("THYAO", "Türk Hava Yolları"),
+            Map.entry("ASELS", "ASELSAN"),
+            Map.entry("KCHOL", "Koç Holding"),
+            Map.entry("SAHOL", "Sabancı Holding"),
+            Map.entry("GARAN", "Garanti BBVA"),
+            Map.entry("AKBNK", "Akbank"),
+            Map.entry("ISCTR", "İş Bankası (C)"),
+            Map.entry("YKBNK", "Yapı Kredi Bankası"),
+            Map.entry("EREGL", "Ereğli Demir ve Çelik"),
+            Map.entry("TUPRS", "Tüpraş"),
+            Map.entry("BIMAS", "BİM"),
+            Map.entry("MGROS", "Migros"),
+            Map.entry("SISE", "Şişecam"),
+            Map.entry("FROTO", "Ford Otosan"),
+            Map.entry("TOASO", "Tofaş"),
+            Map.entry("TCELL", "Turkcell"),
+            Map.entry("ENKAI", "Enka İnşaat"),
+            Map.entry("PETKM", "Petkim"),
+            Map.entry("KOZAL", "Koza Altın"),
+            Map.entry("PGSUS", "Pegasus")
+    );
     private final MarketOverviewService overviewService;
     private final MarketDataClient marketDataClient;
 
@@ -82,6 +115,7 @@ public class MarketDashboardService {
         processCategory(latest, AssetType.METAL, "METAL", latest.metals().keySet(), sparklines, volatility, heatmapTiles);
         processCategory(latest, AssetType.FUND, "FUND", latest.funds().keySet(), sparklines, volatility, heatmapTiles);
         addEquityTiles(latest, sparklines, volatility, heatmapTiles);
+        addBistHeatmapTiles(sparklines, volatility, heatmapTiles);
 
         return new MarketDashboardResponse(
                 latest,
@@ -92,12 +126,59 @@ public class MarketDashboardService {
                         HORIZON_1D,
                         WEIGHT_MARKET_CAP + "->" + WEIGHT_EQUAL + " (fallback)",
                         MODE_MULTI_ASSET,
-                        HORIZON_14D,
+                        HORIZON_UI_RANGE,
                         WEIGHT_PRICE_SQRT
                 ),
                 volatility,
                 java.time.LocalDateTime.now()
         );
+    }
+
+    private static boolean isUsdPerOunceMetalSymbol(String symbol) {
+        if (symbol == null) {
+            return false;
+        }
+        return symbol.trim().toUpperCase().endsWith("_USD_OZ");
+    }
+
+    /** Isı haritasında "kıymetli maden" — USDT vb. kripto sembolleri (yanlışlıkla metals haritasında) elenir. */
+    private static boolean isPreciousMetalHeatmapSymbol(String symbol) {
+        if (symbol == null) {
+            return false;
+        }
+        String s = symbol.trim().toUpperCase(Locale.ROOT);
+        if (s.isEmpty()) {
+            return false;
+        }
+        if (s.contains("USDT") || s.contains("USDC") || s.contains("BUSD")) {
+            return false;
+        }
+        if (s.endsWith("_USD_OZ") || s.endsWith("_USD_O")) {
+            return true;
+        }
+        return "XAU_TRY".equals(s)
+                || "XAG_TRY".equals(s)
+                || "ALTIN_TRY".equals(s)
+                || s.startsWith("XAU")
+                || s.startsWith("XAG")
+                || s.startsWith("XPT")
+                || s.startsWith("XPD");
+    }
+
+    /** Dashboard ısı haritası / sparkline için ilk geçmiş penceresi (gün). */
+    private static int primaryHistoryDays(AssetType type, String symbol) {
+        if (type == AssetType.METAL && (isUsdPerOunceMetalSymbol(symbol) || isPreciousMetalHeatmapSymbol(symbol))) {
+            return METAL_USD_OZ_HISTORY_DAYS;
+        }
+        return HISTORY_DAYS;
+    }
+
+    /** İlk pencerede yeterli kapanış yoksa genişlet (USD/ons zaten max pencerede). */
+    private static int secondaryHistoryDays(AssetType type, String symbol, int primaryDays) {
+        if (type == AssetType.METAL && (isUsdPerOunceMetalSymbol(symbol) || isPreciousMetalHeatmapSymbol(symbol))) {
+            return primaryDays;
+        }
+        return HISTORY_DAYS_LONG;
     }
 
     private void addEquityTiles(
@@ -115,7 +196,7 @@ public class MarketDashboardService {
             String equityWeightMode = hasMarketCap ? WEIGHT_MARKET_CAP : WEIGHT_EQUAL;
             String sector = EQUITY_SECTOR.getOrDefault(symbol, "EQUITY");
             String industry = EQUITY_INDUSTRY.getOrDefault(symbol, "OTHER");
-            List<MarketPriceHistoryDto> raw = fetchHistory(AssetType.STOCK, symbol, HISTORY_DAYS);
+            List<MarketPriceHistoryDto> raw = fetchHistory(AssetType.STOCK, symbol, EQUITY_HISTORY_DAYS);
             List<BigDecimal> closes = midClosesSorted(raw);
             if (closes.size() < 2) {
                 List<MarketPriceHistoryDto> longer = fetchHistory(AssetType.STOCK, symbol, HISTORY_DAYS_LONG);
@@ -127,8 +208,9 @@ public class MarketDashboardService {
             }
 
             if (closes.size() >= 2) {
-                sparklines.add(new SparklineEntry("STOCK", symbol, downsample(closes, SPARKLINE_POINTS)));
-                volatility.add(new VolatilityEntry("STOCK", symbol, round4(dailyReturnStdDev(closes))));
+                List<BigDecimal> closesForVol = closesForShortTermVol(closes);
+                sparklines.add(new SparklineEntry("STOCK", symbol, downsample(closes, EQUITY_SPARKLINE_POINTS)));
+                volatility.add(new VolatilityEntry("STOCK", symbol, round4(dailyReturnStdDev(closesForVol))));
                 double pct = pctChange1D(raw);
                 heatmapTiles.add(new HeatmapTileEntry(
                         sector,
@@ -177,6 +259,53 @@ public class MarketDashboardService {
         }
     }
 
+    private void addBistHeatmapTiles(
+            List<SparklineEntry> sparklines,
+            List<VolatilityEntry> volatility,
+            List<HeatmapTileEntry> heatmapTiles
+    ) {
+        LocalDate to = LocalDate.now(ZoneId.of("Europe/Istanbul"));
+        LocalDate from = to.minusDays(EQUITY_HISTORY_DAYS);
+        Map<String, List<MarketPriceHistoryDto>> bySym =
+                marketDataClient.getBistBatchHistoryMapped(BIST_HEATMAP_SYMBOLS, from, to);
+        for (String symbolRaw : BIST_HEATMAP_SYMBOLS.split(",")) {
+            String symbol = symbolRaw.trim().toUpperCase(Locale.ROOT);
+            if (symbol.isEmpty()) {
+                continue;
+            }
+            List<MarketPriceHistoryDto> raw = bySym.getOrDefault(symbol, List.of());
+            if (raw.size() < 2) {
+                continue;
+            }
+            List<MarketPriceHistoryDto> sortedRaw =
+                    raw.stream().sorted(Comparator.comparing(MarketPriceHistoryDto::timestamp)).toList();
+            List<BigDecimal> closes = midClosesSorted(raw);
+            if (closes.size() < 2) {
+                continue;
+            }
+            List<BigDecimal> closesForVol = closesForShortTermVol(closes);
+            sparklines.add(new SparklineEntry("BIST", symbol, downsample(closes, EQUITY_SPARKLINE_POINTS)));
+            volatility.add(new VolatilityEntry("BIST", symbol, round4(dailyReturnStdDev(closesForVol))));
+            BigDecimal px = closes.getLast();
+            double weight = layoutWeight(px);
+            String industry = BIST_INDUSTRY_TR.getOrDefault(symbol, symbol);
+            double pct = pctChange1D(sortedRaw);
+            heatmapTiles.add(new HeatmapTileEntry(
+                    "BIST_EQUITY",
+                    industry,
+                    symbol,
+                    "BIST",
+                    round4(pct),
+                    weight,
+                    MODE_EQUITY_FINVIZ,
+                    HORIZON_1D,
+                    WEIGHT_EQUAL,
+                    null,
+                    null
+            ));
+        }
+    }
+
     private void processCategory(
             MarketOverviewResponse latest,
             AssetType type,
@@ -187,14 +316,21 @@ public class MarketDashboardService {
             List<HeatmapTileEntry> heatmapTiles
     ) {
         for (String symbol : symbols) {
-            List<MarketPriceHistoryDto> raw = fetchHistory(type, symbol, HISTORY_DAYS);
+            if (type == AssetType.METAL && !isPreciousMetalHeatmapSymbol(symbol)) {
+                continue;
+            }
+            int primaryDays = primaryHistoryDays(type, symbol);
+            List<MarketPriceHistoryDto> raw = fetchHistory(type, symbol, primaryDays);
             List<BigDecimal> closes = midClosesSorted(raw);
             if (closes.size() < 2 && type != AssetType.STOCK) {
-                List<MarketPriceHistoryDto> longer = fetchHistory(type, symbol, HISTORY_DAYS_LONG);
-                List<BigDecimal> longCloses = midClosesSorted(longer);
-                if (longCloses.size() > closes.size()) {
-                    raw = longer;
-                    closes = longCloses;
+                int secondaryDays = secondaryHistoryDays(type, symbol, primaryDays);
+                if (secondaryDays > primaryDays) {
+                    List<MarketPriceHistoryDto> longer = fetchHistory(type, symbol, secondaryDays);
+                    List<BigDecimal> longCloses = midClosesSorted(longer);
+                    if (longCloses.size() > closes.size()) {
+                        raw = longer;
+                        closes = longCloses;
+                    }
                 }
             }
             BigDecimal px = latestPrice(latest, type, symbol);
@@ -202,7 +338,11 @@ public class MarketDashboardService {
             String sector = sectorFor(assetClass, symbol);
 
             if (closes.size() >= 2) {
-                sparklines.add(new SparklineEntry(assetClass, symbol, downsample(closes, SPARKLINE_POINTS)));
+                int sparkTarget =
+                        type == AssetType.METAL && isPreciousMetalHeatmapSymbol(symbol)
+                                ? EQUITY_SPARKLINE_POINTS
+                                : SPARKLINE_POINTS;
+                sparklines.add(new SparklineEntry(assetClass, symbol, downsample(closes, sparkTarget)));
                 double vol = dailyReturnStdDev(closes);
                 volatility.add(new VolatilityEntry(assetClass, symbol, round4(vol)));
                 double pct = pctChangeHeatmapWindow(closes);
@@ -214,7 +354,7 @@ public class MarketDashboardService {
                         round4(pct),
                         weight,
                         MODE_MULTI_ASSET,
-                        HORIZON_14D,
+                        HORIZON_UI_RANGE,
                         WEIGHT_PRICE_SQRT,
                         null,
                         null
@@ -230,7 +370,7 @@ public class MarketDashboardService {
                         0,
                         weight,
                         MODE_MULTI_ASSET,
-                        HORIZON_14D,
+                        HORIZON_UI_RANGE,
                         WEIGHT_PRICE_SQRT,
                         null,
                         null
@@ -244,7 +384,7 @@ public class MarketDashboardService {
                         0,
                         weight,
                         MODE_MULTI_ASSET,
-                        HORIZON_14D,
+                        HORIZON_UI_RANGE,
                         WEIGHT_PRICE_SQRT,
                         null,
                         null
@@ -257,7 +397,7 @@ public class MarketDashboardService {
         return switch (assetClass) {
             case "FX" -> "FOREX";
             case "CRYPTO" -> "CRYPTO";
-            case "METAL" -> "COMMODITIES";
+            case "METAL" -> "PRECIOUS_METALS";
             case "FUND" -> "ETFS & INDEX";
             default -> "OTHER";
         };
@@ -287,6 +427,7 @@ public class MarketDashboardService {
                 StockOverviewDto d = latest.stocks().get(symbol);
                 yield d != null && d.buyPrice() != null && d.buyPrice().signum() > 0 ? d.buyPrice() : BigDecimal.ONE;
             }
+            case BIST -> BigDecimal.ONE;
             default -> BigDecimal.ONE;
         };
     }
@@ -327,6 +468,15 @@ public class MarketDashboardService {
             return d.buyPrice();
         }
         return d.sellPrice();
+    }
+
+    /** Equity 2Y sparkline ile birlikte günlük getiri std. sapması kısa uçta kalsın. */
+    private static List<BigDecimal> closesForShortTermVol(List<BigDecimal> closes) {
+        if (closes == null || closes.isEmpty()) {
+            return List.of();
+        }
+        int take = Math.min(40, closes.size());
+        return closes.subList(closes.size() - take, closes.size());
     }
 
     private static List<BigDecimal> downsample(List<BigDecimal> series, int target) {

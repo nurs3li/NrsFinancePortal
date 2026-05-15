@@ -43,12 +43,13 @@ function MarketCompareLwChartImpl({
 
     useEffect(() => {
         const el = containerRef.current;
-        if (!el || symbols.length < 2 || !rows.length) return;
+        if (!el) return;
 
         const chartRange = parseTerminalChartRange(timeframeLabel);
-        const widthPx = Math.max(320, el.clientWidth);
-        const tsLay = computeTerminalTimeScaleLayout(widthPx, rows.length, chartRange);
+        const widthPx = Math.max(160, Math.floor(el.clientWidth));
         const t = tokensRef.current;
+        const hasData = symbols.length >= 2 && rows.length > 0;
+        const tsLay = computeTerminalTimeScaleLayout(widthPx, hasData ? rows.length : 2, chartRange);
 
         const chart = createChart(el, {
             width: widthPx,
@@ -71,29 +72,45 @@ function MarketCompareLwChartImpl({
             crosshair: { mode: 1 },
         });
 
-        symbols.forEach((sym, i) => {
-            const baseW = lineWidthClamp(lineWidthBySymbol[sym] ?? 2);
-            const line = chart.addLineSeries({
-                color: colors[i % colors.length],
-                lineWidth: baseW,
-                priceLineVisible: false,
-                lastValueVisible: true,
+        if (hasData) {
+            symbols.forEach((sym, i) => {
+                const baseW = lineWidthClamp(lineWidthBySymbol[sym] ?? 2);
+                const line = chart.addLineSeries({
+                    color: colors[i % colors.length],
+                    lineWidth: baseW,
+                    priceLineVisible: false,
+                    lastValueVisible: true,
+                });
+                const pts = rows
+                    .filter((r) => r.values[sym] != null && !Number.isNaN(r.values[sym]))
+                    .map((r) => ({
+                        time: r.time.slice(0, 10) as Time,
+                        value: r.values[sym],
+                    }));
+                line.setData(pts);
             });
-            const pts = rows
-                .filter((r) => r.values[sym] != null && !Number.isNaN(r.values[sym]))
-                .map((r) => ({
-                    time: r.time.slice(0, 10) as Time,
-                    value: r.values[sym],
-                }));
-            line.setData(pts);
-        });
+        } else {
+            const ghost = chart.addLineSeries({
+                color: 'rgba(148, 163, 184, 0.14)',
+                lineWidth: 1,
+                priceLineVisible: false,
+                lastValueVisible: false,
+                crosshairMarkerVisible: false,
+            });
+            const end = new Date();
+            const start = new Date(end.getTime() - 120 * 86_400_000);
+            ghost.setData([
+                { time: start.toISOString().slice(0, 10) as Time, value: 100 },
+                { time: end.toISOString().slice(0, 10) as Time, value: 100 },
+            ]);
+        }
 
         const fit = () => requestAnimationFrame(() => chart.timeScale().fitContent());
         fit();
 
         const onResize = () => {
-            const w = Math.max(320, el.clientWidth);
-            const lay = computeTerminalTimeScaleLayout(w, rows.length, chartRange);
+            const w = Math.max(160, Math.floor(el.clientWidth));
+            const lay = computeTerminalTimeScaleLayout(w, hasData ? rows.length : 2, chartRange);
             chart.applyOptions({
                 width: w,
                 timeScale: {
@@ -123,10 +140,6 @@ function MarketCompareLwChartImpl({
         tokens.text,
         tokens.textMuted,
     ]);
-
-    if (symbols.length < 2 || !rows.length) {
-        return null;
-    }
 
     return <div ref={containerRef} style={{ width: '100%', height }} />;
 }

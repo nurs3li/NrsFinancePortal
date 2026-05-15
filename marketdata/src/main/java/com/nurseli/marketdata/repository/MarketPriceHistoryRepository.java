@@ -94,4 +94,44 @@ public interface MarketPriceHistoryRepository
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
     );
+
+    // --- BIST günlük (HisseTekil) — IS_YATIRIM kaynaklı satırlar ---
+
+    Optional<MarketPriceHistory> findBySymbolAndSourceAndTimestamp(
+            String symbol, String source, LocalDateTime timestamp);
+
+    Optional<MarketPriceHistory> findTopBySymbolAndSourceOrderByTimestampDesc(String symbol, String source);
+
+    List<MarketPriceHistory> findTop2BySymbolAndSourceOrderByTimestampDesc(String symbol, String source);
+
+    long countBySource(String source);
+
+    @Query("SELECT MIN(m.timestamp) FROM MarketPriceHistory m WHERE m.source = :source")
+    Optional<LocalDateTime> findMinTimestampBySource(@Param("source") String source);
+
+    @Query(
+            """
+                    SELECT m FROM MarketPriceHistory m
+                    WHERE m.symbol = :symbol AND m.source = :source
+                      AND m.timestamp >= :start AND m.timestamp < :endExclusive
+                    ORDER BY m.timestamp ASC
+                    """)
+    List<MarketPriceHistory> findBySymbolAndSourceAndTimestampRange(
+            @Param("symbol") String symbol,
+            @Param("source") String source,
+            @Param("start") LocalDateTime start,
+            @Param("endExclusive") LocalDateTime endExclusive);
+
+    @Query(
+            """
+                    SELECT m FROM MarketPriceHistory m
+                    WHERE m.symbol IN :symbols AND m.source = :source
+                      AND m.timestamp >= :start AND m.timestamp < :endExclusive
+                    ORDER BY m.symbol ASC, m.timestamp ASC
+                    """)
+    List<MarketPriceHistory> findBySymbolsAndSourceAndTimestampRange(
+            @Param("symbols") List<String> symbols,
+            @Param("source") String source,
+            @Param("start") LocalDateTime start,
+            @Param("endExclusive") LocalDateTime endExclusive);
 }

@@ -17,23 +17,13 @@ import {
     Legend,
 } from 'recharts';
 import { marketClient } from '../api/client';
+import type { LatestPriceRow } from '../components/market/marketTypes';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 
 type TabId = 'doviz' | 'crypto' | 'metals' | 'funds' | 'equity';
 
-type LatestPrice = {
-    symbol?: string;
-    buyPrice?: number;
-    sellPrice?: number;
-    price?: number;
-    source?: string;
-    timestamp?: string;
-    asOf?: string;
-    qualityFlag?: string;
-    status?: string;
-    message?: string;
-};
+type LatestPrice = LatestPriceRow;
 
 type CandlePoint = {
     t: string;
@@ -145,7 +135,7 @@ export function AdvancedMarket() {
     const tabs: { id: TabId; label: string }[] = [
         { id: 'doviz', label: 'Döviz' },
         { id: 'crypto', label: 'Kripto' },
-        { id: 'metals', label: 'Altın' },
+        { id: 'metals', label: 'Kıymetli madenler' },
         { id: 'funds', label: 'Fonlar' },
         { id: 'equity', label: 'Hisse' },
     ];

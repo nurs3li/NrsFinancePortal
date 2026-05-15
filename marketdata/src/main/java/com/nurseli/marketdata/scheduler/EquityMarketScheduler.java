@@ -21,7 +21,6 @@ import java.util.Optional;
 @Slf4j
 public class EquityMarketScheduler {
 
-    private static final int STARTUP_HISTORY_DAYS = 365;
     private static final int STARTUP_HISTORY_BATCH = 20;
 
     private final EquityPriceIngestService equityPriceIngestService;
@@ -36,9 +35,10 @@ public class EquityMarketScheduler {
     public void equityDailyHistoryOnStartup() {
         try {
             if (initialSeedProperties.isEnabled() && needsHistorySeed()) {
+                int seedDays = Math.max(1, equityProperties.getMaxHistoryDays());
                 log.info("[EQUITY][STARTUP] One-shot history backfill ({} days) then incremental + quote rollup",
-                        STARTUP_HISTORY_DAYS);
-                equityPriceIngestService.fetchAndSaveHistoryBackfill(STARTUP_HISTORY_DAYS, STARTUP_HISTORY_BATCH);
+                        seedDays);
+                equityPriceIngestService.fetchAndSaveHistoryBackfill(seedDays, STARTUP_HISTORY_BATCH);
             } else if (initialSeedProperties.isEnabled()) {
                 log.info("[EQUITY][STARTUP] History seed skipped (DB already warm: minCandles={}, staleDays={})",
                         initialSeedProperties.getMinCandles(), initialSeedProperties.getStaleDays());
@@ -81,7 +81,7 @@ public class EquityMarketScheduler {
         return false;
     }
 
-    @Scheduled(fixedDelay = 600_000) // 10 dakika
+    @Scheduled(fixedDelay = 3_600_000) // 1 saat
     public void fetchEquityQuotes() {
         log.info("[SCHEDULER] Fetching equity quotes from FinHub");
         equityPriceIngestService.fetchAndSaveEquityQuotes();

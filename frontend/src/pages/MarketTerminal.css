@@ -19,6 +19,10 @@
     --terminal-table-head-bg: #f8fafc;
     --terminal-hover-bg: rgba(148, 163, 184, 0.16);
     --terminal-active-row-bg: rgba(59, 130, 246, 0.14);
+    /* Pozitif / negatif seri renkleri (sparkline, %, hero) — light/dark’ta kontrastlı */
+    --terminal-pos: #15803d;
+    --terminal-neg: #b91c1c;
+    --terminal-neu: var(--terminal-muted, #64748b);
 
     min-height: 100%;
     min-height: 100dvh;
@@ -65,18 +69,178 @@
 }
 
 .terminal-hero-change.up {
-    color: #22c55e;
+    color: var(--terminal-pos, #22c55e);
 }
 
 .terminal-hero-change.down {
-    color: #ef4444;
+    color: var(--terminal-neg, #ef4444);
+}
+
+.terminal-hero-change.is-flat {
+    color: var(--terminal-neu, var(--terminal-muted));
+}
+
+.terminal-hero--viop {
+    display: grid;
+    grid-template-columns: minmax(200px, 1.1fr) auto minmax(260px, 1fr);
+    align-items: stretch;
+    gap: 16px 20px;
+    flex-wrap: unset;
+    justify-content: stretch;
+}
+
+.terminal-hero-viop__left {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.terminal-hero-viop__eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--terminal-muted);
+}
+
+.terminal-hero-viop__code {
+    font-size: clamp(1.05rem, 2.1vw, 1.35rem);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.terminal-hero-viop__name {
+    font-size: 13px;
+    color: var(--terminal-muted);
+    line-height: 1.35;
+}
+
+.terminal-hero-viop__badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.terminal-hero-viop__src {
+    font-size: 11px;
+    color: var(--terminal-muted);
+}
+
+.terminal-hero-viop__mid {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 6px;
+    text-align: right;
+    min-width: 0;
+}
+
+.terminal-hero-viop__mid .terminal-hero-price {
+    line-height: 1.05;
+}
+
+.terminal-hero-viop__metrics {
+    border-left: 1px solid color-mix(in srgb, var(--terminal-border) 85%, transparent);
+    padding-left: 16px;
+    min-width: 0;
+}
+
+.terminal-hero-viop-metric-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 14px;
+    font-size: 11px;
+}
+
+.terminal-hero-viop-metric-grid dt {
+    margin: 0;
+    color: var(--terminal-muted);
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.terminal-hero-viop-metric-grid dd {
+    margin: 0;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--terminal-text);
+    font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+    .terminal-hero--viop {
+        grid-template-columns: 1fr;
+    }
+
+    .terminal-hero-viop__mid {
+        align-items: flex-start;
+        text-align: left;
+    }
+
+    .terminal-hero-viop__metrics {
+        border-left: 0;
+        padding-left: 0;
+        border-top: 1px solid color-mix(in srgb, var(--terminal-border) 85%, transparent);
+        padding-top: 12px;
+    }
 }
 
 .terminal-grid {
     display: grid;
     grid-template-columns: minmax(400px, 1.05fr) minmax(0, 2.9fr) minmax(360px, 1.05fr);
     gap: 16px;
+    align-items: stretch;
+}
+
+/*
+ * VİOP / tahvil: sütunları viewport yüksekliğine zorlamayın — sayfa aşağı kaydırılarak uzar,
+ * sol/sağ rail içinde ayrı “mini viewport” scroll yerine doğal akış.
+ */
+.terminal-grid--page-flow {
     align-items: start;
+}
+
+.terminal-left-panel--page-flow .terminal-table-wrap {
+    max-height: none;
+    flex: 0 1 auto;
+    overflow-y: visible;
+}
+
+.terminal-right-panel--page-flow {
+    overflow: visible;
+}
+
+.terminal-right-panel--page-flow .terminal-right-panel-scroll {
+    flex: 0 0 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: visible;
+    overflow-x: visible;
+}
+
+.terminal-grid--page-flow .viop-chart-status {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.terminal-grid--page-flow .viop-chart-status > span:last-child {
+    flex: 0 0 auto;
+    max-width: 100%;
+}
+
+/* VİOP: sol liste + sağ rail biraz daha geniş; orta grafik esnek kalır */
+.terminal-grid--viop {
+    grid-template-columns: minmax(380px, 1.2fr) minmax(0, 2.6fr) minmax(320px, 1.05fr);
 }
 
 .terminal-card {
@@ -114,6 +278,7 @@
 }
 
 .terminal-left-panel.is-compact {
+    /* Eski “dashboard” modu: yalnızca is-compact kullanan ekranlar için; VİOP/tahvil artık terminal-grid--page-flow. */
     height: min(68vh, 720px);
     max-height: min(68vh, 720px);
     min-height: 0;
@@ -203,6 +368,248 @@
     width: 112px;
     max-width: 112px;
     box-sizing: border-box;
+}
+
+/* VİOP sol liste: kontrat kodu kırılmadan, fiyat / % / spark daha ferah */
+.terminal-data-table--viop th:nth-child(2),
+.terminal-data-table--viop td:nth-child(2) {
+    width: auto;
+    min-width: 210px;
+}
+
+.terminal-data-table--viop th:nth-child(3),
+.terminal-data-table--viop td:nth-child(3) {
+    width: 94px;
+    max-width: 94px;
+}
+
+.terminal-data-table--viop th:nth-child(4),
+.terminal-data-table--viop td:nth-child(4) {
+    width: 78px;
+    max-width: 78px;
+}
+
+.terminal-data-table--viop th:nth-child(5),
+.terminal-data-table--viop td:nth-child(5) {
+    width: 96px;
+    max-width: 96px;
+}
+
+.terminal-data-table--viop tbody tr {
+    min-height: 58px;
+    height: auto;
+}
+
+.terminal-data-table--viop .inline-spark {
+    width: 88px;
+    min-width: 72px;
+}
+
+.viop-instrument-stack {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+}
+
+.viop-instrument-stack__badge {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.viop-instrument-stack__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.viop-contract-code {
+    font-weight: 800;
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.viop-contract-sub {
+    font-size: 11px;
+    color: var(--terminal-muted);
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.viop-cat-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    border: 1px solid color-mix(in srgb, var(--terminal-border) 90%, transparent);
+    box-sizing: border-box;
+}
+
+.viop-cat-badge--fx {
+    background: color-mix(in srgb, var(--terminal-accent) 14%, var(--terminal-card-bg));
+    color: color-mix(in srgb, var(--terminal-accent) 55%, var(--terminal-text));
+}
+
+.viop-cat-badge--index {
+    background: color-mix(in srgb, #f59e0b 16%, var(--terminal-card-bg));
+    color: color-mix(in srgb, #b45309 40%, var(--terminal-text));
+}
+
+.viop-cat-badge--gold {
+    background: color-mix(in srgb, #eab308 18%, var(--terminal-card-bg));
+    color: color-mix(in srgb, #a16207 45%, var(--terminal-text));
+}
+
+.viop-cat-badge--eq {
+    background: color-mix(in srgb, var(--terminal-pos) 14%, var(--terminal-card-bg));
+    color: color-mix(in srgb, var(--terminal-pos) 55%, var(--terminal-text));
+}
+
+.viop-stale-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border: 1px solid color-mix(in srgb, var(--terminal-border) 88%, transparent);
+    color: var(--terminal-muted);
+    background: color-mix(in srgb, var(--terminal-muted) 10%, var(--terminal-card-bg));
+}
+
+.terminal-pct-pos {
+    color: var(--terminal-pos, #15803d);
+}
+
+.terminal-pct-neg {
+    color: var(--terminal-neg, #b91c1c);
+}
+
+.terminal-controls--viop {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+}
+
+.viop-toolbar-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.viop-toolbar-row__left,
+.viop-toolbar-row__mid,
+.viop-toolbar-row__right {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    min-width: 0;
+}
+
+.viop-toolbar-row__mid {
+    justify-content: center;
+    flex: 1 1 auto;
+}
+
+.viop-chart-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    font-size: 11px;
+    color: var(--terminal-muted);
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--terminal-border) 75%, transparent);
+    background: color-mix(in srgb, var(--terminal-border) 8%, var(--terminal-card-bg));
+}
+
+.viop-chart-status strong {
+    color: var(--terminal-text);
+    font-weight: 700;
+}
+
+.terminal-mini-item__code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.instrument-drawer--viop-scroll {
+    max-height: calc(100vh - 70px - 120px);
+    overflow-y: auto;
+    padding-right: 4px;
+    overscroll-behavior: contain;
+}
+
+.viop-drawer-kicker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.viop-drawer-section {
+    border: 1px solid color-mix(in srgb, var(--terminal-border) 85%, transparent);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: color-mix(in srgb, var(--terminal-border) 6%, var(--terminal-card-bg));
+}
+
+.viop-drawer-section__title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--terminal-muted);
+    margin: 0 0 8px;
+}
+
+.viop-drawer-kv {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 6px 12px;
+    font-size: 12px;
+    align-items: baseline;
+}
+
+.viop-drawer-kv__label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--terminal-muted);
+}
+
+.viop-drawer-notes {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--terminal-muted);
 }
 
 /* =========================================================================
@@ -378,6 +785,21 @@
     margin-bottom: 12px;
 }
 
+.instrument-drawer--viop {
+    width: min(400px, 94vw);
+}
+
+.instrument-drawer-close {
+    font-size: 11px;
+    padding: 4px 10px;
+}
+
+.instrument-drawer-subtext {
+    font-size: 12px;
+    color: var(--terminal-muted);
+    line-height: 1.35;
+}
+
 .instrument-drawer-symbol {
     display: flex;
     gap: 10px;
@@ -405,16 +827,16 @@
 }
 
 .instrument-meta-card {
-    border: 1px solid rgba(71, 85, 105, 0.45);
+    border: 1px solid var(--terminal-border);
     border-radius: 10px;
     padding: 10px;
-    background: rgba(15, 23, 42, 0.7);
+    background: color-mix(in srgb, var(--terminal-border) 8%, var(--terminal-card-bg));
 }
 
 .instrument-meta-title {
     font-size: 12px;
     font-weight: 700;
-    color: #dbeafe;
+    color: var(--terminal-text);
     margin-bottom: 8px;
 }
 
@@ -426,24 +848,25 @@
 
 .instrument-meta-label {
     font-size: 11px;
-    color: #94a3b8;
+    color: var(--terminal-muted);
 }
 
 .instrument-meta-value {
     font-size: 12px;
-    color: #e2e8f0;
+    color: var(--terminal-text);
 }
 
 .instrument-meta-description {
     margin-top: 8px;
     font-size: 12px;
-    color: #cbd5e1;
+    color: var(--terminal-muted);
     line-height: 1.4;
 }
 
 .instrument-meta-empty {
     font-size: 12px;
-    color: #94a3b8;
+    color: var(--terminal-muted);
+    line-height: 1.45;
 }
 
 .terminal-list-item {
@@ -479,27 +902,47 @@
     gap: 16px;
     position: relative;
     z-index: 0;
-    overflow: hidden;
+    overflow: visible;
     max-width: 100%;
 }
 
 .terminal-chart-header {
     display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: center;
-    min-height: 48px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 10px 12px;
+    row-gap: 8px;
+    min-height: 0;
 }
 
 .terminal-chart-title {
+    flex: 1 1 160px;
+    min-width: 0;
     font-size: 1rem;
     font-weight: 700;
 }
 
+.terminal-chart-subtitle {
+    flex: 1 1 100%;
+    min-width: 0;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--terminal-text-muted);
+    line-height: 1.35;
+}
+
 .terminal-chart-badges {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
     align-items: center;
+    flex: 0 1 auto;
+}
+
+.terminal-chart-header > .terminal-ohlc {
+    flex: 1 1 100%;
+    min-width: 0;
 }
 
 .terminal-chart-badge {
@@ -591,6 +1034,13 @@
     margin-bottom: 12px;
 }
 
+/* Yan panel: kategori pill’leri dar sütunda sola hizalı */
+.terminal-category-row--sidebar {
+    justify-content: flex-start;
+    margin-top: 2px;
+    margin-bottom: 8px;
+}
+
 .terminal-btn {
     border: 1px solid var(--terminal-border);
     background: var(--terminal-btn-bg);
@@ -606,14 +1056,6 @@
     border-color: var(--terminal-border);
     color: var(--terminal-btn-active-text);
     background: var(--terminal-btn-active-bg);
-}
-
-.terminal-heatmap-detail {
-    border-top: 1px solid var(--terminal-border);
-    margin-top: 8px;
-    padding-top: 8px;
-    font-size: 0.78rem;
-    color: var(--terminal-text);
 }
 
 .terminal-mini-list {
@@ -652,17 +1094,50 @@
 }
 
 .terminal-center-stack {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: 16px;
     min-width: 0;
     min-height: 0;
-    align-content: start;
     contain: layout;
 }
 
+.terminal-center-stack--fill {
+    align-self: stretch;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+}
+
+.terminal-center-panel--stretch {
+    flex: 0 0 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+}
+
+.terminal-center-panel--stretch > :last-child {
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+}
+
 .terminal-center-panel,
-.terminal-center-comparison {
+.terminal-center-comparison,
+.terminal-right-comparison {
     margin-bottom: 0;
+}
+
+.terminal-right-comparison {
+    flex-shrink: 0;
+    margin-bottom: 12px;
+}
+
+.terminal-grid--heatmap-rail .terminal-right-treemap-slot {
+    min-height: clamp(220px, 26vh, 420px);
 }
 
 .terminal-right-panel {
@@ -671,7 +1146,7 @@
     min-height: 0;
     width: auto;
     max-height: none;
-    overflow: hidden;
+    overflow: visible;
     margin-bottom: 0;
 }
 
@@ -727,6 +1202,11 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    padding-bottom: 2px;
 }
 
 .terminal-chip {
@@ -739,6 +1219,29 @@
     padding: 4px 8px;
     color: var(--terminal-text);
     background: var(--terminal-btn-bg);
+}
+
+.terminal-chip__stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    min-width: 0;
+}
+
+.terminal-chip__sym {
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.terminal-chip__sub {
+    font-size: 0.65rem;
+    color: var(--terminal-muted);
+    max-width: 160px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.15;
 }
 
 .terminal-chip input {
@@ -796,6 +1299,14 @@
     .terminal-grid {
         grid-template-columns: minmax(420px, 1fr) minmax(0, 3fr) minmax(380px, 1fr);
     }
+
+    .terminal-grid--viop {
+        grid-template-columns: minmax(400px, 1.25fr) minmax(0, 2.85fr) minmax(360px, 1.1fr);
+    }
+
+    .terminal-grid.terminal-grid--list-undocked.terminal-grid--heatmap-rail {
+        grid-template-columns: 0 minmax(0, 3.45fr) minmax(260px, 0.88fr);
+    }
 }
 
 @media (max-width: 1300px) {
@@ -824,3 +1335,659 @@
     }
 }
 
+/* Hisse: ABD / BIST alt seçimi + BIST liste rozeti */
+.terminal-equity-submarket {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    flex-wrap: wrap;
+}
+
+.terminal-submarket-chip {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--terminal-border);
+    background: var(--terminal-btn-bg);
+    color: var(--terminal-text-muted);
+    cursor: pointer;
+    transition:
+        background 0.15s ease,
+        color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.terminal-submarket-chip:hover {
+    background: var(--terminal-hover-bg);
+    color: var(--terminal-text);
+}
+
+.terminal-submarket-chip.is-active {
+    border-color: var(--terminal-accent);
+    background: var(--terminal-btn-active-bg);
+    color: var(--terminal-btn-active-text);
+}
+
+.bist-symbol-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    flex-shrink: 0;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.bist-dq-pill {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid rgba(234, 179, 8, 0.45);
+    color: var(--terminal-muted);
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+/* Seçili enstrüman → açılır piyasa listesi; sol sütun daraltılıp orta kolon genler */
+.terminal-grid--list-undocked {
+    grid-template-columns: 0 minmax(0, 1fr) minmax(min(340px, 30vw), 1.08fr);
+}
+
+/* Spot + ısı haritası: orta kolon geniş, sağda karşılaştırma üstte — treemap dar sütunda */
+.terminal-grid--list-undocked.terminal-grid--heatmap-rail {
+    grid-template-columns: 0 minmax(0, 1fr) minmax(220px, 0.62fr);
+}
+
+.terminal-left-panel--undocked-slot.terminal-card {
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    overflow: visible;
+}
+
+.terminal-market-list-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 150;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    background: rgba(2, 6, 23, 0.28);
+}
+
+.terminal-hero-selector {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 1 min(560px, 62vw);
+    min-width: 0;
+    margin: 0;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.terminal-hero-selector:hover {
+    background: var(--terminal-hover-bg);
+    border-color: var(--terminal-border);
+}
+
+.terminal-hero-selector.is-open {
+    background: var(--terminal-btn-active-bg);
+    border-color: color-mix(in srgb, var(--terminal-accent) 55%, var(--terminal-border));
+}
+
+.terminal-hero-selector--with-inline-quote {
+    flex: 1 1 auto;
+    max-width: none;
+    justify-content: space-between;
+    align-items: stretch;
+}
+
+.terminal-hero-selector__quote {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+    flex-shrink: 0;
+    margin-left: 10px;
+    text-align: right;
+    min-width: 0;
+}
+
+.terminal-hero-selector__price {
+    font-size: clamp(1.2rem, 2.4vw, 1.85rem);
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+.terminal-hero-selector__pct {
+    font-size: 0.82rem;
+    font-weight: 700;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.terminal-hero-selector__pct.is-up {
+    color: var(--terminal-pos, #22c55e);
+}
+
+.terminal-hero-selector__pct.is-down {
+    color: var(--terminal-neg, #ef4444);
+}
+
+.terminal-hero-selector__pct.is-flat {
+    color: var(--terminal-neu, var(--terminal-muted));
+}
+
+.terminal-hero-selector--viop {
+    flex: unset;
+    width: 100%;
+    max-width: none;
+    align-self: stretch;
+    box-sizing: border-box;
+}
+
+.terminal-hero-selector__chevron {
+    flex-shrink: 0;
+    opacity: 0.65;
+    transition: transform 0.18s ease;
+}
+
+.terminal-hero-selector.is-open .terminal-hero-selector__chevron {
+    transform: rotate(180deg);
+}
+
+/* Varlık seçici + karşılaştırma sembolleri (hero üst şerit) */
+.terminal-hero-selector-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.terminal-hero-selector-row > .terminal-hero-selector--with-inline-quote {
+    flex: 0 1 min(440px, 48vw);
+    max-width: min(500px, 54vw);
+}
+
+.terminal-hero-viop__selector-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    align-self: stretch;
+}
+
+.terminal-hero-viop__selector-wrap > .terminal-hero-selector--viop {
+    width: 100%;
+}
+
+.terminal-hero-compare-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+}
+
+.terminal-hero-viop__selector-wrap .terminal-hero-compare-strip {
+    justify-content: flex-start;
+}
+
+.terminal-hero-compare-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    padding: 3px 8px 3px 9px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--terminal-border) 90%, var(--terminal-accent, #38bdf8) 10%);
+    background: color-mix(in srgb, var(--terminal-btn-bg) 88%, var(--terminal-accent, #38bdf8) 6%);
+    color: var(--terminal-text, #e2e8f0);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition:
+        background 0.14s ease,
+        border-color 0.14s ease;
+}
+
+.terminal-hero-compare-chip:hover {
+    border-color: color-mix(in srgb, var(--terminal-accent, #38bdf8) 45%, var(--terminal-border));
+    background: var(--terminal-hover-bg);
+}
+
+.terminal-hero-compare-chip__sym {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 8rem;
+}
+
+.terminal-hero-compare-chip__x {
+    font-size: 13px;
+    line-height: 1;
+    opacity: 0.65;
+    font-weight: 600;
+}
+
+/* Sol liste: arama altı hızlı filtre + tablo gövdesinde kaydırma */
+.terminal-left-panel__inner {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.terminal-left-panel__inner > *:not(.terminal-table-wrap) {
+    flex-shrink: 0;
+}
+
+.terminal-left-panel__inner .terminal-table-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.terminal-list-quick-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+    align-items: center;
+}
+
+/* Piyasa listesi: Gün / Hafta / Ay / Yıl % sütunları — genel tablo nth-child kurallarını geçersiz kılar, sıkı oranlar */
+.terminal-data-table--picker-horizons {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    font-variant-numeric: tabular-nums;
+}
+
+.terminal-left-panel__inner .terminal-table-wrap:has(.terminal-data-table--picker-horizons) {
+    overflow-x: auto;
+    /* `stable` kaydırıcı için sağda rezerv boşluk bırakıyor; trend ile çubuk arası boş görünmesin */
+    scrollbar-gutter: auto;
+}
+
+/* Piyasa seçici popover: daha sıkı dikey boşluk */
+.terminal-left-panel__inner--popover-sheet .terminal-category-row--sidebar {
+    margin-top: 0;
+    margin-bottom: 6px;
+}
+
+.terminal-left-panel__inner--popover-sheet .terminal-quick-filter {
+    padding: 3px 8px;
+    font-size: 10px;
+}
+
+.terminal-left-panel__inner--popover-sheet .terminal-btn-row.terminal-category-row--sidebar {
+    gap: 4px;
+}
+
+.terminal-left-panel__inner--popover-sheet .terminal-category-row--sidebar .terminal-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.terminal-left-panel__inner--popover-sheet .terminal-list-quick-filters {
+    margin-bottom: 6px;
+    gap: 4px;
+}
+
+.terminal-left-panel__inner--popover-sheet .terminal-search {
+    padding: 6px 9px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+}
+
+.terminal-left-panel__inner--popover-sheet .terminal-equity-submarket {
+    margin: 0 0 6px;
+    gap: 6px;
+}
+
+.terminal-left-panel__inner--popover-sheet .terminal-submarket-chip {
+    padding: 4px 10px;
+}
+
+/* Sanal kaydırmalı satır yüksekliği MARKET_LIST_ROW_HEIGHT ile aynı (fiyat + günlük % iki satır) */
+.terminal-data-table--picker-horizons tbody tr {
+    height: 56px;
+    min-height: 56px;
+}
+
+/* Eski 5 sütunluk % / trend genişlikleri bu tabloda yanlış kolonlara uygulanmasın */
+.terminal-data-table--picker-horizons th:nth-child(n),
+.terminal-data-table--picker-horizons td:nth-child(n) {
+    width: auto;
+    max-width: none;
+    min-width: 0;
+}
+
+.terminal-data-table--picker-horizons thead th,
+.terminal-data-table--picker-horizons tbody td {
+    padding: 5px 3px;
+}
+
+/* Yüzdeler toplamı 100% (9 sütun: yıldız | karşılaştır | enstrüman | fiyat | 4×horizon | trend) */
+.terminal-data-table--picker-horizons th:nth-child(1),
+.terminal-data-table--picker-horizons td:nth-child(1) {
+    width: 2.75%;
+    min-width: 26px;
+    max-width: none;
+    padding-left: 2px;
+    padding-right: 1px;
+    text-align: center;
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+.terminal-data-table--picker-horizons th:nth-child(2),
+.terminal-data-table--picker-horizons td:nth-child(2) {
+    width: 2.25%;
+    min-width: 22px;
+    max-width: 30px;
+    padding-left: 0;
+    padding-right: 1px;
+    text-align: center;
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+.terminal-data-table--picker-horizons th:nth-child(3),
+.terminal-data-table--picker-horizons td:nth-child(3) {
+    width: 20%;
+    min-width: 72px;
+    max-width: none;
+    padding-left: 2px;
+    padding-right: 3px;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.terminal-data-table--picker-horizons.terminal-data-table--viop th:nth-child(3),
+.terminal-data-table--picker-horizons.terminal-data-table--viop td:nth-child(3) {
+    width: 25.5%;
+    min-width: 120px;
+}
+
+/* Fiyat (+ günlük %) */
+.terminal-data-table--picker-horizons th:nth-child(4),
+.terminal-data-table--picker-horizons td:nth-child(4) {
+    width: 11.5%;
+    min-width: 64px;
+    max-width: none;
+    padding-left: 2px;
+    padding-right: 2px;
+    text-align: right;
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+.terminal-data-table--picker-horizons td:nth-child(4) {
+    white-space: normal;
+}
+
+.terminal-data-table--picker-horizons th:nth-child(4) {
+    white-space: nowrap;
+}
+
+/* Gün · Hafta · Ay · Yıl */
+.terminal-data-table--picker-horizons th:nth-child(5),
+.terminal-data-table--picker-horizons td:nth-child(5),
+.terminal-data-table--picker-horizons th:nth-child(6),
+.terminal-data-table--picker-horizons td:nth-child(6),
+.terminal-data-table--picker-horizons th:nth-child(7),
+.terminal-data-table--picker-horizons td:nth-child(7),
+.terminal-data-table--picker-horizons th:nth-child(8),
+.terminal-data-table--picker-horizons td:nth-child(8) {
+    width: 9.875%;
+    min-width: 40px;
+    max-width: none;
+    padding-left: 2px;
+    padding-right: 2px;
+    box-sizing: border-box;
+}
+
+.terminal-data-table--picker-horizons th.terminal-horizon-pct-head,
+.terminal-data-table--picker-horizons td.terminal-horizon-pct {
+    font-size: 11px;
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* Sıralanabilir sütun başlıkları (Fiyat / Gün … Yıl) */
+.terminal-data-table--picker-horizons .terminal-sort-th {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 100%;
+    max-width: 100%;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.terminal-data-table--picker-horizons .terminal-sort-th:hover {
+    text-decoration: underline;
+    opacity: 0.92;
+}
+
+.terminal-data-table--picker-horizons .terminal-sort-th:focus-visible {
+    outline: 2px solid var(--terminal-accent, #3b82f6);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+.terminal-data-table--picker-horizons th:nth-child(4) .terminal-sort-th {
+    width: 100%;
+}
+
+/* Trend */
+.terminal-data-table--picker-horizons th:nth-child(9),
+.terminal-data-table--picker-horizons td:nth-child(9) {
+    width: 24.5%;
+    min-width: 80px;
+    max-width: none;
+    padding-left: 2px;
+    padding-right: 2px;
+    text-align: right;
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+.terminal-data-table--picker-horizons.terminal-data-table--viop th:nth-child(9),
+.terminal-data-table--picker-horizons.terminal-data-table--viop td:nth-child(9) {
+    width: 18.5%;
+}
+
+.terminal-data-table--picker-horizons th:nth-child(9) .market-trend-head {
+    margin-left: auto;
+    width: fit-content;
+    max-width: 100%;
+    align-items: flex-end;
+}
+
+.terminal-data-table--picker-horizons .market-trend-head {
+    gap: 3px;
+}
+
+.terminal-data-table--picker-horizons .market-trend-period__btn {
+    padding: 2px 4px;
+    font-size: 10px;
+}
+
+.terminal-data-table--picker-horizons .inline-spark {
+    display: block;
+    width: 84px;
+    max-width: 100%;
+    min-width: 60px;
+    height: 24px;
+    margin-left: auto;
+}
+
+.terminal-data-table--picker-horizons td:nth-child(9) .bist-spark-skeleton {
+    width: 84px !important;
+    max-width: 100%;
+    margin-left: auto;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-star-head,
+.terminal-data-table--picker-horizons .terminal-picker-star-cell {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-cmp-head {
+    padding-left: 0;
+    padding-right: 0;
+    text-align: center;
+    vertical-align: middle;
+    color: var(--terminal-text-muted, #94a3b8);
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-cmp-head__ic {
+    display: inline-flex;
+    vertical-align: middle;
+    opacity: 0.85;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-cmp-cell {
+    padding-left: 0;
+    padding-right: 0;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-compare-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin: 0 auto;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--terminal-text-muted, #94a3b8);
+    cursor: pointer;
+    transition:
+        background 0.14s ease,
+        color 0.14s ease;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-compare-btn:hover:not(:disabled) {
+    background: var(--terminal-hover-bg, rgba(148, 163, 184, 0.14));
+    color: var(--terminal-text, #e2e8f0);
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-compare-btn:focus-visible {
+    outline: 2px solid var(--terminal-accent, #3b82f6);
+    outline-offset: 1px;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-compare-btn:disabled {
+    opacity: 0.28;
+    cursor: default;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-compare-btn.is-active {
+    color: var(--terminal-accent, #38bdf8);
+    background: color-mix(in srgb, var(--terminal-accent, #38bdf8) 12%, transparent);
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-price-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 1px;
+    line-height: 1.15;
+    min-width: 0;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-price-stack__main {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-price-stack__day {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    opacity: 0.95;
+}
+
+.terminal-quick-filter {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--terminal-border);
+    background: var(--terminal-btn-bg);
+    color: var(--terminal-text-muted);
+    cursor: pointer;
+    transition:
+        background 0.12s ease,
+        color 0.12s ease,
+        border-color 0.12s ease;
+}
+
+.terminal-quick-filter:hover {
+    background: var(--terminal-hover-bg);
+    color: var(--terminal-text);
+}
+
+.terminal-quick-filter.is-active {
+    border-color: var(--terminal-accent);
+    background: var(--terminal-btn-active-bg);
+    color: var(--terminal-btn-active-text);
+}
