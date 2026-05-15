@@ -19,8 +19,9 @@ import './TerminalPages.css';
 import './Simulation.css';
 import { fetchSimulationSymbolsByType } from '../services/marketDataService';
 import { useLanguage } from '../i18n/LanguageContext';
-
-type AssetType = 'CRYPTO' | 'FX' | 'FUND' | 'METAL' | 'STOCK';
+import type { EquityMarketMetadata } from '../components/market/marketTypes';
+import type { AssetType } from '../constants/OrderConstants';
+import { getBistLatest, bistLatestPrice } from '../services/bistEquityApi';
 
 type SimulationPerformancePoint = {
     date: string;
@@ -92,6 +93,8 @@ function assetTypeOptionIcon(t: AssetType): string {
             return '▣';
         case 'STOCK':
             return '📈';
+        case 'BIST':
+            return '🏛';
         default:
             return '•';
     }
@@ -220,7 +223,7 @@ function buildSimulationExportRow(
 
 const SIMULATION_STORAGE_KEY = 'nrs-finance-portal-simulation-list-v1';
 
-type OverviewPriceRow = { buyPrice?: number; sellPrice?: number };
+type OverviewPriceRow = { buyPrice?: number; sellPrice?: number } & EquityMarketMetadata;
 
 type OverviewLite = {
     doviz?: Record<string, OverviewPriceRow>;
@@ -261,6 +264,8 @@ function liveTryFromOverview(o: OverviewLite | null | undefined, assetType: Asse
             return usdMul(midFromRow(o.funds?.[sym]));
         case 'STOCK':
             return usdMul(midFromRow(o.stocks?.[sym]));
+        case 'BIST':
+            return null;
         default:
             return null;
     }
@@ -301,6 +306,11 @@ export function Simulation() {
     const [simulationResults, setSimulationResults] = useState<SimulationResultItem[]>([]);
     const [sortMode, setSortMode] = useState<SortMode>('LATEST');
     const [listHydrated, setListHydrated] = useState(false);
+    const simulationResultsRef = useRef<SimulationResultItem[]>([]);
+
+    useEffect(() => {
+        simulationResultsRef.current = simulationResults;
+    }, [simulationResults]);
 
     useEffect(() => {
         try {
@@ -331,9 +341,29 @@ export function Simulation() {
             try {
                 const res = await financeClient.get('/api/market/overview');
                 const overview = unwrapData<OverviewLite>(res);
+                let bistLive: Record<string, number> = {};
+                if (simulationResultsRef.current.some((r) => r.assetType === 'BIST')) {
+                    try {
+                        const rows = await getBistLatest();
+                        bistLive = Object.fromEntries(
+                            rows
+                                .map((row) => {
+                                    const sym = String(row.symbol ?? '').toUpperCase();
+                                    const p = bistLatestPrice(row);
+                                    return [sym, p] as const;
+                                })
+                                .filter(([, p]) => p > 0)
+                        );
+                    } catch {
+                        /* BIST canlı fiyat yoksa önceki değerler korunur */
+                    }
+                }
                 setSimulationResults((prev) =>
                     prev.map((r) => {
-                        const live = liveTryFromOverview(overview, r.assetType, r.assetName);
+                        const live =
+                            r.assetType === 'BIST'
+                                ? bistLive[r.assetName.toUpperCase()] ?? null
+                                : liveTryFromOverview(overview, r.assetType, r.assetName);
                         if (live == null || live <= 0 || r.buyPrice <= 0) return r;
                         const units = r.initialAmount / r.buyPrice;
                         const currentValue = units * live;
@@ -545,6 +575,8 @@ export function Simulation() {
                         return t('category.funds', 'Fonlar');
                     case 'STOCK':
                         return t('category.equity', 'Hisse');
+                    case 'BIST':
+                        return t('category.bist', 'BIST hisse');
                     default:
                         return at;
                 }
@@ -688,7 +720,7 @@ export function Simulation() {
                 >
                     {t(
                         'simulation.approximationNotice',
-                        'Sonuçlar yaklaşıktır: geçmiş performans serisi tarihsel USDTRY ile, bugünkü değer ve birim fiyat ise güncel kur ile hesaplanmıştır. Kesin yatırım tavsiyesi değildir.',
+                        'Sonuçlar yaklaşıktır: ABD hisse, kripto ve fon geçmiş performans serisi tarihsel USDTRY ile; bugünkü değer ve birim fiyat güncel kur ile hesaplanmıştır. BIST hisseleri TRY kotasyonludur. Kesin yatırım tavsiyesi değildir.',
                     )}
                 </div>
             ) : null}
@@ -725,6 +757,7 @@ export function Simulation() {
                             <option value="METAL">{assetTypeOptionIcon('METAL')} METAL</option>
                             <option value="FUND">{assetTypeOptionIcon('FUND')} FUND</option>
                             <option value="STOCK">{assetTypeOptionIcon('STOCK')} STOCK</option>
+                            <option value="BIST">{assetTypeOptionIcon('BIST')} BIST</option>
                         </select>
                     </label>
 
