@@ -70,3 +70,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v24-restore-user-login-suspended.yaml
+
+  - include:
+      file: db/changelog/v25-manual-position-investment-analysis.yaml

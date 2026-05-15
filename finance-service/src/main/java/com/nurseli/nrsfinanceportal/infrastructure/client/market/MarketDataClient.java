@@ -1,5 +1,6 @@
 package com.nurseli.nrsfinanceportal.infrastructure.client.market;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.dto.MarketPriceHistoryDto;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.dto.MarketPriceLatestDto;
@@ -10,9 +11,17 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Component
 @RequiredArgsConstructor
@@ -21,13 +30,27 @@ public class MarketDataClient {
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(18);
     private static final Duration HISTORY_REQUEST_TIMEOUT = Duration.ofSeconds(60);
 
-    /** Döviz dahil tüm latest uçları market-data {@code MarketPriceLatestResponse} ile aynı şema. */
+    private record ApiEnvelope<T>(Boolean success, T data, Object errors, Object meta) {}
+
+    /** Döviz dahil tüm latest haritalarını market-data {@code MarketPriceLatestResponse} ile aynı şema. */
     private static final ParameterizedTypeReference<Map<String, MarketPriceLatestDto>> LATEST_MAP =
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<Map<String, MarketPriceLatestDto>>> LATEST_ENVELOPE =
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<List<MarketPriceHistoryDto>>> HISTORY_ENVELOPE =
             new ParameterizedTypeReference<>() {};
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record BistLatestRow(String symbol, BigDecimal adjustedClose, BigDecimal rawClose) {}
+
+    private static final ParameterizedTypeReference<List<BistLatestRow>> BIST_LATEST_LIST =
+            new ParameterizedTypeReference<>() {};
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record BistHistRow(LocalDate date, BigDecimal close, BigDecimal adjustedClose) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record BistBatchBody(Map<String, List<BistHistRow>> historiesBySymbol) {}
 
     private final WebClient marketDataWebClient;
 
@@ -124,6 +147,7 @@ public class MarketDataClient {
                 if (equity == null) yield BigDecimal.ZERO;
                 yield usdToTry(equity.buyPrice(), snap);
             }
+            case BIST -> getBistLatestMidTry(symbol);
             default -> BigDecimal.ZERO;
         };
     }
@@ -148,6 +172,7 @@ public class MarketDataClient {
             case METAL -> "/api/market/metals/history?symbol={symbol}&days={days}";
             case FUND -> "/api/market/funds/history?symbol={symbol}&days={days}";
             case STOCK -> "/api/market/equity/history?symbol={symbol}&days={days}";
+            case BIST -> throw new IllegalStateException("BIST history: use getBistHistoryBetween(symbol, from, to)");
             default -> throw new IllegalStateException("Unsupported asset type: " + type);
         };
 
@@ -162,7 +187,144 @@ public class MarketDataClient {
         return list != null ? list : List.of();
     }
 
-    private record ApiEnvelope<T>(Boolean success, T data, Object errors, Object meta) {}
+    /**
+     * Metal günlük geçmiş — market-data {@code /api/market/metals/history} {@code from}/{@code to} ile.
+     */
+    public List<MarketPriceHistoryDto> getMetalHistoryBetween(String symbol, LocalDate from, LocalDate to) {
+        if (symbol == null || symbol.isBlank() || from == null || to == null || to.isBefore(from)) {
+            return List.of();
+        }
+        List<MarketPriceHistoryDto> list = marketDataWebClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/market/metals/history")
+                        .queryParam("symbol", symbol.trim().toUpperCase())
+                        .queryParam("from", from.toString())
+                        .queryParam("to", to.toString())
+                        .build())
+                .retrieve()
+                .bodyToMono(HISTORY_ENVELOPE)
+                .map(envelope -> envelope.data() != null ? envelope.data() : List.<MarketPriceHistoryDto>of())
+                .timeout(HISTORY_REQUEST_TIMEOUT)
+                .onErrorReturn(List.of())
+                .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(2));
+        return list != null ? list : List.of();
+    }
+
+    /**
+     * BIST günlük geçmiş — market-data {@code /api/market/equities/bist/batch-history} (tek HTTP).
+     */
+    /**
+     * Tek BIST sembolü için günlük geçmiş (TRY, adjusted close tercihli).
+     */
+    public List<MarketPriceHistoryDto> getBistHistoryBetween(String symbol, LocalDate from, LocalDate to) {
+        if (symbol == null || symbol.isBlank() || from == null || to == null) {
+            return List.of();
+        }
+        String key = symbol.trim().toUpperCase();
+        Map<String, List<MarketPriceHistoryDto>> m = getBistBatchHistoryMapped(key, from, to);
+        List<MarketPriceHistoryDto> list = m.get(key);
+        return list != null ? list : List.of();
+    }
+
+    public BigDecimal getBistLatestMidTry(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            return BigDecimal.ZERO;
+        }
+        String want = symbol.trim().toUpperCase();
+        try {
+            List<BistLatestRow> rows = marketDataWebClient.get()
+                    .uri("/api/market/equities/bist/latest")
+                    .retrieve()
+                    .bodyToMono(BIST_LATEST_LIST)
+                    .timeout(REQUEST_TIMEOUT)
+                    .onErrorReturn(List.of())
+                    .block(REQUEST_TIMEOUT.plusSeconds(2));
+            if (rows == null) {
+                return BigDecimal.ZERO;
+            }
+            for (BistLatestRow r : rows) {
+                if (r == null || r.symbol() == null) {
+                    continue;
+                }
+                if (!want.equals(r.symbol().trim().toUpperCase())) {
+                    continue;
+                }
+                BigDecimal px = r.adjustedClose();
+                if (px != null && px.signum() > 0) {
+                    return px.setScale(8, RoundingMode.HALF_UP);
+                }
+                BigDecimal raw = r.rawClose();
+                if (raw != null && raw.signum() > 0) {
+                    return raw.setScale(8, RoundingMode.HALF_UP);
+                }
+                return BigDecimal.ZERO;
+            }
+            return BigDecimal.ZERO;
+        } catch (RuntimeException ignored) {
+            return BigDecimal.ZERO;
+        }
+    }
+
+    public Map<String, List<MarketPriceHistoryDto>> getBistBatchHistoryMapped(String symbolsCsv, LocalDate from, LocalDate to) {
+        if (symbolsCsv == null || symbolsCsv.isBlank() || from == null || to == null) {
+            return Map.of();
+        }
+        try {
+            ApiEnvelope<BistBatchBody> env = marketDataWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/market/equities/bist/batch-history")
+                            .queryParam("symbols", symbolsCsv)
+                            .queryParam("from", from.toString())
+                            .queryParam("to", to.toString())
+                            .build())
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<ApiEnvelope<BistBatchBody>>() {})
+                    .timeout(HISTORY_REQUEST_TIMEOUT)
+                    .onErrorReturn(new ApiEnvelope<>(Boolean.FALSE, null, null, null))
+                    .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(10));
+            if (env == null || env.data() == null || env.data().historiesBySymbol() == null) {
+                return Map.of();
+            }
+            ZoneId ist = ZoneId.of("Europe/Istanbul");
+            Map<String, List<MarketPriceHistoryDto>> out = new HashMap<>();
+            for (var e : env.data().historiesBySymbol().entrySet()) {
+                String sym = e.getKey() == null ? "" : e.getKey().trim().toUpperCase();
+                if (sym.isEmpty()) {
+                    continue;
+                }
+                List<BistHistRow> rows = e.getValue();
+                if (rows == null || rows.isEmpty()) {
+                    continue;
+                }
+                List<MarketPriceHistoryDto> converted = rows.stream()
+                        .filter(Objects::nonNull)
+                        .sorted(Comparator.comparing(BistHistRow::date, Comparator.nullsLast(Comparator.naturalOrder())))
+                        .map(row -> {
+                            BigDecimal c;
+                            if (row.adjustedClose() != null && row.adjustedClose().signum() > 0) {
+                                c = row.adjustedClose();
+                            } else if (row.close() != null && row.close().signum() > 0) {
+                                c = row.close();
+                            } else {
+                                return null;
+                            }
+                            if (row.date() == null) {
+                                return null;
+                            }
+                            LocalDateTime ts = row.date().atStartOfDay(ist).toLocalDateTime();
+                            return new MarketPriceHistoryDto(c, c, ts);
+                        })
+                        .filter(Objects::nonNull)
+                        .toList();
+                if (!converted.isEmpty()) {
+                    out.put(sym, new ArrayList<>(converted));
+                }
+            }
+            return out;
+        } catch (RuntimeException ignored) {
+            return Map.of();
+        }
+    }
 
     public record LatestPricingSnapshot(
             Map<String, MarketPriceLatestDto> fx,

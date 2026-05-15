@@ -7,6 +7,14 @@ public final class ApiErrorCode {
     public static final String ACCESS_DENIED = "ACCESS_DENIED";
     public static final String INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR";
 
+    public static final String BUY_PRICE_NOT_FOUND = "BUY_PRICE_NOT_FOUND";
+    public static final String SELL_PRICE_NOT_FOUND = "SELL_PRICE_NOT_FOUND";
+    public static final String INVALID_SELL_DATE = "INVALID_SELL_DATE";
+    public static final String INVALID_PRICE_DATE = "INVALID_PRICE_DATE";
+    public static final String OPEN_POSITION_CANNOT_HAVE_SELL_FIELDS = "OPEN_POSITION_CANNOT_HAVE_SELL_FIELDS";
+    public static final String SOLD_POSITION_CANNOT_BE_REOPENED = "SOLD_POSITION_CANNOT_BE_REOPENED";
+    public static final String POSITION_ALREADY_SOLD = "POSITION_ALREADY_SOLD";
+
     private ApiErrorCode() {
     }
 }

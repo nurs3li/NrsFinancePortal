@@ -42,6 +42,8 @@ market-data:
   base-url: http://localhost:8083
   connect-timeout-ms: 5000
   response-timeout-ms: 20000
+  internal-backfill-token: ${NRS_INTERNAL_BACKFILL_TOKEN:}
+  backfill-response-timeout-ms: 300000
 
 management:
   endpoints:
@@ -77,6 +79,9 @@ app:
     enabled: true
     max-requests-per-minute: 40
     window-sec: 60
+  manual-portfolio:
+    price-resolve:
+      max-lookback-days: 7
   # Dekont dosyaları. Boşsa: ${user.home}/.nrs-finance/receipts. Docker: /data/receipts + volume önerilir (tmp silinmez).
   receipt-storage:
     root: ${NRS_RECEIPT_STORAGE_ROOT:}

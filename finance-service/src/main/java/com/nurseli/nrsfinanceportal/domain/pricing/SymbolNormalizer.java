@@ -22,6 +22,7 @@ public class SymbolNormalizer {
             case METAL -> symbol;   // XAU, XAG
             case FUND -> symbol;     // ETF: SPY, QQQ, VOO...
             case STOCK -> symbol == null ? "" : symbol.toUpperCase();
+            case BIST -> symbol == null ? "" : symbol.trim().toUpperCase();
             default -> symbol;
         };
     }

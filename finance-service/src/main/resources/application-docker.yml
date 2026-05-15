@@ -65,6 +65,8 @@ market-data:
   base-url: http://nrs-market-data:8083
   connect-timeout-ms: 5000
   response-timeout-ms: 20000
+  internal-backfill-token: ${NRS_INTERNAL_BACKFILL_TOKEN:}
+  backfill-response-timeout-ms: 300000
 
 app:
   kafka:
@@ -79,6 +81,9 @@ app:
     enabled: true
     max-requests-per-minute: 40
     window-sec: 60
+  manual-portfolio:
+    price-resolve:
+      max-lookback-days: 7
   receipt-storage:
     root: ${NRS_RECEIPT_STORAGE_ROOT:/data/receipts}
   keycloak:

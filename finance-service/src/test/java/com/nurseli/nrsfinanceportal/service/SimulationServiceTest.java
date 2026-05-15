@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 
 class SimulationServiceTest {
 
@@ -133,5 +134,68 @@ class SimulationServiceTest {
         assertEquals(0, response.getHistoricalPriceTry().compareTo(new BigDecimal("320")));
         assertEquals(0, response.getCurrentValueTry().compareTo(new BigDecimal("6000.00")));
         assertEquals("EXACT", response.getQualityFlag());
+    }
+
+    /**
+     * FON geçmişi USD birimindedir; STOCK/CRYPTO ile aynı şekilde mum zamanına göre tarihsel USDTRY ile TRY'ye çevrilir.
+     */
+    @Test
+    void shouldNormalizeFundHistoryWithHistoricalUsdTryPerTimestamp() {
+        MarketDataClient marketDataClient = Mockito.mock(MarketDataClient.class);
+        DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
+        SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
+
+        LocalDate buyDate = LocalDate.of(2024, 6, 10);
+        LocalDate later = buyDate.plusDays(3);
+
+        Mockito.when(marketDataClient.getHistory(eq(AssetType.FUND), eq("VOO"), anyInt()))
+                .thenReturn(List.of(
+                        new MarketPriceHistoryDto(new BigDecimal("10"), new BigDecimal("10"), buyDate.atStartOfDay()),
+                        new MarketPriceHistoryDto(new BigDecimal("12"), new BigDecimal("12"), later.atStartOfDay())
+                ));
+        Mockito.when(marketDataClient.getHistory(eq(AssetType.FX), eq("USDTRY"), anyInt()))
+                .thenReturn(List.of(
+                        new MarketPriceHistoryDto(new BigDecimal("30"), new BigDecimal("34"), buyDate.minusDays(1).atStartOfDay()),
+                        new MarketPriceHistoryDto(new BigDecimal("32"), new BigDecimal("32"), buyDate.atStartOfDay()),
+                        new MarketPriceHistoryDto(new BigDecimal("40"), new BigDecimal("40"), later.atStartOfDay())
+                ));
+        Mockito.when(marketDataClient.getPriceTry(eq(AssetType.FUND), eq("VOO")))
+                .thenReturn(new BigDecimal("600"));
+        Mockito.when(marketDataClient.getPriceTry(eq(AssetType.FX), eq("USDTRY")))
+                .thenReturn(new BigDecimal("50"));
+
+        SimulationResponseDto response = service.simulate(
+                AssetType.FUND, "VOO", new BigDecimal("3200"), buyDate, null
+        );
+
+        assertEquals(0, response.getHistoricalPriceTry().compareTo(new BigDecimal("320")));
+        assertEquals(0, response.getCurrentValueTry().compareTo(new BigDecimal("6000.00")));
+        assertEquals("EXACT", response.getQualityFlag());
+        assertEquals(SimulationService.NOTICE_USD_DENOMINATED, response.getApproximationNoticeCode());
+    }
+
+    @Test
+    void bistUsesTryHistoryWithoutUsdTryFxFetch() {
+        MarketDataClient marketDataClient = Mockito.mock(MarketDataClient.class);
+        DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
+        SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
+
+        LocalDate buyDate = LocalDate.of(2024, 6, 10);
+        Mockito.when(marketDataClient.getBistHistoryBetween(eq("THYAO"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(
+                        new MarketPriceHistoryDto(new BigDecimal("100"), new BigDecimal("100"), buyDate.atStartOfDay()),
+                        new MarketPriceHistoryDto(new BigDecimal("110"), new BigDecimal("110"), buyDate.plusDays(2).atStartOfDay())
+                ));
+        Mockito.when(marketDataClient.getPriceTry(eq(AssetType.BIST), eq("THYAO")))
+                .thenReturn(new BigDecimal("120"));
+
+        SimulationResponseDto response = service.simulate(
+                AssetType.BIST, "THYAO", new BigDecimal("5000"), buyDate, null
+        );
+
+        Mockito.verify(marketDataClient, never()).getHistory(eq(AssetType.FX), eq("USDTRY"), anyInt());
+        assertEquals("EXACT", response.getQualityFlag());
+        assertEquals(null, response.getApproximationNoticeCode());
+        assertEquals(0, response.getHistoricalPriceTry().compareTo(new BigDecimal("100")));
     }
 }

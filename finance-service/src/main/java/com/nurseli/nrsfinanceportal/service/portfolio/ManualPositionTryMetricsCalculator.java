@@ -25,13 +25,14 @@ public class ManualPositionTryMetricsCalculator {
         AssetType type = p.getType();
         BigDecimal qty = nz(p.getQuantity());
         BigDecimal buy = nz(p.getBuyPrice());
-        BigDecimal invested = buy.multiply(qty).setScale(8, RoundingMode.HALF_UP);
+        BigDecimal buyFee = p.getBuyFee() != null && p.getBuyFee().signum() > 0 ? p.getBuyFee() : BigDecimal.ZERO;
+        BigDecimal invested = buy.multiply(qty).add(buyFee).setScale(8, RoundingMode.HALF_UP);
         BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, p.getSymbol(), snap));
         BigDecimal currentValue = currentPrice.multiply(qty).setScale(8, RoundingMode.HALF_UP);
         BigDecimal nominal = currentValue.subtract(invested).setScale(8, RoundingMode.HALF_UP);
-        Instant buyResolved = p.getBuyDate() != null
-                ? p.getBuyDate().atStartOfDay(TZ).toInstant()
-                : Instant.now();
+        Instant buyResolved = p.getBuyPriceResolvedDate() != null
+                ? p.getBuyPriceResolvedDate().atStartOfDay(TZ).toInstant()
+                : (p.getBuyDate() != null ? p.getBuyDate().atStartOfDay(TZ).toInstant() : Instant.now());
         return new PositionMarketMetrics(
                 invested,
                 currentPrice.signum() > 0 ? currentPrice : null,

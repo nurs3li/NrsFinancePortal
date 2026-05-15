@@ -2,6 +2,7 @@ package com.nurseli.nrsfinanceportal.service;
 
 import com.nurseli.nrsfinanceportal.common.dto.UnifiedPortfolioItemView;
 import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPortfolioPosition;
+import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPositionStatus;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.repository.ManualPortfolioPositionRepository;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +30,8 @@ public class UnifiedPortfolioService {
 
         List<UnifiedPortfolioItemView> result = new ArrayList<>();
 
-        List<ManualPortfolioPosition> manualAssets = manualRepo.findByUserIdOrderByBuyDateAsc(user.getId());
+        List<ManualPortfolioPosition> manualAssets = manualRepo.findByUser_IdAndStatusOrderByBuyDateAsc(
+                user.getId(), ManualPositionStatus.OPEN);
         for (ManualPortfolioPosition m : manualAssets) {
             result.add(new UnifiedPortfolioItemView(
                     "MANUAL",
