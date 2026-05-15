@@ -181,31 +181,6 @@ marketClient.interceptors.response.use(
     },
     (err) => handleAuthErrorWithSingleRetry(err)
 );
-const metricsApiUrl = import.meta.env.VITE_METRICS_URL || 'http://localhost:8088';
-
-export const metricsClient = axios.create({
-    baseURL: metricsApiUrl,
-    timeout: httpTimeoutMs,
-    headers: { 'Content-Type': 'application/json' },
-});
-
-metricsClient.interceptors.request.use((config) => {
-    config.headers = config.headers ?? {};
-    const lang = getPreferredAppLang();
-    if (lang) config.headers['Accept-Language'] = lang;
-    if (keycloak.authenticated && keycloak.token) {
-        config.headers.Authorization = `Bearer ${keycloak.token}`;
-    }
-    return config;
-});
-
-metricsClient.interceptors.response.use(
-    (r) => {
-        r.data = unwrapEnvelopePayload(r.data);
-        return r;
-    },
-    (err) => handleAuthErrorWithSingleRetry(err)
-);
 export const notificationClient = axios.create({
     baseURL: notificationApiUrl,
     timeout: httpTimeoutMs,

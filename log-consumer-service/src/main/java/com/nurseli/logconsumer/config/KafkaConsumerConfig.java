@@ -1,5 +1,5 @@
 package com.nurseli.logconsumer.config;
-import com.nurseli.logconsumer.event.SuspiciousActivityDetectedEvent;
+
 import com.nurseli.logconsumer.event.TransactionCreatedEvent;
 import com.nurseli.logconsumer.event.TransactionReversedEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -24,25 +24,18 @@ public class KafkaConsumerConfig {
     /* ================= CREATED ================= */
 
     @Bean
-    public ConsumerFactory<String, TransactionCreatedEvent>
-    createdConsumerFactory() {
+    public ConsumerFactory<String, TransactionCreatedEvent> createdConsumerFactory() {
 
-        JsonDeserializer<TransactionCreatedEvent> deserializer =
-                new JsonDeserializer<>(TransactionCreatedEvent.class);
+        JsonDeserializer<TransactionCreatedEvent> deserializer = new JsonDeserializer<>(TransactionCreatedEvent.class);
         deserializer.addTrustedPackages("*");
 
         Map<String, Object> props = baseProps("log-consumer-created");
 
-        return new DefaultKafkaConsumerFactory<>(
-                props,
-                new StringDeserializer(),
-                deserializer
-        );
+        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), deserializer);
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, TransactionCreatedEvent>
-    createdKafkaListenerContainerFactory() {
+    public ConcurrentKafkaListenerContainerFactory<String, TransactionCreatedEvent> createdKafkaListenerContainerFactory() {
 
         ConcurrentKafkaListenerContainerFactory<String, TransactionCreatedEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
@@ -54,74 +47,23 @@ public class KafkaConsumerConfig {
     /* ================= REVERSED ================= */
 
     @Bean
-    public ConsumerFactory<String, TransactionReversedEvent>
-    reversedConsumerFactory() {
+    public ConsumerFactory<String, TransactionReversedEvent> reversedConsumerFactory() {
 
-        JsonDeserializer<TransactionReversedEvent> deserializer =
-                new JsonDeserializer<>(TransactionReversedEvent.class);
+        JsonDeserializer<TransactionReversedEvent> deserializer = new JsonDeserializer<>(TransactionReversedEvent.class);
         deserializer.addTrustedPackages("*");
 
         Map<String, Object> props = baseProps("log-consumer-reversed");
 
-        return new DefaultKafkaConsumerFactory<>(
-                props,
-                new StringDeserializer(),
-                deserializer
-        );
+        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), deserializer);
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, TransactionReversedEvent>
-    reversedKafkaListenerContainerFactory() {
+    public ConcurrentKafkaListenerContainerFactory<String, TransactionReversedEvent> reversedKafkaListenerContainerFactory() {
 
         ConcurrentKafkaListenerContainerFactory<String, TransactionReversedEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
 
         factory.setConsumerFactory(reversedConsumerFactory());
-        return factory;
-    }
-    /* ================= SUSPICIOUS ================= */
-
-    @Bean
-    public ConsumerFactory<String, SuspiciousActivityDetectedEvent>
-    suspiciousConsumerFactory() {
-
-        JsonDeserializer<com.nurseli.logconsumer.event.SuspiciousActivityDetectedEvent> deserializer =
-                new JsonDeserializer<>(com.nurseli.logconsumer.event.SuspiciousActivityDetectedEvent.class);
-        deserializer.addTrustedPackages("*");
-
-        Map<String, Object> props = baseProps("log-consumer-suspicious");
-
-        return new DefaultKafkaConsumerFactory<>(
-                props,
-                new StringDeserializer(),
-                deserializer
-        );
-    }
-
-    @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, com.nurseli.logconsumer.event.SuspiciousActivityDetectedEvent>
-    suspiciousKafkaListenerContainerFactory() {
-
-        ConcurrentKafkaListenerContainerFactory<String, com.nurseli.logconsumer.event.SuspiciousActivityDetectedEvent> factory =
-                new ConcurrentKafkaListenerContainerFactory<>();
-
-        factory.setConsumerFactory(suspiciousConsumerFactory());
-        return factory;
-    }
-    @Bean
-    public ConsumerFactory<String, String> domainEventsStringConsumerFactory() {
-        Map<String, Object> props = new HashMap<>();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
-        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), new StringDeserializer());
-    }
-
-    @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, String> domainEventsStringKafkaListenerContainerFactory() {
-        ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
-        factory.setConsumerFactory(domainEventsStringConsumerFactory());
         return factory;
     }
 
@@ -130,11 +72,7 @@ public class KafkaConsumerConfig {
     @Bean
     public ConsumerFactory<String, String> applicationLogsConsumerFactory() {
         Map<String, Object> props = baseProps("log-consumer-application-logs");
-        return new DefaultKafkaConsumerFactory<>(
-                props,
-                new StringDeserializer(),
-                new StringDeserializer()
-        );
+        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), new StringDeserializer());
     }
 
     @Bean
@@ -143,6 +81,7 @@ public class KafkaConsumerConfig {
         factory.setConsumerFactory(applicationLogsConsumerFactory());
         return factory;
     }
+
     /* ================= COMMON ================= */
 
     private Map<String, Object> baseProps(String groupId) {

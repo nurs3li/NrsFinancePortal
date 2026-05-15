@@ -29,7 +29,6 @@ type AdminUserInspection = {
             categories?: DashboardCategory[];
         };
         totalPortfolioValueTry?: number;
-        whale?: { level?: string; impactScore?: number; triggeredAt?: string };
     } | null;
 };
 
@@ -388,7 +387,6 @@ export function AdminUsersAndAccounts() {
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
                                     <div style={cardStyle}><div style={mutedStyle}>Toplam portföy değeri</div><div style={{ fontWeight: 800, marginTop: 4 }}>{formatMoney(inspectData.dashboardSummary?.portfolio?.totalValueTry)}</div></div>
                                     <div style={cardStyle}><div style={mutedStyle}>Özet (dashboard)</div><div style={{ fontWeight: 800, marginTop: 4 }}>{formatMoney(inspectData.dashboardSummary?.totalPortfolioValueTry)}</div></div>
-                                    <div style={cardStyle}><div style={mutedStyle}>Yatırımcı etiketi (Redis)</div><div style={{ fontWeight: 800, marginTop: 4 }}>{inspectData.dashboardSummary?.whale?.level ?? '-'}</div></div>
                                 </div>
 
                                 <div style={{ ...cardStyle, padding: 12 }}>

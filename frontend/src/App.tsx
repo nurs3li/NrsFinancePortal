@@ -169,30 +169,6 @@ function App() {
                                     }
                                 />
                                 <Route
-                                    path="/admin/metrics"
-                                    element={<Navigate to="/admin" replace />}
-                                />
-                                <Route
-                                    path="/admin/tasks"
-                                    element={<Navigate to="/admin" replace />}
-                                />
-                                <Route
-                                    path="/fm/tasks"
-                                    element={<Navigate to="/dashboard" replace />}
-                                />
-                                <Route
-                                    path="/fm/tasks/:id"
-                                    element={<Navigate to="/dashboard" replace />}
-                                />
-                                <Route
-                                    path="/fm/risk"
-                                    element={<Navigate to="/dashboard" replace />}
-                                />
-                                <Route
-                                    path="/fm/fund-requests"
-                                    element={<Navigate to="/dashboard" replace />}
-                                />
-                                <Route
                                     path="/operasyon/suspicious"
                                     element={<Navigate to="/dashboard" replace />}
                                 />

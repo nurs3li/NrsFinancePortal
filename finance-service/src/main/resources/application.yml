@@ -54,12 +54,6 @@ management:
     health:
       show-details: when_authorized
 app:
-  kafka:
-    listeners-enabled: ${APP_KAFKA_LISTENERS_ENABLED:true}
-    topics:
-      investment-position-created: ${KAFKA_TOPIC_INVESTMENT_POSITION_CREATED:finance.investment.position.created}
-      investment-position-updated: ${KAFKA_TOPIC_INVESTMENT_POSITION_UPDATED:finance.investment.position.updated}
-      investment-position-closed: ${KAFKA_TOPIC_INVESTMENT_POSITION_CLOSED:finance.investment.position.closed}
   observability:
     enabled: ${APP_OBSERVABILITY_ENABLED:true}
     open-search:

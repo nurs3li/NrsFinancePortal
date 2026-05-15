@@ -28,7 +28,6 @@ public class NotificationChannelPolicyResolver {
             Map.entry("REVIEW_TASK_ESCALATED_CRITICAL", DeliveryDecision.IN_APP_AND_EMAIL),
             Map.entry("USER_REGISTERED", DeliveryDecision.IN_APP_AND_EMAIL),
             Map.entry("SYSTEM_ERROR", DeliveryDecision.IN_APP_AND_EMAIL),
-            Map.entry("WHALE_SPIKE", DeliveryDecision.IN_APP_AND_EMAIL),
 
             // Fund request bildirimleri
             Map.entry("FUND_REQUEST_CREATED", DeliveryDecision.IN_APP_AND_EMAIL),

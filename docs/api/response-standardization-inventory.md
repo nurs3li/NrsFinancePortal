@@ -32,7 +32,7 @@ Bu envanter `/api/**` endpointleri icin tek tip response envelope gecisini izlem
 ## Uygulanan Mekanizma
 - finance-service: `ApiResponseEnvelopeAdvice`
 - marketdata: `ApiEnvelopeAdvice`
-- Frontend (legacy uyum): `marketClient/metricsClient/notificationClient` response interceptor envelope payload'ini otomatik `data` alanina unwrap eder.
+- Frontend (legacy uyum): `marketClient` / `notificationClient` response interceptor envelope payload'ini otomatik `data` alanina unwrap eder.
 
 ## Not
 - Amaç endpoint davranisini bozmadan kademeli gecis yapmak.

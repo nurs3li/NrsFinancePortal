@@ -21,7 +21,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DashboardSummaryService {
 
-    private final WhaleStateCacheService whaleStateCacheService;
     private final PortfolioPerformanceService portfolioPerformanceService;
     private final UserRepository userRepository;
 
@@ -31,21 +30,10 @@ public class DashboardSummaryService {
             return emptySummary();
         }
 
-        var whaleState = whaleStateCacheService.getLastWhaleState(userId);
-        DashboardSummaryResponse.WhaleSummary whale =
-                whaleState == null
-                        ? null
-                        : new DashboardSummaryResponse.WhaleSummary(
-                        whaleState.level(),
-                        whaleState.impactScore(),
-                        whaleState.triggeredAt()
-                );
-
         PortfolioPerformanceDto performance = portfolioPerformanceService.performanceForUser(user);
         var portfolio = buildPortfolioSummary(performance);
 
         return new DashboardSummaryResponse(
-                whale,
                 portfolio,
                 nz(performance.getTotalCurrentValue())
         );
@@ -53,7 +41,6 @@ public class DashboardSummaryService {
 
     private static DashboardSummaryResponse emptySummary() {
         return new DashboardSummaryResponse(
-                null,
                 new DashboardSummaryResponse.PortfolioSummary(
                         BigDecimal.ZERO,
                         Map.of(),

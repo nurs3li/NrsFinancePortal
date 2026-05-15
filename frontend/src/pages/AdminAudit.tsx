@@ -17,7 +17,7 @@ const AUDIT_GRAFANA_EMBED_HEIGHT_PX = 250;
 const AUDIT_GRAFANA_CLIP_TOP_PX = 48;
 const ONE_H_MS = 3600000;
 
-type AuditTab = 'user' | 'system' | 'critical' | 'whale';
+type AuditTab = 'user' | 'system' | 'critical';
 
 type AuditRow = {
     cursor: string;
@@ -55,8 +55,6 @@ const SERVICE_OPTIONS = [
     'finance-service',
     'market-data-service',
     'notification-service',
-    'whale-analytics-service',
-    'metrics-service',
     'log-consumer-service',
 ];
 
@@ -358,13 +356,8 @@ function buildQueryParams(
         };
     }
 
-    /* whale */
-    const q = [smartQ.trim(), 'whale'].filter(Boolean).join(' ').trim();
-    return {
-        ...base,
-        serviceName: 'whale-analytics-service',
-        q,
-    };
+    const _exhaustive: never = tab;
+    return _exhaustive;
 }
 
 export function AdminAudit() {
@@ -1116,7 +1109,6 @@ export function AdminAudit() {
                 {tabBtn('user', t('admin.auditTabUser', 'User activity'))}
                 {tabBtn('system', t('admin.auditTabSystem', 'System logs'))}
                 {tabBtn('critical', t('admin.auditTabCritical', 'Critical errors'))}
-                {tabBtn('whale', t('admin.auditTabWhale', 'Whale alerts'))}
             </div>
 
             {disabledReason && (
@@ -1173,11 +1165,6 @@ export function AdminAudit() {
                                 key: 'errors',
                                 label: t('admin.auditChipErrorsOnly', 'Sadece hatalar'),
                                 onClick: () => setAuditTab('critical'),
-                            },
-                            {
-                                key: 'whale',
-                                label: t('admin.auditChipWhale', 'Whale hareketleri'),
-                                onClick: () => setAuditTab('whale'),
                             },
                             {
                                 key: 'balance',
@@ -1400,12 +1387,6 @@ export function AdminAudit() {
 
                 {auditTab === 'critical' && (
                     <p style={{ margin: '0 0 12px', fontSize: 12, color: SILVER_MUTED }}>{t('admin.auditCriticalHint', 'Only ERROR level logs.')}</p>
-                )}
-
-                {auditTab === 'whale' && (
-                    <p style={{ margin: '0 0 12px', fontSize: 12, color: SILVER_MUTED }}>
-                        {t('admin.auditWhaleHint', 'Filtered to whale-analytics-service + whale keywords.')}
-                    </p>
                 )}
 
                 <details

@@ -146,7 +146,6 @@ public class EmailNotificationService {
             case "ACCOUNT_FROZEN" -> "Hesabınız güvenlik nedeniyle donduruldu";
             case "ACCOUNT_UNFROZEN" -> "Hesabınız tekrar kullanıma açıldı";
             case "REVIEW_TASK_CREATED" -> "Yeni inceleme görevi (havuz)";
-            case "WHALE_SPIKE" -> "Whale uyarısı yoğunluğu";
             case "FUND_REQUEST_CREATED" -> "Manuel inceleme bekleyen para talebi";
             case "FUND_REQUEST_APPROVED" -> "Para talebiniz onaylandı";
             case "FUND_REQUEST_REJECTED" -> "Para talebiniz reddedildi";

@@ -67,7 +67,7 @@ public class AuditContextMdcFilter extends OncePerRequestFilter {
         if (uri.contains("/api/users/me") && ("PATCH".equals(method) || "PUT".equals(method))) return "PROFILE";
         if (uri.contains("/api/users/")) return "USER_ADMIN";
         if (uri.contains("/api/portfolio")) return "PORTFOLIO";
-        if (uri.contains("/api/whales") || uri.contains("/api/tasks")) return "RISK_OPS";
+        if (uri.contains("/api/tasks")) return "RISK_OPS";
         if (uri.contains("/api/timeline")) return "TIMELINE";
         if (uri.contains("/api/balance")) return "BALANCE";
         if (uri.contains("/api/transactions")) return "TRANSACTION";

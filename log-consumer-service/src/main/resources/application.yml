@@ -11,7 +11,7 @@ spring:
     bootstrap-servers: localhost:9092
 
     consumer:
-      group-id: whale-detector
+      group-id: log-consumer
       auto-offset-reset: earliest
       enable-auto-commit: false
 
@@ -34,14 +34,6 @@ management:
     web:
       exposure:
         include: health,info
-
-app:
-  kafka:
-    topics:
-      investment-position-created: ${KAFKA_TOPIC_INVESTMENT_POSITION_CREATED:finance.investment.position.created}
-      investment-position-updated: ${KAFKA_TOPIC_INVESTMENT_POSITION_UPDATED:finance.investment.position.updated}
-      investment-position-closed: ${KAFKA_TOPIC_INVESTMENT_POSITION_CLOSED:finance.investment.position.closed}
-      investor-behavior-updated: ${KAFKA_TOPIC_INVESTOR_BEHAVIOR_UPDATED:investor.behavior.updated}
 
 opensearch:
   host: localhost

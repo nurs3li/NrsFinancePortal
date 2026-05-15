@@ -70,7 +70,6 @@ public class RateLimitFilter implements Filter {
         if ("GET".equals(method)
                 && (path.startsWith("/api/tasks")                 // /api/tasks/me, /api/tasks/{id}
                 || path.startsWith("/api/admin/tasks")        // admin görev listesi/detayı
-                || path.startsWith("/api/admin/suspicious")   // şüpheli olay listeleri
                 || path.startsWith("/api/admin/accounts"))) { // admin hesap listesi
             chain.doFilter(request, response);
             return;

@@ -16,7 +16,6 @@ import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPriceSource;
 import com.nurseli.nrsfinanceportal.domain.pricing.SymbolNormalizer;
 import com.nurseli.nrsfinanceportal.domain.portfolio.SnapshotTriggerType;
 import com.nurseli.nrsfinanceportal.domain.user.User;
-import com.nurseli.nrsfinanceportal.integration.kafka.InvestmentPositionEventPublisher;
 import com.nurseli.nrsfinanceportal.repository.ManualPortfolioPositionRepository;
 import com.nurseli.nrsfinanceportal.service.portfolio.HistoricalManualPriceResolverService;
 import com.nurseli.nrsfinanceportal.service.portfolio.HistoricalManualPriceResolverService.ManualChartPoint;
@@ -46,7 +45,6 @@ public class ManualPortfolioService {
     private final ManualPortfolioPositionRepository manualRepo;
     private final CurrentUserResolver currentUserResolver;
     private final PortfolioSnapshotRecorder portfolioSnapshotRecorder;
-    private final InvestmentPositionEventPublisher investmentPositionEventPublisher;
     private final HistoricalManualPriceResolverService priceResolver;
     private final ManualPortfolioNominalAnalysisCalculator nominalAnalysisCalculator;
 
@@ -121,7 +119,6 @@ public class ManualPortfolioService {
 
         ManualPortfolioPosition saved = manualRepo.save(p);
         recordManualSnapshot(user.getId());
-        investmentPositionEventPublisher.publishCreated(saved);
         return saved;
     }
 
@@ -201,7 +198,6 @@ public class ManualPortfolioService {
 
         ManualPortfolioPosition saved = manualRepo.save(p);
         recordManualSnapshot(user.getId());
-        investmentPositionEventPublisher.publishUpdated(saved);
         return saved;
     }
 
@@ -236,7 +232,6 @@ public class ManualPortfolioService {
         validateCore(p);
         ManualPortfolioPosition saved = manualRepo.save(p);
         recordManualSnapshot(user.getId());
-        investmentPositionEventPublisher.publishClosed(saved);
         return saved;
     }
 
@@ -245,7 +240,6 @@ public class ManualPortfolioService {
         User user = currentUserResolver.getOrCreateCurrentUser();
         ManualPortfolioPosition p = manualRepo.findByIdAndUser_Id(id, user.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Manuel pozisyon bulunamadi"));
-        investmentPositionEventPublisher.publishClosed(p);
         manualRepo.delete(p);
         recordManualSnapshot(user.getId());
     }
