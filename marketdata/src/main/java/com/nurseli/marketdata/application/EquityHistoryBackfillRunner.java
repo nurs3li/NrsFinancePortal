@@ -21,7 +21,7 @@ public class EquityHistoryBackfillRunner implements ApplicationRunner {
         boolean enabled = properties.isEnabled() || envBoolean("EQUITY_HISTORY_BACKFILL_ENABLED")
                 || envBoolean("APP_EQUITY_HISTORY_BACKFILL_ENABLED");
         int periodDays = resolveInt(properties.getPeriodDays(),
-                "EQUITY_HISTORY_BACKFILL_PERIOD_DAYS", "APP_EQUITY_HISTORY_BACKFILL_PERIOD_DAYS", 365);
+                "EQUITY_HISTORY_BACKFILL_PERIOD_DAYS", "APP_EQUITY_HISTORY_BACKFILL_PERIOD_DAYS", 730);
         int batchSize = resolveInt(properties.getBatchSize(),
                 "EQUITY_HISTORY_BACKFILL_BATCH_SIZE", "APP_EQUITY_HISTORY_BACKFILL_BATCH_SIZE", 20);
         boolean shutdownOnComplete = properties.isShutdownOnComplete()

@@ -13,7 +13,7 @@ public class MetalMarketScheduler {
 
     private final MetalPriceIngestService ingestService;
 
-    @Scheduled(fixedDelayString = "PT15M", initialDelayString = "PT2M")
+    @Scheduled(fixedDelayString = "PT1H", initialDelayString = "PT2M")
     public void ingestMetals() {
         log.info("[METAL] Fetching metal prices from CoinGecko...");
         ingestService.fetchAndSaveGramGold();

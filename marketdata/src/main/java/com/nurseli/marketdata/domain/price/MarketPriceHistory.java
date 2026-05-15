@@ -1,11 +1,18 @@
 package com.nurseli.marketdata.domain.price;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "market_price_history")
+@Getter
+@Setter
+@NoArgsConstructor
 public class MarketPriceHistory {
 
     @Id
@@ -13,63 +20,92 @@ public class MarketPriceHistory {
     private Long id;
 
     @Column(nullable = false, length = 10)
-    private String symbol; // USDTRY, EURTRY
+    private String symbol;
 
-    @Column(nullable = false, precision = 19, scale = 6)
+    @Column(nullable = false, precision = 19, scale = 6, name = "buy_price")
     private BigDecimal buyPrice;
 
-    @Column(nullable = false, precision = 19, scale = 6)
+    @Column(nullable = false, precision = 19, scale = 6, name = "sell_price")
     private BigDecimal sellPrice;
 
     @Column(nullable = false, length = 20)
-    private String source; // TCMB
+    private String source;
 
     @Column(nullable = false)
     private LocalDateTime timestamp;
 
-    // --- getters & setters ---
+    @Column(name = "adjusted_close", precision = 24, scale = 8)
+    private BigDecimal adjustedClose;
 
-    public Long getId() {
-        return id;
-    }
+    @Column(name = "adjusted_average", precision = 24, scale = 8)
+    private BigDecimal adjustedAverage;
 
-    public String getSymbol() {
-        return symbol;
-    }
+    @Column(name = "adjusted_low", precision = 24, scale = 8)
+    private BigDecimal adjustedLow;
 
-    public void setSymbol(String symbol) {
-        this.symbol = symbol;
-    }
+    @Column(name = "adjusted_high", precision = 24, scale = 8)
+    private BigDecimal adjustedHigh;
 
-    public BigDecimal getBuyPrice() {
-        return buyPrice;
-    }
+    @Column(name = "adjusted_volume", precision = 24, scale = 8)
+    private BigDecimal adjustedVolume;
 
-    public void setBuyPrice(BigDecimal buyPrice) {
-        this.buyPrice = buyPrice;
-    }
+    @Column(name = "raw_close", precision = 24, scale = 8)
+    private BigDecimal rawClose;
 
-    public BigDecimal getSellPrice() {
-        return sellPrice;
-    }
+    @Column(name = "raw_average", precision = 24, scale = 8)
+    private BigDecimal rawAverage;
 
-    public void setSellPrice(BigDecimal sellPrice) {
-        this.sellPrice = sellPrice;
-    }
+    @Column(name = "raw_low", precision = 24, scale = 8)
+    private BigDecimal rawLow;
 
-    public String getSource() {
-        return source;
-    }
+    @Column(name = "raw_high", precision = 24, scale = 8)
+    private BigDecimal rawHigh;
 
-    public void setSource(String source) {
-        this.source = source;
-    }
+    @Column(name = "raw_volume", precision = 24, scale = 8)
+    private BigDecimal rawVolume;
 
-    public LocalDateTime getTimestamp() {
-        return timestamp;
-    }
+    @Column(name = "usd_try", precision = 24, scale = 8)
+    private BigDecimal usdTry;
 
-    public void setTimestamp(LocalDateTime timestamp) {
-        this.timestamp = timestamp;
-    }
+    @Column(name = "bist100_value", precision = 24, scale = 8)
+    private BigDecimal bist100Value;
+
+    @Column(name = "usd_price", precision = 24, scale = 8)
+    private BigDecimal usdPrice;
+
+    @Column(name = "index_based_price", precision = 24, scale = 8)
+    private BigDecimal indexBasedPrice;
+
+    @Column(name = "usd_volume", precision = 24, scale = 8)
+    private BigDecimal usdVolume;
+
+    @Column(precision = 24, scale = 2)
+    private BigDecimal capital;
+
+    @Column(name = "market_cap_try", precision = 24, scale = 2)
+    private BigDecimal marketCapTry;
+
+    @Column(name = "market_cap_usd", precision = 24, scale = 2)
+    private BigDecimal marketCapUsd;
+
+    @Column(name = "free_float_market_cap_try", precision = 24, scale = 2)
+    private BigDecimal freeFloatMarketCapTry;
+
+    @Column(name = "free_float_market_cap_usd", precision = 24, scale = 2)
+    private BigDecimal freeFloatMarketCapUsd;
+
+    @Column(name = "dollar_based_low", precision = 24, scale = 8)
+    private BigDecimal dollarBasedLow;
+
+    @Column(name = "dollar_based_high", precision = 24, scale = 8)
+    private BigDecimal dollarBasedHigh;
+
+    @Column(name = "dollar_based_average", precision = 24, scale = 8)
+    private BigDecimal dollarBasedAverage;
+
+    @Column(name = "data_quality", length = 32)
+    private String dataQuality;
+
+    @Column(length = 8)
+    private String currency;
 }

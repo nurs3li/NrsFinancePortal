@@ -97,7 +97,8 @@ public class EquityPriceIngestService {
     @Transactional
     @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
     public void fetchAndSaveOneYearHistoryBackfill() {
-        fetchAndSaveHistoryBackfill(365, 20);
+        int days = Math.max(1, equityProperties.getMaxHistoryDays());
+        fetchAndSaveHistoryBackfill(days, 20);
     }
 
     @Transactional
@@ -144,12 +145,13 @@ public class EquityPriceIngestService {
                 // Son satır market_price_history içinde çoğunlukla 10 dk'da bir gelen FINHUB quote'tur;
                 // grafiğin kaynağı equity_daily_candle olduğu için "son gün" buradan türetilmeli (aksi halde
                 // from = bugün+1 olur ve incremental hiç çalışmaz).
+                int maxDays = Math.max(1, equityProperties.getMaxHistoryDays());
                 LocalDate fromRaw = equityDailyCandleRepository.findTopBySymbolOrderByAsOfDesc(symbol)
                         .map(c -> c.getAsOf().plusDays(1))
-                        .orElse(today.minusDays(365));
+                        .orElse(today.minusDays(maxDays));
                 int heal = Math.max(0, equityProperties.getIncrementalGapHealDays());
                 LocalDate from = fromRaw.minusDays(heal);
-                LocalDate oldest = today.minusDays(365);
+                LocalDate oldest = today.minusDays(maxDays);
                 if (from.isBefore(oldest)) {
                     from = oldest;
                 }

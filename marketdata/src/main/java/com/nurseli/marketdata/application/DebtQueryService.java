@@ -108,18 +108,21 @@ public class DebtQueryService {
         boolean synthetic = source.toUpperCase().contains("MVP");
         String quality = synthetic ? "FALLBACK" : "EXACT";
         Long daysToMaturity = calculateDaysToMaturity(maturityDate);
-        BigDecimal couponRate = inferCouponRateFromYield(s.getYieldPct());
         return new DebtSnapshotResponse(
                 s.getIsin(),
                 s.getDirtyPrice(),
                 s.getYieldPct(),
                 maturityDate,
                 daysToMaturity,
-                couponRate,
+                null,
                 source,
                 asOf,
                 quality,
-                synthetic
+                synthetic,
+                Boolean.FALSE,
+                "BOND_PRICE_PERFORMANCE",
+                "PRICE",
+                Boolean.FALSE
         );
     }
 
@@ -134,13 +137,5 @@ public class DebtQueryService {
             }
         }
         return null;
-    }
-
-    /**
-     * Coupon rate provider yoksa geçici olarak yield bazlı güvenli fallback döner.
-     */
-    private BigDecimal inferCouponRateFromYield(BigDecimal yieldPct) {
-        if (yieldPct == null) return BigDecimal.ZERO;
-        return yieldPct.max(BigDecimal.ZERO);
     }
 }

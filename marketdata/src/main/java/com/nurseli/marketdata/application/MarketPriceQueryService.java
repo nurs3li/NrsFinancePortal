@@ -5,11 +5,15 @@ import com.nurseli.marketdata.api.dto.CandlePointResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceHistoryResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceLatestResponse;
 import com.nurseli.marketdata.api.dto.MarketType;
+import com.nurseli.marketdata.api.dto.PreciousMetalUsdChanges;
+import com.nurseli.marketdata.api.dto.PreciousMetalUsdOverviewRow;
 import com.nurseli.marketdata.api.dto.DataQualityFlag;
 import com.nurseli.marketdata.api.dto.PriceQuality;
 import com.nurseli.marketdata.api.exception.InvalidRequestException;
 import com.nurseli.marketdata.config.EquityProperties;
 import com.nurseli.marketdata.config.EtfProperties;
+import com.nurseli.marketdata.config.MarketMetalsIsyatirimProperties;
+import com.nurseli.marketdata.domain.metal.PreciousMetalUsdCatalog;
 import com.nurseli.marketdata.domain.price.CryptoSymbolMapping;
 import com.nurseli.marketdata.domain.price.CryptoDailyCandle;
 import com.nurseli.marketdata.domain.price.EquityDailyCandle;
@@ -45,7 +49,7 @@ public class MarketPriceQueryService {
     // tuttugu icin days=1 secilince hafta sonu/tatilde sadece 1 mum gelebiliyor; lightweight-charts
     // ise >= 2 nokta istiyor. days=5 ile son 5 takvim gunu icindeki en az 2 is gunu kapanisi
     // garantilenip "Analiz grafigi icin veri bulunamadi" mesaji onlenir.
-    private static final Set<Integer> ALLOWED_DAYS = Set.of(1, 3, 5, 7, 14, 30, 90, 180, 365);
+    private static final Set<Integer> ALLOWED_DAYS = Set.of(1, 3, 5, 7, 14, 30, 90, 180, 365, 730);
     private static final int MAX_SYMBOLS = 8;
     private static final BigDecimal ZERO_VOLUME = BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP);
     /**
@@ -69,25 +73,31 @@ public class MarketPriceQueryService {
     private final EtfProperties etfProperties;
     private final EquityMarketCapService equityMarketCapService;
     private final MetalPriceIngestService metalPriceIngestService;
+    private final MarketMetalsIsyatirimProperties marketMetalsIsyatirimProperties;
+    private final PreciousMetalUsdChangeCalculator preciousMetalUsdChangeCalculator;
 
     public MarketPriceLatestResponse getLatestOrThrow(String symbol) {
         return repository
                 .findTopBySymbolOrderByTimestampDesc(symbol)
-                .map(e -> new MarketPriceLatestResponse(
-                        e.getSymbol(),
-                        e.getBuyPrice(),
-                        e.getSellPrice(),
-                        e.getSource(),
-                        e.getTimestamp(),
-                        e.getTimestamp(),
-                        PriceQuality.EXACT,
-                        null,
-                        null,
-                        null
-                ))
+                .map(this::mapEntityToLatest)
                 .orElseThrow(() ->
                         new IllegalStateException("No data found for symbol: " + symbol)
                 );
+    }
+
+    private MarketPriceLatestResponse mapEntityToLatest(MarketPriceHistory e) {
+        return new MarketPriceLatestResponse(
+                e.getSymbol(),
+                e.getBuyPrice(),
+                e.getSellPrice(),
+                e.getSource(),
+                e.getTimestamp(),
+                e.getTimestamp(),
+                PriceQuality.EXACT,
+                null,
+                null,
+                null
+        );
     }
 
     public Map<String, MarketPriceLatestResponse> getLatestBySource(String source) {
@@ -95,18 +105,7 @@ public class MarketPriceQueryService {
                 .stream()
                 .collect(Collectors.toMap(
                         MarketPriceHistory::getSymbol,
-                        e -> new MarketPriceLatestResponse(
-                                e.getSymbol(),
-                                e.getBuyPrice(),
-                                e.getSellPrice(),
-                                e.getSource(),
-                                e.getTimestamp(),
-                                e.getTimestamp(),
-                                PriceQuality.EXACT,
-                                null,
-                                null,
-                                null
-                        ),
+                        this::mapEntityToLatest,
                         (a, b) -> a.timestamp().isAfter(b.timestamp()) ? a : b,
                         LinkedHashMap::new
                 ));
@@ -121,7 +120,99 @@ public class MarketPriceQueryService {
     }
 
     public Map<String, MarketPriceLatestResponse> getLatestMetals() {
-        return getLatestBySource("COINGECKO");
+        Map<String, MarketPriceLatestResponse> out = new LinkedHashMap<>(getLatestBySource("COINGECKO"));
+        for (PreciousMetalUsdCatalog.Entry e : PreciousMetalUsdCatalog.all()) {
+            repository.findTopBySymbolAndSourceOrderByTimestampDesc(e.canonicalSymbol(), PreciousMetalUsdCatalog.SOURCE)
+                    .map(this::mapEntityToLatest)
+                    .ifPresent(row -> out.put(e.canonicalSymbol(), row));
+        }
+        return out;
+    }
+
+    public List<PreciousMetalUsdOverviewRow> getPreciousMetalUsdOverviewPanel() {
+        List<PreciousMetalUsdOverviewRow> rows = new ArrayList<>();
+        for (PreciousMetalUsdCatalog.Entry e : PreciousMetalUsdCatalog.all()) {
+            Optional<MarketPriceHistory> latest = repository.findTopBySymbolAndSourceOrderByTimestampDesc(
+                    e.canonicalSymbol(),
+                    PreciousMetalUsdCatalog.SOURCE);
+            if (latest.isEmpty()) {
+                continue;
+            }
+            MarketPriceHistory h = latest.get();
+            BigDecimal mid = mid(h);
+            PreciousMetalUsdChanges ch = preciousMetalUsdChangeCalculator.compute(e.canonicalSymbol());
+            rows.add(new PreciousMetalUsdOverviewRow(
+                    e.canonicalSymbol(),
+                    e.displayName(),
+                    mid,
+                    ch,
+                    PreciousMetalUsdCatalog.SOURCE,
+                    marketMetalsIsyatirimProperties.getSourceLabel(),
+                    marketMetalsIsyatirimProperties.getDelayLabel(),
+                    h.getTimestamp(),
+                    "USD",
+                    "OUNCE"));
+        }
+        return rows;
+    }
+
+    public MarketPriceLatestResponse getMetalSingleLatest(String rawSymbol) {
+        if (rawSymbol == null || rawSymbol.isBlank()) {
+            throw new InvalidRequestException("symbol zorunludur.");
+        }
+        String symbol = rawSymbol.trim().toUpperCase();
+        if ("XAU_TRY".equals(symbol)) {
+            return getLatestOrThrow(symbol);
+        }
+        if (PreciousMetalUsdCatalog.isUsdOunceMetal(symbol)) {
+            return repository.findTopBySymbolAndSourceOrderByTimestampDesc(symbol, PreciousMetalUsdCatalog.SOURCE)
+                    .map(this::mapEntityToLatest)
+                    .orElseThrow(() -> new InvalidRequestException("Bu sembol için veri bulunamadı: " + symbol));
+        }
+        throw new InvalidRequestException("Geçersiz metal sembolü: " + symbol);
+    }
+
+    /**
+     * USD/ons kıymetli madenler — geçersiz semboller atlanır, kalanlar için günlük mum serisi döner.
+     */
+    public BatchHistoryResponse getPreciousMetalUsdBatchHistory(
+            String rawSymbolsCsv,
+            LocalDate from,
+            LocalDate to,
+            Integer days
+    ) {
+        if (rawSymbolsCsv == null || rawSymbolsCsv.isBlank()) {
+            throw new InvalidRequestException("symbols zorunludur.");
+        }
+        List<String> symbols = Arrays.stream(rawSymbolsCsv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .map(String::toUpperCase)
+                .distinct()
+                .toList();
+        LocalDateTime end;
+        LocalDateTime start;
+        if (from != null && to != null) {
+            if (to.isBefore(from)) {
+                throw new InvalidRequestException("from > to");
+            }
+            start = from.atStartOfDay(MARKET_WALL_CLOCK_ZONE).toLocalDateTime();
+            end = to.atTime(23, 59, 59);
+        } else {
+            int d = days != null ? days : 730;
+            validateDays(d);
+            end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
+            start = end.minusDays(d);
+        }
+        Map<String, List<CandlePointResponse>> series = new LinkedHashMap<>();
+        for (String symbol : symbols) {
+            if (!PreciousMetalUsdCatalog.isUsdOunceMetal(symbol)) {
+                continue;
+            }
+            List<MarketPriceHistory> rows = findUsdOunceMetalRawHistory(symbol, start, end);
+            series.put(symbol, toDailyCandles(rows));
+        }
+        return new BatchHistoryResponse(series);
     }
 
     public Map<String, MarketPriceLatestResponse> getLatestFunds() {
@@ -239,10 +330,10 @@ public class MarketPriceQueryService {
 
     /**
      * Altın (XAU_TRY) geçmişi — piyasa batch grafiğiyle aynı kaynak: ham satırlar → günlük mum.
-     * Dakika kovası ({@link #getHistory}) çok büyük seri üretebildiği için simülasyon / uzun aralıkta
-     * tüketici istemcilerde zaman aşımı veya boş yanıt riski vardı.
+     * USD/ons sembolleri (İş Yatırım) için CoinGecko backfill çağrılmaz.
+     * {@code from}/{@code to} verilirse gün aralığı; aksi halde {@code days} (izin listesinde) kullanılır.
      */
-    public List<MarketPriceHistoryResponse> getMetalHistory(String rawSymbol, int days) {
+    public List<MarketPriceHistoryResponse> getMetalHistory(String rawSymbol, int days, LocalDate from, LocalDate to) {
         if (rawSymbol == null || rawSymbol.isBlank()) {
             throw new InvalidRequestException("symbol zorunludur.");
         }
@@ -250,19 +341,44 @@ public class MarketPriceQueryService {
         if (!isAllowedSymbol(MarketType.METALS, symbol)) {
             throw new InvalidRequestException("type=METALS için geçersiz symbol: " + symbol);
         }
-        if (days <= 0) {
-            return List.of();
+        if ((from == null) != (to == null)) {
+            throw new InvalidRequestException("from ve to birlikte verilmelidir.");
         }
-        metalPriceIngestService.ensureHistoricalBackfill(days);
-        LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
-        LocalDateTime start = end.minusDays(days);
-        List<MarketPriceHistory> rows =
-                repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
+        final LocalDateTime start;
+        final LocalDateTime end;
+        if (from != null) {
+            if (to.isBefore(from)) {
+                throw new InvalidRequestException("from > to");
+            }
+            start = from.atStartOfDay(MARKET_WALL_CLOCK_ZONE).toLocalDateTime();
+            end = to.atTime(23, 59, 59);
+        } else {
+            if (days <= 0) {
+                return List.of();
+            }
+            validateDays(days);
+            end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
+            start = end.minusDays(days);
+        }
+        if ("XAU_TRY".equals(symbol)) {
+            int backfillDays = from != null
+                    ? (int) Math.min(365L, ChronoUnit.DAYS.between(from, to) + 1)
+                    : days;
+            metalPriceIngestService.ensureHistoricalBackfill(backfillDays);
+        }
+        List<MarketPriceHistory> rows = PreciousMetalUsdCatalog.isUsdOunceMetal(symbol)
+                ? findUsdOunceMetalRawHistory(symbol, start, end)
+                : repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
         List<CandlePointResponse> candles = toDailyCandles(rows);
         if (!candles.isEmpty()) {
-            return toHistoryFromCandles(candles);
+            return PreciousMetalUsdCatalog.isUsdOunceMetal(symbol)
+                    ? toHistoryFromCandles(candles, PreciousMetalUsdCatalog.SOURCE)
+                    : toHistoryFromCandles(candles);
         }
-        return getHistory(symbol, days);
+        if (from == null) {
+            return getHistory(symbol, days);
+        }
+        return List.of();
     }
 
     /**
@@ -572,7 +688,7 @@ public class MarketPriceQueryService {
 
     private void validateDays(int days) {
         if (!ALLOWED_DAYS.contains(days)) {
-            throw new InvalidRequestException("days sadece 1, 7, 14, 30, 90, 180, 365 olabilir.");
+            throw new InvalidRequestException("days sadece izin verilen sabit değerlerden biri olabilir (örn. 5, 7, 30, 90, 180, 365, 730).");
         }
     }
 
@@ -608,7 +724,7 @@ public class MarketPriceQueryService {
         return switch (type) {
             case FX -> Set.of("USDTRY", "EURTRY", "GBPTRY").contains(symbol);
             case CRYPTO -> CryptoSymbolMapping.SYMBOL_TO_ID.containsKey(symbol);
-            case METALS -> Set.of("XAU_TRY").contains(symbol);
+            case METALS -> "XAU_TRY".equals(symbol) || PreciousMetalUsdCatalog.isUsdOunceMetal(symbol);
             case FUNDS -> etfProperties != null
                     && etfProperties.getSymbols() != null
                     && etfProperties.getSymbols().stream()
@@ -710,16 +826,38 @@ public class MarketPriceQueryService {
     }
 
     private List<MarketPriceHistoryResponse> toHistoryFromCandles(List<CandlePointResponse> candles) {
+        return toHistoryFromCandles(candles, "SYSTEM");
+    }
+
+    private List<MarketPriceHistoryResponse> toHistoryFromCandles(List<CandlePointResponse> candles, String responseSource) {
         return candles.stream()
                 .map(c -> new MarketPriceHistoryResponse(
                         c.c(),
                         c.c(),
                         c.t().toLocalDateTime(),
-                        "SYSTEM",
+                        responseSource,
                         c.t().toLocalDateTime(),
                         DataQualityFlag.EXACT
                 ))
                 .toList();
+    }
+
+    /**
+     * USD/ons kıymetli maden günlükleri {@code IS_YATIRIM} kaynağında; aynı sembol için scheduler
+     * veya sentetik tick'ler farklı {@code source} ile yazılabiliyor — geçmiş uçlarında yalnızca İş Yatırım
+     * serisi okunmalı (aksi halde günlük mumda yanlış kaynak baskın çıkıyor).
+     */
+    private List<MarketPriceHistory> findUsdOunceMetalRawHistory(
+            String symbol,
+            LocalDateTime startInclusive,
+            LocalDateTime endInclusive
+    ) {
+        LocalDate fromDay = startInclusive.toLocalDate();
+        LocalDate toDay = endInclusive.toLocalDate();
+        LocalDateTime qStart = fromDay.atStartOfDay(MARKET_WALL_CLOCK_ZONE).toLocalDateTime();
+        LocalDateTime endExclusive = toDay.plusDays(1).atStartOfDay(MARKET_WALL_CLOCK_ZONE).toLocalDateTime();
+        return repository.findBySymbolAndSourceAndTimestampRange(
+                symbol, PreciousMetalUsdCatalog.SOURCE, qStart, endExclusive);
     }
 
     private List<CandlePointResponse> toEquityCandles(String symbol, LocalDate from, LocalDate to) {

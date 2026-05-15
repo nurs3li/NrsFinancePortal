@@ -14,7 +14,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Component
 @Slf4j
@@ -50,12 +53,12 @@ public class EvdsDebtClient {
             if (instrument == null || instrument.getIsin() == null || instrument.getIsin().isBlank()) {
                 continue;
             }
-            List<EvdsPoint> pricePoints = fetchRecentSeriesPoints(instrument.getDirtyPriceSeries(), pointLimit);
-            List<EvdsPoint> yieldPoints = fetchRecentSeriesPoints(instrument.getYieldSeries(), pointLimit);
+            List<EvdsSeriesPoint> pricePoints = fetchRecentSeriesPoints(instrument.getDirtyPriceSeries(), pointLimit);
+            List<EvdsSeriesPoint> yieldPoints = fetchRecentSeriesPoints(instrument.getYieldSeries(), pointLimit);
             int rowCount = Math.max(pricePoints.size(), yieldPoints.size());
             for (int idx = 0; idx < rowCount; idx++) {
-                EvdsPoint pricePoint = idx < pricePoints.size() ? pricePoints.get(idx) : null;
-                EvdsPoint yieldPoint = idx < yieldPoints.size() ? yieldPoints.get(idx) : null;
+                EvdsSeriesPoint pricePoint = idx < pricePoints.size() ? pricePoints.get(idx) : null;
+                EvdsSeriesPoint yieldPoint = idx < yieldPoints.size() ? yieldPoints.get(idx) : null;
                 if (pricePoint == null && yieldPoint == null) {
                     continue;
                 }
@@ -82,6 +85,35 @@ public class EvdsDebtClient {
         return out;
     }
 
+    /**
+     * EVDS serisini tarih artan sırada döndürür (örn. aylık TÜFE endeks seviyesi).
+     * Seri kodu {@code market.evds.series.CPI_TR_INDEX} üzerinden yapılandırılır.
+     */
+    public List<EvdsSeriesPoint> fetchSeriesAscending(String seriesCode, LocalDate startInclusive, LocalDate endInclusive) {
+        if (!evdsProperties.isEnabled() || seriesCode == null || seriesCode.isBlank()) {
+            return List.of();
+        }
+        String normalizedSeries = normalizeSeriesCode(seriesCode);
+        String json = webClient.get()
+                .uri(buildSeriesUri(normalizedSeries, startInclusive, endInclusive))
+                .header("key", evdsProperties.getApiKey())
+                .retrieve()
+                .bodyToMono(String.class)
+                .timeout(java.time.Duration.ofMillis(evdsProperties.getTimeoutMs()))
+                .retryWhen(Retry.max(2))
+                .onErrorResume(ex -> {
+                    log.warn("[EVDS_SERIES] fetch failed for {}: {}", normalizedSeries, ex.getMessage());
+                    return Mono.empty();
+                })
+                .block();
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        List<EvdsSeriesPoint> parsed = parseAllPoints(json);
+        parsed.sort(Comparator.comparing(EvdsSeriesPoint::asOf));
+        return dedupeByCalendarDayKeepLast(parsed);
+    }
+
     private int resolveLookbackDays(Integer overrideDays) {
         if (overrideDays != null && overrideDays > 0) {
             return overrideDays;
@@ -89,7 +121,7 @@ public class EvdsDebtClient {
         return Math.max(1, evdsProperties.getDebt().getLookbackDays());
     }
 
-    private List<EvdsPoint> fetchRecentSeriesPoints(String seriesCode, int limit) {
+    private List<EvdsSeriesPoint> fetchRecentSeriesPoints(String seriesCode, int limit) {
         if (seriesCode == null || seriesCode.isBlank()) {
             return List.of();
         }
@@ -130,14 +162,34 @@ public class EvdsDebtClient {
                 .formatted(seriesCode, startDate, endDate, evdsProperties.getApiKey());
     }
 
-    private List<EvdsPoint> parseRecentPoints(String json, int limit) {
+    private List<EvdsSeriesPoint> parseRecentPoints(String json, int limit) {
+        List<EvdsSeriesPoint> parsed = parseAllPoints(json);
+        if (parsed.isEmpty()) {
+            return List.of();
+        }
+        parsed.sort((a, b) -> b.asOf().compareTo(a.asOf()));
+        List<EvdsSeriesPoint> uniqueByDate = new ArrayList<>();
+        for (EvdsSeriesPoint point : parsed) {
+            boolean exists = uniqueByDate.stream().anyMatch(x -> x.asOf().toLocalDate().equals(point.asOf().toLocalDate()));
+            if (exists) {
+                continue;
+            }
+            uniqueByDate.add(point);
+            if (uniqueByDate.size() >= limit) {
+                break;
+            }
+        }
+        return uniqueByDate;
+    }
+
+    private List<EvdsSeriesPoint> parseAllPoints(String json) {
         try {
             JsonNode root = objectMapper.readTree(json);
             JsonNode items = root.path("items");
             if (!items.isArray() || items.isEmpty()) {
                 return List.of();
             }
-            List<EvdsPoint> parsed = new ArrayList<>();
+            List<EvdsSeriesPoint> parsed = new ArrayList<>();
             for (JsonNode item : items) {
                 String dateText = item.path("Tarih").asText(null);
                 if (dateText == null || dateText.isBlank()) {
@@ -146,33 +198,30 @@ public class EvdsDebtClient {
                 if (dateText == null || dateText.isBlank()) {
                     continue;
                 }
-                LocalDate date = LocalDate.parse(dateText, EVDS_DATE);
+                LocalDate date = EvdsObservationDateParser.parse(dateText);
+                if (date == null) {
+                    continue;
+                }
                 BigDecimal value = firstNumericValue(item);
                 if (value == null) {
                     continue;
                 }
-                parsed.add(new EvdsPoint(date.atStartOfDay(), value));
+                parsed.add(new EvdsSeriesPoint(date.atStartOfDay(), value));
             }
-            if (parsed.isEmpty()) {
-                return List.of();
-            }
-            parsed.sort((a, b) -> b.asOf().compareTo(a.asOf()));
-            List<EvdsPoint> uniqueByDate = new ArrayList<>();
-            for (EvdsPoint point : parsed) {
-                boolean exists = uniqueByDate.stream().anyMatch(x -> x.asOf().toLocalDate().equals(point.asOf().toLocalDate()));
-                if (exists) {
-                    continue;
-                }
-                uniqueByDate.add(point);
-                if (uniqueByDate.size() >= limit) {
-                    break;
-                }
-            }
-            return uniqueByDate;
+            return parsed;
         } catch (Exception ex) {
             log.warn("[EVDS_DEBT] parse error: {}", ex.getMessage());
             return List.of();
         }
+    }
+
+    private List<EvdsSeriesPoint> dedupeByCalendarDayKeepLast(List<EvdsSeriesPoint> sortedAsc) {
+        Map<LocalDate, EvdsSeriesPoint> map = new LinkedHashMap<>();
+        for (EvdsSeriesPoint p : sortedAsc) {
+            LocalDate d = p.asOf().toLocalDate();
+            map.put(d, p);
+        }
+        return new ArrayList<>(map.values());
     }
 
     private BigDecimal firstNumericValue(JsonNode item) {
@@ -229,6 +278,4 @@ public class EvdsDebtClient {
             LocalDateTime asOf,
             String source
     ) {}
-
-    private record EvdsPoint(LocalDateTime asOf, BigDecimal value) {}
 }

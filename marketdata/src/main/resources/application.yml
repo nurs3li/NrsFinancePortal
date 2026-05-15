@@ -38,10 +38,36 @@ management:
         include: health,info
 
 market:
+  fx:
+    effective-rates:
+      lookback-days: ${FX_EFFECTIVE_LOOKBACK_DAYS:400}
   evds:
     enabled: true
     apiKey: ${EVDS_API_KEY:}
     timeoutMs: 3000
+    # Mantıksal gösterge → EVDS seri kodu (Java içinde TP_* sabitlenmez).
+    series:
+      CPI_TR_INDEX: ${EVDS_SERIES_CPI_TR_INDEX:TP_GENENDEKS_T1}
+      PPI_TR_INDEX: ${EVDS_SERIES_PPI_TR_INDEX:TP_TUFE1YI_T1}
+      LOAN_RATE_CONSUMER_TRY_WEEKLY: ${EVDS_SERIES_LOAN_RATE_CONSUMER_TRY_WEEKLY:TP_KTF10}
+      LOAN_RATE_VEHICLE_TRY_WEEKLY: ${EVDS_SERIES_LOAN_RATE_VEHICLE_TRY_WEEKLY:TP_KTF11}
+      LOAN_RATE_HOUSING_TRY_WEEKLY: ${EVDS_SERIES_LOAN_RATE_HOUSING_TRY_WEEKLY:TP_KTF12}
+      LOAN_RATE_COMMERCIAL_TRY_WEEKLY: ${EVDS_SERIES_LOAN_RATE_COMMERCIAL_TRY_WEEKLY:TP_KTF17}
+      TCMB_WEIGHTED_AVG_FUNDING_COST_TR: ${EVDS_SERIES_TCMB_WEIGHTED_AVG_FUNDING_COST_TR:TP_APIFON4}
+      POLICY_RATE_TR: ${EVDS_SERIES_POLICY_RATE_TR:TP_BISPOLFAIZ_TUR}
+      DEPOSIT_RATE_TRY_1M_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_TRY_1M_WEEKLY:TP_TRY_MT01}
+      DEPOSIT_RATE_TRY_3M_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_TRY_3M_WEEKLY:TP_TRY_MT02}
+      DEPOSIT_RATE_TRY_6M_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_TRY_6M_WEEKLY:TP_TRY_MT03}
+      DEPOSIT_RATE_TRY_1Y_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_TRY_1Y_WEEKLY:TP_TRY_MT04}
+      DEPOSIT_RATE_TRY_GT1Y_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_TRY_GT1Y_WEEKLY:TP_TRY_MT05}
+      DEPOSIT_RATE_EUR_1M_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_EUR_1M_WEEKLY:TP_EUR_MT01}
+      DEPOSIT_RATE_EUR_3M_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_EUR_3M_WEEKLY:TP_EUR_MT02}
+      DEPOSIT_RATE_EUR_6M_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_EUR_6M_WEEKLY:TP_EUR_MT03}
+      DEPOSIT_RATE_EUR_1Y_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_EUR_1Y_WEEKLY:TP_EUR_MT04}
+      DEPOSIT_RATE_USD_1M_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_USD_1M_WEEKLY:TP_USD_MT01}
+      DEPOSIT_RATE_USD_3M_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_USD_3M_WEEKLY:TP_USD_MT02}
+      DEPOSIT_RATE_USD_6M_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_USD_6M_WEEKLY:TP_USD_MT03}
+      DEPOSIT_RATE_USD_1Y_WEEKLY: ${EVDS_SERIES_DEPOSIT_RATE_USD_1Y_WEEKLY:TP_USD_MT04}
     debt:
       enabled: ${EVDS_DEBT_ENABLED:false}
       lookbackDays: ${EVDS_DEBT_LOOKBACK_DAYS:14}
@@ -190,6 +216,21 @@ market:
           yieldSeries: TP_TRT080932K20_ORAN
           dirtyPriceScale: 1
           yieldScale: 1
+  inflation:
+    ppi:
+      persist-enabled: ${INFLATION_PPI_PERSIST_ENABLED:true}
+      base-year: 2003
+      scheduler-enabled: ${INFLATION_PPI_SCHEDULER_ENABLED:false}
+      scheduler-cron: ${INFLATION_PPI_SCHEDULER_CRON:0 0 7 3 * *}
+  deposit-rates:
+    enabled: ${DEPOSIT_RATES_ENABLED:false}
+    # WEEKLY — kredi faizi (haftalık akım) ile aynı frekans ailesi; EVDS ham verisi haftalık seri olarak işlenir.
+    frequency: WEEKLY
+    scheduler-enabled: ${DEPOSIT_RATES_SCHEDULER_ENABLED:false}
+    scheduler-cron: ${DEPOSIT_RATES_SCHEDULER_CRON:0 0 7 * * MON}
+    backfill:
+      enabled: ${DEPOSIT_RATES_BACKFILL_ENABLED:false}
+      from: ${DEPOSIT_RATES_BACKFILL_FROM:2018-01-01}
   providers:
     debt:
       enabled: ${DEBT_PROVIDER_ENABLED:false}
@@ -197,9 +238,39 @@ market:
       apiKey: ${DEBT_PROVIDER_API_KEY:}
       timeoutMs: 3000
       latestPath: ${DEBT_PROVIDER_LATEST_PATH:/debt/latest}
-
+  bist:
+    enabled: false
+    scheduler-enabled: false
+    primary-provider: IS_YATIRIM
+    fallback-provider: YAHOO
+    fallback-to-db: true
+    default-lookback-years: 2
+    symbols:
+      - THYAO
+      - ASELS
+      - KCHOL
+      - SAHOL
+      - GARAN
+      - AKBNK
+      - ISCTR
+      - YKBNK
+      - EREGL
+      - TUPRS
+      - BIMAS
+      - MGROS
+      - SISE
+      - FROTO
+      - TOASO
+      - TCELL
+      - ENKAI
+      - PETKM
+      - KOZAL
+      - PGSUS
 
 app:
+  internal:
+    # Boşsa: POST /internal/market/backfill/bist-daily 401 (JWT admin ucu kullanılır).
+    backfill-token: ${NRS_INTERNAL_BACKFILL_TOKEN:}
   translation:
     enabled: ${APP_TRANSLATION_ENABLED:true}
     provider: ${APP_TRANSLATION_PROVIDER:googlefree}
@@ -238,6 +309,7 @@ app:
       - WMT
     # Incremental'da son mumdan sonraki günden N gün geriye dış kaynak (Yahoo/Stooq) — ara boşluk doldurma
     incremental-gap-heal-days: ${EQUITY_INCREMENTAL_GAP_HEAL_DAYS:21}
+    max-history-days: ${EQUITY_MAX_HISTORY_DAYS:730}
     history-incremental-cron: ${EQUITY_HISTORY_INCREMENTAL_CRON:0 30 2 * * *}
     history-incremental-zone: ${EQUITY_HISTORY_INCREMENTAL_ZONE:Europe/Istanbul}
     # Açılış: ihtiyaç varsa bir kez dış kaynakla geçmiş (Yahoo/Stooq/…); sonra incremental + quote rollup.
@@ -247,7 +319,7 @@ app:
       stale-days: ${EQUITY_INITIAL_SEED_STALE_DAYS:4}
     history-backfill:
       enabled: ${EQUITY_HISTORY_BACKFILL_ENABLED:false}
-      periodDays: ${EQUITY_HISTORY_BACKFILL_PERIOD_DAYS:365}
+      periodDays: ${EQUITY_HISTORY_BACKFILL_PERIOD_DAYS:730}
       batchSize: ${EQUITY_HISTORY_BACKFILL_BATCH_SIZE:20}
       shutdownOnComplete: ${EQUITY_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
   crypto:
@@ -285,9 +357,179 @@ app:
   market:
     fx:
       # TCMB ingest aralığı (ms). HTTP /doviz/latest canlı çekmez; DB + snapshot okur.
-      scheduler-ms: 60000
+      scheduler-ms: 3600000
       # Ingest sonrası bellek snapshot geçerlilik süresi (saniye)
       snapshot-ttl-seconds: 90
+    viop:
+      enabled: true
+      provider: IS_YATIRIM
+      delay-minutes: 15
+      default-period-minutes: 60
+      cache-ttl-seconds: 900
+      timezone: Europe/Istanbul
+      isyatirim:
+        base-url: https://www.isyatirim.com.tr
+        history-path: /_Layouts/15/IsYatirim.Website/Common/ChartData.aspx/IndexHistoricalAll
+        snapshot-path: /_layouts/15/Isyatirim.Website/Common/Data.aspx/OneEndeks
+        referer: https://www.isyatirim.com.tr/tr-tr/analiz/Sayfalar/viop.aspx
+        connect-timeout-ms: 5000
+        read-timeout-ms: 10000
+        user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36
+      scheduler:
+        enabled: true
+        snapshot-enabled: true
+        history-enabled: false
+        snapshot-fixed-delay-ms: 3600000
+        history-fixed-delay-ms: 3600000
+        snapshot-initial-delay-ms: 120000
+        history-initial-delay-ms: 1980000
+        history-lookback-days: 7
+        history-chunk-days: 7
+        period-minutes: 60
+        # Geriye dönük YAML alanları (cron artık kullanılmıyor; fixed-delay öncelikli).
+        snapshot-cron: "0 */15 * * * *"
+        history-cron: "0 30 2 * * *"
+      whitelist:
+        index:
+          - underlying: XU030
+            display-name: BIST 30 Vadeli
+            contract-name: XU030 Aralık 2026 Vadeli
+            contract-code: F_XU0301226
+            maturity-month: 12
+            maturity-year: 2026
+            segment: INDEX_FUTURES
+            asset-class: INDEX
+            chart-type: PRICE_SERIES
+            enabled: true
+          - underlying: XLBNK
+            display-name: BIST Likit Banka Vadeli
+            contract-name: XLBNK Aralık 2026 Vadeli
+            contract-code: F_XLBNK1226
+            maturity-month: 12
+            maturity-year: 2026
+            segment: INDEX_FUTURES
+            asset-class: INDEX
+            chart-type: PRICE_SERIES
+            enabled: true
+        fx:
+          - underlying: USDTRY
+            display-name: USD/TRY Vadeli
+            contract-name: USDTRY Aralık 2026 Vadeli
+            contract-code: F_USDTRY1226
+            maturity-month: 12
+            maturity-year: 2026
+            segment: FX_TRY_FUTURES
+            asset-class: FX
+            chart-type: PRICE_SERIES
+            enabled: true
+          - underlying: EURTRY
+            display-name: EUR/TRY Vadeli
+            contract-name: EURTRY Aralık 2026 Vadeli
+            contract-code: F_EURTRY1226
+            maturity-month: 12
+            maturity-year: 2026
+            segment: FX_TRY_FUTURES
+            asset-class: FX
+            chart-type: PRICE_SERIES
+            enabled: true
+        precious-metal:
+          - underlying: XAUTRYM
+            display-name: Gram Altın Vadeli
+            contract-name: Gram Altın Ekim 2026 Vadeli
+            contract-code: F_XAUTRYM1026
+            maturity-month: 10
+            maturity-year: 2026
+            segment: PRECIOUS_METAL_FUTURES
+            asset-class: PRECIOUS_METAL
+            chart-type: PRICE_SERIES
+            enabled: true
+          - underlying: XAUUSD
+            display-name: Ons Altın Vadeli
+            contract-name: Ons Altın Ekim 2026 Vadeli
+            contract-code: F_XAUUSD1026
+            maturity-month: 10
+            maturity-year: 2026
+            segment: PRECIOUS_METAL_FUTURES
+            asset-class: PRECIOUS_METAL
+            chart-type: PRICE_SERIES
+            enabled: true
+        equity:
+          - underlying: GARAN
+            display-name: GARAN Pay Vadeli
+            contract-name: GARAN Temmuz 2026 Vadeli
+            contract-code: F_GARAN0726
+            maturity-month: 7
+            maturity-year: 2026
+            segment: EQUITY_FUTURES
+            asset-class: EQUITY
+            chart-type: PRICE_SERIES
+            enabled: true
+          - underlying: THYAO
+            display-name: THYAO Pay Vadeli
+            contract-name: THYAO Temmuz 2026 Vadeli
+            contract-code: F_THYAO0726
+            maturity-month: 7
+            maturity-year: 2026
+            segment: EQUITY_FUTURES
+            asset-class: EQUITY
+            chart-type: PRICE_SERIES
+            enabled: true
+          - underlying: ASELS
+            display-name: ASELS Pay Vadeli
+            contract-name: ASELS Temmuz 2026 Vadeli
+            contract-code: F_ASELS0726
+            maturity-month: 7
+            maturity-year: 2026
+            segment: EQUITY_FUTURES
+            asset-class: EQUITY
+            chart-type: PRICE_SERIES
+            enabled: true
+          - underlying: AKBNK
+            display-name: AKBNK Pay Vadeli
+            contract-name: AKBNK Temmuz 2026 Vadeli
+            contract-code: F_AKBNK0726
+            maturity-month: 7
+            maturity-year: 2026
+            segment: EQUITY_FUTURES
+            asset-class: EQUITY
+            chart-type: PRICE_SERIES
+            enabled: true
+          - underlying: SISE
+            display-name: SISE Pay Vadeli
+            contract-name: SISE Temmuz 2026 Vadeli
+            contract-code: F_SISE0726
+            maturity-month: 7
+            maturity-year: 2026
+            segment: EQUITY_FUTURES
+            asset-class: EQUITY
+            chart-type: PRICE_SERIES
+            enabled: true
+          - underlying: EREGL
+            display-name: EREGL Pay Vadeli
+            contract-name: EREGL Temmuz 2026 Vadeli
+            contract-code: F_EREGL0726
+            maturity-month: 7
+            maturity-year: 2026
+            segment: EQUITY_FUTURES
+            asset-class: EQUITY
+            chart-type: PRICE_SERIES
+            enabled: true
+    metals:
+      isyatirim:
+        enabled: true
+        base-url: https://www.isyatirim.com.tr
+        historical-path: /_Layouts/15/IsYatirim.Website/Common/ChartData.aspx/IndexHistoricalAll
+        period-minutes: 1440
+        default-lookback-years: 2
+        latest-lookback-days: 10
+        latest-fallback-lookback-days: 30
+        connect-timeout-ms: 5000
+        read-timeout-ms: 10000
+        source-label: "İş Yatırım"
+        delay-label: "Gecikmeli veri"
+        latest-refresh:
+          enabled: true
+          fixed-delay-ms: 3600000
   providers:
     fx:
       canonical: TCMB
@@ -302,50 +544,18 @@ app:
       canonical: FINHUB
       fallback-order: []
   viop:
-    backfill:
-      enabled: ${VIOP_BACKFILL_ENABLED:false}
-      dir: ${VIOP_BACKFILL_DIR:artifacts/viop}
-      pattern: ${VIOP_BACKFILL_PATTERN:viop_*.csv}
-      shutdownOnComplete: ${VIOP_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
-      # Periyodik tarama: klasore yeni eklenen viop_YYYYMMDD.csv dosyalari her N saatte bir
-      # otomatik DB'ye alinir. ViopBackfillRunner.importAllCsvFilesToDb() idempotent calistigi
-      # icin tekrar tekrar tetiklenmesi guvenlidir (duplicate satirlar atilir).
-      incremental:
-        enabled: ${VIOP_BACKFILL_INCREMENTAL_ENABLED:true}
-        # Default: her 3 saatte bir (00:00, 03:00, ..., 21:00 Europe/Istanbul).
-        cron: ${VIOP_BACKFILL_INCREMENTAL_CRON:0 0 */3 * * *}
-        zone: ${VIOP_BACKFILL_INCREMENTAL_ZONE:Europe/Istanbul}
-    rollups:
-      # true: açılışta kontrat % / son-iki-nokta alanlarını snapshot'lardan bir kez hesaplar (POST backfill şart değil)
-      refresh-on-startup: ${VIOP_ROLLUPS_REFRESH_ON_START:false}
     query:
-      # VIOP whitelist — kategori dengeli ana sergisi (toplam 13 kontrat).
-      # 10 doviz + 1 endeks + 2 emtia: kullaniciya "Doviz, Endeks ve Emtia kapsiyoruz" sozunu
-      # somut olarak tasiyan bir vitrin. Hepsi son 17 gunluk yayinda aktif islem goren,
-      # likiditesi yuksek vadeli sozlesmeler — UI'de hicbir grafik bos kalmaz.
-      #
-      # Liste guncellenirken `frontend/src/constants/ViopWhitelist.ts` de birlikte
-      # guncellenmelidir. Kategorize secim metodolojisi: `artifacts/viop/_category_picks.py`.
+      # ViopQueryService (legacy DB yolları) için; İş Yatırım vitrin kontratı ile hizalı tutun.
       allowed-contracts:
-        # --- Doviz: USDTRY en yakin 8 vade (May 2026 -> Ara 2026) ---
-        - F_USDTRY0526
-        - F_USDTRY0626
-        - F_USDTRY0726
-        - F_USDTRY0826
-        - F_USDTRY0926
-        - F_USDTRY1026
-        - F_USDTRY1126
+        - F_XU0301226
+        - F_XLBNK1226
         - F_USDTRY1226
-        # --- Doviz: EUR caprazlari (Aralik 2026) ---
-        - F_EURUSD1226
         - F_EURTRY1226
-        # --- Endeks: BIST30 vadeli (en yakin: Haziran 2026) ---
-        - F_XU0300626
-        # --- Emtia: Gram Altin TRY ve ONS Altin USD (Haziran 2026) ---
-        - F_XAUTRYM0626
-        - F_XAUUSD0626
-        # --- Pay vadelileri (Haziran 2026) — en yuksek hacimli BIST hisseleri ---
-        - F_THYAO0626
-        - F_EREGL0626
-        - F_SASA0626
-        - F_SISE0626
+        - F_XAUTRYM1026
+        - F_XAUUSD1026
+        - F_GARAN0726
+        - F_THYAO0726
+        - F_ASELS0726
+        - F_AKBNK0726
+        - F_SISE0726
+        - F_EREGL0726

@@ -1,0 +1,40 @@
+package com.nurseli.marketdata.api.dto;
+
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+
+public record ViopContractSnapshotResponse(
+        String contractCode,
+        String underlying,
+        String displayName,
+        String contractName,
+        int maturityMonth,
+        int maturityYear,
+        String assetClass,
+        String segment,
+        String sourceLabel,
+        int delayMinutes,
+        OffsetDateTime updateDate,
+        BigDecimal bid,
+        BigDecimal ask,
+        BigDecimal last,
+        BigDecimal open,
+        BigDecimal high,
+        BigDecimal low,
+        BigDecimal dayClose,
+        BigDecimal changeAmount,
+        BigDecimal changePercent,
+        Long quantity,
+        Long volume,
+        BigDecimal settlement,
+        BigDecimal preSettlement,
+        BigDecimal limitUp,
+        BigDecimal limitDown,
+        BigDecimal initialMargin,
+        Integer priceStep,
+        BigDecimal weekLow,
+        BigDecimal weekHigh,
+        BigDecimal monthLow,
+        BigDecimal monthHigh,
+        String dataQuality
+) {}

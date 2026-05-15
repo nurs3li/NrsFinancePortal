@@ -16,10 +16,10 @@ public class FxMarketScheduler {
     private final EvdsIngestService evdsIngestService;
 
     /**
-     * FX rates (TCMB) — varsayılan 60 sn; ingest DB + bellek snapshot günceller.
+     * FX rates (TCMB) — varsayılan 1 saat; ingest DB + bellek snapshot günceller.
      * {@code app.market.fx.scheduler-ms} ile özelleştirilebilir.
      */
-    @Scheduled(fixedDelayString = "${app.market.fx.scheduler-ms:60000}")
+    @Scheduled(fixedDelayString = "${app.market.fx.scheduler-ms:3600000}")
     public void fetchFxRates() {
         try {
             log.info("[SCHEDULER] Fetching FX rates from TCMB");
