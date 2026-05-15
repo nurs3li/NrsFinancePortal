@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import type { AxiosResponse } from 'axios';
 import DOMPurify from 'dompurify';
 import { financeClient, marketClient, notificationClient, readFinanceBinaryErrorMessage } from '../api/client';
-import type { MarketDashboard } from '../components/market/marketTypes';
+import type { LatestPriceRow, MarketDashboard } from '../components/market/marketTypes';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 import { useDocumentVisibility } from '../hooks/useDocumentVisibility';
@@ -114,7 +114,8 @@ function buildDistributionConicGradient(slices: { key: string; pct: number }[], 
     return `conic-gradient(${parts.join(', ')})`;
 }
 
-type LatestPrice = { symbol?: string; buyPrice?: number; sellPrice?: number; price?: number; status?: string };
+/** Dashboard özet kartları; BIST/US ayrımı için `LatestPriceRow` ile uyumlu additive alanlar */
+type LatestPrice = LatestPriceRow;
 type NewsItem = {
     id: number;
     title: string;

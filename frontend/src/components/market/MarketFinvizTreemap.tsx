@@ -1,4 +1,5 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { hierarchy, treemap, treemapSquarify } from 'd3-hierarchy';
 import type { HierarchyRectangularNode } from 'd3-hierarchy';
 
@@ -18,6 +19,8 @@ export type TreemapTile = {
 
 type HNode = {
     name: string;
+    /** Sektör gruplaması için sabit anahtar (gösterim `name` ile ayrılabilir). */
+    sectorKey?: string;
     value?: number;
     change?: number;
     symbol?: string;
@@ -49,6 +52,13 @@ function textColor(pct: number): string {
     return '#f8fafc';
 }
 
+export type TreemapFloatingTooltipLabels = {
+    labelChange: string;
+    labelSector: string;
+    /** İkincil metin rengi (ör. tema textMuted) */
+    mutedColor?: string;
+};
+
 type Props = {
     tiles: TreemapTile[];
     borderColor: string;
@@ -56,7 +66,23 @@ type Props = {
     onTileHover?: (tile: TreemapTile) => void;
     onTileLeave?: () => void;
     onTileClick?: (tile: TreemapTile) => void;
+    /** Verildiğinde hover bilgisi kutucuk altında değil, imleç yakınında sabitlenir */
+    floatingTooltip?: TreemapFloatingTooltipLabels | null;
+    /** Sektör kutusu başlığı: `tile.sector` anahtarı sabit kalır, yalnızca etiket çevrilir */
+    sectorDisplayName?: (sectorKey: string) => string;
 };
+
+const TOOLTIP_W = 200;
+const TOOLTIP_H = 76;
+
+function clampTooltipPosition(clientX: number, clientY: number): { left: number; top: number } {
+    const pad = 10;
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const left = Math.min(Math.max(pad, clientX + 12), vw - TOOLTIP_W - pad);
+    const top = Math.min(Math.max(pad, clientY + 12), vh - TOOLTIP_H - pad);
+    return { left, top };
+}
 
 export function MarketFinvizTreemap({
     tiles,
@@ -65,9 +91,42 @@ export function MarketFinvizTreemap({
     onTileHover,
     onTileLeave,
     onTileClick,
+    floatingTooltip,
+    sectorDisplayName,
 }: Props) {
     const wrapRef = useRef<HTMLDivElement>(null);
     const [size, setSize] = useState({ w: 300, h: 400 });
+    const [floatTip, setFloatTip] = useState<{ tile: TreemapTile; left: number; top: number } | null>(null);
+    const floatPosRafRef = useRef<number | null>(null);
+    const floatPosPendingRef = useRef<{ clientX: number; clientY: number } | null>(null);
+
+    const flushFloatPos = useCallback(() => {
+        floatPosRafRef.current = null;
+        const p = floatPosPendingRef.current;
+        floatPosPendingRef.current = null;
+        if (!p) return;
+        const { left, top } = clampTooltipPosition(p.clientX, p.clientY);
+        setFloatTip((prev) => (prev ? { tile: prev.tile, left, top } : null));
+    }, []);
+
+    const onLeafPointerMove = useCallback(
+        (e: ReactMouseEvent) => {
+            if (!floatingTooltip) return;
+            floatPosPendingRef.current = { clientX: e.clientX, clientY: e.clientY };
+            if (floatPosRafRef.current != null) return;
+            floatPosRafRef.current = requestAnimationFrame(flushFloatPos);
+        },
+        [floatingTooltip, flushFloatPos],
+    );
+
+    useEffect(() => {
+        return () => {
+            if (floatPosRafRef.current != null) {
+                cancelAnimationFrame(floatPosRafRef.current);
+                floatPosRafRef.current = null;
+            }
+        };
+    }, []);
 
     useLayoutEffect(() => {
         const el = wrapRef.current;
@@ -94,10 +153,12 @@ export function MarketFinvizTreemap({
             if (!bySector.has(t.sector)) bySector.set(t.sector, []);
             bySector.get(t.sector)!.push(t);
         }
-        const children: HNode[] = [...bySector.entries()].map(([name, list]) => ({
-            name,
+        const children: HNode[] = [...bySector.entries()].map(([sectorKey, list]) => ({
+            name: sectorDisplayName ? sectorDisplayName(sectorKey) : sectorKey,
+            sectorKey,
             children: list.map((t) => ({
                 name: t.symbol,
+                sectorKey,
                 value: Math.max(t.layoutWeight, 0.04),
                 change: t.changePercent,
                 symbol: t.symbol,
@@ -123,7 +184,7 @@ export function MarketFinvizTreemap({
             .round(true)(h);
 
         return h;
-    }, [tiles, size.w, size.h]);
+    }, [tiles, size.w, size.h, sectorDisplayName]);
 
     if (!tiles.length) {
         return (
@@ -164,9 +225,10 @@ export function MarketFinvizTreemap({
                 {sectorNodes.map((node) => {
                     const sw = node.x1 - node.x0;
                     const sh = node.y1 - node.y0;
+                    const sk = node.data.sectorKey ?? node.data.name;
                     return (
                         <div
-                            key={`sector-bg-${node.data.name}`}
+                            key={`sector-bg-${sk}`}
                             style={{
                                 position: 'absolute',
                                 left: node.x0,
@@ -196,8 +258,9 @@ export function MarketFinvizTreemap({
                     const area = w * h;
                     const showPct = area > 420;
                     const showSym = area > 180;
+                    const sk = node.data.sectorKey ?? node.parent?.data.sectorKey ?? 'OTHER';
                     const tile: TreemapTile = {
-                        sector: node.parent?.data.name ?? 'OTHER',
+                        sector: sk,
                         industry: node.data.industry,
                         symbol: sym,
                         assetClass: node.data.assetClass ?? 'OTHER',
@@ -219,9 +282,23 @@ export function MarketFinvizTreemap({
                     return (
                         <div
                             key={`leaf-${sym}-${node.x0}-${node.y0}`}
-                            title={titleParts.join(' | ')}
-                            onMouseEnter={() => onTileHover?.(tile)}
-                            onMouseLeave={() => onTileLeave?.()}
+                            title={floatingTooltip ? undefined : titleParts.join(' | ')}
+                            onMouseEnter={(e) => {
+                                if (floatingTooltip) {
+                                    const { left, top } = clampTooltipPosition(e.clientX, e.clientY);
+                                    setFloatTip({ tile, left, top });
+                                } else {
+                                    onTileHover?.(tile);
+                                }
+                            }}
+                            onMouseMove={floatingTooltip ? onLeafPointerMove : undefined}
+                            onMouseLeave={() => {
+                                if (floatingTooltip) {
+                                    setFloatTip(null);
+                                } else {
+                                    onTileLeave?.();
+                                }
+                            }}
                             onClick={() => onTileClick?.(tile)}
                             style={{
                                 position: 'absolute',
@@ -276,9 +353,10 @@ export function MarketFinvizTreemap({
                     const lw = node.x1 - node.x0;
                     const lh = node.y1 - node.y0;
                     if (lw < 56 || lh < 36) return null;
+                    const sk = node.data.sectorKey ?? node.data.name;
                     return (
                         <div
-                            key={`sector-lbl-${node.data.name}`}
+                            key={`sector-lbl-${sk}`}
                             style={{
                                 position: 'absolute',
                                 left: node.x0 + 4,
@@ -304,6 +382,38 @@ export function MarketFinvizTreemap({
                     );
                 })}
             </div>
+            {floatTip && floatingTooltip ? (
+                <div
+                    role="tooltip"
+                    style={{
+                        position: 'fixed',
+                        left: floatTip.left,
+                        top: floatTip.top,
+                        width: TOOLTIP_W,
+                        zIndex: 420,
+                        pointerEvents: 'none',
+                        borderRadius: 8,
+                        border: `1px solid ${borderColor}`,
+                        background: panelBg,
+                        boxShadow: '0 10px 32px rgba(2, 6, 23, 0.42)',
+                        padding: '8px 10px',
+                        fontSize: 11,
+                        lineHeight: 1.38,
+                    }}
+                >
+                    <div style={{ fontWeight: 700, marginBottom: 4, color: '#f8fafc' }}>
+                        {floatTip.tile.symbol} · {floatTip.tile.assetClass}
+                    </div>
+                    <div style={{ color: floatingTooltip.mutedColor ?? 'rgba(148, 163, 184, 0.95)' }}>
+                        {floatingTooltip.labelChange}: {floatTip.tile.changePercent >= 0 ? '+' : ''}
+                        {floatTip.tile.changePercent.toFixed(2)}%
+                    </div>
+                    <div style={{ color: floatingTooltip.mutedColor ?? 'rgba(148, 163, 184, 0.95)' }}>
+                        {floatingTooltip.labelSector}:{' '}
+                        {sectorDisplayName ? sectorDisplayName(floatTip.tile.sector) : floatTip.tile.sector}
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 }

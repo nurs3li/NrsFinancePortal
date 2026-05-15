@@ -1,8 +1,6 @@
 import {
-    forwardRef,
     useCallback,
     useEffect,
-    useImperativeHandle,
     useLayoutEffect,
     useMemo,
     useRef,
@@ -10,12 +8,25 @@ import {
     type CSSProperties,
     type MouseEvent,
 } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AxiosResponse } from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { financeClient, marketClient } from '../api/client';
+import {
+    getBistBatchHistory,
+    getBistCandles,
+    getBistLatest,
+    bistLatestPrice,
+    bistPickClose,
+} from '../services/bistEquityApi';
 import type { LatestPriceRow, MarketDashboard } from '../components/market/marketTypes';
-import { approxPctByDays } from '../components/market/heatmapApproxPct';
+import { approxPctByCalendarSpan, approxPctByDays, approxPctBySpan } from '../components/market/heatmapApproxPct';
+import {
+    CHART_RANGE_SEQUENCE as TERMINAL_CHART_RANGE_SEQUENCE,
+    type ChartRangeId,
+    RANGE_TO_DAYS,
+} from '../components/market/heatmapRange';
+import { heatmapSectorLabel } from '../components/market/heatmapSectorLabels';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { formatAssetLabel, getDynamicLogoUrl } from '../lib/assetBranding';
@@ -25,18 +36,39 @@ import { MarketTerminalChart } from '../components/market/MarketTerminalChart';
 import { BondTerminalChart } from '../components/market/BondTerminalChart';
 import { ViopTerminalChart } from '../components/market/ViopTerminalChart';
 import { SpotTerminalChart } from '../components/market/SpotTerminalChart';
+import { FxEffectiveRatesComparisonSection } from '../components/market/FxEffectiveRatesComparisonSection';
 import { MarketCompareLwChart } from '../components/market/MarketCompareLwChart';
 import { usePolling } from '../hooks/usePolling';
-import { Star, TrendingUp } from 'lucide-react';
+import { ChevronDown, GitCompare, Info, Star, TrendingUp } from 'lucide-react';
 import { extractMaturityDate, formatBondDisplayName, getRemainingDays } from '../utils/bondFormatter';
+import { debtHasStructuredYieldData, pickStructuredYieldDecimal } from '../utils/bondYieldSemantics';
 import { cryptoMeta, etfMeta, fxMeta, getBondMeta, instrumentMeta } from '../utils/instrumentMeta';
-import { isViopWhitelisted, VIOP_WHITELIST, viopCategoryFor, type ViopCategory } from '../constants/ViopWhitelist';
+import { isViopWhitelisted, viopCategoryFor, type ViopCategory } from '../constants/ViopWhitelist';
+import {
+    getPreciousMetalDisplayMeta,
+    isPreciousMetalAllowlisted,
+    isUsdPerOunceMetalSymbol,
+    PRECIOUS_METAL_SYMBOLS,
+    PRECIOUS_USD_OZ_DESCRIPTION,
+} from '../constants/preciousMetalsUsd';
 import './MarketTerminal.css';
 
 type MarketInstrument = {
     symbol: string;
+    /** Liste / karşılaştırma etiketi; API veya whitelist’ten (VİOP snapshot displayName vb.) */
+    displayName?: string | null;
+    /** Okunabilir ad (API `name` / `instrumentName` ile uyumlu fallback zinciri) */
+    name?: string | null;
+    instrumentName?: string | null;
     category: MarketCategory;
     price: number;
+    /** ABD / BIST ayrımı (backend `marketRegion`) */
+    marketRegion?: 'US' | 'TR' | string;
+    exchange?: string;
+    sector?: string;
+    source?: string;
+    delayMinutes?: number;
+    marketCap?: number | null;
     /**
      * Tablonun "Toplam donem degisimi" ana metrigi. Sparkline penceresinden hesaplandigi
      * icin pratikte ~14 gunluk degisimi temsil eder; siralama/Hero panel/asagi yukari
@@ -56,6 +88,8 @@ type MarketInstrument = {
     volume?: number | null;
     /** İlk bulunan: API `currency` | `priceCurrency` | `quoteCurrency` */
     currency?: string;
+    /** BIST günlük satırı `dataQuality` (HISTORICAL / PARTIAL vb.) */
+    dataQuality?: string;
     metrics?: {
         basis?: number;
         yield?: number;
@@ -65,7 +99,14 @@ type InstrumentType = 'STOCK' | 'BOND' | 'FUTURES';
 type InstrumentVm = MarketInstrument & {
     type: InstrumentType;
     displayName: string;
+    /** Kıymetli madenler tablosu: alt satır (örn. XAU/USD). */
+    listSubtitle?: string;
     sparkline: number[];
+    /** Piyasa listesi: günlük / haftalık / aylık / yıllık yaklaşık % (spark veya VIOP sözleşme alanları). */
+    pctDay?: number | null;
+    pctWeek?: number | null;
+    pctMonth?: number | null;
+    pctYear?: number | null;
     maturityDate?: string;
     daysToMaturity?: number;
     couponRate?: number;
@@ -75,6 +116,9 @@ type InstrumentVm = MarketInstrument & {
     marginRequirement?: number;
     longShort?: 'LONG' | 'SHORT' | 'NÖTR';
 };
+
+/** Piyasa seçici tablosu: Fiyat ve horizon % sütunları için sıralama anahtarı */
+type PickerListSortKey = 'price' | 'pctDay' | 'pctWeek' | 'pctMonth' | 'pctYear';
 
 type IndicatorPoint = { t: string; value: number };
 type IndicatorsResponse = {
@@ -122,10 +166,18 @@ type DebtSnapshot = {
     maturityDate?: string;
     daysToMaturity?: number;
     couponRate?: number;
+    /** Yapılandırılmış yield — yalnızca API gönderirse doldurulur (vade–getiri eğrisi için). */
+    yieldToMaturity?: number | null;
+    simpleYield?: number | null;
+    compoundYield?: number | null;
     asOf?: string;
     source?: string;
     quality?: 'EXACT' | 'FALLBACK' | 'STALE' | string;
     synthetic?: boolean;
+    hasStructuredYieldData?: boolean;
+    bondDataCategory?: string;
+    dirtyPriceUnit?: string;
+    yieldFieldRepresentsYtm?: boolean;
 };
 type ViopContract = {
     contractCode: string;
@@ -138,6 +190,62 @@ type ViopContract = {
     listPctChange365d?: number | null;
     seqMovePct?: number | null;
     seqMoveTrend?: string | null;
+};
+/** `/api/market/viop/contracts/{code}/snapshot` — İş Yatırım snapshot (envelope dışı gövde) */
+type ViopContractSnapshotApi = {
+    contractCode: string;
+    underlying: string;
+    displayName: string;
+    contractName: string;
+    maturityMonth: number;
+    maturityYear: number;
+    assetClass?: string;
+    segment?: string;
+    sourceLabel: string;
+    delayMinutes: number;
+    updateDate: string;
+    bid: number | null;
+    ask: number | null;
+    last: number | null;
+    open: number | null;
+    /** Backend `openPrice` (İş Yatırım `open` alanı) */
+    openPrice?: number | null;
+    high: number | null;
+    low: number | null;
+    dayClose: number | null;
+    changeAmount: number | null;
+    changePercent: number | null;
+    quantity: number | null;
+    volume: number | null;
+    settlement: number | null;
+    preSettlement: number | null;
+    limitUp: number | null;
+    limitDown: number | null;
+    initialMargin: number | null;
+    priceStep: number | null;
+    weekLow: number | null;
+    weekHigh: number | null;
+    monthLow: number | null;
+    monthHigh: number | null;
+    /** Referans kapanışlar — liste Hafta/Ay/Yıl % için (İş Yatırım snapshot). */
+    weekClose?: number | null;
+    monthClose?: number | null;
+    yearClose?: number | null;
+    prevYearClose?: number | null;
+    dataQuality: string | null;
+};
+type ViopHistoryPointApi = {
+    contractCode: string;
+    time: string;
+    price: number;
+    source: string;
+    periodMinutes: number;
+};
+type ViopHistoryApi = {
+    contractCode: string;
+    chartType: string;
+    dataQuality?: string;
+    points: ViopHistoryPointApi[];
 };
 type DebtInstrument = { isin: string; name: string; issuer: string; maturityDate: string };
 type MarketCategory = 'EQUITY' | 'CRYPTO' | 'FX' | 'METALS' | 'FUNDS' | 'FUTURES' | 'BOND';
@@ -155,21 +263,6 @@ type DebtHistoryByIsin = Record<string, DebtSnapshot[]>;
  * "onceki gune gore degisim" cizgisi her zaman gorunur olur ve "yeterli veri yok"
  * mesajiyla karsilasilmaz.
  */
-/*
- * 1D = 5 takvim gunu. Backend (marketdata) equity/fx/crypto repository'leri sadece daily
- * kapanis tutuyor; days=1 hafta sonu/tatilde sadece 1 mum getiriyor ve lightweight-charts
- * en az 2 nokta istedigi icin chart bos kaliyordu. days=5 ile son 1 is haftasinin (Pzt-Cum)
- * kapanislari yakalanir, kullaniciya bir "yakin donem performans" baglami sunulur.
- * Backend ALLOWED_DAYS'e 3 ve 5 eklendi; sayisal degeri burada degistirmek istersen oradan
- * da senkronize et.
- */
-const RANGE_TO_DAYS: Record<'1D' | '1W' | '1M' | '1Y', number> = {
-    '1D': 5,
-    '1W': 7,
-    '1M': 30,
-    '1Y': 365,
-};
-
 function toFiniteNumber(v: unknown): number | null {
     if (v == null) return null;
     if (typeof v === 'number' && Number.isFinite(v)) return v;
@@ -224,7 +317,7 @@ const CATEGORY_LABELS: { id: MarketCategory; label: string }[] = [
     { id: 'EQUITY', label: 'Hisse' },
     { id: 'CRYPTO', label: 'Kripto' },
     { id: 'FX', label: 'Döviz' },
-    { id: 'METALS', label: 'Altın' },
+    { id: 'METALS', label: 'Kıymetli madenler' },
     { id: 'FUNDS', label: 'Fonlar' },
     { id: 'FUTURES', label: 'VİOP' },
     { id: 'BOND', label: 'Tahvil' },
@@ -260,10 +353,16 @@ function normalizeApiCurrencyCode(raw: string | undefined): DisplayCurrency | nu
     return null;
 }
 
-function resolveDisplayCurrency(ins: Pick<MarketInstrument, 'category' | 'currency'>): DisplayCurrency {
+function resolveDisplayCurrency(
+    ins: Pick<MarketInstrument, 'category' | 'currency' | 'marketRegion' | 'exchange' | 'symbol'>
+): DisplayCurrency {
+    if (isUsdPerOunceMetalSymbol(ins.symbol)) return 'USD';
     const fromApi = normalizeApiCurrencyCode(ins.currency);
     if (fromApi) return fromApi;
+    if (ins.marketRegion === 'TR' || String(ins.exchange ?? '').toUpperCase() === 'BIST') return 'TRY';
     if (ins.category === 'EQUITY' || ins.category === 'CRYPTO') return 'USD';
+    /** Yabancı ETF / fon kotasyonları genelde USD; API `currency` göndermezse ₺ yanlış gösterilmesin. */
+    if (ins.category === 'FUNDS') return 'USD';
     return 'TRY';
 }
 
@@ -278,6 +377,14 @@ function normalizeMetaKey(symbol: string | undefined): string {
         .replace(/[^A-Z0-9]/g, '');
 }
 
+function bistSymbolBadgeStyle(symbol: string): { background: string; color: string } {
+    let h = 0;
+    const s = symbol.trim().toUpperCase();
+    for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    const hue = h % 360;
+    return { background: `hsl(${hue} 46% 36%)`, color: 'hsl(210 20% 98%)' };
+}
+
 type UsdTryRatePayload = { rate: number; available: boolean };
 
 function effectiveUsdTryRate(payload: UsdTryRatePayload | undefined): number | null {
@@ -288,9 +395,12 @@ function effectiveUsdTryRate(payload: UsdTryRatePayload | undefined): number | n
 
 /** USD kotasyonlu satırlar: toggle açıkken backend USDTRY kuru ile TL; diğerleri aynı kalır. */
 function terminalPriceDisplay(
-    ins: Pick<MarketInstrument, 'category' | 'currency' | 'price'>,
+    ins: Pick<MarketInstrument, 'category' | 'currency' | 'price' | 'marketRegion' | 'exchange' | 'symbol'>,
     opts: { showUsdInTry: boolean; usdTryRate: number | null }
-): { title: string; glyph: string; amount: number } {
+): { title: string; glyph: string; amount: number; suffix?: string } {
+    if (isUsdPerOunceMetalSymbol(ins.symbol)) {
+        return { title: 'USD/ons', glyph: '$', amount: ins.price, suffix: ' / ons' };
+    }
     const base = resolveDisplayCurrency(ins);
     if (opts.showUsdInTry && base === 'USD' && opts.usdTryRate != null) {
         return { title: 'TRY', glyph: '₺', amount: ins.price * opts.usdTryRate };
@@ -310,6 +420,14 @@ function sparklineClosesFor(dashboard: MarketDashboard | undefined, symbol: stri
     if (exact?.closes?.length) return exact.closes;
     const loose = dashboard.sparklines.find((s) => normalizeSymbolKey(s.symbol) === key);
     return loose?.closes ?? [];
+}
+
+/** Kıymetli madenler: yanlış varlık sınıfından sparkline çekilmesini engeller (yalnızca eşleşen assetClass). */
+function sparklineClosesForStrict(dashboard: MarketDashboard | undefined, symbol: string, assetClass: string): number[] {
+    if (!dashboard) return [];
+    const key = normalizeSymbolKey(symbol);
+    const exact = dashboard.sparklines.find((s) => normalizeSymbolKey(s.symbol) === key && s.assetClass === assetClass);
+    return exact?.closes?.filter((x) => Number.isFinite(x) && x > 0) ?? [];
 }
 
 function resolveListVolume(
@@ -457,22 +575,99 @@ function parseViopContractLabel(contractCode: string): string {
     };
     const underlyingMap: Record<string, string> = {
         XU030: 'BIST30',
+        XLBNK: 'Banka',
         USDTRY: 'USD/TRY',
         EURTRY: 'EUR/TRY',
+        XAUTRYM: 'Altın/TRY',
+        XAUUSD: 'Altın/USD',
         ALTIN: 'Altın',
+        GARAN: 'Garanti BBVA',
+        THYAO: 'Türk Hava Yolları',
+        ASELS: 'ASELSAN',
+        AKBNK: 'Akbank',
+        SISE: 'Şişecam',
+        EREGL: 'Ereğli Demir Çelik',
     };
     const underlying = underlyingMap[rawUnderlying] ?? rawUnderlying;
     const month = monthMap[mm] ?? mm;
     return `${underlying} Vadeli (${month} 20${yy})`;
 }
 
-/** VİOP kategori chip'i için kısa etiket + renk paleti (FX / IDX / EMT / PAY). */
+/** VİOP kategori chip'i için kısa etiket + (eski inline kullanımlar için) renk paleti. */
 const VIOP_CATEGORY_CHIP: Record<ViopCategory, { label: string; bg: string; color: string }> = {
     FX: { label: 'FX', bg: 'rgba(56, 189, 248, 0.18)', color: '#7dd3fc' },
     INDEX: { label: 'IDX', bg: 'rgba(245, 158, 11, 0.18)', color: '#fbbf24' },
-    COMMODITY: { label: 'EMT', bg: 'rgba(234, 179, 8, 0.22)', color: '#facc15' },
-    EQUITY: { label: 'PAY', bg: 'rgba(34, 197, 94, 0.18)', color: '#86efac' },
+    COMMODITY: { label: 'GOLD', bg: 'rgba(234, 179, 8, 0.22)', color: '#facc15' },
+    EQUITY: { label: 'EQ', bg: 'rgba(34, 197, 94, 0.18)', color: '#86efac' },
 };
+
+function viopCatBadgeClass(cat: ViopCategory): string {
+    switch (cat) {
+        case 'FX':
+            return 'viop-cat-badge viop-cat-badge--fx';
+        case 'INDEX':
+            return 'viop-cat-badge viop-cat-badge--index';
+        case 'COMMODITY':
+            return 'viop-cat-badge viop-cat-badge--gold';
+        case 'EQUITY':
+            return 'viop-cat-badge viop-cat-badge--eq';
+        default:
+            return 'viop-cat-badge';
+    }
+}
+
+function viopAssetClassTitle(cat: ViopCategory | null): string {
+    switch (cat) {
+        case 'INDEX':
+            return 'Endeks Vadeli';
+        case 'FX':
+            return 'Döviz Vadeli';
+        case 'COMMODITY':
+            return 'Altın Vadeli';
+        case 'EQUITY':
+            return 'Pay Vadeli';
+        default:
+            return 'VİOP';
+    }
+}
+
+function viopPriceDecimals(symbol: string): number {
+    const c = viopCategoryFor(symbol);
+    if (c === 'FX') return 3;
+    if (c === 'INDEX') return 2;
+    if (c === 'COMMODITY') return 2;
+    if (c === 'EQUITY') return 2;
+    return 2;
+}
+
+function fmtViopMktSide(n: number | null | undefined, maximumFractionDigits: number): string | null {
+    if (n == null || !Number.isFinite(Number(n))) return null;
+    const v = Number(n);
+    if (v <= 0) return null;
+    return v.toLocaleString('tr-TR', { maximumFractionDigits, minimumFractionDigits: 0 });
+}
+
+function fmtViopBidAskLine(
+    bid: number | null | undefined,
+    ask: number | null | undefined,
+    maximumFractionDigits: number
+): string {
+    const b = fmtViopMktSide(bid, maximumFractionDigits);
+    const a = fmtViopMktSide(ask, maximumFractionDigits);
+    if (b && a) return `${b} / ${a}`;
+    if (b) return `${b} / —`;
+    if (a) return `— / ${a}`;
+    return '—';
+}
+
+function viopDataQualityHint(s: ViopContractSnapshotApi | undefined): string | null {
+    if (!s?.dataQuality) return null;
+    const q = String(s.dataQuality).toUpperCase();
+    if (q.includes('STALE')) return 'STALE';
+    if (q.includes('DELAY')) return 'GECİKME';
+    if (q.includes('FALLBACK') || q.includes('LOW')) return 'TAHMİNİ';
+    return null;
+}
 
 function buildRsi(points: { time: string; close: number }[], period = 14): { time: string; value: number }[] {
     if (points.length <= period) return [];
@@ -507,6 +702,64 @@ function normalizeSymbolKey(symbol: string): string {
         .trim()
         .replace(/\s+/g, '')
         .toUpperCase();
+}
+
+function formatEuropeIstanbulDateOnly(date: Date): string {
+    return date.toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+}
+
+/** İş Yatırım USD/ons serisi için `from`/`to` (yyyy-MM-dd); gram altın için `days`. */
+function metalsHistoryQueryParams(rawSymbol: string, days: number): Record<string, string | number> {
+    const sym = normalizeSymbolKey(rawSymbol);
+    const apiSym = sym === 'ALTIN_TRY' ? 'XAU_TRY' : sym;
+    if (apiSym === 'XAU_TRY') {
+        return { symbol: apiSym, days };
+    }
+    if (isUsdPerOunceMetalSymbol(apiSym)) {
+        const now = new Date();
+        const to = formatEuropeIstanbulDateOnly(now);
+        const fromMs = now.getTime() - Math.max(1, days) * 86_400_000;
+        const from = formatEuropeIstanbulDateOnly(new Date(fromMs));
+        return { symbol: apiSym, from, to };
+    }
+    return { symbol: apiSym, days };
+}
+
+/** `LocalDateTime` query paramları için İstanbul duvar saati (backend `Europe/Istanbul`). */
+function formatEuropeIstanbulLocalIso(date: Date): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Istanbul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+    }).formatToParts(date);
+    const g = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? '00';
+    return `${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}:${g('second')}`;
+}
+
+function snapshotToLegacyViopSnapshot(s: ViopContractSnapshotApi): ViopSnapshot {
+    const last = Number(s.last ?? 0);
+    const settle = Number(s.settlement ?? s.preSettlement ?? last);
+    const basis = last - (Number.isFinite(settle) ? settle : last);
+    return {
+        contractCode: s.contractCode,
+        price: last,
+        basis,
+        theoreticalSpot: Number.isFinite(settle) ? settle : last,
+        asOf: s.updateDate,
+        openInterest: s.quantity != null ? Number(s.quantity) : 0,
+        expiryDate: `${s.maturityYear}-${String(s.maturityMonth).padStart(2, '0')}-28`,
+        contractMonth: s.displayName,
+        annualizedBasisPct: null,
+        marginRequirement: s.initialMargin != null ? Number(s.initialMargin) : undefined,
+        longShortIndicator: basis >= 0 ? 'LONG' : 'SHORT',
+        listPctChange14d: s.changePercent != null ? Number(s.changePercent) : null,
+        sparklineCloses: null,
+    };
 }
 
 async function mapPool<T, R>(items: T[], batchSize: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -557,20 +810,96 @@ function effectiveViopCarryPercent(v: ViopSnapshot, price: number): number {
  * 96 çok agresifti (200+ kontratın yarısı 6 paralel kanaldan saniyelerce frontend'i bloke ediyordu);
  * orta seviye olarak küçük tutuyoruz — gerçek mod sadece boş latest senaryosunda devrede.
  */
-const VIOP_HISTORY_CATALOG_CAP = 24;
-
 /** Tablo gövdesi: yalnızca görünür aralık + overscan render (VİOP’ta binlerce <tr> = navigasyon kilitlenmesi) */
-const MARKET_LIST_ROW_HEIGHT = 52;
+const MARKET_LIST_ROW_HEIGHT = 56;
 const MARKET_LIST_OVERSCAN_ROWS = 12;
+
+type EquitySubmarket = 'US' | 'BIST';
+
+/** Grafik aralığı: dahili `1D` vb. — Türkçe kısa etiket (UI). */
+function chartRangeUiShortLabel(r: ChartRangeId): string {
+    const m: Record<ChartRangeId, string> = {
+        '1D': '1G',
+        '1W': '1H',
+        '1M': '1A',
+        '3M': '3A',
+        '6M': '6A',
+        '1Y': '1Y',
+        '2Y': '2Y',
+    };
+    return m[r];
+}
+
+function istCalendarYmd(d: Date): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Istanbul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(d);
+    const g = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? '00';
+    return `${g('year')}-${g('month')}-${g('day')}`;
+}
+
+function bistCalendarRange(daysBack: number): { from: string; to: string } {
+    const to = new Date();
+    const from = new Date(to.getTime() - Math.max(1, daysBack) * 86_400_000);
+    return { from: istCalendarYmd(from), to: istCalendarYmd(to) };
+}
+
+function getInstrumentDisplayName(row: {
+    symbol: string;
+    displayName?: string | null;
+    name?: string | null;
+    instrumentName?: string | null;
+}): string {
+    for (const v of [row.displayName, row.name, row.instrumentName]) {
+        if (typeof v === 'string' && v.trim().length > 0) return v.trim();
+    }
+    return row.symbol;
+}
+
+function canShowComparisonChart(
+    activeCategory: MarketCategory,
+    marketType: string | null,
+    equitySubmarket: EquitySubmarket
+): boolean {
+    if (activeCategory === 'EQUITY' && equitySubmarket === 'BIST') return true;
+    return Boolean(marketType) || activeCategory === 'FUTURES';
+}
+
+function rowIsBistEquityVm(row: Pick<InstrumentVm, 'category' | 'marketRegion' | 'exchange'>): boolean {
+    return (
+        row.category === 'EQUITY' &&
+        row.marketRegion === 'TR' &&
+        String(row.exchange ?? '').toUpperCase() === 'BIST'
+    );
+}
+
+/** Piyasa listesinden grafik karşılaştırması: aynı ana kategori / alt pazar (BIST) / VİOP türü */
+function canPickerCompareRow(
+    row: InstrumentVm,
+    selected: InstrumentVm | null,
+    activeCategory: MarketCategory,
+    equitySubmarket: EquitySubmarket,
+): boolean {
+    if (!selected?.symbol || row.symbol === selected.symbol) return false;
+    if (row.category !== activeCategory || selected.category !== activeCategory) return false;
+    if (activeCategory === 'EQUITY') {
+        if (rowIsBistEquityVm(row) !== (equitySubmarket === 'BIST')) return false;
+    }
+    if (activeCategory === 'FUTURES') {
+        const cr = viopCategoryFor(row.symbol);
+        const cs = viopCategoryFor(selected.symbol);
+        if (!cr || !cs || cr !== cs) return false;
+    }
+    return true;
+}
 
 /**
  * Sol listedeki sparkline trendinin kac gunluk pencereden hesaplanacagini belirler.
  * BOND (tahvil) icin 7 gun: kullanici tahvili kisa-vadeli yon icin izliyor ve degisimler
  * yavas oldugundan 14 gun cok pasif kaliyordu. Diger kategoriler 14 gun (default).
- *
- * NOT: Bu pencere hem sparkline'in kac noktasini cizecegini hem de yon-renk hesabini
- * yonetir; ayrica tablo basligi `Trend ({gunSayisi}g)` olarak gosterilir, boylece
- * kullanici hangi periyoda bakildigini net gorur.
  */
 const SPARK_DAYS_BY_CATEGORY: Partial<Record<MarketCategory, number>> = {
     BOND: 7,
@@ -580,32 +909,6 @@ function sparkDaysFor(category: MarketCategory): number {
     return SPARK_DAYS_BY_CATEGORY[category] ?? DEFAULT_SPARK_DAYS;
 }
 
-/**
- * Trend kolonu icin kullanici tarafindan secilebilen pencere boyutlari.
- *
- * Kapsam: yalnizca Hisse / Kripto / Doviz / Altin / Fonlar kategorileri (TREND_SELECTABLE_CATEGORIES).
- * BOND (tahvil) ve FUTURES (VIOP) icin bu secim *gosterilmez* -- tahvil sabit 7 gunde kaliyor
- * (kullanici talebi, kisa vadeli yon icin), VIOP ise zaten gunluk kapanis stream'i kullaniyor
- * ve secimin pratik anlami yok.
- *
- * Performans notu: bu secim yalnizca *istemci tarafinda var olan* `row.sparkline` dizisinin
- * slice araligini ve yon-yuzdesini etkiler -- yeni network istegi tetiklemez, server'a ek yuk
- * bindirmez, ilk sayfa yuklemesini geciktirmez. Tum maliyet O(N) bir slice ve iki cikartmaktan
- * ibarettir.
- */
-/*
- * 1G icin `days: 2` -> sparkline `slice(-2)` minimum 2 nokta dondurur, polyline gercek bir
- * cizgi olarak gorunur. Tek noktayla cizgi cikmiyordu (SVG polyline en az 2 nokta ister) ve
- * trend kolonu 1G'de bos kaliyordu. Yuzde hesabi `effectiveChangePercent` icinde "1D" oz-kosulu
- * ile `dailyChangePercent`'i kullaniyor; sparkline slice'i bunu degistirmez.
- */
-const TREND_PERIOD_OPTIONS = [
-    { id: '1D' as const, days: 2, label: '1G' },
-    { id: '7D' as const, days: 7, label: '7G' },
-    { id: '14D' as const, days: 14, label: '14G' },
-];
-type TrendPeriodId = (typeof TREND_PERIOD_OPTIONS)[number]['id'];
-const DEFAULT_TREND_PERIOD: TrendPeriodId = '14D';
 const TREND_SELECTABLE_CATEGORIES: ReadonlySet<MarketCategory> = new Set<MarketCategory>([
     'EQUITY',
     'CRYPTO',
@@ -615,16 +918,127 @@ const TREND_SELECTABLE_CATEGORIES: ReadonlySet<MarketCategory> = new Set<MarketC
 ]);
 
 /**
- * Trend kolonunda kullanilacak gercek pencere boyutunu dondurur:
- *  - BOND   -> 7   (eski davranis, kullanici sabit istiyor)
- *  - FUTURES -> 14 (default, secim UI'sini gostermiyoruz)
- *  - Digerleri -> kullanici secimi (1 / 7 / 14)
+ * Mini spark çizgisi için slice uzunluğu (ek API yok).
+ * Spot kategoriler: üstteki grafik aralığı ile aynı `RANGE_TO_DAYS` penceresi.
+ * Tahvil / VİOP: uzun aralıkta SVG okunabilirliği için kademeli kısa pencere.
  */
-function effectiveSparkDays(category: MarketCategory, trendPeriod: TrendPeriodId): number {
-    if (!TREND_SELECTABLE_CATEGORIES.has(category)) {
-        return sparkDaysFor(category);
+function sparkSliceDaysForInstrumentRow(category: MarketCategory, chartRange: ChartRangeId): number {
+    if (TREND_SELECTABLE_CATEGORIES.has(category)) {
+        return Math.max(2, RANGE_TO_DAYS[chartRange]);
     }
-    return TREND_PERIOD_OPTIONS.find((p) => p.id === trendPeriod)?.days ?? DEFAULT_SPARK_DAYS;
+    switch (chartRange) {
+        case '1D':
+            return 2;
+        case '1W':
+            return 7;
+        case '1M':
+            return 14;
+        case '3M':
+            return 45;
+        case '6M':
+            return 90;
+        case '1Y':
+            return 60;
+        case '2Y':
+            return 120;
+        default:
+            return sparkDaysFor(category);
+    }
+}
+
+/** Terminal grafiğiyle aynı seri: sıralı mumların ilk→son kapanış % (1A/6A/2Y seçimi). */
+function pctChangeFromTerminalCandles(candleList: { time: string; close: number }[]): number | null {
+    if (!candleList || candleList.length < 2) return null;
+    const sorted = [...candleList].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+    const first = Number(sorted[0]?.close);
+    const last = Number(sorted[sorted.length - 1]?.close);
+    if (!(Number.isFinite(first) && first > 0 && Number.isFinite(last))) return null;
+    return ((last - first) / first) * 100;
+}
+
+/** Açılır piyasa listesi: Gün / Hafta / Ay / Yıl yüzde hücreleri (spark veya backend sayıları). */
+function finiteHorizonPct(v: unknown): number | null {
+    if (v == null) return null;
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!Number.isFinite(n)) return null;
+    return n;
+}
+
+/** VIOP: son fiyatın haftalık/aylık/yıllık referans kapanışa göre %’si (snapshot alanları). */
+function viopPctVersusReference(last: number, referenceClose: unknown): number | null {
+    const ref = referenceClose == null ? Number.NaN : Number(referenceClose);
+    if (!Number.isFinite(last) || last <= 0) return null;
+    if (!Number.isFinite(ref) || ref <= 0) return null;
+    return ((last - ref) / ref) * 100;
+}
+
+type InstrumentHorizonPcts = {
+    pctDay: number | null;
+    pctWeek: number | null;
+    pctMonth: number | null;
+    pctYear: number | null;
+};
+
+/**
+ * Trend grafiği / `effectiveChangePercent` ile aynı: downsample spark’ta takvim günü penceresini
+ * dizi indeksine `approxPctByCalendarSpan` ile çevirir. (Eski `approxPctBySpan(..., 30|252)` son N
+ * örnek alırdı; 1A/1Y ile grafik chip’i çelişirdi.)
+ */
+function spotSparkHorizonPct(
+    spark: readonly number[],
+    category: MarketCategory,
+    chartRange: '1W' | '1M' | '1Y',
+): number | null {
+    if (!TREND_SELECTABLE_CATEGORIES.has(category)) return null;
+    const calDays = RANGE_TO_DAYS[chartRange];
+    const assumedCalendarSpan = category === 'EQUITY' ? RANGE_TO_DAYS['2Y'] : 90;
+    const mapped = approxPctByCalendarSpan(spark, calDays, assumedCalendarSpan);
+    if (mapped != null && Math.abs(mapped) > 1e-6) return mapped;
+    const win = Math.min(calDays, Math.max(2, spark.length));
+    const slice = spark.slice(-win);
+    if (slice.length >= 2) {
+        const first = Number(slice[0]);
+        const last = Number(slice[slice.length - 1]);
+        if (Number.isFinite(first) && first > 0 && Number.isFinite(last)) {
+            return ((last - first) / first) * 100;
+        }
+    }
+    return approxPctBySpan(spark, calDays);
+}
+
+function horizonPctsFromSparkCloses(
+    closes: readonly number[],
+    dayOverride: number | null,
+    category?: MarketCategory,
+): InstrumentHorizonPcts {
+    const spark = closes.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
+    if (spark.length < 2) {
+        return { pctDay: dayOverride, pctWeek: null, pctMonth: null, pctYear: null };
+    }
+    if (category != null && TREND_SELECTABLE_CATEGORIES.has(category)) {
+        return {
+            pctDay: dayOverride ?? approxPctBySpan(spark, 1),
+            pctWeek: spotSparkHorizonPct(spark, category, '1W'),
+            pctMonth: spotSparkHorizonPct(spark, category, '1M'),
+            pctYear: spotSparkHorizonPct(spark, category, '1Y'),
+        };
+    }
+    return {
+        pctDay: dayOverride ?? approxPctBySpan(spark, 1),
+        pctWeek: approxPctBySpan(spark, 7),
+        pctMonth: approxPctBySpan(spark, 30),
+        pctYear: approxPctBySpan(spark, 252),
+    };
+}
+
+function formatHorizonPct(p: number | null | undefined): string {
+    if (p == null || !Number.isFinite(p)) return '—';
+    return `${p >= 0 ? '+' : ''}${p.toFixed(2)}%`;
+}
+
+function horizonPctClassName(p: number | null | undefined): string {
+    if (p == null || !Number.isFinite(p)) return 'terminal-horizon-pct';
+    return `terminal-horizon-pct ${p >= 0 ? 'terminal-pct-pos' : 'terminal-pct-neg'}`;
 }
 
 /**
@@ -656,21 +1070,19 @@ function dailyChangePercentForListedAsset(
  * % kolonunda gosterilecek "donem degisim" yuzdesini hesaplar.
  *
  * Kurallar:
- *  - BOND / FUTURES: row.changePercent -- bu kategorilerde periyod secimi yok, mevcut deger.
- *  - 1D modu (secilebilir kategoriler): `dailyChangePercent` — hisse için tile 1G, diger
- *    varlıklarda `dailyChangePercentForListedAsset` (spark 1G oncelikli, tile uzun pencere degil).
- *  - 7D / 14D modu: row.sparkline.slice(-days) ilk-son nokta yuzdesi.
- *    ((last - first) / first) * 100. Padding kaldirildigi icin slice gercek N gunluk veriden
- *    olusur; yetersiz veri varsa row.changePercent fallback.
+ *  - BOND / FUTURES: row.changePercent — bu kategorilerde grafik aralığı ayrı mantıkta.
+ *  - Spot (TREND_SELECTABLE): üstteki grafik zaman aralığı `chartRange` ile aynı pencere
+ *    (`RANGE_TO_DAYS`): 1G günlük % önceliği; diğer aralıklarda downsample spark için
+ *    `approxPctByCalendarSpan` (takvim günü oranı), sonra kısa seri yedekleri.
  */
 function effectiveChangePercent(
     row: { sparkline: number[]; changePercent: number; dailyChangePercent?: number; category: MarketCategory },
-    trendPeriod: TrendPeriodId,
+    chartRange: ChartRangeId,
 ): number {
     if (!TREND_SELECTABLE_CATEGORIES.has(row.category)) {
         return row.changePercent;
     }
-    if (trendPeriod === '1D') {
+    if (chartRange === '1D') {
         const daily = row.dailyChangePercent;
         if (daily != null && Number.isFinite(daily) && Math.abs(daily) > 1e-6) {
             return daily;
@@ -679,8 +1091,15 @@ function effectiveChangePercent(
         if (a1 != null && Math.abs(a1) > 1e-6) return a1;
         return row.changePercent;
     }
-    const days = TREND_PERIOD_OPTIONS.find((p) => p.id === trendPeriod)?.days ?? DEFAULT_SPARK_DAYS;
-    const slice = row.sparkline.slice(-days);
+    const calDays = RANGE_TO_DAYS[chartRange];
+    const assumedCalendarSpan =
+        row.category === 'EQUITY' ? RANGE_TO_DAYS['2Y'] : 90;
+    const mapped = approxPctByCalendarSpan(row.sparkline, calDays, assumedCalendarSpan);
+    if (mapped != null && Math.abs(mapped) > 1e-6) {
+        return mapped;
+    }
+    const win = Math.min(calDays, Math.max(2, row.sparkline.length));
+    const slice = row.sparkline.slice(-win);
     if (slice.length >= 2) {
         const first = Number(slice[0]);
         const last = Number(slice[slice.length - 1]);
@@ -688,22 +1107,57 @@ function effectiveChangePercent(
             return ((last - first) / first) * 100;
         }
     }
-    const approx =
-        trendPeriod === '7D'
-            ? approxPctByDays(row.sparkline, 7)
-            : trendPeriod === '14D'
-              ? approxPctByDays(row.sparkline, 14)
-              : null;
+    const approx = approxPctBySpan(row.sparkline, calDays);
     if (approx != null && Math.abs(approx) > 1e-6) {
         return approx;
     }
     return row.changePercent;
 }
 
+function finiteOrNull(v: unknown): number | null {
+    if (v == null) return null;
+    const n = typeof v === 'number' ? v : Number(v);
+    return Number.isFinite(n) ? n : null;
+}
+
+function pickerSortValue(row: InstrumentVm, key: PickerListSortKey): number | null {
+    if (key === 'price') return Number.isFinite(row.price) ? row.price : null;
+    if (key === 'pctDay') return finiteOrNull(row.pctDay);
+    if (key === 'pctWeek') return finiteOrNull(row.pctWeek);
+    if (key === 'pctMonth') return finiteOrNull(row.pctMonth);
+    return finiteOrNull(row.pctYear);
+}
+
+function comparePickerBySortKey(
+    a: InstrumentVm,
+    b: InstrumentVm,
+    key: PickerListSortKey,
+    dir: 'asc' | 'desc',
+): number {
+    const sign = dir === 'asc' ? 1 : -1;
+    const va = pickerSortValue(a, key);
+    const vb = pickerSortValue(b, key);
+    if (va == null && vb == null) return a.symbol.localeCompare(b.symbol);
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    const d = sign * (va - vb);
+    if (d !== 0) return d;
+    return a.symbol.localeCompare(b.symbol);
+}
+
+function applyPickerTableSort(
+    rows: InstrumentVm[],
+    sort: { key: PickerListSortKey; dir: 'asc' | 'desc' } | null,
+): InstrumentVm[] {
+    if (!sort) return rows;
+    return [...rows].sort((a, b) => comparePickerBySortKey(a, b, sort.key, sort.dir));
+}
+
 /** Treemap `assetClass` → sol tablo / trend chip ile aynı `MarketCategory`. */
 function heatmapAssetClassToCategory(assetClass: string): MarketCategory {
     switch (assetClass) {
         case 'STOCK':
+        case 'BIST':
             return 'EQUITY';
         case 'CRYPTO':
             return 'CRYPTO';
@@ -719,20 +1173,27 @@ function heatmapAssetClassToCategory(assetClass: string): MarketCategory {
 }
 
 /**
- * Sağ panel ısı haritası: sol listedeki 1G / 7G / 14G seçimi ile aynı % mantığı
- * (`effectiveChangePercent` + dashboard sparkline). Eskiden backend tile % sabitti.
+ * Sağ panel ısı haritası: üstteki grafik zaman aralığı ile aynı % mantığı
+ * (`effectiveChangePercent` + dashboard sparkline).
+ * @param sparkOverride BIST gibi dashboard spark’ı olmayan satırlar için harici kapanış dizisi.
  */
-function enrichTreemapTileForTrendPeriod(
+function enrichTreemapTileForChartRange(
     tile: TreemapTile,
     dashboard: MarketDashboard | undefined,
-    trendPeriod: TrendPeriodId,
+    chartRange: ChartRangeId,
+    sparkOverride?: number[],
 ): TreemapTile {
-    if (!dashboard) return tile;
+    const closes =
+        sparkOverride != null && sparkOverride.length > 0
+            ? sparkOverride
+            : dashboard != null
+              ? sparklineClosesFor(dashboard, tile.symbol, tile.assetClass)
+              : [];
+    if ((sparkOverride == null || sparkOverride.length === 0) && !dashboard) return tile;
     const category = heatmapAssetClassToCategory(tile.assetClass);
     if (!TREND_SELECTABLE_CATEGORIES.has(category)) {
         return tile;
     }
-    const closes = sparklineClosesFor(dashboard, tile.symbol, tile.assetClass);
     const changePercent = resolveChangePercent(closes, tile.changePercent);
     const dailyChangePercent = dailyChangePercentForListedAsset(
         category,
@@ -746,7 +1207,7 @@ function enrichTreemapTileForTrendPeriod(
         dailyChangePercent,
         category,
     };
-    const pct = effectiveChangePercent(row, trendPeriod);
+    const pct = effectiveChangePercent(row, chartRange);
     return { ...tile, changePercent: pct };
 }
 
@@ -803,46 +1264,6 @@ function isStarredResolved(data: StarredAssetsApiResponse | undefined, mt: strin
     return data.resolved.some((r) => r.marketType === mt && r.symbol === sym);
 }
 
-/**
- * Heatmap hover detayini izolated bir component'ta tutuyoruz: aksi halde her tile hover
- * Market.tsx (2900+ satir, ~10 chart) parent'ini re-render ediyor ve lightweight-charts
- * gibi imperative bilesenler titremeye basliyor. forwardRef + useImperativeHandle ile
- * parent rAF-throttled handler'dan kucuk bu component'in local state'ini guncelliyor;
- * Market.tsx parent re-render etmiyor.
- */
-type HeatmapHoverPanelHandle = { setTile: (tile: TreemapTile | null) => void };
-type HeatmapHoverPanelProps = {
-    labelChange: string;
-    labelSector: string;
-    promptText: string;
-};
-const HeatmapHoverPanel = forwardRef<HeatmapHoverPanelHandle, HeatmapHoverPanelProps>(
-    function HeatmapHoverPanel({ labelChange, labelSector, promptText }, ref) {
-        const [tile, setTile] = useState<TreemapTile | null>(null);
-        useImperativeHandle(ref, () => ({ setTile }), []);
-        return (
-            <div className="terminal-heatmap-detail">
-                {tile ? (
-                    <>
-                        <div>
-                            <strong>{tile.symbol}</strong> · {tile.assetClass}
-                        </div>
-                        <div>
-                            {labelChange}: {tile.changePercent >= 0 ? '+' : ''}
-                            {tile.changePercent.toFixed(2)}%
-                        </div>
-                        <div>
-                            {labelSector}: {tile.sector}
-                        </div>
-                    </>
-                ) : (
-                    <div>{promptText}</div>
-                )}
-            </div>
-        );
-    }
-);
-
 export function Market() {
     const { theme, tokens } = useTheme();
     const { t } = useLanguage();
@@ -851,34 +1272,50 @@ export function Market() {
     const [showUsdInTry, setShowUsdInTry] = useState(false);
     const [selectedSymbol, setSelectedSymbol] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
-    /*
-     * Trend kolonunun pencere boyutu: yalnizca destekleyen kategorilerde (Hisse/Kripto/FX/
-     * Altin/Fonlar) tablo basligindaki kompakt segmented control'den degistirilir.
-     * Server'a istek atmaz -- mevcut sparkline dizisinden hesaplandigi icin maliyetsizdir.
-     * Kategori degistiginde state korunur, kullanici Hisse'de 7G secince Kripto'ya gectiginde
-     * de 7G ile karsilasir; bu daha tutarli bir deneyim.
-     */
-    const [trendPeriod, setTrendPeriod] = useState<TrendPeriodId>(DEFAULT_TREND_PERIOD);
     const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
     const [liveOverrides, setLiveOverrides] = useState<Record<string, LiveTick>>({});
-    const [range, setRange] = useState<'1D' | '1W' | '1M' | '1Y'>('1M');
+    const [range, setRange] = useState<ChartRangeId>('1M');
+    const [equitySubmarket, setEquitySubmarket] = useState<EquitySubmarket>('US');
+    /** Açılır piyasa listesinde gezilen kategori / alt pazar; grafik `activeCategory` ile ayrılır — chip’e basınca hero değişmez. */
+    const [pickerCategory, setPickerCategory] = useState<MarketCategory>('EQUITY');
+    const [pickerEquitySubmarket, setPickerEquitySubmarket] = useState<EquitySubmarket>('US');
+    const [bistRange, setBistRange] = useState<ChartRangeId>('1M');
+    const trendChartRange: ChartRangeId =
+        activeCategory === 'EQUITY' && equitySubmarket === 'BIST' ? bistRange : range;
     const [showMa, setShowMa] = useState(true);
     const [showRsi, setShowRsi] = useState(true);
     const [bondChartMode, setBondChartMode] = useState<'DUAL' | 'CANDLE'>('DUAL');
     const [viopChartMode, setViopChartMode] = useState<'LINE' | 'CANDLE'>('LINE');
     const [spotChartMode, setSpotChartMode] = useState<'ANALYSIS' | 'CANDLE'>('ANALYSIS');
-    // hoverTile state'i artik <HeatmapHoverPanel/> icinde izolated. Bu sayede hover
-    // Market.tsx (~2900 satir, ~10 chart) parent'ini re-render etmiyor; sadece kucuk
-    // panel re-render oluyor ve grafikler titremiyor.
-    const hoverPanelRef = useRef<HeatmapHoverPanelHandle>(null);
-    const hoverTileRafRef = useRef<number | null>(null);
-    const hoverTilePendingRef = useRef<TreemapTile | null>(null);
-    const lastHoverTileKeyRef = useRef<string>('');
     const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down'>>({});
     const prevPricesRef = useRef<Record<string, number>>({});
+    const prevTerminalCategoryRef = useRef<MarketCategory>(activeCategory);
     const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
     const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
     const [loadingCompare, setLoadingCompare] = useState(false);
+    /** Piyasa listesi yalnızca enstrüman seçicide tıklanınca açılan sabit konumlu panelde (yan sütun yok). */
+    const [instrumentListOpen, setInstrumentListOpen] = useState(false);
+    const terminalHeroRef = useRef<HTMLDivElement | null>(null);
+    const [instrumentListPopoverBox, setInstrumentListPopoverBox] = useState<{
+        top: number;
+        left: number;
+        width: number;
+    } | null>(null);
+    /** Sol liste: arama sonrası hızlı filtre (Tümü / yükselen / düşen / hacim veya VİOP türü). */
+    const [marketListQuickFilter, setMarketListQuickFilter] = useState<string>('ALL');
+    /** Piyasa listesi: Fiyat / Gün / Hafta / Ay / Yıl başlık tıklaması ile sıralama */
+    const [pickerTableSort, setPickerTableSort] = useState<{ key: PickerListSortKey; dir: 'asc' | 'desc' } | null>(
+        null,
+    );
+
+    const togglePickerListSort = useCallback((key: PickerListSortKey) => {
+        setPickerTableSort((prev) => {
+            if (prev?.key === key) {
+                return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
+            }
+            return { key, dir: 'desc' };
+        });
+    }, []);
 
     const queryClient = useQueryClient();
     const { data: starredAssets } = useQuery({
@@ -901,9 +1338,9 @@ export function Market() {
     });
 
     const handleStarToggle = useCallback(
-        (e: MouseEvent<HTMLButtonElement>, rowSymbol: string) => {
+        (e: MouseEvent<HTMLButtonElement>, rowSymbol: string, rowCategory: MarketCategory) => {
             e.stopPropagation();
-            const key = rowToStarredApiKey(activeCategory, rowSymbol);
+            const key = rowToStarredApiKey(rowCategory, rowSymbol);
             if (!key) return;
             const pair = `${key.marketType}:${key.symbol}`;
             const sel = starredAssets?.selected ?? [];
@@ -922,12 +1359,66 @@ export function Market() {
             }
             starMutation.mutate(next);
         },
-        [activeCategory, starredAssets, starMutation]
+        [starredAssets, starMutation]
     );
 
-    /** Tahvil / VİOP: 1G seçeneği UI'de yok; `range` state tutarsız kalırsa istek gün sayısı 1A'ya normalize edilir. */
-    const dataRangeForChart =
-        (activeCategory === 'BOND' || activeCategory === 'FUTURES') && range === '1D' ? '1M' : range;
+    const handleInstrumentSelectorClick = useCallback(() => {
+        setInstrumentListOpen((wasOpen) => {
+            if (!wasOpen) {
+                setPickerCategory(activeCategory);
+                setPickerEquitySubmarket(equitySubmarket);
+            }
+            return !wasOpen;
+        });
+    }, [activeCategory, equitySubmarket]);
+
+    useEffect(() => {
+        setInstrumentListOpen(false);
+        setMarketListQuickFilter('ALL');
+    }, [activeCategory, equitySubmarket]);
+
+    useEffect(() => {
+        if (!instrumentListOpen) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setInstrumentListOpen(false);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [instrumentListOpen]);
+
+    useLayoutEffect(() => {
+        if (!instrumentListOpen) {
+            setInstrumentListPopoverBox(null);
+            return;
+        }
+        const sync = () => {
+            const host = terminalHeroRef.current;
+            if (!host) return;
+            const r = host.getBoundingClientRect();
+            const width = Math.min(720, Math.max(460, Math.round(r.width * 0.88)));
+            const left = Math.max(12, Math.min(r.left, window.innerWidth - width - 12));
+            setInstrumentListPopoverBox({ top: r.bottom + 6, left, width });
+        };
+        sync();
+        window.addEventListener('resize', sync);
+        window.addEventListener('scroll', sync, true);
+        return () => {
+            window.removeEventListener('resize', sync);
+            window.removeEventListener('scroll', sync, true);
+        };
+    }, [instrumentListOpen]);
+
+    /** Ana görünüm veya açık piyasa seçicide BIST listesi / spark için BIST API gerekir. */
+    const needBistTerminalData =
+        (activeCategory === 'EQUITY' && equitySubmarket === 'BIST') ||
+        (instrumentListOpen && pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST');
+
+    /** Tahvil listesi: ana sayfa Tahvil’de veya seçicide Tahvil sekmesindeyken yükle. */
+    const needDebtTerminalData =
+        activeCategory === 'BOND' || (instrumentListOpen && pickerCategory === 'BOND');
+
+    /** Grafik ve batch istekleri seçili `range` ile aynı kalır (VİOP/tahvil 1G dahil). */
+    const dataRangeForChart: ChartRangeId = range;
 
     const {
         data: dashboard,
@@ -936,12 +1427,134 @@ export function Market() {
         refetch: refetchDashboard,
     } = useQuery({
         queryKey: ['market', 'dashboard', 'terminal'],
-        queryFn: () => financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => unwrapData(r)),
+        queryFn: () =>
+            financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => unwrapData(r)),
         refetchInterval: activeCategory === 'FUTURES' || activeCategory === 'BOND' ? false : 12_000,
     });
 
+    const {
+        data: bistLatest = [],
+        isLoading: loadingBistLatest,
+        error: bistLatestError,
+    } = useQuery({
+        queryKey: ['market', 'bist', 'latest', 'terminal'],
+        queryFn: ({ signal }) => getBistLatest(signal),
+        enabled: needBistTerminalData,
+        refetchInterval: needBistTerminalData ? 60_000 : false,
+    });
+
+    const bistSparkSymbolsCsv = useMemo(() => {
+        if (!bistLatest.length) return '';
+        return bistLatest
+            .slice(0, 22)
+            .map((r) => normalizeSymbolKey(String(r.symbol ?? '')))
+            .filter(Boolean)
+            .join(',');
+    }, [bistLatest]);
+
+    const bistSparkRange = useMemo(() => bistCalendarRange(400), []);
+
+    const { data: bistBatchSpark } = useQuery({
+        queryKey: ['market', 'bist', 'batch-spark', bistSparkRange.from, bistSparkRange.to, bistSparkSymbolsCsv],
+        queryFn: ({ signal }) => {
+            const syms = bistSparkSymbolsCsv.split(',').map((s) => s.trim()).filter(Boolean);
+            return getBistBatchHistory(syms, bistSparkRange.from, bistSparkRange.to, signal);
+        },
+        enabled: needBistTerminalData && bistSparkSymbolsCsv.length > 0,
+        staleTime: 120_000,
+    });
+
+    const bistSparkClosesBySymbol = useMemo(() => {
+        const m: Record<string, number[]> = {};
+        const by = bistBatchSpark?.historiesBySymbol;
+        if (!by) return m;
+        Object.entries(by).forEach(([sym, rows]) => {
+            const key = normalizeSymbolKey(sym);
+            const closes = [...(rows ?? [])]
+                .sort((a, b) => String(a.date ?? '').localeCompare(String(b.date ?? '')))
+                .map((r) => bistPickClose(r))
+                .filter((x) => Number.isFinite(x) && x > 0);
+            if (closes.length >= 2) m[key] = closes;
+        });
+        return m;
+    }, [bistBatchSpark]);
+
+    const bistMainChartDays = useMemo(() => RANGE_TO_DAYS[bistRange], [bistRange]);
+    const bistMainHistoryRange = useMemo(() => bistCalendarRange(bistMainChartDays), [bistMainChartDays]);
+
+    const { data: bistCandles = [], isLoading: loadingBistCandles } = useQuery({
+        queryKey: [
+            'market',
+            'bist',
+            'candles',
+            'terminal',
+            selectedSymbol,
+            bistMainHistoryRange.from,
+            bistMainHistoryRange.to,
+        ],
+        enabled: activeCategory === 'EQUITY' && equitySubmarket === 'BIST' && Boolean(selectedSymbol),
+        queryFn: ({ signal }) =>
+            getBistCandles(selectedSymbol, bistMainHistoryRange.from, bistMainHistoryRange.to, signal),
+        staleTime: 120_000,
+        refetchInterval: 120_000,
+    });
+
+    const bistTreemapTiles = useMemo((): TreemapTile[] => {
+        const fromDash = (dashboard?.heatmapTiles ?? []).filter((t) => t.assetClass === 'BIST' && t.symbol);
+        if (fromDash.length > 0 && dashboard) {
+            return fromDash.map((tile) => enrichTreemapTileForChartRange(tile, dashboard, bistRange));
+        }
+        if (!bistLatest.length) return [];
+        const out: TreemapTile[] = [];
+        for (const r of bistLatest) {
+            const sym = normalizeSymbolKey(String(r.symbol ?? ''));
+            if (!sym) continue;
+            const pctRaw = r.changePercent;
+            const pct =
+                typeof pctRaw === 'number' && Number.isFinite(pctRaw)
+                    ? pctRaw
+                    : parseFloat(String(pctRaw ?? '0').replace(',', '.')) || 0;
+            const mcRaw = r.marketCapTry;
+            const mc =
+                typeof mcRaw === 'number' && Number.isFinite(mcRaw)
+                    ? mcRaw
+                    : parseFloat(String(mcRaw ?? '0').replace(',', '.')) || 0;
+            const w = mc > 0 ? mc : Math.abs(pct) + 1;
+            const display =
+                typeof (r as { displayName?: string }).displayName === 'string'
+                    ? String((r as { displayName?: string }).displayName).trim()
+                    : '';
+            out.push({
+                sector: 'BIST_EQUITY',
+                industry: display.length > 0 ? display : null,
+                symbol: sym,
+                assetClass: 'BIST',
+                changePercent: pct,
+                layoutWeight: Math.max(1, w),
+                mode: 'BIST_DAILY',
+            });
+        }
+        return out.map((tile) => {
+            const spark = bistSparkClosesBySymbol[normalizeSymbolKey(tile.symbol)];
+            return enrichTreemapTileForChartRange(
+                tile,
+                dashboard,
+                bistRange,
+                spark != null && spark.length >= 2 ? spark : undefined,
+            );
+        });
+    }, [bistLatest, dashboard, bistRange, bistSparkClosesBySymbol]);
+
+    const chartTfLabel = useMemo(() => {
+        if (activeCategory === 'EQUITY' && equitySubmarket === 'BIST') return chartRangeUiShortLabel(bistRange);
+        return chartRangeUiShortLabel(range);
+    }, [activeCategory, equitySubmarket, bistRange, range]);
+
     const usdTryRateQueryEnabled =
-        showUsdInTry && (activeCategory === 'EQUITY' || activeCategory === 'CRYPTO');
+        showUsdInTry &&
+        ((activeCategory === 'EQUITY' && equitySubmarket !== 'BIST') ||
+            activeCategory === 'CRYPTO' ||
+            activeCategory === 'FUNDS');
     const { data: usdTryRatePayload } = useQuery({
         queryKey: ['market', 'terminal', 'usd-try-rate'],
         queryFn: () =>
@@ -965,7 +1578,7 @@ export function Market() {
             lastSideRailPxRef.current = null;
             return;
         }
-        if (loadingDashboard) {
+        if (loadingDashboard && !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST')) {
             setSideRailPx(null);
             lastSideRailPxRef.current = null;
             return;
@@ -999,7 +1612,7 @@ export function Market() {
                 sideRailRafRef.current = null;
             }
         };
-    }, [loadingDashboard, activeCategory]);
+    }, [loadingDashboard, activeCategory, equitySubmarket, loadingBistLatest]);
 
     const [threeColRailSync, setThreeColRailSync] = useState(
         () => typeof window !== 'undefined' && window.matchMedia('(min-width: 981px)').matches
@@ -1024,58 +1637,17 @@ export function Market() {
                   boxSizing: 'border-box',
               }
             : undefined;
-    const leftPanelStyle: CSSProperties | undefined =
-        activeCategory === 'FUTURES' || activeCategory === 'BOND'
-            ? {
-                  height: 'clamp(620px, calc(100dvh - 210px), 860px)',
-                  maxHeight: 'clamp(620px, calc(100dvh - 210px), 860px)',
-                  minHeight: 0,
-                  overflow: 'hidden',
-                  boxSizing: 'border-box',
-              }
-            : sideRailBoxStyle;
+    const rightPanelStyle: CSSProperties | undefined =
+        activeCategory === 'FUTURES' || activeCategory === 'BOND' ? undefined : sideRailBoxStyle;
 
-    useEffect(() => {
-        return () => {
-            if (hoverTileRafRef.current != null) {
-                cancelAnimationFrame(hoverTileRafRef.current);
-                hoverTileRafRef.current = null;
-            }
-        };
-    }, []);
+    const isSpotHeatmapRail =
+        activeCategory === 'EQUITY' ||
+        activeCategory === 'CRYPTO' ||
+        activeCategory === 'FX' ||
+        activeCategory === 'METALS' ||
+        activeCategory === 'FUNDS';
 
-    const handleTreemapHover = useCallback((tile: TreemapTile | null) => {
-        hoverTilePendingRef.current = tile;
-        if (hoverTileRafRef.current != null) return;
-        hoverTileRafRef.current = requestAnimationFrame(() => {
-            const next = hoverTilePendingRef.current;
-            const key = next ? `${next.assetClass}:${next.symbol}` : '';
-            if (key !== lastHoverTileKeyRef.current) {
-                lastHoverTileKeyRef.current = key;
-                // Sadece izolated <HeatmapHoverPanel/> re-render olur; Market.tsx parent etkilenmez.
-                hoverPanelRef.current?.setTile(next);
-            }
-            hoverTileRafRef.current = null;
-        });
-    }, []);
-
-    // VIOP latest + contracts: küçük payload, tek seferlik. Tab değişiminden bağımsız her zaman
-    // fetch ediyoruz; aksi halde kullanıcı VIOP'a ilk gelişinde önce kontrat listesini bekliyor
-    // ve sonra grafiği — tek isabet yerine iki tur ekrana yansıyor.
-    //
-    // `select` ile whitelist filtresi defansif uygulanır: backend (`app.viop.query.allowed-contracts`)
-    // birincil filtre, frontend ise backend genişlerse UI'de likiditesiz/likit olmayan kontratların
-    // sızmamasını garanti eder. Whitelist sabiti: `constants/ViopWhitelist.ts`.
-    const { data: viopLatest = [], isSuccess: viopLatestSucceeded } = useQuery({
-        queryKey: ['market', 'viop', 'latest', 'terminal'],
-        queryFn: ({ signal }) =>
-            marketClient.get<ViopSnapshot[]>('/api/market/viop/latest', { signal }).then((r) => r.data),
-        select: (rows) => (rows ?? []).filter((r) => isViopWhitelisted(r?.contractCode)),
-        refetchInterval: false,
-        refetchOnWindowFocus: false,
-        refetchOnReconnect: false,
-        staleTime: Infinity,
-    });
+    // VIOP: kontrat listesi + kontrat başına snapshot (`/api/market/viop/contracts/{code}/snapshot`).
     const { data: viopContracts = [] } = useQuery({
         queryKey: ['market', 'viop', 'contracts', 'terminal'],
         queryFn: ({ signal }) =>
@@ -1086,8 +1658,39 @@ export function Market() {
         refetchOnReconnect: false,
         staleTime: Infinity,
     });
-    const viopRangeDays = RANGE_TO_DAYS[dataRangeForChart];
-
+    const viopSnapshotQueries = useQueries({
+        queries: viopContracts.map((c) => {
+            const sym = normalizeSymbolKey(c.contractCode);
+            return {
+                queryKey: ['market', 'viop', 'snapshot', sym],
+                queryFn: ({ signal }) =>
+                    marketClient
+                        .get<ViopContractSnapshotApi>(
+                            `/api/market/viop/contracts/${encodeURIComponent(sym)}/snapshot`,
+                            {
+                            signal,
+                        })
+                        .then((r) => r.data),
+                enabled: Boolean(sym) && isViopWhitelisted(sym),
+                staleTime: 20_000,
+                refetchInterval: activeCategory === 'FUTURES' ? 30_000 : false,
+                refetchOnWindowFocus: activeCategory === 'FUTURES',
+            };
+        }),
+    });
+    const viopSnapshotBySymbol = useMemo(() => {
+        const m: Record<string, ViopContractSnapshotApi> = {};
+        viopSnapshotQueries.forEach((q, i) => {
+            const sym = normalizeSymbolKey(viopContracts[i]?.contractCode);
+            const row = q.data;
+            if (sym && row) {
+                m[sym] = row;
+                const alt = sym.startsWith('F_') ? sym.slice(2) : `F_${sym}`;
+                m[alt] = row;
+            }
+        });
+        return m;
+    }, [viopSnapshotQueries, viopContracts]);
     const viopContractBySymbol = useMemo(() => {
         const m: Record<string, ViopContract> = {};
         viopContracts.forEach((c) => {
@@ -1097,67 +1700,23 @@ export function Market() {
         return m;
     }, [viopContracts]);
 
-    /**
-     * Fallback "history fırtınası": yalnızca /viop/latest GERÇEKTEN boş döndüyse devreye girer.
-     * Önceki versiyon `viopLatest.length === 0` ile loading durumunda da tetikleniyor, 96 paralel
-     * istek üretip VIOP sekmesini ve sayfa geçişlerini kilitliyordu.
-     */
-    const { data: viopLatestFromHistory = {} } = useQuery({
-        queryKey: ['market', 'viop', 'history-latest', 'terminal', dataRangeForChart, viopContracts.length],
-        enabled:
-            activeCategory === 'FUTURES' &&
-            viopLatestSucceeded &&
-            viopLatest.length === 0 &&
-            viopContracts.length > 0,
-        queryFn: async ({ signal }) => {
-            let contracts = [...new Set(viopContracts.map((c) => normalizeSymbolKey(c.contractCode)).filter(Boolean))];
-            if (contracts.length > VIOP_HISTORY_CATALOG_CAP) {
-                contracts = contracts.slice(0, VIOP_HISTORY_CATALOG_CAP);
-            }
-            const histDays = Math.min(400, Math.max(14, viopRangeDays));
-            const entries = await mapPool(contracts, 4, async (contract) => {
-                try {
-                    const rows = await marketClient
-                        .get<ViopSnapshot[]>('/api/market/viop/history', {
-                            params: { contract, days: histDays },
-                            signal,
-                        })
-                        .then((r) => r.data);
-                    const latest = [...(rows ?? [])]
-                        .filter((x) => Number(x?.price ?? 0) > 0)
-                        .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime())
-                        .at(-1);
-                    return latest ? ([contract, latest] as const) : null;
-                } catch {
-                    return null;
-                }
-            });
-            return Object.fromEntries(entries.filter((e): e is [string, ViopSnapshot] => Array.isArray(e)));
-        },
-        refetchInterval: false,
-        refetchOnWindowFocus: false,
-        refetchOnReconnect: false,
-        staleTime: 5 * 60_000,
-        gcTime: 5 * 60_000,
-    });
-
     const { data: debtLatest = [] } = useQuery({
         queryKey: ['market', 'debt', 'latest', 'terminal'],
         queryFn: ({ signal }) =>
             marketClient.get<DebtSnapshot[]>('/api/market/debt/latest', { signal }).then((r) => r.data),
-        enabled: activeCategory === 'BOND',
-        refetchInterval: activeCategory === 'BOND' ? 15_000 : false,
+        enabled: needDebtTerminalData,
+        refetchInterval: needDebtTerminalData ? 15_000 : false,
     });
     const { data: debtCatalog = [] } = useQuery({
         queryKey: ['market', 'debt', 'catalog', 'terminal'],
         queryFn: ({ signal }) =>
             marketClient.get<DebtInstrument[]>('/api/market/debt/catalog', { signal }).then((r) => r.data),
-        enabled: activeCategory === 'BOND',
-        refetchInterval: activeCategory === 'BOND' ? 60_000 : false,
+        enabled: needDebtTerminalData,
+        refetchInterval: needDebtTerminalData ? 60_000 : false,
     });
     const { data: debtHistoryByIsin = {} } = useQuery({
         queryKey: ['market', 'debt', 'history-by-isin', 'terminal', dataRangeForChart, debtCatalog.length],
-        enabled: activeCategory === 'BOND' && debtCatalog.length > 0,
+        enabled: needDebtTerminalData && debtCatalog.length > 0,
         queryFn: async ({ signal }) => {
             const uniq = [...new Set(debtCatalog.map((d) => normalizeSymbolKey(d.isin)).filter(Boolean))];
             const entries = await mapPool(uniq, 4, async (isin) => {
@@ -1171,7 +1730,7 @@ export function Market() {
             });
             return Object.fromEntries(entries) as DebtHistoryByIsin;
         },
-        refetchInterval: activeCategory === 'BOND' ? 60_000 : false,
+        refetchInterval: needDebtTerminalData ? 60_000 : false,
     });
 
 
@@ -1209,14 +1768,16 @@ export function Market() {
     }, [debtLatest]);
     const viopLatestMap = useMemo(() => {
         const m: Record<string, ViopSnapshot> = {};
-        viopLatest.forEach((x) => {
-            m[normalizeSymbolKey(x.contractCode)] = x;
-        });
-        Object.entries(viopLatestFromHistory).forEach(([key, value]) => {
-            if (!m[key]) m[key] = value;
+        const seen = new Set<string>();
+        Object.values(viopSnapshotBySymbol).forEach((snap) => {
+            if (!snap?.contractCode) return;
+            const key = normalizeSymbolKey(snap.contractCode);
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            m[key] = snapshotToLegacyViopSnapshot(snap);
         });
         return m;
-    }, [viopLatest, viopLatestFromHistory]);
+    }, [viopSnapshotBySymbol]);
     const volatilityByKey = useMemo(() => {
         const m: Record<string, number> = {};
         (dashboard?.volatility ?? []).forEach((v) => {
@@ -1225,48 +1786,41 @@ export function Market() {
         return m;
     }, [dashboard]);
 
-    const instruments = useMemo<MarketInstrument[]>(() => {
-        if (activeCategory === 'FUTURES') {
-            const sourceRows = viopLatest.length > 0 ? viopLatest : Object.values(viopLatestFromHistory);
-            const merged = new Map<string, ViopSnapshot>();
-            sourceRows.forEach((v) => {
-                const key = normalizeSymbolKey(v?.contractCode);
-                if (!key) return;
-                const prev = merged.get(key);
-                if (!prev) {
-                    merged.set(key, v);
-                    return;
-                }
-                const prevTs = new Date(prev.asOf ?? 0).getTime();
-                const nextTs = new Date(v.asOf ?? 0).getTime();
-                if (nextTs >= prevTs) merged.set(key, v);
-            });
-            return [...merged.values()]
-                .map((v) => {
-                    const symbol = normalizeSymbolKey(v.contractCode);
-                    const priceN = Number(v.price ?? 0);
-                    const fromDb = viopTerminalListChange(v, viopContractBySymbol[symbol]);
-                    const pctFallback =
-                        priceN > 0 ? (impliedViopBasis(v, priceN) / priceN) * 100 : 0;
-                    const pct = fromDb ? fromDb.pct : pctFallback;
-                    const trendDir = fromDb ? fromDb.trend : pct >= 0 ? ('UP' as const) : ('DOWN' as const);
-                    return {
-                        symbol,
-                        category: 'FUTURES' as const,
-                        price: priceN,
-                        changePercent: Number.isFinite(pct) ? pct : 0,
-                        trend: trendDir,
-                        metrics: {
-                            basis: impliedViopBasis(v, priceN),
-                            yield: effectiveViopCarryPercent(v, priceN),
-                        },
-                        volume: Number(v.openInterest ?? 0),
-                    } satisfies MarketInstrument;
-                })
-                .filter((row) => Number.isFinite(row.price) && row.price > 0)
-                .sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
+    const buildInstruments = useCallback(
+        (cat: MarketCategory, eqSub: EquitySubmarket): MarketInstrument[] => {
+        if (cat === 'FUTURES') {
+            const out: MarketInstrument[] = [];
+            for (const c of viopContracts) {
+                const symbol = normalizeSymbolKey(c.contractCode);
+                const snap = viopSnapshotBySymbol[symbol];
+                const priceN = Number(snap?.last ?? 0);
+                if (!(priceN > 0) || !snap) continue;
+                const pctRaw = snap.changePercent;
+                const pct =
+                    pctRaw != null && Number.isFinite(Number(pctRaw))
+                        ? Number(pctRaw)
+                        : viopTerminalListChange(snapshotToLegacyViopSnapshot(snap), viopContractBySymbol[symbol])
+                              ?.pct ?? 0;
+                const trendDir = pct >= 0 ? ('UP' as const) : ('DOWN' as const);
+                const legacy = snapshotToLegacyViopSnapshot(snap);
+                out.push({
+                    symbol,
+                    category: 'FUTURES',
+                    displayName: snap.displayName?.trim() || snap.contractName?.trim() || undefined,
+                    name: snap.contractName?.trim() || undefined,
+                    price: priceN,
+                    changePercent: Number.isFinite(pct) ? pct : 0,
+                    trend: trendDir,
+                    metrics: {
+                        basis: impliedViopBasis(legacy, priceN),
+                        yield: effectiveViopCarryPercent(legacy, priceN),
+                    },
+                    volume: snap.volume != null ? Number(snap.volume) : Number(snap.quantity ?? 0),
+                });
+            }
+            return out.sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
         }
-        if (activeCategory === 'BOND') {
+        if (cat === 'BOND') {
             const merged = new Map<string, DebtSnapshot>();
             debtLatest.forEach((d) => {
                 const key = normalizeSymbolKey(d?.isin);
@@ -1308,20 +1862,128 @@ export function Market() {
                 })
                 .sort((a, b) => b.price - a.price);
         }
+        if (cat === 'EQUITY' && eqSub === 'BIST') {
+            const out: MarketInstrument[] = [];
+            for (const r of bistLatest) {
+                const symbol = normalizeSymbolKey(String(r.symbol ?? ''));
+                if (!symbol) continue;
+                const price = bistLatestPrice(r);
+                if (!Number.isFinite(price) || price <= 0) continue;
+                const pctRaw = r.changePercent;
+                const changePercent =
+                    typeof pctRaw === 'number' && Number.isFinite(pctRaw)
+                        ? pctRaw
+                        : parseFloat(String(pctRaw ?? '0').replace(',', '.')) || 0;
+                const volRaw = r.volume;
+                const volume =
+                    typeof volRaw === 'number' && Number.isFinite(volRaw)
+                        ? volRaw
+                        : parseFloat(String(volRaw ?? '0').replace(',', '.')) || null;
+                const dq = r.dataQuality != null ? String(r.dataQuality) : undefined;
+                const displayName = (r.displayName && String(r.displayName).trim()) || undefined;
+                const sector = (r.sector && String(r.sector).trim()) || undefined;
+                out.push({
+                    symbol,
+                    category: 'EQUITY',
+                    displayName,
+                    name: displayName,
+                    price,
+                    changePercent,
+                    dailyChangePercent: changePercent,
+                    trend: changePercent >= 0 ? 'UP' : 'DOWN',
+                    volume,
+                    currency: 'TRY',
+                    marketRegion: 'TR',
+                    exchange: 'BIST',
+                    sector,
+                    source: r.source != null ? String(r.source) : undefined,
+                    ...(dq ? { dataQuality: dq } : {}),
+                });
+            }
+            return out.sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
+        }
         if (!dashboard) return [];
         const latestMap =
-            activeCategory === 'EQUITY'
+            cat === 'EQUITY'
                 ? dashboard.latest.stocks
-                : activeCategory === 'CRYPTO'
+                : cat === 'CRYPTO'
                 ? dashboard.latest.crypto
-                : activeCategory === 'FX'
+                : cat === 'FX'
                 ? dashboard.latest.doviz
-                : activeCategory === 'METALS'
+                : cat === 'METALS'
                 ? dashboard.latest.metals
                 : dashboard.latest.funds;
-        const assetClass = heatAssetClassForCategory(activeCategory);
+        const assetClass = heatAssetClassForCategory(cat);
         if (!assetClass) return [];
         const unique = new Map<string, MarketInstrument>();
+
+        if (cat === 'METALS') {
+            const lm = latestMap as Record<string, LatestPriceRow | undefined>;
+            for (const rawSymbol of PRECIOUS_METAL_SYMBOLS) {
+                const row = lm[rawSymbol];
+                if (!row || row.status === 'NO_DATA') continue;
+                const symbol = normalizeSymbolKey(rawSymbol);
+                if (!symbol) continue;
+                const spark = sparklineClosesForStrict(dashboard, symbol, assetClass);
+                const tile = findHeatmapTile(dashboard, symbol, assetClass);
+                const price = pickPrice(row);
+                if (!Number.isFinite(price) || price <= 0) continue;
+                const volume = resolveListVolume(dashboard, symbol, assetClass, price, tile);
+                const tileChange = tile?.changePercent;
+                const changePercent = resolveChangePercent(spark, tileChange);
+                const dailyChangePercent = dailyChangePercentForListedAsset(
+                    cat,
+                    tileChange,
+                    spark,
+                    changePercent,
+                );
+                const r = row as Record<string, unknown>;
+                const apiCurrency = [r.currency, r.priceCurrency, r.quoteCurrency].find(
+                    (x): x is string => typeof x === 'string' && x.trim().length > 0
+                );
+                const apiName = typeof r.name === 'string' && r.name.trim().length > 0 ? r.name.trim() : undefined;
+                const apiRegion =
+                    typeof r.marketRegion === 'string' && r.marketRegion.trim().length > 0
+                        ? r.marketRegion.trim()
+                        : undefined;
+                const apiExchange =
+                    typeof r.exchange === 'string' && r.exchange.trim().length > 0 ? r.exchange.trim() : undefined;
+                const apiSector =
+                    typeof r.sector === 'string' && r.sector.trim().length > 0 ? r.sector.trim() : undefined;
+                const apiSource =
+                    typeof r.source === 'string' && r.source.trim().length > 0 ? r.source.trim() : undefined;
+                const delayRaw = r.delayMinutes;
+                const apiDelay =
+                    typeof delayRaw === 'number' && Number.isFinite(delayRaw)
+                        ? delayRaw
+                        : typeof delayRaw === 'string' && /^\d+$/.test(delayRaw.trim())
+                          ? Number(delayRaw.trim())
+                          : undefined;
+                const meta = getPreciousMetalDisplayMeta(symbol);
+                const mergedSource =
+                    isUsdPerOunceMetalSymbol(symbol) && !apiSource?.trim() ? meta?.sourceLabel : apiSource;
+                unique.set(symbol, {
+                    symbol,
+                    category: cat,
+                    price,
+                    changePercent,
+                    dailyChangePercent,
+                    trend: changePercent >= 0 ? 'UP' : 'DOWN',
+                    volume,
+                    ...(meta?.displayName ? { displayName: meta.displayName } : {}),
+                    ...(apiCurrency ? { currency: apiCurrency.trim() } : {}),
+                    ...(isUsdPerOunceMetalSymbol(symbol) && !apiCurrency ? { currency: 'USD' } : {}),
+                    ...(apiName ? { name: apiName } : {}),
+                    ...(apiRegion ? { marketRegion: apiRegion } : {}),
+                    ...(apiExchange ? { exchange: apiExchange } : {}),
+                    ...(apiSector ? { sector: apiSector } : {}),
+                    ...(mergedSource ? { source: String(mergedSource).trim() } : {}),
+                    ...(apiDelay != null ? { delayMinutes: apiDelay } : {}),
+                });
+            }
+            return [...unique.values()];
+        }
+
         Object.entries(latestMap ?? {})
             .filter(([, row]) => row && row.status !== 'NO_DATA')
             .forEach(([rawSymbol, row]) => {
@@ -1336,7 +1998,7 @@ export function Market() {
                 const tileChange = tile?.changePercent;
                 const changePercent = resolveChangePercent(spark, tileChange);
                 const dailyChangePercent = dailyChangePercentForListedAsset(
-                    activeCategory,
+                    cat,
                     tileChange,
                     spark,
                     changePercent,
@@ -1345,31 +2007,65 @@ export function Market() {
                 const apiCurrency = [r.currency, r.priceCurrency, r.quoteCurrency].find(
                     (x): x is string => typeof x === 'string' && x.trim().length > 0
                 );
+                const apiName = typeof r.name === 'string' && r.name.trim().length > 0 ? r.name.trim() : undefined;
+                const apiRegion =
+                    typeof r.marketRegion === 'string' && r.marketRegion.trim().length > 0
+                        ? r.marketRegion.trim()
+                        : undefined;
+                const apiExchange =
+                    typeof r.exchange === 'string' && r.exchange.trim().length > 0 ? r.exchange.trim() : undefined;
+                const apiSector =
+                    typeof r.sector === 'string' && r.sector.trim().length > 0 ? r.sector.trim() : undefined;
+                const apiSource =
+                    typeof r.source === 'string' && r.source.trim().length > 0 ? r.source.trim() : undefined;
+                const delayRaw = r.delayMinutes;
+                const apiDelay =
+                    typeof delayRaw === 'number' && Number.isFinite(delayRaw)
+                        ? delayRaw
+                        : typeof delayRaw === 'string' && /^\d+$/.test(delayRaw.trim())
+                          ? Number(delayRaw.trim())
+                          : undefined;
                 unique.set(symbol, {
                     symbol,
-                    category: activeCategory,
+                    category: cat,
                     price,
                     changePercent,
                     dailyChangePercent,
                     trend: changePercent >= 0 ? 'UP' : 'DOWN',
                     volume,
-                    metrics: activeCategory === 'FX' ? { basis: fxSpreadMap[symbol] ?? 0 } : undefined,
+                    metrics: cat === 'FX' ? { basis: fxSpreadMap[symbol] ?? 0 } : undefined,
                     ...(apiCurrency ? { currency: apiCurrency.trim() } : {}),
+                    ...(apiName ? { name: apiName } : {}),
+                    ...(apiRegion ? { marketRegion: apiRegion } : {}),
+                    ...(apiExchange ? { exchange: apiExchange } : {}),
+                    ...(apiSector ? { sector: apiSector } : {}),
+                    ...(apiSource ? { source: apiSource } : {}),
+                    ...(apiDelay != null ? { delayMinutes: apiDelay } : {}),
                 });
             });
         return [...unique.values()].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
-    }, [
-        activeCategory,
-        dashboard,
-        viopLatest,
-        viopLatestFromHistory,
-        viopContracts,
-        viopContractBySymbol,
-        dataRangeForChart,
-        debtLatest,
-        debtHistoryByIsin,
-        fxSpreadMap,
-    ]);
+        },
+        [
+            dashboard,
+            viopContracts,
+            viopSnapshotBySymbol,
+            viopContractBySymbol,
+            dataRangeForChart,
+            debtLatest,
+            debtHistoryByIsin,
+            fxSpreadMap,
+            bistLatest,
+        ]
+    );
+
+    const instruments = useMemo(
+        () => buildInstruments(activeCategory, equitySubmarket),
+        [buildInstruments, activeCategory, equitySubmarket]
+    );
+    const pickerInstruments = useMemo(
+        () => buildInstruments(pickerCategory, pickerEquitySubmarket),
+        [buildInstruments, pickerCategory, pickerEquitySubmarket]
+    );
 
     useEffect(() => {
         if (!instruments.length) {
@@ -1387,6 +2083,32 @@ export function Market() {
         setIsDetailPanelOpen(false);
         setShowUsdInTry(false);
     }, [activeCategory]);
+
+    useEffect(() => {
+        if (activeCategory !== 'EQUITY') return;
+        setCompareSymbols([]);
+        setCompareRows([]);
+    }, [equitySubmarket, activeCategory]);
+
+    useEffect(() => {
+        if (activeCategory !== 'EQUITY' || equitySubmarket !== 'BIST') return;
+        if (!bistLatest.length) return;
+        const keys = new Set(bistLatest.map((r) => normalizeSymbolKey(String(r.symbol ?? ''))));
+        const sel = normalizeSymbolKey(selectedSymbol);
+        if (sel && keys.has(sel)) return;
+        const preferred = keys.has('THYAO') ? 'THYAO' : String(bistLatest[0].symbol ?? '');
+        setSelectedSymbol(normalizeSymbolKey(preferred));
+    }, [activeCategory, equitySubmarket, bistLatest, selectedSymbol]);
+
+    useEffect(() => {
+        if (activeCategory !== 'FUTURES') return;
+        setCompareSymbols((prev) => {
+            const valid = prev.filter((s) => instruments.some((i) => i.symbol === s));
+            if (valid.length === prev.length && valid.every((s, i) => s === prev[i])) return prev;
+            return valid;
+        });
+    }, [activeCategory, selectedSymbol, instruments]);
+
     useEffect(() => {
         if (!isDetailPanelOpen) return;
         const onKeyDown = (event: KeyboardEvent) => {
@@ -1417,7 +2139,17 @@ export function Market() {
         }
     }, [instruments, activeCategory]);
 
-    const days = RANGE_TO_DAYS[dataRangeForChart];
+    useEffect(() => {
+        if (activeCategory === 'METALS' && prevTerminalCategoryRef.current !== 'METALS') {
+            setRange('2Y');
+        }
+        prevTerminalCategoryRef.current = activeCategory;
+    }, [activeCategory]);
+
+    const days =
+        activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
+            ? bistMainChartDays
+            : RANGE_TO_DAYS[dataRangeForChart];
     const marketType =
         activeCategory === 'EQUITY'
             ? 'EQUITY'
@@ -1440,7 +2172,7 @@ export function Market() {
 
     /** Hisse / döviz / kripto / altın: backend `bucket=hourly`. Tahvil / VİOP: yalnızca snapshot/günlük seri (saatlik istemci uydurması yok). */
     const terminalHourlyRange =
-        (activeCategory === 'EQUITY' ||
+        ((activeCategory === 'EQUITY' && equitySubmarket !== 'BIST') ||
             activeCategory === 'FX' ||
             activeCategory === 'CRYPTO' ||
             activeCategory === 'METALS') &&
@@ -1448,7 +2180,9 @@ export function Market() {
 
     const { data: indicatorData, isLoading: loadingIndicators } = useQuery({
         queryKey: ['market', 'indicators', 'terminal', activeCategory, selectedSymbol, days, terminalHourlyRange ? `hourly:${range}` : 'daily'],
-        enabled: Boolean(selectedSymbol && marketType),
+        enabled:
+            Boolean(selectedSymbol && marketType) &&
+            !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST'),
         queryFn: ({ signal }) =>
             marketClient
                 .get<IndicatorsResponse>('/api/market/indicators', {
@@ -1462,12 +2196,17 @@ export function Market() {
                     signal,
                 })
                 .then((r) => r.data),
-        refetchInterval: Boolean(selectedSymbol && marketType) ? 15_000 : false,
+        refetchInterval:
+            Boolean(selectedSymbol && marketType) && !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST')
+                ? 15_000
+                : false,
     });
 
     const { data: batchData, isLoading: loadingCandles } = useQuery({
         queryKey: ['market', 'candles', 'terminal', activeCategory, selectedSymbol, days, terminalHourlyRange ? `hourly:${range}` : 'daily'],
-        enabled: Boolean(selectedSymbol && marketType),
+        enabled:
+            Boolean(selectedSymbol && marketType) &&
+            !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST'),
         queryFn: async ({ signal }) => {
             if (activeCategory === 'METALS' && !terminalHourlyRange) {
                 const symbolCandidates = [selectedSymbol, selectedSymbol === 'ALTIN_TRY' ? 'XAU_TRY' : 'ALTIN_TRY']
@@ -1476,7 +2215,10 @@ export function Market() {
                 for (const symbol of symbolCandidates) {
                     try {
                         const rows = await marketClient
-                            .get<MarketHistoryPoint[]>('/api/market/metals/history', { params: { symbol, days }, signal })
+                            .get<MarketHistoryPoint[]>('/api/market/metals/history', {
+                                params: metalsHistoryQueryParams(symbol, days),
+                                signal,
+                            })
                             .then((r) => r.data);
                         const candlesFromHistory = historyRowsToSyntheticCandles(rows ?? []);
                         if (candlesFromHistory.length > 0) {
@@ -1527,7 +2269,10 @@ export function Market() {
                     : selectedSymbol;
             try {
                 const rows = await marketClient
-                    .get<MarketHistoryPoint[]>(historyPath, { params: { symbol: historySymbol, days }, signal })
+                    .get<MarketHistoryPoint[]>(historyPath, {
+                        params: metalsHistoryQueryParams(historySymbol, days),
+                        signal,
+                    })
                     .then((r) => r.data);
                 const fallbackCandles = historyRowsToSyntheticCandles(rows ?? []);
                 const existingFlat =
@@ -1554,58 +2299,37 @@ export function Market() {
             }
         },
         // Günlük ingest sonrası grafik güncellensin: aynı sekmede kalınca da periyodik tazele.
-        refetchInterval: Boolean(selectedSymbol && marketType)
-            ? terminalHourlyRange
-                ? range === '1W'
-                    ? 90_000
-                    : 60_000
-                : 120_000
-            : false,
+        refetchInterval:
+            Boolean(selectedSymbol && marketType) && !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST')
+                ? terminalHourlyRange
+                    ? range === '1W'
+                        ? 90_000
+                        : 60_000
+                    : 120_000
+                : false,
         refetchOnWindowFocus: true,
         staleTime: terminalHourlyRange ? (range === '1W' ? 45_000 : 30_000) : 45_000,
     });
 
-    const { data: viopHistory = [], isLoading: loadingViopHistory } = useQuery({
-        queryKey: ['market', 'viop-history', selectedSymbol, days],
+    const { data: viopHistoryApi, isLoading: loadingViopHistory } = useQuery({
+        queryKey: ['market', 'viop-history-api', selectedSymbol, days],
         enabled: activeCategory === 'FUTURES' && Boolean(selectedSymbol),
         queryFn: async ({ signal }) => {
-            const primary = await marketClient
-                .get<ViopSnapshot[]>('/api/market/viop/history', {
-                    params: { contract: selectedSymbol, days },
-                    signal,
-                })
-                .then((r) => r.data);
-            if (primary.length > 0 || days >= 365) {
-                return primary;
-            }
-            return marketClient
-                .get<ViopSnapshot[]>('/api/market/viop/history', {
-                    params: { contract: selectedSymbol, days: 365 },
-                    signal,
-                })
-                .then((r) => r.data);
+            const now = new Date();
+            const fromMs = now.getTime() - Math.max(1, days) * 86_400_000;
+            const from = formatEuropeIstanbulLocalIso(new Date(fromMs));
+            const to = formatEuropeIstanbulLocalIso(now);
+            const sym = selectedSymbol ?? '';
+            const { data } = await marketClient.get<ViopHistoryApi>(
+                `/api/market/viop/contracts/${encodeURIComponent(sym)}/history`,
+                { params: { from, to, period: 60 }, signal }
+            );
+            return data;
         },
-        refetchInterval: false,
-        refetchOnWindowFocus: false,
-        refetchOnReconnect: false,
-        staleTime: 5 * 60_000,
+        refetchInterval: activeCategory === 'FUTURES' && Boolean(selectedSymbol) ? 60_000 : false,
+        refetchOnWindowFocus: activeCategory === 'FUTURES',
+        staleTime: 45_000,
     });
-    const { data: viopOiHistory = [] } = useQuery({
-        queryKey: ['market', 'viop-oi-history', selectedSymbol, days],
-        enabled: activeCategory === 'FUTURES' && Boolean(selectedSymbol),
-        queryFn: ({ signal }) =>
-            marketClient
-                .get<ViopSnapshot[]>('/api/market/viop/oi-history', {
-                    params: { contract: selectedSymbol, days },
-                    signal,
-                })
-                .then((r) => r.data),
-        refetchInterval: false,
-        refetchOnWindowFocus: false,
-        refetchOnReconnect: false,
-        staleTime: 5 * 60_000,
-    });
-
     const { data: debtHistory = [], isLoading: loadingDebtHistory } = useQuery({
         queryKey: ['market', 'debt-history', selectedSymbol, days],
         enabled: activeCategory === 'BOND' && Boolean(selectedSymbol),
@@ -1622,22 +2346,22 @@ export function Market() {
 
     const candles = useMemo(() => {
         if (activeCategory === 'FUTURES') {
-            const sorted = [...viopHistory]
-                .filter((x) => Number(x.price ?? 0) > 0)
-                .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
-            const raw = sorted.map((x, idx) => {
-                const close = Number(x.price ?? 0);
+            const pts = viopHistoryApi?.points ?? [];
+            const sorted = [...pts]
+                .filter((p) => Number(p.price) > 0)
+                .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+            return sorted.map((p, idx) => {
+                const close = Number(p.price);
                 const prev = idx > 0 ? Number(sorted[idx - 1]?.price ?? close) : close;
                 return {
-                    time: x.asOf ?? new Date().toISOString(),
+                    time: p.time,
                     open: prev,
                     high: Math.max(prev, close),
                     low: Math.min(prev, close),
                     close,
-                    volume: Number(x.openInterest ?? 0),
+                    volume: 0,
                 };
             });
-            return raw;
         }
         if (activeCategory === 'BOND') {
             const sorted = [...debtHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
@@ -1654,6 +2378,23 @@ export function Market() {
                 };
             });
             return raw;
+        }
+        if (activeCategory === 'EQUITY' && equitySubmarket === 'BIST') {
+            const sorted = [...bistCandles].sort((a, b) => String(a.date ?? '').localeCompare(String(b.date ?? '')));
+            return sorted.map((row) => {
+                const close = bistPickClose(row);
+                const o = Number(row.open);
+                const open = Number.isFinite(o) && o > 0 ? o : close;
+                const hRaw = Number(row.high);
+                const lRaw = Number(row.low);
+                const high = Number.isFinite(hRaw) && hRaw > 0 ? hRaw : Math.max(open, close);
+                const low = Number.isFinite(lRaw) && lRaw > 0 ? lRaw : Math.min(open, close);
+                const vRaw = Number(row.volume);
+                const volume = Number.isFinite(vRaw) ? vRaw : 0;
+                const d = String(row.date ?? '').slice(0, 10);
+                const time = d.length === 10 ? `${d}T12:00:00` : new Date().toISOString();
+                return { time, open, high, low, close, volume };
+            });
         }
         const series = batchData?.series?.[selectedSymbol] ?? [];
         if (series.length > 0) {
@@ -1690,7 +2431,7 @@ export function Market() {
             const prev = idx > 0 ? Number(closes[idx - 1]?.value ?? close) : close;
             return { time: p.t, open: prev, high: Math.max(prev, close), low: Math.min(prev, close), close, volume: 0 };
         });
-    }, [activeCategory, viopHistory, debtHistory, batchData, indicatorData, selectedSymbol, terminalHourlyRange, days]);
+    }, [activeCategory, equitySubmarket, viopHistoryApi, debtHistory, batchData, indicatorData, selectedSymbol, terminalHourlyRange, days, bistCandles]);
     const bondDualPoints = useMemo(() => {
         if (activeCategory !== 'BOND') return [];
         const sorted = [...debtHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
@@ -1705,34 +2446,28 @@ export function Market() {
     }, [activeCategory, debtHistory]);
     const viopLinePoints = useMemo(() => {
         if (activeCategory !== 'FUTURES') return [];
-        // Önce exact timestamp ile dedup (backend retry / duplicate snapshot koruması) — gün bazlı
-        // dedup yapmıyoruz: chart Unix timestamp kullanıyor ve gerçek zaman aralıklarına ihtiyacı var.
-        const byTs = new Map<number, ViopSnapshot>();
-        viopHistory.forEach((x) => {
-            const priceN = Number(x.price ?? 0);
+        const pts = viopHistoryApi?.points ?? [];
+        const byTs = new Map<number, ViopHistoryPointApi>();
+        pts.forEach((p) => {
+            const priceN = Number(p.price ?? 0);
             if (!(priceN > 0)) return;
-            const ts = new Date(x.asOf ?? 0).getTime();
+            const ts = new Date(p.time).getTime();
             if (!Number.isFinite(ts) || ts <= 0) return;
             const existing = byTs.get(ts);
-            if (!existing || new Date(existing.asOf ?? 0).getTime() <= ts) {
-                byTs.set(ts, x);
+            if (!existing || new Date(existing.time).getTime() <= ts) {
+                byTs.set(ts, p);
             }
         });
         return [...byTs.entries()]
             .sort((a, b) => a[0] - b[0])
-            .map(([, x]) => {
-                const priceN = Number(x.price ?? 0);
-                const basisDisp = impliedViopBasis(x, priceN);
-                const carry = effectiveViopCarryPercent(x, priceN);
-                return {
-                    time: x.asOf ?? new Date().toISOString(),
-                    price: priceN,
-                    basis: basisDisp,
-                    annualizedBasisPct: Number.isFinite(carry) ? carry : 0,
-                    openInterest: Number(x.openInterest ?? 0),
-                };
-            });
-    }, [activeCategory, viopHistory]);
+            .map(([, p]) => ({
+                time: p.time,
+                price: Number(p.price),
+                basis: 0,
+                annualizedBasisPct: 0,
+                openInterest: 0,
+            }));
+    }, [activeCategory, viopHistoryApi]);
 
     const ma7 = useMemo(() => {
         if (indicatorData?.ma?.['7']?.length) {
@@ -1752,8 +2487,9 @@ export function Market() {
         [candles]
     );
 
-    const instrumentVms = useMemo<InstrumentVm[]>(() => {
-        return instruments.map((ins) => {
+    const mapInstrumentsToVms = useCallback(
+        (list: MarketInstrument[]): InstrumentVm[] =>
+        list.map((ins) => {
             const symbolKey = normalizeSymbolKey(ins.symbol);
             const live = ins.category === 'FUTURES' ? null : liveOverrides[`${ins.category}:${symbolKey}`];
             const livePrice = live && live.price > 0 ? live.price : ins.price;
@@ -1799,6 +2535,7 @@ export function Market() {
                     .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime())
                     .map((row) => Number(row?.dirtyPrice))
                     .filter((p) => Number.isFinite(p) && p > 0);
+                const hzBond = horizonPctsFromSparkCloses(sparkFromHistory, finiteHorizonPct(liveChange), 'BOND');
                 return {
                     ...ins,
                     price: livePrice,
@@ -1810,25 +2547,55 @@ export function Market() {
                     maturityDate: fromApi ?? (fromIsin ? fromIsin.toISOString() : undefined),
                     daysToMaturity: remainingDays,
                     couponRate: Number(latestDebt?.couponRate ?? 0),
-                    yieldToMaturity: Number(latestDebt?.yieldPct ?? ins.metrics?.yield ?? 0),
+                    yieldToMaturity: pickStructuredYieldDecimal(latestDebt),
                     longShort: 'NÖTR',
+                    ...hzBond,
                 };
             }
             if (ins.category === 'FUTURES') {
                 const contractLabel = parseViopContractLabel(symbolKey);
                 const latestViop = viopLatestMap[symbolKey];
+                const snap = viopSnapshotBySymbol[symbolKey];
                 const viopSpark = latestViop?.sparklineCloses;
                 const sparkFromDb = Array.isArray(viopSpark)
                     ? viopSpark.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0)
                     : [];
                 const basis = Number(ins.metrics?.basis ?? 0);
+                const readable = getInstrumentDisplayName({
+                    symbol: symbolKey,
+                    displayName: snap?.displayName ?? ins.displayName,
+                    name: snap?.contractName ?? ins.name,
+                    instrumentName: ins.instrumentName,
+                });
+                const displayName = readable !== symbolKey ? readable : contractLabel;
+                const ctr = viopContractBySymbol[symbolKey];
+                const lastPx = Number(snap?.last ?? 0);
+                const hzFut: InstrumentHorizonPcts = {
+                    pctDay:
+                        finiteHorizonPct(snap?.changePercent) ??
+                        finiteHorizonPct(ctr?.listPctChange1d) ??
+                        approxPctBySpan(sparkFromDb, 1),
+                    pctWeek:
+                        finiteHorizonPct(ctr?.listPctChange7d) ??
+                        viopPctVersusReference(lastPx, snap?.weekClose) ??
+                        approxPctBySpan(sparkFromDb, 7),
+                    pctMonth:
+                        finiteHorizonPct(ctr?.listPctChange30d) ??
+                        viopPctVersusReference(lastPx, snap?.monthClose) ??
+                        approxPctBySpan(sparkFromDb, 30),
+                    pctYear:
+                        finiteHorizonPct(ctr?.listPctChange365d) ??
+                        viopPctVersusReference(lastPx, snap?.yearClose) ??
+                        viopPctVersusReference(lastPx, snap?.prevYearClose) ??
+                        approxPctBySpan(sparkFromDb, 365),
+                };
                 return {
                     ...ins,
                     price: livePrice,
                     changePercent: liveChange,
                     volume: liveVolume,
                     type: 'FUTURES',
-                    displayName: contractLabel,
+                    displayName,
                     sparkline: normalizeTrendSparkline(sparkFromDb, livePrice, liveChange),
                     contractMonth: latestViop?.contractMonth ?? toContractMonth(contractLabel),
                     expiryDate: latestViop?.expiryDate,
@@ -1843,10 +2610,62 @@ export function Market() {
                             : basis < 0
                             ? 'SHORT'
                             : 'NÖTR',
+                    ...hzFut,
+                };
+            }
+            if (ins.category === 'EQUITY' && ins.marketRegion === 'TR' && String(ins.exchange ?? '').toUpperCase() === 'BIST') {
+                const sparkLocal = bistSparkClosesBySymbol[symbolKey] ?? [];
+                const displayName = getInstrumentDisplayName({
+                    symbol: symbolKey,
+                    displayName: ins.displayName,
+                    name: ins.name,
+                    instrumentName: ins.instrumentName,
+                });
+                const hzBist = horizonPctsFromSparkCloses(
+                    sparkLocal,
+                    finiteHorizonPct(ins.dailyChangePercent) ?? finiteHorizonPct(liveChange),
+                    'EQUITY',
+                );
+                return {
+                    ...ins,
+                    price: livePrice,
+                    changePercent: liveChange,
+                    dailyChangePercent: ins.dailyChangePercent ?? liveChange,
+                    volume: liveVolume,
+                    type: 'STOCK',
+                    displayName,
+                    sparkline: normalizeTrendSparkline(sparkLocal, livePrice, liveChange),
+                    longShort: ins.trend === 'UP' ? 'LONG' : 'SHORT',
+                    ...hzBist,
+                };
+            }
+            if (ins.category === 'METALS' && isPreciousMetalAllowlisted(symbolKey)) {
+                const meta = getPreciousMetalDisplayMeta(symbolKey);
+                const spark =
+                    dashboard && heatAssetClassForCategory('METALS')
+                        ? sparklineClosesForStrict(dashboard, symbolKey, 'METAL')
+                        : [];
+                const hzDash = horizonPctsFromSparkCloses(spark, liveDailyChange, 'METALS');
+                const sparkMaxPoints = 90;
+                const displayName = meta?.displayName ?? ins.displayName ?? formatAssetLabel(symbolKey, 'METALS');
+                return {
+                    ...ins,
+                    price: livePrice,
+                    changePercent: liveChange,
+                    dailyChangePercent: liveDailyChange,
+                    volume: liveVolume,
+                    type: 'STOCK',
+                    displayName,
+                    listSubtitle: meta?.subtitle,
+                    sparkline: normalizeTrendSparkline(spark, livePrice, liveChange, sparkMaxPoints),
+                    longShort: ins.trend === 'UP' ? 'LONG' : 'SHORT',
+                    ...hzDash,
                 };
             }
             const ac = heatAssetClassForCategory(ins.category);
             const spark = dashboard && ac ? sparklineClosesFor(dashboard, symbolKey, ac) : [];
+            const hzDash = horizonPctsFromSparkCloses(spark, liveDailyChange, ins.category);
+            const sparkMaxPoints = ins.category === 'EQUITY' ? 320 : 90;
             return {
                 ...ins,
                 price: livePrice,
@@ -1855,26 +2674,212 @@ export function Market() {
                 volume: liveVolume,
                 type: 'STOCK',
                 displayName: formatAssetLabel(symbolKey, marketKindForCategory(ins.category)),
-                sparkline: normalizeTrendSparkline(spark, livePrice, liveChange),
+                sparkline: normalizeTrendSparkline(spark, livePrice, liveChange, sparkMaxPoints),
                 longShort: ins.trend === 'UP' ? 'LONG' : 'SHORT',
+                ...hzDash,
             };
-        });
-    }, [instruments, dashboard, debtMetaMap, debtLatestMap, debtHistoryByIsin, viopLatestMap, debtNameMap, activeCategory, liveOverrides]);
+        }),
+        [
+            dashboard,
+            debtMetaMap,
+            debtLatestMap,
+            debtHistoryByIsin,
+            viopLatestMap,
+            viopSnapshotBySymbol,
+            debtNameMap,
+            liveOverrides,
+            bistSparkClosesBySymbol,
+            viopContractBySymbol,
+        ]
+    );
 
-    const filteredInstruments = useMemo(() => {
-        const q = searchTerm.trim().toUpperCase();
-        if (!q) return instrumentVms;
-        return instrumentVms.filter(
-            (x) =>
-                x.symbol.includes(q) ||
-                x.displayName.toUpperCase().includes(q) ||
-                String(x.type).includes(q)
-        );
-    }, [instrumentVms, searchTerm]);
+    const instrumentVms = useMemo(() => mapInstrumentsToVms(instruments), [mapInstrumentsToVms, instruments]);
+    const selectedBondStructuredYield = useMemo(() => {
+        if (activeCategory !== 'BOND' || !selectedSymbol) return false;
+        return debtHasStructuredYieldData(debtLatestMap[normalizeSymbolKey(selectedSymbol)]);
+    }, [activeCategory, selectedSymbol, debtLatestMap]);
+    const pickerInstrumentVms = useMemo(() => mapInstrumentsToVms(pickerInstruments), [mapInstrumentsToVms, pickerInstruments]);
+
+    const pickerFilteredInstruments = useMemo(() => {
+        const q = searchTerm.trim().toLowerCase();
+        if (!q) return pickerInstrumentVms;
+        return pickerInstrumentVms.filter((x) => {
+            if (
+                x.symbol.toLowerCase().includes(q) ||
+                x.displayName.toLowerCase().includes(q) ||
+                String(x.type).toLowerCase().includes(q)
+            ) {
+                return true;
+            }
+            if (pickerCategory !== 'METALS') return false;
+            const meta = getPreciousMetalDisplayMeta(x.symbol);
+            const sub = String(x.listSubtitle ?? '').toLowerCase();
+            const bag = [x.symbol, x.displayName, sub, ...(meta?.searchTerms ?? [])].join(' ').toLowerCase();
+            return bag.includes(q);
+        });
+    }, [pickerInstrumentVms, searchTerm, pickerCategory]);
+
+    const pickerMarketListQuickChips = useMemo(() => {
+        if (pickerCategory === 'FUTURES') {
+            return [
+                { id: 'ALL', label: t('market.filterAll', 'Tümü') },
+                { id: 'VIOP_FX', label: t('market.filterViopFx', 'Döviz') },
+                { id: 'VIOP_INDEX', label: t('market.filterViopIndex', 'Endeks') },
+                { id: 'VIOP_COMMODITY', label: t('market.filterViopCommodity', 'Emtia') },
+                { id: 'VIOP_EQUITY', label: t('market.filterViopEquity', 'Pay') },
+            ];
+        }
+        return [
+            { id: 'ALL', label: t('market.filterAll', 'Tümü') },
+            { id: 'UP', label: t('market.filterGainers', 'Yükselenler') },
+            { id: 'DOWN', label: t('market.filterLosers', 'Düşenler') },
+            { id: 'VOL', label: t('market.filterVolume', 'Hacim') },
+        ];
+    }, [pickerCategory, t]);
+
+    useEffect(() => {
+        const allowed =
+            pickerCategory === 'FUTURES'
+                ? new Set(['ALL', 'VIOP_FX', 'VIOP_INDEX', 'VIOP_COMMODITY', 'VIOP_EQUITY'])
+                : new Set(['ALL', 'UP', 'DOWN', 'VOL']);
+        if (!allowed.has(marketListQuickFilter)) {
+            setMarketListQuickFilter('ALL');
+        }
+    }, [pickerCategory, marketListQuickFilter]);
+
+    const pickerDisplayedInstruments = useMemo(() => {
+        const rows = pickerFilteredInstruments;
+        const sortOut = (list: InstrumentVm[]) => applyPickerTableSort(list, pickerTableSort);
+
+        if (pickerCategory === 'FUTURES') {
+            if (marketListQuickFilter === 'ALL') return sortOut(rows);
+            const catMap: Record<string, 'FX' | 'INDEX' | 'COMMODITY' | 'EQUITY'> = {
+                VIOP_FX: 'FX',
+                VIOP_INDEX: 'INDEX',
+                VIOP_COMMODITY: 'COMMODITY',
+                VIOP_EQUITY: 'EQUITY',
+            };
+            const want = catMap[marketListQuickFilter];
+            if (!want) return sortOut(rows);
+            return sortOut(rows.filter((r) => viopCategoryFor(r.symbol) === want));
+        }
+        if (marketListQuickFilter === 'ALL') return sortOut(rows);
+        if (marketListQuickFilter === 'UP') {
+            return sortOut(
+                rows.filter((r) => {
+                    const d = finiteOrNull(r.pctDay);
+                    return d != null && d > 0.02;
+                }),
+            );
+        }
+        if (marketListQuickFilter === 'DOWN') {
+            return sortOut(
+                rows.filter((r) => {
+                    const d = finiteOrNull(r.pctDay);
+                    return d != null && d < -0.02;
+                }),
+            );
+        }
+        if (marketListQuickFilter === 'VOL') {
+            const byVol = [...rows].sort((a, b) => {
+                const va = a.volume != null && Number.isFinite(Number(a.volume)) ? Number(a.volume) : 0;
+                const vb = b.volume != null && Number.isFinite(Number(b.volume)) ? Number(b.volume) : 0;
+                return vb - va;
+            });
+            return sortOut(byVol);
+        }
+        return sortOut(rows);
+    }, [pickerFilteredInstruments, marketListQuickFilter, pickerCategory, pickerTableSort]);
     const selectedInstrumentVm = useMemo(
         () => instrumentVms.find((x) => x.symbol === selectedSymbol) ?? instrumentVms[0] ?? null,
         [instrumentVms, selectedSymbol]
     );
+
+    const chartComparisonAvailable = useMemo(
+        () =>
+            canShowComparisonChart(activeCategory, marketType, equitySubmarket) &&
+            activeCategory !== 'BOND',
+        [activeCategory, marketType, equitySubmarket],
+    );
+
+    const heroCompareExtras = useMemo(() => {
+        if (!selectedSymbol || !chartComparisonAvailable) return [] as string[];
+        const sk = normalizeSymbolKey(selectedSymbol);
+        return compareSymbols.filter((s) => normalizeSymbolKey(s) !== sk);
+    }, [compareSymbols, selectedSymbol, chartComparisonAvailable]);
+
+    const handlePickerCompareClick = useCallback(
+        (e: MouseEvent, row: InstrumentVm) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (!chartComparisonAvailable || !selectedInstrumentVm) return;
+            if (!canPickerCompareRow(row, selectedInstrumentVm, activeCategory, equitySubmarket)) return;
+            const selKey = normalizeSymbolKey(selectedInstrumentVm.symbol);
+            const symKey = normalizeSymbolKey(row.symbol);
+            if (symKey === selKey) return;
+
+            setCompareSymbols((prev) => {
+                const keys = prev.map(normalizeSymbolKey);
+                if (keys.includes(symKey)) {
+                    const next = prev.filter((s) => normalizeSymbolKey(s) !== symKey);
+                    return next.length <= 1 ? [] : next;
+                }
+                if (prev.length >= 4) return prev;
+                const withAnchor =
+                    prev.length === 0 || !keys.includes(selKey)
+                        ? [selectedInstrumentVm.symbol, ...prev.filter((s) => normalizeSymbolKey(s) !== selKey)]
+                        : [...prev];
+                const merged = [...withAnchor];
+                if (!merged.map(normalizeSymbolKey).includes(symKey)) merged.push(row.symbol);
+                const seen = new Set<string>();
+                const out: string[] = [];
+                const push = (raw: string) => {
+                    const k = normalizeSymbolKey(raw);
+                    if (!k || seen.has(k) || out.length >= 4) return;
+                    seen.add(k);
+                    out.push(raw);
+                };
+                push(selectedInstrumentVm.symbol);
+                for (const s of merged) {
+                    if (normalizeSymbolKey(s) !== selKey) push(s);
+                }
+                return out;
+            });
+        },
+        [chartComparisonAvailable, selectedInstrumentVm, activeCategory, equitySubmarket],
+    );
+
+    const heroCompareStrip =
+        chartComparisonAvailable && heroCompareExtras.length > 0 ? (
+            <div
+                className="terminal-hero-compare-strip"
+                role="list"
+                aria-label={t('market.compareSelectedSymbols', 'Karşılaştırmaya eklenen semboller')}
+            >
+                {heroCompareExtras.map((sym) => (
+                    <button
+                        key={sym}
+                        type="button"
+                        className="terminal-hero-compare-chip"
+                        role="listitem"
+                        title={t('market.compareChipRemove', 'Karşılaştırmadan çıkar')}
+                        onClick={(ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            setCompareSymbols((prev) => {
+                                const next = prev.filter((s) => normalizeSymbolKey(s) !== normalizeSymbolKey(sym));
+                                return next.length <= 1 ? [] : next;
+                            });
+                        }}
+                    >
+                        <span className="terminal-hero-compare-chip__sym">{sym}</span>
+                        <span className="terminal-hero-compare-chip__x" aria-hidden>
+                            ×
+                        </span>
+                    </button>
+                ))}
+            </div>
+        ) : null;
 
     const tableWrapRef = useRef<HTMLDivElement>(null);
     const [listScrollTop, setListScrollTop] = useState(0);
@@ -1935,15 +2940,19 @@ export function Market() {
         if (el) el.scrollTop = 0;
         lastReportedScrollTopRef.current = 0;
         setListScrollTop(0);
-    }, [activeCategory]);
+    }, [pickerCategory, pickerEquitySubmarket, marketListQuickFilter, searchTerm]);
+
+    useEffect(() => {
+        setPickerTableSort(null);
+    }, [pickerCategory, pickerEquitySubmarket, searchTerm]);
 
     const listVirtual = useMemo(() => {
-        const total = filteredInstruments.length;
+        const total = pickerDisplayedInstruments.length;
         const rowH = MARKET_LIST_ROW_HEIGHT;
         const start = Math.min(total, Math.max(0, Math.floor(listScrollTop / rowH) - MARKET_LIST_OVERSCAN_ROWS));
         const visibleRows = Math.ceil(listViewportH / rowH) + 2 * MARKET_LIST_OVERSCAN_ROWS + 2;
         const end = Math.min(total, start + visibleRows);
-        const rows = filteredInstruments.slice(start, end);
+        const rows = pickerDisplayedInstruments.slice(start, end);
         return {
             rowHeight: rowH,
             topSpacer: start * rowH,
@@ -1951,7 +2960,7 @@ export function Market() {
             rows,
             totalHeight: total * rowH,
         };
-    }, [filteredInstruments, listScrollTop, listViewportH]);
+    }, [pickerDisplayedInstruments, listScrollTop, listViewportH]);
     const sparklinePath = useCallback((values: number[]) => {
         if (!values.length) return '';
         const min = Math.min(...values);
@@ -1973,13 +2982,24 @@ export function Market() {
         // Üst hero % / ok: TREND (1G/7G/14G) seciminde tablo + ısı haritası ile aynı
         // `effectiveChangePercent`; yalnızca uzun-pencere `changePercent` kalsa hero ile
         // liste/heatmap ayrışırdı (FX canlı 24s vs spark 1G).
+        // Tahvil / VİOP: seçilen zaman dilimindeki terminal mumları (candles) ilk→son kapanış
+        // — hisse ile aynı grafik-tabanlı mantık; aksi halde canlı liste %’si sabit kalırdı.
         const current = instrumentVms.find((x) => x.symbol === selectedSymbol) ?? instrumentVms[0];
         if (!current) return null;
         const highs = candles.map((c) => c.high);
         const lows = candles.map((c) => c.low);
-        const headlineChange = TREND_SELECTABLE_CATEGORIES.has(current.category)
-            ? effectiveChangePercent(current, trendPeriod)
-            : current.changePercent;
+        const useChartPct =
+            (TREND_SELECTABLE_CATEGORIES.has(current.category) ||
+                current.category === 'BOND' ||
+                current.category === 'FUTURES') &&
+            candles.length >= 2;
+        const fromChart = useChartPct ? pctChangeFromTerminalCandles(candles) : null;
+        const headlineChange =
+            fromChart != null && Number.isFinite(fromChart)
+                ? fromChart
+                : TREND_SELECTABLE_CATEGORIES.has(current.category)
+                  ? effectiveChangePercent(current, trendChartRange)
+                  : current.changePercent;
         return {
             ...current,
             changePercent: headlineChange,
@@ -1987,11 +3007,15 @@ export function Market() {
             high: highs.length ? Math.max(...highs) : current.price,
             low: lows.length ? Math.min(...lows) : current.price,
         };
-    }, [instrumentVms, selectedSymbol, candles, trendPeriod]);
+    }, [instrumentVms, selectedSymbol, candles, trendChartRange]);
     const heroScaled = useMemo(() => {
         if (!hero) return null;
         const pd = terminalPriceDisplay(hero, { showUsdInTry, usdTryRate });
-        const isUsdConv = resolveDisplayCurrency(hero) === 'USD' && showUsdInTry && usdTryRate != null;
+        const isUsdConv =
+            !isUsdPerOunceMetalSymbol(hero.symbol) &&
+            resolveDisplayCurrency(hero) === 'USD' &&
+            showUsdInTry &&
+            usdTryRate != null;
         const mult = isUsdConv ? usdTryRate : 1;
         return { ...pd, high: hero.high * mult, low: hero.low * mult };
     }, [hero, showUsdInTry, usdTryRate]);
@@ -2007,6 +3031,21 @@ export function Market() {
         const key = normalizeMetaKey(selectedInstrumentVm.symbol);
 
         if (selectedInstrumentVm.category === 'EQUITY') {
+            const isBist =
+                selectedInstrumentVm.marketRegion === 'TR' &&
+                String(selectedInstrumentVm.exchange ?? '').toUpperCase() === 'BIST';
+            if (isBist) {
+                return {
+                    title: t('market.drawerStockTitle', 'Hisse bilgisi'),
+                    rows: [
+                        ['Sembol', selectedInstrumentVm.symbol],
+                        ['Şirket', selectedInstrumentVm.displayName],
+                        ['Sektör', selectedInstrumentVm.sector ?? '—'],
+                        ['Borsa', 'BIST'],
+                    ],
+                    description: t('stocks.bistFootnote', 'BIST günlük kapanış verisi (İş Yatırım HisseTekil).'),
+                };
+            }
             const meta = instrumentMeta[key];
             return meta
                 ? {
@@ -2048,6 +3087,32 @@ export function Market() {
                   }
                 : null;
         }
+        if (selectedInstrumentVm.category === 'METALS') {
+            const symKey = normalizeSymbolKey(selectedInstrumentVm.symbol);
+            const pm = getPreciousMetalDisplayMeta(symKey);
+            if (pm) {
+                const rows: [string, string][] = [
+                    ['Ürün', pm.displayName],
+                    ['Kotasyon', pm.subtitle],
+                    ['Birim', pm.unitLabel],
+                ];
+                if (pm.sourceLabel) rows.push(['Kaynak', pm.sourceLabel]);
+                if (pm.delayLabel) rows.push(['Veri', pm.delayLabel]);
+                const descUsd = isUsdPerOunceMetalSymbol(symKey) ? PRECIOUS_USD_OZ_DESCRIPTION[symKey] : undefined;
+                return {
+                    title: 'Kıymetli maden',
+                    rows,
+                    description:
+                        descUsd ??
+                        'TL bazlı yaklaşık gram altın (CoinGecko). USD/ons kotasyonları ayrı sembollerdedir.',
+                };
+            }
+            return {
+                title: 'Kıymetli maden',
+                rows: [['Ürün', selectedInstrumentVm.displayName ?? symKey]],
+                description: 'Kıymetli maden kotasyonu.',
+            };
+        }
         if (selectedInstrumentVm.category === 'FUNDS') {
             const meta = etfMeta[key];
             return meta
@@ -2077,30 +3142,42 @@ export function Market() {
             };
         }
         return null;
-    }, [selectedInstrumentVm]);
+    }, [selectedInstrumentVm, t]);
     const futuresHeaderMetrics = useMemo(() => {
         if (activeCategory !== 'FUTURES' || !selectedSymbol) return null;
         const key = normalizeSymbolKey(selectedSymbol);
+        const snap = viopSnapshotBySymbol[key];
         const latest = viopLatestMap[key];
-        if (!latest || !Number.isFinite(Number(latest.price)) || Number(latest.price) <= 0) return null;
-        const oiSeries = [...viopOiHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
-        const lastOi = oiSeries.length
-            ? Number(oiSeries[oiSeries.length - 1]?.openInterest ?? latest.openInterest ?? 0)
-            : Number(latest.openInterest ?? 0);
-        const prevOi = oiSeries.length > 1 ? Number(oiSeries[oiSeries.length - 2]?.openInterest ?? 0) : lastOi;
-        const oiChangePct = prevOi > 0 ? ((lastOi - prevOi) / prevOi) * 100 : 0;
-        const priceN = Number(latest.price);
-        const displayBasis = impliedViopBasis(latest, priceN);
-        const carry = effectiveViopCarryPercent(latest, priceN);
+        const priceN = Number(snap?.last ?? latest?.price ?? 0);
+        if (!(priceN > 0)) return null;
+        const legacy = latest ?? (snap ? snapshotToLegacyViopSnapshot(snap) : null);
+        const displayBasis = legacy ? impliedViopBasis(legacy, priceN) : 0;
+        const carry = legacy ? effectiveViopCarryPercent(legacy, priceN) : 0;
         return {
+            bid: snap?.bid != null ? Number(snap.bid) : null,
+            ask: snap?.ask != null ? Number(snap.ask) : null,
+            changeAmount: snap?.changeAmount != null ? Number(snap.changeAmount) : null,
+            changePercent: snap?.changePercent != null ? Number(snap.changePercent) : null,
+            volume: snap?.volume != null ? Number(snap.volume) : null,
+            quantity: snap?.quantity != null ? Number(snap.quantity) : null,
+            settlement: snap?.settlement != null ? Number(snap.settlement) : null,
+            preSettlement: snap?.preSettlement != null ? Number(snap.preSettlement) : null,
+            initialMargin: snap?.initialMargin != null ? Number(snap.initialMargin) : null,
+            limitUp: snap?.limitUp != null ? Number(snap.limitUp) : null,
+            limitDown: snap?.limitDown != null ? Number(snap.limitDown) : null,
+            open: snap?.open != null ? Number(snap.open) : snap?.openPrice != null ? Number(snap.openPrice) : null,
+            high: snap?.high != null ? Number(snap.high) : null,
+            low: snap?.low != null ? Number(snap.low) : null,
+            sourceLabel: snap?.sourceLabel ?? '—',
+            delayMinutes: snap?.delayMinutes ?? null,
             basis: displayBasis,
             carry: Number.isFinite(carry) ? carry : 0,
-            oiChangePct,
-            oi: lastOi,
         };
-    }, [activeCategory, selectedSymbol, viopLatestMap, viopOiHistory]);
+    }, [activeCategory, selectedSymbol, viopSnapshotBySymbol, viopLatestMap]);
 
     const markers = useMemo(() => [], []);
+
+    const heatmapSectorDisplay = useCallback((sectorKey: string) => heatmapSectorLabel(sectorKey, t), [t]);
 
     const insightsTreemapTiles = useMemo(() => {
         if (!dashboard) return [];
@@ -2113,32 +3190,61 @@ export function Market() {
                 if (activeCategory === 'FUNDS') return tile.assetClass === 'FUND';
                 return false;
             })
-            .map((tile) => enrichTreemapTileForTrendPeriod(tile, dashboard, trendPeriod));
-    }, [dashboard, activeCategory, trendPeriod]);
+            .map((tile) => enrichTreemapTileForChartRange(tile, dashboard, range));
+    }, [dashboard, activeCategory, range]);
 
-    const topGainers = useMemo(() => {
-        const rows = instrumentVms.map((ins) => ({
-            symbol: ins.symbol,
-            changePercent: TREND_SELECTABLE_CATEGORIES.has(ins.category)
-                ? effectiveChangePercent(ins, trendPeriod)
-                : ins.changePercent,
-        }));
-        return [...rows].sort((a, b) => b.changePercent - a.changePercent).slice(0, 5);
-    }, [instrumentVms, trendPeriod]);
+    const insightsTreemapTilesEffective = useMemo(() => {
+        if (activeCategory === 'EQUITY' && equitySubmarket === 'BIST') return bistTreemapTiles;
+        return insightsTreemapTiles;
+    }, [activeCategory, equitySubmarket, bistTreemapTiles, insightsTreemapTiles]);
 
-    const topLosers = useMemo(() => {
-        const rows = instrumentVms.map((ins) => ({
-            symbol: ins.symbol,
-            changePercent: TREND_SELECTABLE_CATEGORIES.has(ins.category)
-                ? effectiveChangePercent(ins, trendPeriod)
-                : ins.changePercent,
-        }));
-        return [...rows].sort((a, b) => a.changePercent - b.changePercent).slice(0, 5);
-    }, [instrumentVms, trendPeriod]);
     const futuresTopMovers = useMemo(
         () => [...instruments].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent)).slice(0, 5),
         [instruments]
     );
+    const futuresVolumeLeaders = useMemo(() => {
+        if (activeCategory !== 'FUTURES') return [] as { symbol: string; volume: number }[];
+        return instruments
+            .map((ins) => {
+                const snap = viopSnapshotBySymbol[normalizeSymbolKey(ins.symbol)];
+                const vol = snap?.volume != null ? Number(snap.volume) : 0;
+                return { symbol: ins.symbol, volume: vol };
+            })
+            .filter((x) => x.volume > 0)
+            .sort((a, b) => b.volume - a.volume)
+            .slice(0, 5);
+    }, [activeCategory, instruments, viopSnapshotBySymbol]);
+
+    const futuresTopPositive = useMemo(() => {
+        if (activeCategory !== 'FUTURES') return [];
+        return [...instruments].sort((a, b) => b.changePercent - a.changePercent).slice(0, 4);
+    }, [activeCategory, instruments]);
+
+    const futuresTopNegative = useMemo(() => {
+        if (activeCategory !== 'FUTURES') return [];
+        return [...instruments].sort((a, b) => a.changePercent - b.changePercent).slice(0, 4);
+    }, [activeCategory, instruments]);
+
+    const futuresBreadthLabel = useMemo(() => {
+        if (activeCategory !== 'FUTURES' || instruments.length === 0) return null;
+        const up = instruments.filter((i) => i.changePercent > 0.05).length;
+        const down = instruments.filter((i) => i.changePercent < -0.05).length;
+        const flat = instruments.length - up - down;
+        if (up > down && up >= flat) return t('market.directionUp', 'Yukarı');
+        if (down > up && down >= flat) return t('market.directionDown', 'Aşağı');
+        return t('market.directionMixed', 'Karışık');
+    }, [activeCategory, instruments, t]);
+
+    const viopDelayMinutesDisplay = useMemo(() => {
+        if (activeCategory !== 'FUTURES') return null;
+        for (const c of viopContracts) {
+            const s = viopSnapshotBySymbol[normalizeSymbolKey(c.contractCode)];
+            if (s?.delayMinutes != null && Number.isFinite(Number(s.delayMinutes))) {
+                return Number(s.delayMinutes);
+            }
+        }
+        return null;
+    }, [activeCategory, viopContracts, viopSnapshotBySymbol]);
 
     const cryptoDominance = useMemo(() => {
         if (activeCategory !== 'CRYPTO' || !dashboard) return [] as { symbol: string; dominancePct: number }[];
@@ -2160,7 +3266,7 @@ export function Market() {
         const vols = slice.map((s) => {
             const vm = instrumentVms.find((x) => x.symbol === s);
             if (vm && TREND_SELECTABLE_CATEGORIES.has(vm.category)) {
-                return Math.abs(effectiveChangePercent(vm, trendPeriod));
+                return Math.abs(effectiveChangePercent(vm, trendChartRange));
             }
             return Math.abs(instruments.find((x) => x.symbol === s)?.changePercent ?? 0);
         });
@@ -2169,15 +3275,20 @@ export function Market() {
             const vm = instrumentVms.find((x) => x.symbol === sym);
             const v =
                 vm && TREND_SELECTABLE_CATEGORIES.has(vm.category)
-                    ? Math.abs(effectiveChangePercent(vm, trendPeriod))
+                    ? Math.abs(effectiveChangePercent(vm, trendChartRange))
                     : Math.abs(instruments.find((x) => x.symbol === sym)?.changePercent ?? 0);
             out[sym] = 2 + Math.min(2.5, (v / max) * 2.5);
         }
         return out;
-    }, [compareSymbols, instruments, instrumentVms, trendPeriod]);
+    }, [compareSymbols, instruments, instrumentVms, trendChartRange]);
 
     const loadCompare = useCallback(() => {
-        if ((activeCategory !== 'FUTURES' && !marketType) || compareSymbols.length < 2) {
+        const bistCompare =
+            activeCategory === 'EQUITY' && equitySubmarket === 'BIST' && compareSymbols.length >= 2;
+        if (
+            compareSymbols.length < 2 ||
+            (activeCategory !== 'FUTURES' && !marketType && !bistCompare)
+        ) {
             setCompareRows([]);
             return;
         }
@@ -2185,44 +3296,74 @@ export function Market() {
         const symbols = compareSymbols.slice(0, 4);
         const request =
             activeCategory === 'FUTURES'
-                ? Promise.all(
-                      symbols.map((sym) =>
-                          marketClient
-                              .get<ViopSnapshot[]>('/api/market/viop/history', {
-                                  params: { contract: sym, days },
-                              })
-                              .then((res) => [sym, res.data] as const)
-                      )
-                  ).then((rows) => {
-                      const series: Record<string, CandlePoint[]> = {};
-                      rows.forEach(([sym, data]) => {
-                          series[sym] = (data ?? []).map((x) => ({
-                              t: x.asOf ?? new Date().toISOString(),
-                              o: Number(x.price ?? 0),
-                              h: Number(x.price ?? 0),
-                              l: Number(x.price ?? 0),
-                              c: Number(x.price ?? 0),
-                              v: Number(x.openInterest ?? 0),
-                          }));
+                ? (() => {
+                      const now = new Date();
+                      const fromMs = now.getTime() - Math.max(1, days) * 86_400_000;
+                      const from = formatEuropeIstanbulLocalIso(new Date(fromMs));
+                      const to = formatEuropeIstanbulLocalIso(now);
+                      return Promise.all(
+                          symbols.map((sym) =>
+                              marketClient
+                                  .get<ViopHistoryApi>(`/api/market/viop/contracts/${encodeURIComponent(sym)}/history`, {
+                                      params: { from, to, period: 60 },
+                                  })
+                                  .then((res) => [sym, res.data] as const)
+                          )
+                      ).then((rows) => {
+                          const series: Record<string, CandlePoint[]> = {};
+                          rows.forEach(([sym, hist]) => {
+                              series[sym] = (hist?.points ?? []).map((p) => ({
+                                  t: p.time,
+                                  o: Number(p.price),
+                                  h: Number(p.price),
+                                  l: Number(p.price),
+                                  c: Number(p.price),
+                                  v: 0,
+                              }));
+                          });
+                          return { series } satisfies BatchHistoryResponse;
                       });
-                      return { series } satisfies BatchHistoryResponse;
-                  })
-                : marketClient
-                      .get<BatchHistoryResponse>('/api/market/history/batch', {
-                          params: {
-                              type: marketType,
-                              symbols: symbols.join(','),
-                              days,
-                              ...((activeCategory === 'EQUITY' ||
-                                  activeCategory === 'FX' ||
-                                  activeCategory === 'CRYPTO' ||
-                                  activeCategory === 'METALS') &&
-                              (range === '1D' || range === '1W')
-                                  ? { bucket: 'hourly' }
-                                  : {}),
-                          },
-                      })
-                      .then((res) => res.data);
+                  })()
+                : bistCompare
+                  ? getBistBatchHistory(symbols, bistMainHistoryRange.from, bistMainHistoryRange.to).then((resp) => {
+                        const series: Record<string, CandlePoint[]> = {};
+                        const hist = resp.historiesBySymbol ?? {};
+                        symbols.forEach((sym) => {
+                            const rowsRaw = hist[sym] ?? hist[normalizeSymbolKey(sym)] ?? [];
+                            const sorted = [...rowsRaw].sort((a, b) =>
+                                String(a.date ?? '').localeCompare(String(b.date ?? ''))
+                            );
+                            series[sym] = sorted.map((row) => {
+                                const c = bistPickClose(row);
+                                const d = String(row.date ?? '').slice(0, 10);
+                                return {
+                                    t: `${d}T12:00:00`,
+                                    o: c,
+                                    h: c,
+                                    l: c,
+                                    c,
+                                    v: 0,
+                                };
+                            });
+                        });
+                        return { series } satisfies BatchHistoryResponse;
+                    })
+                  : marketClient
+                        .get<BatchHistoryResponse>('/api/market/history/batch', {
+                            params: {
+                                type: marketType,
+                                symbols: symbols.join(','),
+                                days,
+                                ...((activeCategory === 'EQUITY' ||
+                                    activeCategory === 'FX' ||
+                                    activeCategory === 'CRYPTO' ||
+                                    activeCategory === 'METALS') &&
+                                (range === '1D' || range === '1W')
+                                    ? { bucket: 'hourly' }
+                                    : {}),
+                            },
+                        })
+                        .then((res) => res.data);
 
         request
             .then((batch) => {
@@ -2257,7 +3398,16 @@ export function Market() {
             })
             .catch(() => setCompareRows([]))
             .finally(() => setLoadingCompare(false));
-    }, [compareSymbols, days, marketType, activeCategory, range]);
+    }, [
+        compareSymbols,
+        days,
+        marketType,
+        activeCategory,
+        range,
+        equitySubmarket,
+        bistMainHistoryRange.from,
+        bistMainHistoryRange.to,
+    ]);
 
     useEffect(() => {
         if (compareSymbols.length >= 2) {
@@ -2324,7 +3474,10 @@ export function Market() {
     const errMsg = dashboardError instanceof Error ? dashboardError.message : '';
     /** VİOP / tahvil listesi finance dashboard’undan bağımsız; dashboard beklerken tüm sayfayı kilitleme */
     const showDashboardBlockingSpinner =
-        loadingDashboard && activeCategory !== 'FUTURES' && activeCategory !== 'BOND';
+        loadingDashboard &&
+        activeCategory !== 'FUTURES' &&
+        activeCategory !== 'BOND' &&
+        !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST');
     const categoryLabel = useCallback(
         (id: MarketCategory) => {
             const key =
@@ -2346,6 +3499,18 @@ export function Market() {
         },
         [t]
     );
+    const spotTerminalTitle = useMemo(() => {
+        if (activeCategory === 'EQUITY' && equitySubmarket === 'BIST') {
+            return t('stocks.bistAnalysisTitle', 'Türk Hisse Piyasa Analizi');
+        }
+        return `${categoryLabel(activeCategory)} ${t('market.marketAnalysis', 'Piyasa Analiz')}`;
+    }, [activeCategory, equitySubmarket, categoryLabel, t]);
+    const spotTerminalSubtitle = useMemo(() => {
+        if (activeCategory === 'EQUITY' && equitySubmarket === 'BIST') {
+            return t('stocks.bistAnalysisSubtitle', 'BIST günlük fiyat verileri ve düzeltilmiş kapanış grafiği');
+        }
+        return undefined;
+    }, [activeCategory, equitySubmarket, t]);
     const terminalVars = useMemo(
         () =>
             ({
@@ -2363,6 +3528,8 @@ export function Market() {
                 '--terminal-table-head-bg': theme === 'dark' ? 'rgba(15, 23, 42, 0.98)' : '#f8fafc',
                 '--terminal-hover-bg': theme === 'dark' ? 'rgba(30, 41, 59, 0.72)' : 'rgba(148, 163, 184, 0.16)',
                 '--terminal-active-row-bg': theme === 'dark' ? 'rgba(30, 58, 138, 0.28)' : 'rgba(59, 130, 246, 0.14)',
+                '--terminal-pos': theme === 'dark' ? '#4ade80' : '#15803d',
+                '--terminal-neg': theme === 'dark' ? '#f87171' : '#b91c1c',
             }) as CSSProperties,
         [theme, tokens]
     );
@@ -2384,116 +3551,550 @@ export function Market() {
         [tokens.bg, tokens.bgCard, tokens.border, tokens.text, tokens.textMuted]
     );
 
+    const instrumentListSheetStyle: CSSProperties | undefined = useMemo(() => {
+        if (instrumentListOpen && instrumentListPopoverBox) {
+            return {
+                position: 'fixed',
+                top: instrumentListPopoverBox.top,
+                left: instrumentListPopoverBox.left,
+                width: instrumentListPopoverBox.width,
+                maxHeight: 'min(62vh, 480px)',
+                minHeight: 0,
+                zIndex: 200,
+                display: 'flex',
+                flexDirection: 'column',
+                boxSizing: 'border-box',
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: `1px solid ${tokens.border}`,
+                backgroundColor: tokens.bgCard,
+                boxShadow: '0 12px 36px rgba(2, 6, 23, 0.28)',
+                overflow: 'hidden',
+            };
+        }
+        return { display: 'none' };
+    }, [instrumentListOpen, instrumentListPopoverBox, tokens.border, tokens.bgCard]);
+
+    const renderComparisonCard = (cardClass: string) => {
+        if (!canShowComparisonChart(activeCategory, marketType, equitySubmarket) || activeCategory === 'BOND') {
+            return null;
+        }
+        const chartH = cardClass === 'terminal-right-comparison' ? 220 : 250;
+        return (
+            <div className={`terminal-card ${cardClass}`}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <strong style={{ fontSize: 14 }}>{t('market.comparisonChart', 'Karşılaştırma Grafiği (Baz 100)')}</strong>
+                    <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                        {activeCategory === 'FUTURES'
+                            ? t('market.compareFromListHintViop', 'Kontrat seçimini piyasa listesinden yapın.')
+                            : t('market.compareFromListHint', 'Karşılaştırma sembollerini piyasa listesindeki sütundan ekleyin veya çıkarın.')}
+                    </div>
+                </div>
+                <div style={{ marginTop: 4, position: 'relative', minHeight: chartH }}>
+                    {loadingCompare ? (
+                        <div
+                            style={{
+                                position: 'absolute',
+                                inset: 0,
+                                zIndex: 2,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: 6,
+                                fontSize: 13,
+                                color: tokens.textMuted,
+                                background:
+                                    theme === 'dark' ? 'rgba(15, 23, 42, 0.58)' : 'rgba(248, 250, 252, 0.72)',
+                                pointerEvents: 'none',
+                            }}
+                        >
+                            {t('market.compareLoading', 'Karşılaştırma yükleniyor...')}
+                        </div>
+                    ) : null}
+                    <MarketCompareLwChart
+                        rows={compareRows}
+                        symbols={compareSymbols.slice(0, 4)}
+                        colors={['#38bdf8', '#22c55e', '#eab308', '#f87171']}
+                        lineWidthBySymbol={lineWidthBySymbol}
+                        timeframeLabel={chartTfLabel}
+                        tokens={chartTokens}
+                        height={chartH}
+                    />
+                </div>
+                {!loadingCompare && compareSymbols.length < 2 ? (
+                    <div style={{ fontSize: 11, color: tokens.textMuted, marginTop: 8 }}>
+                        {t(
+                            'market.compareNeedTwoFromList',
+                            'En az iki sembol seçildiğinde çizgiler burada görünür. Piyasa listesindeki karşılaştırma sütununu kullanın.'
+                        )}
+                    </div>
+                ) : null}
+                {!loadingCompare && compareSymbols.length >= 2 && compareRows.length === 0 ? (
+                    <div style={{ fontSize: 11, color: tokens.textMuted, marginTop: 8 }}>
+                        {t(
+                            'market.compareInsufficientHistory',
+                            'Karşılaştırma için yeterli geçmiş veri yok. Zaman aralığını genişletmeyi veya başka sembolleri deneyin.'
+                        )}
+                    </div>
+                ) : null}
+            </div>
+        );
+    };
+
     if (errMsg) {
         return <div className="terminal-page">{t('market.pageError', 'Piyasa terminali hatası')}: {errMsg}</div>;
     }
 
     return (
         <div className="terminal-page" style={terminalVars}>
-            <div className="terminal-hero">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                    {/* AssetLogo en basta -- onceden hero'da hic gorsel yoktu, sadece "Secili Enstrüman" yazisi
-                     * ve sembol kodu vardi; kullanici "secili enstrumanin basinda adi gorunmuyor" geri bildirimi
-                     * verdi. VIOP/Bond kontrat kodlarini logo CDN'e gondermek 404 doguruyor (assetBranding
-                     * helper'i bunu yakalayip null donuyor), AssetLogo da fallback ikona dusuyor. */}
-                    <AssetLogo
-                        src={
-                            hero && (activeCategory === 'EQUITY' || activeCategory === 'CRYPTO' || activeCategory === 'FX' || activeCategory === 'METALS' || activeCategory === 'FUNDS')
-                                ? getDynamicLogoUrl(hero.symbol, marketKindForCategory(activeCategory))
-                                : null
-                        }
-                        alt={hero ? `${hero.symbol} logo` : 'logo'}
-                        fallbackIcon={TrendingUp}
-                        fallbackColor={tokens.textMuted}
-                        size={36}
-                    />
-                    <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 12, color: tokens.textMuted, marginBottom: 2 }}>{t('market.selectedInstrument', 'Seçili Enstrüman')}</div>
-                        <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.15 }}>
-                            {hero
-                                ? activeCategory === 'FUTURES'
-                                    ? parseViopContractLabel(hero.symbol)
-                                    : activeCategory === 'BOND'
-                                    ? debtNameMap[hero.symbol] ?? hero.symbol
-                                    : formatAssetLabel(hero.symbol, marketKindForCategory(activeCategory))
-                                : '—'}
-                        </div>
-                        <div style={{ fontSize: 12, color: tokens.textMuted }}>{hero?.symbol ?? ''}</div>
-                    </div>
-                </div>
-                <div className="terminal-hero-price" title={heroScaled?.title}>
-                    {heroScaled ? (
-                        <>
-                            <span style={{ opacity: 0.8 }}>{heroScaled.glyph}</span>{' '}
-                            {heroScaled.amount.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}
-                        </>
-                    ) : (
-                        '—'
-                    )}
-                </div>
-                <div className={`terminal-hero-change ${hero && hero.trend === 'UP' ? 'up' : 'down'}`}>
-                    {hero ? (
-                        <>
-                            {hero.changePercent >= 0 ? '+' : ''}
-                            {hero.changePercent.toFixed(2)}% {hero.trend === 'UP' ? '↑' : '↓'}
-                        </>
-                    ) : (
-                        '—'
-                    )}
-                </div>
-                <div style={{ textAlign: 'right', fontSize: 12, color: tokens.textMuted }}>
-                    <div title={heroScaled?.title}>
-                        H:{' '}
-                        <span style={{ opacity: 0.8 }}>{heroScaled?.glyph ?? ''}</span>
-                        {heroScaled ? ' ' : ''}
-                        {heroScaled || hero
-                            ? (heroScaled?.high ?? hero?.high ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })
-                            : '—'}
-                    </div>
-                    <div title={heroScaled?.title}>
-                        L:{' '}
-                        <span style={{ opacity: 0.8 }}>{heroScaled?.glyph ?? ''}</span>
-                        {heroScaled ? ' ' : ''}
-                        {heroScaled || hero
-                            ? (heroScaled?.low ?? hero?.low ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })
-                            : '—'}
-                    </div>
-                    {activeCategory === 'FUTURES' && futuresHeaderMetrics ? (
-                        <>
-                            <div>Baz: {futuresHeaderMetrics.basis.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
-                            <div>Yıllık Taşıma: %{futuresHeaderMetrics.carry.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
-                            <div>
-                                OI Değişim: {futuresHeaderMetrics.oiChangePct >= 0 ? '+' : ''}
-                                {futuresHeaderMetrics.oiChangePct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
+            <div
+                ref={terminalHeroRef}
+                className={`terminal-hero ${activeCategory === 'FUTURES' ? 'terminal-hero--viop' : ''}`}
+            >
+                {hero && activeCategory === 'FUTURES' ? (
+                    <>
+                        <div className="terminal-hero-viop__selector-wrap">
+                            <button
+                                type="button"
+                                className={`terminal-hero-selector terminal-hero-selector--viop ${
+                                    instrumentListOpen ? 'is-open' : ''
+                                }`}
+                                onClick={handleInstrumentSelectorClick}
+                                aria-expanded={instrumentListOpen}
+                                aria-haspopup="dialog"
+                                title={t('market.instrumentPickerHint', 'Piyasa listesini aç / kapat')}
+                            >
+                            <div className="terminal-hero-viop__left">
+                            <div className="terminal-hero-viop__eyebrow">{t('market.selectedInstrument', 'Seçili Enstrüman')}</div>
+                            <div className="terminal-hero-viop__code" title={hero.symbol}>
+                                {hero.symbol}
                             </div>
-                        </>
-                    ) : null}
-                </div>
+                            <div className="terminal-hero-viop__name">
+                                {(() => {
+                                    const snap = viopSnapshotBySymbol[normalizeSymbolKey(hero.symbol)];
+                                    const n = getInstrumentDisplayName({
+                                        symbol: hero.symbol,
+                                        displayName: hero.displayName,
+                                        name: snap?.contractName,
+                                    });
+                                    return n !== hero.symbol ? n : parseViopContractLabel(hero.symbol);
+                                })()}
+                            </div>
+                            <div className="terminal-hero-viop__badges">
+                                {(() => {
+                                    const cat = viopCategoryFor(hero.symbol);
+                                    if (!cat) return null;
+                                    return (
+                                        <span className={viopCatBadgeClass(cat)} title={viopAssetClassTitle(cat)}>
+                                            {VIOP_CATEGORY_CHIP[cat].label}
+                                        </span>
+                                    );
+                                })()}
+                                <span className="instrument-highlight-chip" style={{ borderColor: 'var(--terminal-border)', color: 'var(--terminal-text)' }}>
+                                    {viopAssetClassTitle(viopCategoryFor(hero.symbol))}
+                                </span>
+                                {(() => {
+                                    const snap = viopSnapshotBySymbol[normalizeSymbolKey(hero.symbol)];
+                                    const hint = viopDataQualityHint(snap);
+                                    return hint ? <span className="viop-stale-pill">{hint}</span> : null;
+                                })()}
+                            </div>
+                            <div className="terminal-hero-viop__src">
+                                {t('market.source', 'Kaynak')}: {futuresHeaderMetrics?.sourceLabel ?? '—'}
+                                {futuresHeaderMetrics?.delayMinutes != null && futuresHeaderMetrics.delayMinutes > 0
+                                    ? ` · ${t('market.delayedData', 'Gecikmeli veri')}: ${futuresHeaderMetrics.delayMinutes} dk`
+                                    : viopDelayMinutesDisplay != null && viopDelayMinutesDisplay > 0
+                                      ? ` · ${viopDelayMinutesDisplay} dk`
+                                      : ''}
+                            </div>
+                            <ChevronDown className="terminal-hero-selector__chevron" size={18} aria-hidden />
+                        </div>
+                            </button>
+                            {heroCompareStrip}
+                        </div>
+                        <div className="terminal-hero-viop__mid">
+                            <div className="terminal-hero-price" title={heroScaled?.title}>
+                                {heroScaled ? (
+                                    <>
+                                        <span style={{ opacity: 0.85 }}>{heroScaled.glyph}</span>{' '}
+                                        {heroScaled.amount.toLocaleString('tr-TR', {
+                                            maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                        })}
+                                    </>
+                                ) : (
+                                    '—'
+                                )}
+                            </div>
+                            <div
+                                className={`terminal-hero-change ${
+                                    Math.abs(hero.changePercent) < 0.005 ? 'is-flat' : hero.trend === 'UP' ? 'up' : 'down'
+                                }`}
+                            >
+                                {Math.abs(hero.changePercent) < 0.005 ? <>0,00% →</> : (
+                                    <>
+                                        {hero.changePercent >= 0 ? '+' : ''}
+                                        {hero.changePercent.toFixed(2)}% {hero.trend === 'UP' ? '↑' : '↓'}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                        <div className="terminal-hero-viop__metrics">
+                            <dl className="terminal-hero-viop-metric-grid">
+                                <dt>{t('market.bidAsk', 'Alış / Satış')}</dt>
+                                <dd>
+                                    {fmtViopBidAskLine(
+                                        futuresHeaderMetrics?.bid ?? null,
+                                        futuresHeaderMetrics?.ask ?? null,
+                                        viopPriceDecimals(hero.symbol)
+                                    )}
+                                </dd>
+                                <dt>{t('market.open', 'Açılış')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.open != null && Number.isFinite(futuresHeaderMetrics.open)
+                                        ? futuresHeaderMetrics.open.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.dayHighLow', 'Gün Yük / Düş')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.high != null && Number.isFinite(futuresHeaderMetrics.high)
+                                        ? futuresHeaderMetrics.high.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}{' '}
+                                    /{' '}
+                                    {futuresHeaderMetrics?.low != null && Number.isFinite(futuresHeaderMetrics.low)
+                                        ? futuresHeaderMetrics.low.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.volumeQty', 'Hacim / Adet')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.volume != null
+                                        ? futuresHeaderMetrics.volume.toLocaleString('tr-TR')
+                                        : '—'}{' '}
+                                    /{' '}
+                                    {futuresHeaderMetrics?.quantity != null
+                                        ? futuresHeaderMetrics.quantity.toLocaleString('tr-TR')
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.settlement', 'Uzlaşma')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.settlement != null && Number.isFinite(futuresHeaderMetrics.settlement)
+                                        ? futuresHeaderMetrics.settlement.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.preSettlement', 'Ön uzlaşma')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.preSettlement != null && Number.isFinite(futuresHeaderMetrics.preSettlement)
+                                        ? futuresHeaderMetrics.preSettlement.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.initialMargin', 'Teminat')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.initialMargin != null && Number.isFinite(futuresHeaderMetrics.initialMargin)
+                                        ? futuresHeaderMetrics.initialMargin.toLocaleString('tr-TR')
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.limitUpDown', 'Tavan / Taban')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.limitUp != null && Number.isFinite(futuresHeaderMetrics.limitUp)
+                                        ? futuresHeaderMetrics.limitUp.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}{' '}
+                                    /{' '}
+                                    {futuresHeaderMetrics?.limitDown != null && Number.isFinite(futuresHeaderMetrics.limitDown)
+                                        ? futuresHeaderMetrics.limitDown.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}
+                                </dd>
+                            </dl>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="terminal-hero-selector-row">
+                            <button
+                                type="button"
+                                className={`terminal-hero-selector terminal-hero-selector--with-inline-quote ${
+                                    instrumentListOpen ? 'is-open' : ''
+                                }`}
+                                onClick={handleInstrumentSelectorClick}
+                                aria-expanded={instrumentListOpen}
+                                aria-haspopup="dialog"
+                                title={t('market.instrumentPickerHint', 'Piyasa listesini aç / kapat')}
+                            >
+                            <div
+                                style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 auto' }}
+                            >
+                            {/* AssetLogo en basta -- onceden hero'da hic gorsel yoktu, sadece "Secili Enstrüman" yazisi
+                             * ve sembol kodu vardi; kullanici "secili enstrumanin basinda adi gorunmuyor" geri bildirimi
+                             * verdi. VIOP/Bond kontrat kodlarini logo CDN'e gondermek 404 doguruyor (assetBranding
+                             * helper'i bunu yakalayip null donuyor), AssetLogo da fallback ikona dusuyor. */}
+                            {hero && activeCategory === 'EQUITY' && equitySubmarket === 'BIST' ? (
+                                <span
+                                    className="bist-symbol-badge"
+                                    style={{
+                                        ...bistSymbolBadgeStyle(hero.symbol),
+                                        width: 36,
+                                        height: 36,
+                                        fontSize: 11,
+                                    }}
+                                    title={hero.symbol}
+                                    aria-hidden
+                                >
+                                    {hero.symbol.slice(0, 2)}
+                                </span>
+                            ) : (
+                                <AssetLogo
+                                    src={
+                                        hero && (activeCategory === 'EQUITY' || activeCategory === 'CRYPTO' || activeCategory === 'FX' || activeCategory === 'METALS' || activeCategory === 'FUNDS')
+                                            ? getDynamicLogoUrl(hero.symbol, marketKindForCategory(activeCategory))
+                                            : null
+                                    }
+                                    alt={hero ? `${hero.symbol} logo` : 'logo'}
+                                    fallbackIcon={TrendingUp}
+                                    fallbackColor={tokens.textMuted}
+                                    size={36}
+                                />
+                            )}
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: 12, color: tokens.textMuted, marginBottom: 2 }}>{t('market.selectedInstrument', 'Seçili Enstrüman')}</div>
+                                <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.15 }}>
+                                    {hero
+                                        ? activeCategory === 'FUTURES'
+                                            ? parseViopContractLabel(hero.symbol)
+                                            : activeCategory === 'BOND'
+                                            ? debtNameMap[hero.symbol] ?? hero.symbol
+                                            : activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
+                                            ? hero.displayName
+                                            : activeCategory === 'METALS'
+                                            ? hero.displayName
+                                            : formatAssetLabel(hero.symbol, marketKindForCategory(activeCategory))
+                                        : '—'}
+                                </div>
+                                {activeCategory === 'BOND' && hero ? (
+                                    <div
+                                        style={{
+                                            fontFamily: 'ui-monospace, monospace',
+                                            fontSize: 13,
+                                            fontWeight: 600,
+                                            color: tokens.text,
+                                            marginTop: 4,
+                                            letterSpacing: 0.02,
+                                        }}
+                                        title={t('market.bondHeroIsinTitle', 'Devlet tahvili ISIN kodu')}
+                                    >
+                                        ISIN: {hero.symbol}
+                                    </div>
+                                ) : (
+                                    <div style={{ fontSize: 12, color: tokens.textMuted }}>{hero?.symbol ?? ''}</div>
+                                )}
+                            </div>
+                            </div>
+                            <div className="terminal-hero-selector__quote">
+                                <div
+                                    className="terminal-hero-selector__price"
+                                    title={
+                                        activeCategory === 'BOND'
+                                            ? t('market.bondHeroMarketPriceTip', 'Piyasa fiyatı (TRY). Bu değer tahvil faizi (yield) değildir.')
+                                            : heroScaled?.title
+                                    }
+                                >
+                                    {heroScaled ? (
+                                        <>
+                                            <span style={{ opacity: 0.8 }}>{heroScaled.glyph}</span>{' '}
+                                            {heroScaled.amount.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}
+                                            {heroScaled.suffix ?? ''}
+                                        </>
+                                    ) : (
+                                        '—'
+                                    )}
+                                </div>
+                                <div
+                                    className={`terminal-hero-selector__pct ${
+                                        !hero || Math.abs(hero.changePercent) < 0.005
+                                            ? 'is-flat'
+                                            : hero.trend === 'UP'
+                                              ? 'is-up'
+                                              : 'is-down'
+                                    }`}
+                                    title={
+                                        activeCategory === 'BOND'
+                                            ? t(
+                                                  'market.bondHeroDailyPriceChgTip',
+                                                  'Günlük fiyat değişimi (%). Tahvil faizi veya garanti getiri değildir.',
+                                              )
+                                            : undefined
+                                    }
+                                    style={activeCategory === 'BOND' ? { display: 'flex', alignItems: 'center', gap: 6 } : undefined}
+                                >
+                                    {hero ? (
+                                        Math.abs(hero.changePercent) < 0.005 ? (
+                                            <>0,00%</>
+                                        ) : (
+                                            <>
+                                                {hero.changePercent >= 0 ? '+' : ''}
+                                                {hero.changePercent.toFixed(2)}% {hero.trend === 'UP' ? '↑' : '↓'}
+                                            </>
+                                        )
+                                    ) : (
+                                        '—'
+                                    )}
+                                    {activeCategory === 'BOND' ? (
+                                        <span
+                                            title={t(
+                                                'market.bondHeroNotYieldTip',
+                                                'Bu değer faiz oranı (yield) değildir; gösterilenler piyasa fiyatı ve fiyat performansıdır.',
+                                            )}
+                                            style={{ display: 'inline-flex', color: tokens.textMuted, cursor: 'help' }}
+                                            aria-label={t('market.bondHeroNotYieldAria', 'Fiyat ile yield ayrımı bilgisi')}
+                                        >
+                                            <Info size={15} strokeWidth={2.2} aria-hidden />
+                                        </span>
+                                    ) : null}
+                                </div>
+                            </div>
+                            <ChevronDown className="terminal-hero-selector__chevron" size={20} aria-hidden />
+                        </button>
+                            {heroCompareStrip}
+                        </div>
+                        <div style={{ textAlign: 'right', fontSize: 12, color: tokens.textMuted }}>
+                            <div title={heroScaled?.title}>
+                                H:{' '}
+                                <span style={{ opacity: 0.8 }}>{heroScaled?.glyph ?? ''}</span>
+                                {heroScaled ? ' ' : ''}
+                                {heroScaled || hero
+                                    ? (heroScaled?.high ?? hero?.high ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })
+                                    : '—'}
+                            </div>
+                            <div title={heroScaled?.title}>
+                                L:{' '}
+                                <span style={{ opacity: 0.8 }}>{heroScaled?.glyph ?? ''}</span>
+                                {heroScaled ? ' ' : ''}
+                                {heroScaled || hero
+                                    ? (heroScaled?.low ?? hero?.low ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })
+                                    : '—'}
+                            </div>
+                            {activeCategory === 'FUTURES' && futuresHeaderMetrics ? (
+                                <>
+                                    <div>
+                                        Δ:{' '}
+                                        {futuresHeaderMetrics.changeAmount != null && Number.isFinite(futuresHeaderMetrics.changeAmount)
+                                            ? futuresHeaderMetrics.changeAmount.toLocaleString('tr-TR', { maximumFractionDigits: 2 })
+                                            : '—'}
+                                        {futuresHeaderMetrics.changePercent != null && Number.isFinite(futuresHeaderMetrics.changePercent)
+                                            ? ` (${futuresHeaderMetrics.changePercent >= 0 ? '+' : ''}${futuresHeaderMetrics.changePercent.toLocaleString('tr-TR', {
+                                                  maximumFractionDigits: 2,
+                                              })}%)`
+                                            : ''}
+                                    </div>
+                                    <div>
+                                        A/S:{' '}
+                                        {futuresHeaderMetrics.bid != null ? futuresHeaderMetrics.bid.toLocaleString('tr-TR') : '—'} /{' '}
+                                        {futuresHeaderMetrics.ask != null ? futuresHeaderMetrics.ask.toLocaleString('tr-TR') : '—'}
+                                    </div>
+                                    <div>
+                                        Açılış / G / D:{' '}
+                                        {futuresHeaderMetrics.open != null ? futuresHeaderMetrics.open.toLocaleString('tr-TR') : '—'} ·{' '}
+                                        {futuresHeaderMetrics.high != null ? futuresHeaderMetrics.high.toLocaleString('tr-TR') : '—'} ·{' '}
+                                        {futuresHeaderMetrics.low != null ? futuresHeaderMetrics.low.toLocaleString('tr-TR') : '—'}
+                                    </div>
+                                    <div>
+                                        Hacim / Adet:{' '}
+                                        {futuresHeaderMetrics.volume != null
+                                            ? futuresHeaderMetrics.volume.toLocaleString('tr-TR')
+                                            : '—'}{' '}
+                                        /{' '}
+                                        {futuresHeaderMetrics.quantity != null
+                                            ? futuresHeaderMetrics.quantity.toLocaleString('tr-TR')
+                                            : '—'}
+                                    </div>
+                                    <div>
+                                        Uzlaşma / Ön uzlaşma:{' '}
+                                        {futuresHeaderMetrics.settlement != null
+                                            ? futuresHeaderMetrics.settlement.toLocaleString('tr-TR')
+                                            : '—'}{' '}
+                                        /{' '}
+                                        {futuresHeaderMetrics.preSettlement != null
+                                            ? futuresHeaderMetrics.preSettlement.toLocaleString('tr-TR')
+                                            : '—'}
+                                    </div>
+                                    <div>
+                                        Teminat / Tavan–Taban:{' '}
+                                        {futuresHeaderMetrics.initialMargin != null
+                                            ? futuresHeaderMetrics.initialMargin.toLocaleString('tr-TR')
+                                            : '—'}{' '}
+                                        /{' '}
+                                        {futuresHeaderMetrics.limitUp != null ? futuresHeaderMetrics.limitUp.toLocaleString('tr-TR') : '—'} –{' '}
+                                        {futuresHeaderMetrics.limitDown != null
+                                            ? futuresHeaderMetrics.limitDown.toLocaleString('tr-TR')
+                                            : '—'}
+                                    </div>
+                                    <div style={{ fontSize: 11, opacity: 0.85 }}>
+                                        {futuresHeaderMetrics.sourceLabel}
+                                        {futuresHeaderMetrics.delayMinutes != null
+                                            ? ` · ${futuresHeaderMetrics.delayMinutes} dk gecikme`
+                                            : ''}
+                                    </div>
+                                </>
+                            ) : null}
+                        </div>
+                    </>
+                )}
             </div>
+
+            {instrumentListOpen ? (
+                <button
+                    type="button"
+                    className="terminal-market-list-backdrop"
+                    aria-label={t('market.closeMarketListPopover', 'Listeyi kapat')}
+                    onClick={() => setInstrumentListOpen(false)}
+                />
+            ) : null}
 
             {showDashboardBlockingSpinner ? (
                 <div className="terminal-card">{t('market.loading', 'Piyasa terminali yükleniyor...')}</div>
             ) : (
                 <>
-                    <div className="terminal-grid">
+                    <div
+                        className={`terminal-grid ${activeCategory === 'FUTURES' ? 'terminal-grid--viop' : ''} ${
+                            activeCategory === 'FUTURES' || activeCategory === 'BOND' ? 'terminal-grid--page-flow' : ''
+                        } terminal-grid--list-undocked${isSpotHeatmapRail ? ' terminal-grid--heatmap-rail' : ''}`}
+                    >
                         <div
                             className={`terminal-card terminal-left-panel ${
-                                activeCategory === 'FUTURES' || activeCategory === 'BOND' ? 'is-compact' : ''
-                            }`}
-                            style={leftPanelStyle}
+                                pickerCategory === 'FUTURES' || pickerCategory === 'BOND'
+                                    ? 'terminal-left-panel--page-flow'
+                                    : ''
+                            } terminal-left-panel--undocked-slot`}
                         >
+                            <div
+                                className={`terminal-left-panel__inner${
+                                    instrumentListOpen ? ' terminal-left-panel__inner--popover-sheet' : ''
+                                }`}
+                                style={instrumentListSheetStyle}
+                            >
                             <div
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'space-between',
-                                    gap: 8,
-                                    marginBottom: 10,
+                                    gap: 6,
+                                    marginBottom: 6,
                                 }}
                             >
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                                     <div style={{ fontWeight: 700 }}>{t('market.marketList', 'Piyasa Listesi')}</div>
-                                    {activeCategory === 'FUTURES' ? (
+                                    {pickerCategory === 'FUTURES' ? (
                                         <div
                                             style={{
                                                 fontSize: 11,
@@ -2502,11 +4103,28 @@ export function Market() {
                                                 letterSpacing: 0.2,
                                             }}
                                         >
-                                            Döviz · Endeks · Emtia · Pay ({VIOP_WHITELIST.length} kontrat)
+                                            BIST 30 vadeli ({viopContracts.length} kontrat)
+                                        </div>
+                                    ) : pickerCategory === 'BOND' ? (
+                                        <div
+                                            style={{
+                                                fontSize: 11,
+                                                color: tokens.textMuted,
+                                                lineHeight: 1.25,
+                                                letterSpacing: 0.2,
+                                            }}
+                                        >
+                                            {t(
+                                                'market.bondListKicker',
+                                                'Gösterilen % değerleri dönemsel fiyat değişimidir; tahvil faizi (yield) değildir.',
+                                            )}
                                         </div>
                                     ) : null}
                                 </div>
-                                {activeCategory === 'EQUITY' || activeCategory === 'CRYPTO' ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                    {(pickerCategory === 'CRYPTO' ||
+                                    (pickerCategory === 'EQUITY' && pickerEquitySubmarket !== 'BIST') ||
+                                    pickerCategory === 'FUNDS') ? (
                                     <button
                                         type="button"
                                         className={`terminal-btn ${showUsdInTry ? 'active' : ''}`}
@@ -2515,6 +4133,74 @@ export function Market() {
                                         {showUsdInTry ? t('market.showUsd', 'USD göster') : t('market.convertTry', 'TL’ye çevir')}
                                     </button>
                                 ) : null}
+                                </div>
+                            </div>
+                            <div
+                                className="terminal-btn-row terminal-category-row terminal-category-row--sidebar"
+                                role="tablist"
+                                aria-label={t('market.categorySelectAria', 'Piyasa kategorisi')}
+                            >
+                                {CATEGORY_LABELS.map((cat) => (
+                                    <button
+                                        key={cat.id}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={pickerCategory === cat.id}
+                                        className={`terminal-btn ${pickerCategory === cat.id ? 'active' : ''}`}
+                                        onClick={() => {
+                                            setPickerCategory(cat.id);
+                                            setMarketListQuickFilter('ALL');
+                                        }}
+                                    >
+                                        {categoryLabel(cat.id)}
+                                    </button>
+                                ))}
+                            </div>
+                            {pickerCategory === 'EQUITY' ? (
+                                <div
+                                    className="terminal-equity-submarket"
+                                    role="group"
+                                    aria-label={t('stocks.submarketGroup', 'Hisse alt pazarı')}
+                                >
+                                    <button
+                                        type="button"
+                                        className={`terminal-submarket-chip ${pickerEquitySubmarket === 'US' ? 'is-active' : ''}`}
+                                        onClick={() => {
+                                            setPickerEquitySubmarket('US');
+                                            setMarketListQuickFilter('ALL');
+                                        }}
+                                        title={t('stocks.nasdaqNyse', 'NASDAQ / NYSE')}
+                                    >
+                                        {t('stocks.usStocks', 'ABD Hisseleri')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`terminal-submarket-chip ${pickerEquitySubmarket === 'BIST' ? 'is-active' : ''}`}
+                                        onClick={() => {
+                                            setPickerEquitySubmarket('BIST');
+                                            setMarketListQuickFilter('ALL');
+                                        }}
+                                        title={t('stocks.bist', 'Borsa İstanbul')}
+                                    >
+                                        {t('stocks.turkishStocks', 'Türk Hisseleri')}
+                                    </button>
+                                </div>
+                            ) : null}
+                            <div
+                                className="terminal-list-quick-filters"
+                                role="group"
+                                aria-label={t('market.quickFiltersAria', 'Hızlı filtre')}
+                            >
+                                {pickerMarketListQuickChips.map((chip) => (
+                                    <button
+                                        key={chip.id}
+                                        type="button"
+                                        className={`terminal-quick-filter ${marketListQuickFilter === chip.id ? 'is-active' : ''}`}
+                                        onClick={() => setMarketListQuickFilter(chip.id)}
+                                    >
+                                        {chip.label}
+                                    </button>
+                                ))}
                             </div>
                             <input
                                 className="terminal-search"
@@ -2523,69 +4209,233 @@ export function Market() {
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                             <div ref={tableWrapRef} className="terminal-table-wrap">
-                                <table className="terminal-data-table">
+                                <table
+                                    className={`terminal-data-table terminal-data-table--picker-horizons ${
+                                        pickerCategory === 'FUTURES' ? 'terminal-data-table--viop' : ''
+                                    }`}
+                                >
                                     <thead>
                                         <tr>
-                                            <th aria-label="Yıldız" style={{ width: 36 }}>
-                                                ★
+                                            <th className="terminal-picker-star-head" aria-label={t('market.favoritesColumn', 'Favoriler')}>
+                                                <span aria-hidden>★</span>
+                                            </th>
+                                            <th
+                                                className="terminal-picker-cmp-head"
+                                                aria-label={t('market.compareWithSelected', 'Karşılaştırma')}
+                                                title={t('market.compareWithSelectedHint', 'Seçili enstrümanla grafikte karşılaştır')}
+                                            >
+                                                <GitCompare size={13} strokeWidth={2.2} aria-hidden className="terminal-picker-cmp-head__ic" />
                                             </th>
                                             <th>{t('market.instrument', 'Enstrüman')}</th>
-                                            <th>{t('market.price', 'Fiyat')}</th>
-                                            <th>%</th>
                                             <th
-                                                title={`Son ${effectiveSparkDays(activeCategory, trendPeriod)} günlük kapanışlardan hesaplanır`}
+                                                scope="col"
+                                                aria-sort={
+                                                    pickerTableSort?.key === 'price'
+                                                        ? pickerTableSort.dir === 'asc'
+                                                            ? 'ascending'
+                                                            : 'descending'
+                                                        : 'none'
+                                                }
                                             >
-                                                {/*
-                                                  * Trend basligi: BOND/FUTURES disindaki kategorilerde 1G/7G/14G arasi
-                                                  * kompakt segmented control. Tabloyu yeniden render etmez (yalnizca
-                                                  * iki hucre `effectiveSparkDays` / `effectiveChangePercent` ile yeniden
-                                                  * hesaplar), bu yuzden sayfa yuklemesi gecikmez.
-                                                  */}
-                                                {TREND_SELECTABLE_CATEGORIES.has(activeCategory) ? (
-                                                    <div className="market-trend-head">
-                                                        <span className="market-trend-head__label">
-                                                            {t('market.trend', 'Trend')}
-                                                        </span>
-                                                        <div
-                                                            className="market-trend-period"
-                                                            role="group"
-                                                            aria-label="Trend periyodu"
-                                                        >
-                                                            {TREND_PERIOD_OPTIONS.map((opt) => (
-                                                                <button
-                                                                    key={opt.id}
-                                                                    type="button"
-                                                                    className={`market-trend-period__btn${
-                                                                        trendPeriod === opt.id ? ' is-active' : ''
-                                                                    }`}
-                                                                    aria-pressed={trendPeriod === opt.id}
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setTrendPeriod(opt.id);
-                                                                    }}
-                                                                    title={`Trendi son ${opt.days} güne göre hesapla`}
-                                                                >
-                                                                    {opt.label}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        {t('market.trend', 'Trend')} ({sparkDaysFor(activeCategory)}g)
-                                                    </>
-                                                )}
+                                                <button
+                                                    type="button"
+                                                    className="terminal-sort-th"
+                                                    onClick={() => togglePickerListSort('price')}
+                                                    title={
+                                                        pickerCategory === 'BOND'
+                                                            ? t('market.bondSortMarketPrice', 'Piyasa fiyatına göre sırala')
+                                                            : t('market.sortByPrice', 'Fiyata göre sırala')
+                                                    }
+                                                >
+                                                    {pickerCategory === 'BOND'
+                                                        ? t('market.bondColMarketPrice', 'Piyasa Fiyatı')
+                                                        : t('market.price', 'Fiyat')}
+                                                    {pickerTableSort?.key === 'price'
+                                                        ? pickerTableSort.dir === 'asc'
+                                                            ? ' \u2191'
+                                                            : ' \u2193'
+                                                        : ''}
+                                                </button>
+                                            </th>
+                                            <th
+                                                className="terminal-horizon-pct-head"
+                                                scope="col"
+                                                title={
+                                                    pickerCategory === 'BOND'
+                                                        ? t('market.bondHorizonDayHint', '1 günlük fiyat değişimi (faiz/yield değil)')
+                                                        : t('market.horizonDayHint', 'Günlük değişim: canlı veya spark son noktaları')
+                                                }
+                                                aria-sort={
+                                                    pickerTableSort?.key === 'pctDay'
+                                                        ? pickerTableSort.dir === 'asc'
+                                                            ? 'ascending'
+                                                            : 'descending'
+                                                        : 'none'
+                                                }
+                                            >
+                                                <button
+                                                    type="button"
+                                                    className="terminal-sort-th terminal-sort-th--pct"
+                                                    onClick={() => togglePickerListSort('pctDay')}
+                                                >
+                                                    {pickerCategory === 'BOND'
+                                                        ? t('market.bondColChg1d', '1G Fiyat Değişimi')
+                                                        : t('market.horizonDay', 'Gün')}
+                                                    {pickerTableSort?.key === 'pctDay'
+                                                        ? pickerTableSort.dir === 'asc'
+                                                            ? ' \u2191'
+                                                            : ' \u2193'
+                                                        : ''}
+                                                </button>
+                                            </th>
+                                            <th
+                                                className="terminal-horizon-pct-head"
+                                                scope="col"
+                                                title={
+                                                    pickerCategory === 'BOND'
+                                                        ? t('market.bondHorizonWeekHint', '1 haftalık fiyat değişimi')
+                                                        : t('market.horizonWeekHint', 'Son ~7 kapanış')
+                                                }
+                                                aria-sort={
+                                                    pickerTableSort?.key === 'pctWeek'
+                                                        ? pickerTableSort.dir === 'asc'
+                                                            ? 'ascending'
+                                                            : 'descending'
+                                                        : 'none'
+                                                }
+                                            >
+                                                <button
+                                                    type="button"
+                                                    className="terminal-sort-th terminal-sort-th--pct"
+                                                    onClick={() => togglePickerListSort('pctWeek')}
+                                                >
+                                                    {pickerCategory === 'BOND'
+                                                        ? t('market.bondColChg1w', '1H Fiyat Değişimi')
+                                                        : t('market.horizonWeek', 'Hafta')}
+                                                    {pickerTableSort?.key === 'pctWeek'
+                                                        ? pickerTableSort.dir === 'asc'
+                                                            ? ' \u2191'
+                                                            : ' \u2193'
+                                                        : ''}
+                                                </button>
+                                            </th>
+                                            <th
+                                                className="terminal-horizon-pct-head"
+                                                scope="col"
+                                                title={
+                                                    pickerCategory === 'BOND'
+                                                        ? t('market.bondHorizonMonthHint', '1 aylık fiyat değişimi')
+                                                        : t('market.horizonMonthHint', 'Son ~30 kapanış')
+                                                }
+                                                aria-sort={
+                                                    pickerTableSort?.key === 'pctMonth'
+                                                        ? pickerTableSort.dir === 'asc'
+                                                            ? 'ascending'
+                                                            : 'descending'
+                                                        : 'none'
+                                                }
+                                            >
+                                                <button
+                                                    type="button"
+                                                    className="terminal-sort-th terminal-sort-th--pct"
+                                                    onClick={() => togglePickerListSort('pctMonth')}
+                                                >
+                                                    {pickerCategory === 'BOND'
+                                                        ? t('market.bondColChg1m', '1A Fiyat Değişimi')
+                                                        : t('market.horizonMonth', 'Ay')}
+                                                    {pickerTableSort?.key === 'pctMonth'
+                                                        ? pickerTableSort.dir === 'asc'
+                                                            ? ' \u2191'
+                                                            : ' \u2193'
+                                                        : ''}
+                                                </button>
+                                            </th>
+                                            <th
+                                                className="terminal-horizon-pct-head"
+                                                scope="col"
+                                                title={
+                                                    pickerCategory === 'BOND'
+                                                        ? t('market.bondHorizonYearHint', '1 yıllık fiyat değişimi')
+                                                        : t('market.horizonYearHint', 'Son ~252 kapanış (mevcut seri kısaysa seri uzunluğu)')
+                                                }
+                                                aria-sort={
+                                                    pickerTableSort?.key === 'pctYear'
+                                                        ? pickerTableSort.dir === 'asc'
+                                                            ? 'ascending'
+                                                            : 'descending'
+                                                        : 'none'
+                                                }
+                                            >
+                                                <button
+                                                    type="button"
+                                                    className="terminal-sort-th terminal-sort-th--pct"
+                                                    onClick={() => togglePickerListSort('pctYear')}
+                                                >
+                                                    {pickerCategory === 'BOND'
+                                                        ? t('market.bondColChg1y', '1Y Fiyat Değişimi')
+                                                        : t('market.horizonYear', 'Yıl')}
+                                                    {pickerTableSort?.key === 'pctYear'
+                                                        ? pickerTableSort.dir === 'asc'
+                                                            ? ' \u2191'
+                                                            : ' \u2193'
+                                                        : ''}
+                                                </button>
+                                            </th>
+                                            <th
+                                                title={
+                                                    pickerCategory === 'BOND'
+                                                        ? t(
+                                                              'market.bondTrendColHint',
+                                                              'Seçili grafik aralığıyla uyumlu mini fiyat serisi (fiyat performansı; tahvil faizi değildir).',
+                                                          )
+                                                        : TREND_SELECTABLE_CATEGORIES.has(pickerCategory)
+                                                          ? `Trend ve mini çizgi: üstteki grafik aralığı (${chartRangeUiShortLabel(range)}) ile aynı veri penceresi`
+                                                          : pickerCategory === 'FUTURES'
+                                                            ? `Mini trend: seçili grafik aralığı (${chartRangeUiShortLabel(range)}) ile uyumlu veri penceresi`
+                                                            : `Trend: ${chartRangeUiShortLabel(range)}`
+                                                }
+                                            >
+                                                {pickerCategory === 'BOND'
+                                                    ? t('market.bondTrendCol', '1A Fiyat Trendi')
+                                                    : `${t('market.trend', 'Trend')} (${chartRangeUiShortLabel(range)})`}
                                             </th>
                                         </tr>
                                     </thead>
                                     <tbody>
+                                        {pickerDisplayedInstruments.length === 0 ? (
+                                            <tr>
+                                                <td
+                                                    colSpan={9}
+                                                    className="terminal-chart-empty"
+                                                    style={{ padding: 16, textAlign: 'left' }}
+                                                >
+                                                    {pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST'
+                                                        ? bistLatestError
+                                                            ? String(
+                                                                  bistLatestError instanceof Error
+                                                                      ? bistLatestError.message
+                                                                      : t('stocks.bistListError', 'BIST verisi alınamadı.')
+                                                              )
+                                                            : loadingBistLatest
+                                                              ? t('stocks.bistListLoading', 'BIST listesi yükleniyor…')
+                                                              : t(
+                                                                    'stocks.bistListEmpty',
+                                                                    'BIST için gösterilecek sembol bulunamadı (fiyat verisi yok).'
+                                                                )
+                                                        : pickerFilteredInstruments.length > 0
+                                                          ? t('market.quickFilterEmpty', 'Bu filtre için sonuç yok.')
+                                                          : t('market.listEmpty', 'Bu arama için sonuç yok.')}
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            <>
                                         {listVirtual.topSpacer > 0 ? (
                                             <tr style={{ height: listVirtual.topSpacer }}>
-                                                <td colSpan={5} />
+                                                <td colSpan={9} />
                                             </tr>
                                         ) : null}
                                         {listVirtual.rows.map((row) => {
-                                            const sk = rowToStarredApiKey(activeCategory, row.symbol);
+                                            const sk = rowToStarredApiKey(row.category, row.symbol);
                                             const starFilled = sk
                                                 ? isStarredResolved(starredAssets, sk.marketType, sk.symbol)
                                                 : false;
@@ -2599,14 +4449,26 @@ export function Market() {
                                                 row.category === 'BOND'
                                                     ? `ISIN: ${row.symbol}\nVade: ${formatDateTr(row.maturityDate ?? extractMaturityDate(row.symbol))}\nKalan Gün: ${
                                                           daysValue != null ? daysValue : '—'
-                                                      }\nFiyat: ${rowPriceDisp.glyph} ${rowPriceDisp.amount.toLocaleString('tr-TR', {
+                                                      }\nPiyasa fiyatı: ${rowPriceDisp.glyph} ${rowPriceDisp.amount.toLocaleString('tr-TR', {
                                                           maximumFractionDigits: 4,
-                                                      })}`
+                                                      })}\nNot: Dönemsel % değerleri fiyat performansıdır; tahvil faizi (yield) değildir.`
                                                     : undefined;
+                                            const rowIsBistEquity =
+                                                row.category === 'EQUITY' &&
+                                                row.marketRegion === 'TR' &&
+                                                String(row.exchange ?? '').toUpperCase() === 'BIST';
+                                            const rowMatchesChartSelection =
+                                                selectedSymbol === row.symbol &&
+                                                activeCategory === row.category &&
+                                                (row.category !== 'EQUITY' ||
+                                                    equitySubmarket === (rowIsBistEquity ? 'BIST' : 'US'));
+                                            const rowKey = normalizeSymbolKey(row.symbol);
+                                            const rowInCompareSet = compareSymbols.some((s) => normalizeSymbolKey(s) === rowKey);
+                                            const comparePickerFull = compareSymbols.length >= 4 && !rowInCompareSet;
                                             return (
                                             <tr
-                                                key={row.symbol}
-                                                className={`${selectedSymbol === row.symbol ? 'active' : ''} ${
+                                                key={`${row.category}:${row.symbol}`}
+                                                className={`${rowMatchesChartSelection ? 'active' : ''} ${
                                                     priceFlash[row.symbol] === 'up'
                                                         ? 'terminal-flash-up'
                                                         : priceFlash[row.symbol] === 'down'
@@ -2614,19 +4476,24 @@ export function Market() {
                                                         : ''
                                                 }`}
                                                 onClick={() => {
+                                                    setActiveCategory(row.category);
+                                                    if (row.category === 'EQUITY') {
+                                                        setEquitySubmarket(rowIsBistEquity ? 'BIST' : 'US');
+                                                    }
                                                     setSelectedSymbol(row.symbol);
                                                     setIsDetailPanelOpen(true);
+                                                    setInstrumentListOpen(false);
                                                 }}
                                                 title={bondTooltip}
                                             >
-                                                <td style={{ textAlign: 'center', width: 36 }} onClick={(e) => e.stopPropagation()}>
+                                                <td className="terminal-picker-star-cell" onClick={(e) => e.stopPropagation()}>
                                                     {sk ? (
                                                         <button
                                                             type="button"
                                                             className="terminal-star-btn"
                                                             aria-label={starFilled ? 'Yıldızı kaldır' : 'Dashboard’da göster'}
                                                             disabled={starMutation.isPending}
-                                                            onClick={(e) => handleStarToggle(e, row.symbol)}
+                                                            onClick={(e) => handleStarToggle(e, row.symbol, row.category)}
                                                         >
                                                             <Star
                                                                 size={14}
@@ -2638,126 +4505,220 @@ export function Market() {
                                                         <span style={{ color: tokens.textMuted, fontSize: 11 }}>—</span>
                                                     )}
                                                 </td>
+                                                <td className="terminal-picker-cmp-cell" onClick={(e) => e.stopPropagation()}>
+                                                    <button
+                                                        type="button"
+                                                        className={`terminal-picker-compare-btn${rowInCompareSet ? ' is-active' : ''}`}
+                                                        disabled={
+                                                            !chartComparisonAvailable ||
+                                                            !selectedInstrumentVm ||
+                                                            comparePickerFull ||
+                                                            !canPickerCompareRow(
+                                                                row,
+                                                                selectedInstrumentVm,
+                                                                activeCategory,
+                                                                equitySubmarket
+                                                            )
+                                                        }
+                                                        title={
+                                                            !chartComparisonAvailable
+                                                                ? t('market.compareUnavailable', 'Bu görünümde karşılaştırma yok.')
+                                                                : !selectedInstrumentVm
+                                                                  ? t('market.compareNeedSelection', 'Önce bir enstrüman seçin.')
+                                                                  : !canPickerCompareRow(
+                                                                        row,
+                                                                        selectedInstrumentVm,
+                                                                        activeCategory,
+                                                                        equitySubmarket
+                                                                    )
+                                                                    ? t(
+                                                                          'market.compareIncompatible',
+                                                                          'Aynı pazar ve kategorideki enstrümanlar karşılaştırılabilir.'
+                                                                      )
+                                                                    : `${selectedInstrumentVm.symbol} · ${row.symbol} — ${t(
+                                                                          'market.pickerCompareShort',
+                                                                          'Grafikte karşılaştır'
+                                                                      )}`
+                                                        }
+                                                        aria-label={t('market.pickerCompareAria', 'Karşılaştır')}
+                                                        onClick={(e) => handlePickerCompareClick(e, row)}
+                                                    >
+                                                        <GitCompare size={13} strokeWidth={2.2} aria-hidden />
+                                                    </button>
+                                                </td>
                                                 <td className="terminal-instrument-cell">
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', rowGap: 4 }}>
-                                                        <AssetLogo
-                                                            src={
-                                                                // VIOP/Bond kontrat kodlari ticker degil; CDN'e gondermek 404 ureriyor
-                                                                // ve onError -> setState dongusu navigasyonu engelliyor. Direkt null.
-                                                                row.category === 'BOND' || row.category === 'FUTURES'
-                                                                    ? null
-                                                                    : getDynamicLogoUrl(row.symbol, marketKindForCategory(row.category))
-                                                            }
-                                                            alt={`${row.symbol} logo`}
-                                                            fallbackIcon={TrendingUp}
-                                                            fallbackColor={tokens.textMuted}
-                                                            size={20}
-                                                        />
-                                                        <div style={{ fontWeight: 700, minWidth: 0, lineHeight: 1.2, wordBreak: 'break-word' }}>
-                                                            {row.category === 'BOND' ? row.displayName : row.symbol}
-                                                        </div>
-                                                    </div>
-                                                    {row.category === 'BOND' ? (
-                                                        <>
-                                                            <div style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.25, marginTop: 2, wordBreak: 'break-word' }}>
-                                                                ISIN: {row.symbol}
-                                                            </div>
-                                                            <div style={{ marginTop: 4 }}>
-                                                                <span
-                                                                    className="instrument-highlight-chip"
-                                                                    style={{ background: bondTone.bg, color: bondTone.color }}
-                                                                >
-                                                                    {daysValue != null ? `Vade: ${daysValue} gün` : `Vade: ${formatDateTr(row.maturityDate)}`}
-                                                                </span>
-                                                            </div>
-                                                        </>
-                                                    ) : row.category === 'FUTURES' ? (
-                                                        <div
-                                                            style={{
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                gap: 6,
-                                                                marginTop: 2,
-                                                                flexWrap: 'wrap',
-                                                            }}
-                                                        >
-                                                            {(() => {
-                                                                const cat = viopCategoryFor(row.symbol);
-                                                                if (!cat) return null;
-                                                                const chip = VIOP_CATEGORY_CHIP[cat];
-                                                                return (
-                                                                    <span
-                                                                        className="instrument-highlight-chip"
-                                                                        style={{
-                                                                            background: chip.bg,
-                                                                            color: chip.color,
-                                                                            fontSize: 10,
-                                                                            padding: '1px 6px',
-                                                                            letterSpacing: 0.3,
-                                                                            fontWeight: 700,
-                                                                        }}
-                                                                        title={
-                                                                            cat === 'FX'
-                                                                                ? 'Döviz Vadeli'
-                                                                                : cat === 'INDEX'
-                                                                                    ? 'Endeks Vadeli'
-                                                                                    : cat === 'COMMODITY'
-                                                                                        ? 'Emtia Vadeli'
+                                                    {row.category === 'FUTURES' ? (
+                                                        <div className="viop-instrument-stack">
+                                                            <div className="viop-instrument-stack__badge">
+                                                                {(() => {
+                                                                    const cat = viopCategoryFor(row.symbol);
+                                                                    if (!cat) return null;
+                                                                    return (
+                                                                        <span
+                                                                            className={viopCatBadgeClass(cat)}
+                                                                            title={
+                                                                                cat === 'FX'
+                                                                                    ? 'Döviz Vadeli'
+                                                                                    : cat === 'INDEX'
+                                                                                      ? 'Endeks Vadeli'
+                                                                                      : cat === 'COMMODITY'
+                                                                                        ? 'Altın Vadeli'
                                                                                         : 'Pay Vadeli'
-                                                                        }
-                                                                    >
-                                                                        {chip.label}
-                                                                    </span>
-                                                                );
-                                                            })()}
-                                                            <span style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.25, wordBreak: 'break-word' }}>
-                                                                {row.displayName}
-                                                            </span>
+                                                                            }
+                                                                        >
+                                                                            {VIOP_CATEGORY_CHIP[cat].label}
+                                                                        </span>
+                                                                    );
+                                                                })()}
+                                                            </div>
+                                                            <div className="viop-instrument-stack__main">
+                                                                <div className="viop-contract-code" title={row.symbol}>
+                                                                    {row.symbol}
+                                                                </div>
+                                                                <div className="viop-contract-sub" title={row.displayName}>
+                                                                    {row.displayName}
+                                                                </div>
+                                                                {(() => {
+                                                                    const snap = viopSnapshotBySymbol[normalizeSymbolKey(row.symbol)];
+                                                                    const hint = viopDataQualityHint(snap);
+                                                                    return hint ? (
+                                                                        <div style={{ marginTop: 2 }}>
+                                                                            <span className="viop-stale-pill">{hint}</span>
+                                                                        </div>
+                                                                    ) : null;
+                                                                })()}
+                                                            </div>
                                                         </div>
                                                     ) : (
-                                                        <div style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.25, marginTop: 2, wordBreak: 'break-word' }}>
-                                                            {row.displayName}
-                                                        </div>
+                                                        <>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', rowGap: 4 }}>
+                                                                {row.category === 'EQUITY' &&
+                                                                row.marketRegion === 'TR' &&
+                                                                String(row.exchange ?? '').toUpperCase() === 'BIST' ? (
+                                                                    <span
+                                                                        className="bist-symbol-badge"
+                                                                        style={bistSymbolBadgeStyle(row.symbol)}
+                                                                        title={row.symbol}
+                                                                        aria-hidden
+                                                                    >
+                                                                        {row.symbol.slice(0, 2)}
+                                                                    </span>
+                                                                ) : (
+                                                                    <AssetLogo
+                                                                        src={
+                                                                            row.category === 'BOND'
+                                                                                ? null
+                                                                                : getDynamicLogoUrl(
+                                                                                      row.symbol,
+                                                                                      marketKindForCategory(row.category)
+                                                                                  )
+                                                                        }
+                                                                        alt={`${row.symbol} logo`}
+                                                                        fallbackIcon={TrendingUp}
+                                                                        fallbackColor={tokens.textMuted}
+                                                                        size={20}
+                                                                    />
+                                                                )}
+                                                                <div style={{ fontWeight: 700, minWidth: 0, lineHeight: 1.2, wordBreak: 'break-word' }}>
+                                                                    {row.category === 'BOND'
+                                                                        ? row.displayName
+                                                                        : row.category === 'METALS'
+                                                                          ? row.displayName
+                                                                          : row.symbol}
+                                                                    {row.category === 'EQUITY' &&
+                                                                    String(row.exchange ?? '').toUpperCase() === 'BIST' &&
+                                                                    row.dataQuality &&
+                                                                    String(row.dataQuality).toUpperCase() === 'PARTIAL' ? (
+                                                                        <span className="bist-dq-pill" title={t('stocks.partialDataHint', 'Kapanış verisi eksik olabilir.')}>
+                                                                            {t('stocks.partialData', 'Kısmi veri')}
+                                                                        </span>
+                                                                    ) : null}
+                                                                </div>
+                                                            </div>
+                                                            {row.category === 'BOND' ? (
+                                                                <>
+                                                                    <div style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.25, marginTop: 2, wordBreak: 'break-word' }}>
+                                                                        ISIN: {row.symbol}
+                                                                    </div>
+                                                                    <div style={{ marginTop: 4 }}>
+                                                                        <span
+                                                                            className="instrument-highlight-chip"
+                                                                            style={{ background: bondTone.bg, color: bondTone.color }}
+                                                                        >
+                                                                            {daysValue != null ? `Vade: ${daysValue} gün` : `Vade: ${formatDateTr(row.maturityDate)}`}
+                                                                        </span>
+                                                                    </div>
+                                                                </>
+                                                            ) : (
+                                                                <div style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.25, marginTop: 2, wordBreak: 'break-word' }}>
+                                                                    {row.category === 'METALS' ? row.listSubtitle ?? row.symbol : row.displayName}
+                                                                </div>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </td>
-                                                <td title={rowPriceDisp.title}>
-                                                    <span style={{ opacity: 0.8 }}>{rowPriceDisp.glyph}</span>{' '}
-                                                    {rowPriceDisp.amount.toLocaleString('tr-TR', {
-                                                        maximumFractionDigits: 4,
-                                                    })}
+                                                <td className="terminal-picker-price-cell" title={rowPriceDisp.title}>
+                                                    <div className="terminal-picker-price-stack">
+                                                        <div className="terminal-picker-price-stack__main">
+                                                            <span style={{ opacity: 0.8 }}>{rowPriceDisp.glyph}</span>{' '}
+                                                            {rowPriceDisp.amount.toLocaleString('tr-TR', {
+                                                                maximumFractionDigits:
+                                                                    row.category === 'FUTURES' ? viopPriceDecimals(row.symbol) : 4,
+                                                            })}
+                                                            {rowPriceDisp.suffix ?? ''}
+                                                        </div>
+                                                        <div
+                                                            className={`terminal-picker-price-stack__day ${horizonPctClassName(row.pctDay)}`}
+                                                            title={t('market.horizonDay', 'Gün')}
+                                                        >
+                                                            {formatHorizonPct(row.pctDay)}
+                                                        </div>
+                                                    </div>
                                                 </td>
-                                                <td
-                                                    style={{
-                                                        color:
-                                                            effectiveChangePercent(row, trendPeriod) >= 0
-                                                                ? '#22c55e'
-                                                                : '#ef4444',
-                                                    }}
-                                                    title={
-                                                        TREND_SELECTABLE_CATEGORIES.has(row.category) && trendPeriod !== '1D'
-                                                            ? `Son ${effectiveSparkDays(row.category, trendPeriod)} günlük donem değişimi`
-                                                            : '24 saatlik değişim'
-                                                    }
-                                                >
-                                                    {(() => {
-                                                        const pct = effectiveChangePercent(row, trendPeriod);
-                                                        return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
-                                                    })()}
+                                                <td className={horizonPctClassName(row.pctDay)} title={t('market.horizonDay', 'Gün')}>
+                                                    {formatHorizonPct(row.pctDay)}
+                                                </td>
+                                                <td className={horizonPctClassName(row.pctWeek)} title={t('market.horizonWeek', 'Hafta')}>
+                                                    {formatHorizonPct(row.pctWeek)}
+                                                </td>
+                                                <td className={horizonPctClassName(row.pctMonth)} title={t('market.horizonMonth', 'Ay')}>
+                                                    {formatHorizonPct(row.pctMonth)}
+                                                </td>
+                                                <td className={horizonPctClassName(row.pctYear)} title={t('market.horizonYear', 'Yıl')}>
+                                                    {formatHorizonPct(row.pctYear)}
                                                 </td>
                                                 <td>
                                                     {(() => {
                                                         // Sparkline yon-rengi ve uzunlugu, secili periyoda gore (BOND/FUTURES
                                                         // dahil) hesaplanir. Tek slice + iki indeks okumasi, virtual list ile
                                                         // birlestiginde maliyet pratikte ihmal edilebilir.
-                                                        const days = effectiveSparkDays(row.category, trendPeriod);
-                                                        const slice = row.sparkline.slice(-days);
-                                                        const effPct = effectiveChangePercent(row, trendPeriod);
+                                                        const sparkDays = sparkSliceDaysForInstrumentRow(row.category, trendChartRange);
+                                                        const slice = row.sparkline.slice(-sparkDays);
+                                                        const isBistRow =
+                                                            row.category === 'EQUITY' &&
+                                                            row.marketRegion === 'TR' &&
+                                                            String(row.exchange ?? '').toUpperCase() === 'BIST';
+                                                        if (isBistRow && slice.length < 2) {
+                                                            return (
+                                                                <div
+                                                                    className="bist-spark-skeleton"
+                                                                    style={{
+                                                                        height: 24,
+                                                                        borderRadius: 4,
+                                                                        background: 'rgba(148,163,184,0.18)',
+                                                                    }}
+                                                                    title={t('stocks.sparkLoading', 'Mini grafik yükleniyor')}
+                                                                />
+                                                            );
+                                                        }
+                                                        const effPct = effectiveChangePercent(row, trendChartRange);
                                                         // Renk: % kolonu ile aynı işaret (spark eğimi eski veride yukarı, canlı % aşağı kalabiliyordu).
                                                         const sparkUp = TREND_SELECTABLE_CATEGORIES.has(row.category)
                                                             ? effPct >= 0
                                                             : slice.length >= 2
                                                               ? slice[slice.length - 1] >= slice[0]
                                                               : effPct >= 0;
+                                                        const sparkLabelUi = chartRangeUiShortLabel(trendChartRange);
                                                         return (
                                                             <svg
                                                                 className="inline-spark"
@@ -2765,11 +4726,11 @@ export function Market() {
                                                                 preserveAspectRatio="none"
                                                                 aria-hidden="true"
                                                             >
-                                                                <title>{`Son ${days} günlük trend`}</title>
+                                                                <title>{`Trend (${sparkLabelUi}): son ${sparkDays} nokta`}</title>
                                                                 <polyline
                                                                     points={sparklinePath(slice)}
                                                                     fill="none"
-                                                                    stroke={sparkUp ? '#22c55e' : '#ef4444'}
+                                                                    stroke={sparkUp ? 'var(--terminal-pos, #15803d)' : 'var(--terminal-neg, #b91c1c)'}
                                                                     strokeWidth="2"
                                                                 />
                                                             </svg>
@@ -2781,114 +4742,173 @@ export function Market() {
                                         })}
                                         {listVirtual.bottomSpacer > 0 ? (
                                             <tr style={{ height: listVirtual.bottomSpacer }}>
-                                                <td colSpan={5} />
+                                                <td colSpan={9} />
                                             </tr>
                                         ) : null}
+                                            </>
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
+                            </div>
                         </div>
 
-                        <div ref={centerStackRef} className="terminal-center-stack">
-                        <div className="terminal-card terminal-center-panel">
-                            <div className="terminal-btn-row terminal-category-row" style={{ marginBottom: 10 }}>
-                                {CATEGORY_LABELS.map((cat) => (
-                                    <button
-                                        key={cat.id}
-                                        type="button"
-                                        className={`terminal-btn ${activeCategory === cat.id ? 'active' : ''}`}
-                                        onClick={() => {
-                                            // BOND/FUTURES intraday verisi tutmuyor; 1D secenegi
-                                            // bos grafik gosterirdi. Bu sekmelere gecerken range
-                                            // 1D ise default 1M'e dusururuz.
-                                            if ((cat.id === 'BOND' || cat.id === 'FUTURES') && range === '1D') {
-                                                setRange('1M');
-                                            }
-                                            setActiveCategory(cat.id);
-                                        }}
-                                    >
-                                        {categoryLabel(cat.id)}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="terminal-controls">
-                                <div className="terminal-btn-row">
-                                    {/*
-                                     * 1D butonu sadece intraday akisi olan kategorilerde gosterilir.
-                                     * BOND ve FUTURES (VIOP) verisi gunluk kapanis bazli oldugu icin
-                                     * "1 Gun" secimi bos/anlamsiz grafik uretirdi -> gizlendi.
-                                     */}
-                                    {((activeCategory === 'BOND' || activeCategory === 'FUTURES')
-                                        ? (['1W', '1M', '1Y'] as const)
-                                        : (['1D', '1W', '1M', '1Y'] as const)
-                                    ).map((r) => (
-                                        <button key={r} type="button" className={`terminal-btn ${range === r ? 'active' : ''}`} onClick={() => setRange(r)}>
-                                            {r}
-                                        </button>
-                                    ))}
-                                </div>
-                                {activeCategory === 'BOND' ? (
-                                    <div className="terminal-btn-row">
-                                        <button
-                                            type="button"
-                                            className={`terminal-btn ${bondChartMode === 'DUAL' ? 'active' : ''}`}
-                                            onClick={() => setBondChartMode('DUAL')}
-                                        >
-                                            {t('market.bondAnalysis', 'Tahvil Analiz')}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={`terminal-btn ${bondChartMode === 'CANDLE' ? 'active' : ''}`}
-                                            onClick={() => setBondChartMode('CANDLE')}
-                                        >
-                                            {t('market.detailedCandle', 'Detaylı Mum')}
-                                        </button>
-                                    </div>
-                                ) : null}
+                            <div
+                                ref={centerStackRef}
+                                className={`terminal-center-stack${
+                                    activeCategory === 'FUTURES' || activeCategory === 'BOND' ? ' terminal-center-stack--fill' : ''
+                                }`}
+                            >
+                        <div
+                            className={`terminal-card terminal-center-panel${
+                                activeCategory === 'FUTURES' || activeCategory === 'BOND' ? ' terminal-center-panel--stretch' : ''
+                            }`}
+                        >
+                            <div className={`terminal-controls ${activeCategory === 'FUTURES' ? 'terminal-controls--viop' : ''}`}>
                                 {activeCategory === 'FUTURES' ? (
-                                    <div className="terminal-btn-row">
-                                        <button
-                                            type="button"
-                                            className={`terminal-btn ${viopChartMode === 'LINE' ? 'active' : ''}`}
-                                            onClick={() => setViopChartMode('LINE')}
-                                        >
-                                            {t('market.viopAnalysis', 'VİOP Analiz')}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={`terminal-btn ${viopChartMode === 'CANDLE' ? 'active' : ''}`}
-                                            onClick={() => setViopChartMode('CANDLE')}
-                                        >
-                                            {t('market.detailedCandle', 'Detaylı Mum')}
-                                        </button>
-                                    </div>
-                                ) : null}
-                                {activeCategory !== 'FUTURES' && activeCategory !== 'BOND' ? (
-                                    <div className="terminal-btn-row">
-                                        <button
-                                            type="button"
-                                            className={`terminal-btn ${spotChartMode === 'ANALYSIS' ? 'active' : ''}`}
-                                            onClick={() => setSpotChartMode('ANALYSIS')}
-                                        >
-                                            {t('market.marketAnalysis', 'Piyasa Analiz')}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={`terminal-btn ${spotChartMode === 'CANDLE' ? 'active' : ''}`}
-                                            onClick={() => setSpotChartMode('CANDLE')}
-                                        >
-                                            {t('market.detailedCandle', 'Detaylı Mum')}
-                                        </button>
-                                    </div>
-                                ) : null}
-                                <div className="terminal-btn-row">
-                                    <button type="button" className={`terminal-btn ${showMa ? 'active' : ''}`} onClick={() => setShowMa((v) => !v)}>
-                                        MA
-                                    </button>
-                                    <button type="button" className={`terminal-btn ${showRsi ? 'active' : ''}`} onClick={() => setShowRsi((v) => !v)}>
-                                        RSI
-                                    </button>
-                                </div>
+                                    <>
+                                        <div className="viop-toolbar-row">
+                                            <div className="viop-toolbar-row__left">
+                                                <div className="terminal-btn-row">
+                                                    {TERMINAL_CHART_RANGE_SEQUENCE.map((r) => (
+                                                        <button
+                                                            key={r}
+                                                            type="button"
+                                                            className={`terminal-btn ${range === r ? 'active' : ''}`}
+                                                            onClick={() => setRange(r)}
+                                                        >
+                                                            {chartRangeUiShortLabel(r)}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="viop-toolbar-row__mid">
+                                                <div className="terminal-btn-row">
+                                                    <button
+                                                        type="button"
+                                                        className={`terminal-btn ${viopChartMode === 'LINE' ? 'active' : ''}`}
+                                                        onClick={() => setViopChartMode('LINE')}
+                                                    >
+                                                        {t('market.viopAnalysis', 'VİOP Analiz')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={`terminal-btn ${viopChartMode === 'CANDLE' ? 'active' : ''}`}
+                                                        onClick={() => setViopChartMode('CANDLE')}
+                                                    >
+                                                        {t('market.detailedCandle', 'Detaylı Mum')}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="viop-toolbar-row__right">
+                                                <div className="terminal-btn-row">
+                                                    <button type="button" className={`terminal-btn ${showMa ? 'active' : ''}`} onClick={() => setShowMa((v) => !v)}>
+                                                        MA
+                                                    </button>
+                                                    <button type="button" className={`terminal-btn ${showRsi ? 'active' : ''}`} onClick={() => setShowRsi((v) => !v)}>
+                                                        RSI
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="viop-chart-status" role="status">
+                                            <span>
+                                                <strong>{t('market.timeframe', 'Zaman')}: </strong>
+                                                {chartRangeUiShortLabel(range)}
+                                            </span>
+                                            <span>
+                                                <strong>{t('market.trend', 'Trend')}: </strong>
+                                                {hero && Math.abs(hero.changePercent) < 0.005
+                                                    ? 'FLAT'
+                                                    : hero?.trend === 'UP'
+                                                      ? 'UP'
+                                                      : 'DOWN'}
+                                            </span>
+                                            <span>
+                                                <strong>{t('market.dataType', 'Veri tipi')}: </strong>
+                                                {viopHistoryApi?.chartType ?? 'PRICE_SERIES'}
+                                            </span>
+                                            <span style={{ flex: '1 1 220px', minWidth: 0 }}>
+                                                {viopChartMode === 'CANDLE'
+                                                    ? t(
+                                                          'market.viopSyntheticCandleHint',
+                                                          'OHLC yerine fiyat serisi kullanılıyor; mumlar fiyat serisinden türetilmiştir.'
+                                                      )
+                                                    : t('market.viopPriceSeriesHint', 'Fiyat serisi bazlı gösterim.')}
+                                            </span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="terminal-btn-row">
+                                            {activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
+                                                ? TERMINAL_CHART_RANGE_SEQUENCE.map((r) => (
+                                                      <button
+                                                          key={r}
+                                                          type="button"
+                                                          className={`terminal-btn ${bistRange === r ? 'active' : ''}`}
+                                                          onClick={() => setBistRange(r)}
+                                                      >
+                                                          {chartRangeUiShortLabel(r)}
+                                                      </button>
+                                                  ))
+                                                : TERMINAL_CHART_RANGE_SEQUENCE.map((r) => (
+                                                      <button
+                                                          key={r}
+                                                          type="button"
+                                                          className={`terminal-btn ${range === r ? 'active' : ''}`}
+                                                          onClick={() => setRange(r)}
+                                                      >
+                                                          {chartRangeUiShortLabel(r)}
+                                                      </button>
+                                                  ))}
+                                        </div>
+                                        {activeCategory === 'BOND' ? (
+                                            <div className="terminal-btn-row">
+                                                <button
+                                                    type="button"
+                                                    className={`terminal-btn ${bondChartMode === 'DUAL' ? 'active' : ''}`}
+                                                    onClick={() => setBondChartMode('DUAL')}
+                                                >
+                                                    {t('market.bondAnalysis', 'Tahvil Analiz')}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`terminal-btn ${bondChartMode === 'CANDLE' ? 'active' : ''}`}
+                                                    onClick={() => setBondChartMode('CANDLE')}
+                                                >
+                                                    {t('market.detailedCandle', 'Detaylı Mum')}
+                                                </button>
+                                            </div>
+                                        ) : null}
+                                        {activeCategory !== 'BOND' ? (
+                                            <div className="terminal-btn-row">
+                                                <button
+                                                    type="button"
+                                                    className={`terminal-btn ${spotChartMode === 'ANALYSIS' ? 'active' : ''}`}
+                                                    onClick={() => setSpotChartMode('ANALYSIS')}
+                                                >
+                                                    {t('market.marketAnalysis', 'Piyasa Analiz')}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`terminal-btn ${spotChartMode === 'CANDLE' ? 'active' : ''}`}
+                                                    onClick={() => setSpotChartMode('CANDLE')}
+                                                >
+                                                    {t('market.detailedCandle', 'Detaylı Mum')}
+                                                </button>
+                                            </div>
+                                        ) : null}
+                                        <div className="terminal-btn-row">
+                                            <button type="button" className={`terminal-btn ${showMa ? 'active' : ''}`} onClick={() => setShowMa((v) => !v)}>
+                                                MA
+                                            </button>
+                                            <button type="button" className={`terminal-btn ${showRsi ? 'active' : ''}`} onClick={() => setShowRsi((v) => !v)}>
+                                                RSI
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                             {activeCategory === 'BOND' && bondChartMode === 'DUAL' ? (
                                 <BondTerminalChart
@@ -2900,6 +4920,7 @@ export function Market() {
                                     trendLabel={hero?.trend}
                                     timeframeLabel={dataRangeForChart}
                                     tokens={chartTokens}
+                                    showYieldSeries={selectedBondStructuredYield}
                                 />
                             ) : activeCategory === 'FUTURES' && viopChartMode === 'LINE' ? (
                                 <ViopTerminalChart
@@ -2914,14 +4935,19 @@ export function Market() {
                                 />
                             ) : activeCategory !== 'FUTURES' && activeCategory !== 'BOND' && spotChartMode === 'ANALYSIS' ? (
                                 <SpotTerminalChart
-                                    title={`${categoryLabel(activeCategory)} ${t('market.marketAnalysis', 'Piyasa Analiz')}`}
+                                    title={spotTerminalTitle}
+                                    subtitle={spotTerminalSubtitle}
                                     candles={candles}
                                     ma7={ma7}
                                     ma21={ma21}
                                     showMa={showMa}
-                                    loading={loadingCandles || loadingIndicators}
+                                    loading={
+                                        activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
+                                            ? loadingBistCandles
+                                            : loadingCandles || loadingIndicators
+                                    }
                                     trendLabel={hero?.trend}
-                                    timeframeLabel={dataRangeForChart}
+                                    timeframeLabel={chartTfLabel}
                                     chartTimePreferIstanbulBusinessDay={!terminalHourlyRange}
                                     tokens={chartTokens}
                                 />
@@ -2934,79 +4960,41 @@ export function Market() {
                                     showMa={showMa}
                                     showRsi={showRsi}
                                     markers={markers}
-                                    loading={loadingCandles || loadingIndicators || loadingViopHistory || loadingDebtHistory}
+                                    loading={
+                                        activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
+                                            ? loadingBistCandles
+                                            : loadingCandles || loadingIndicators || loadingViopHistory || loadingDebtHistory
+                                    }
                                     symbol={selectedSymbol}
                                     trendLabel={hero?.trend}
-                                    timeframeLabel={dataRangeForChart}
+                                    timeframeLabel={chartTfLabel}
                                     chartTimePreferIstanbulBusinessDay={!terminalHourlyRange}
                                     tokens={chartTokens}
                                 />
                             )}
+                            {activeCategory === 'FX' ? (
+                                <FxEffectiveRatesComparisonSection
+                                    tokens={chartTokens}
+                                    selectedSymbol={selectedSymbol ?? undefined}
+                                    enabled={activeCategory === 'FX'}
+                                />
+                            ) : null}
                         </div>
                         {/*
-                         * Karsilastirma Grafigi (Baz 100) panelini FUTURES ve BOND kategorilerinde
-                         * gizliyoruz. FUTURES'ta zaten karsilastirma manasizdi; BOND'da ise marketType
-                         * null oldugundan panel sadece "ana chart'i kullanin" mesajini gosteriyordu --
-                         * gereksiz dikey alan + bilgi gurultusu yaratiyordu. Diger kategorilerde
-                         * (EQUITY, CRYPTO, FX, METALS, FUNDS) panel aynen calismaya devam eder.
+                         * Karşılaştırma: spot + ısı haritası rail’de sağ sütunda (treemap üstü); VİOP ortada kalır.
+                         * Tahvil (BOND) gizli — ayrı batch yolu yok.
                          */}
-                        {activeCategory !== 'FUTURES' && activeCategory !== 'BOND' ? (
-                            <div className="terminal-card terminal-center-comparison">
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                    <strong style={{ fontSize: 14 }}>{t('market.comparisonChart', 'Karşılaştırma Grafiği (Baz 100)')}</strong>
-                                    <div style={{ fontSize: 12, color: '#94a3b8' }}>{t('market.select2to4', 'Aynı kategoriden 2-4 sembol seç')}</div>
-                                </div>
-                                {marketType ? (
-                                    <div className="terminal-compare-selector">
-                                        {instruments.slice(0, 12).map((ins) => {
-                                            const checked = compareSymbols.includes(ins.symbol);
-                                            return (
-                                                <label key={`cmp-${ins.symbol}`} className="terminal-chip">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={checked}
-                                                        onChange={(e) => {
-                                                            if (e.target.checked) {
-                                                                setCompareSymbols((prev) => (prev.length >= 4 ? prev : [...prev, ins.symbol]));
-                                                            } else {
-                                                                setCompareSymbols((prev) => prev.filter((s) => s !== ins.symbol));
-                                                            }
-                                                        }}
-                                                    />
-                                                    {ins.symbol}
-                                                </label>
-                                            );
-                                        })}
-                                    </div>
-                                ) : null}
-                                {/* "Tahvil kategorisinde..." bilgilendirme metni kaldirildi: BOND
-                                 * artik tum karsilastirma panelini gizliyor (yukaridaki kosul). */}
-                                {loadingCompare ? (
-                                    <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
-                                        {t('market.compareLoading', 'Karşılaştırma yükleniyor...')}
-                                    </div>
-                                ) : compareRows.length === 0 ? (
-                                    <div className="terminal-chart-empty" style={{ marginTop: 8 }}>
-                                        {t('market.comparePickTwo', 'Karşılaştırma için en az iki sembol seçin.')}
-                                    </div>
-                                ) : (
-                                    <div style={{ marginTop: 10 }}>
-                                        <MarketCompareLwChart
-                                            rows={compareRows}
-                                            symbols={compareSymbols.slice(0, 4)}
-                                            colors={['#38bdf8', '#22c55e', '#eab308', '#f87171']}
-                                            lineWidthBySymbol={lineWidthBySymbol}
-                                            timeframeLabel={dataRangeForChart}
-                                            tokens={chartTokens}
-                                            height={250}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        ) : null}
+                        {!isSpotHeatmapRail ? renderComparisonCard('terminal-center-comparison') : null}
                         </div>
 
-                        <div className="terminal-card terminal-right-panel" style={sideRailBoxStyle}>
+                        <div
+                            className={`terminal-card terminal-right-panel ${
+                                activeCategory === 'FUTURES' || activeCategory === 'BOND'
+                                    ? 'terminal-right-panel--page-flow'
+                                    : ''
+                            }`}
+                            style={rightPanelStyle}
+                        >
                             <div style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}>{t('market.marketInsights', 'Piyasa İçgörü')}</div>
                             <div className="terminal-right-panel-scroll">
                             {activeCategory === 'EQUITY' ||
@@ -3015,53 +5003,184 @@ export function Market() {
                             activeCategory === 'METALS' ||
                             activeCategory === 'FUNDS' ? (
                                 <>
+                                    {renderComparisonCard('terminal-right-comparison')}
                                     <div className="terminal-right-treemap-slot">
                                         <MarketFinvizTreemap
-                                            tiles={insightsTreemapTiles}
+                                            tiles={insightsTreemapTilesEffective}
                                             borderColor="rgba(71, 85, 105, 0.55)"
                                             panelBg={tokens.bgCard}
-                                            onTileHover={handleTreemapHover}
-                                            onTileLeave={() => handleTreemapHover(null)}
+                                            sectorDisplayName={heatmapSectorDisplay}
+                                            floatingTooltip={{
+                                                labelChange: `${t('market.change', 'Değişim')} (${chartRangeUiShortLabel(range)})`,
+                                                labelSector: t('market.sector', 'Sektör'),
+                                                mutedColor: tokens.textMuted,
+                                            }}
                                         />
                                     </div>
-                                    <div style={{ marginTop: 8 }}>
+                                    <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                                         <button type="button" className="terminal-btn" onClick={() => navigate('/market/heatmap')}>
                                             {t('market.detailedHeatmap', 'Detaylı ısı haritası')}
                                         </button>
+                                        <button
+                                            type="button"
+                                            className="terminal-btn"
+                                            onClick={() => navigate('/market/heatmap?sector=BIST_EQUITY')}
+                                        >
+                                            {t('market.detailedHeatmapBist', 'Türk hisseleri — detaylı ısı haritası')}
+                                        </button>
                                     </div>
-                                    <HeatmapHoverPanel
-                                        ref={hoverPanelRef}
-                                        labelChange={`${t('market.change', 'Değişim')} (${TREND_PERIOD_OPTIONS.find((p) => p.id === trendPeriod)?.label ?? trendPeriod})`}
-                                        labelSector={t('market.sector', 'Sektör')}
-                                        promptText={t('market.heatmapHoverPrompt', 'Detay için ısı haritasında bir alana gelin.')}
-                                    />
                                 </>
                             ) : null}
 
                             {activeCategory === 'FUTURES' ? (
                                 <div className="terminal-mini-list">
-                                    <strong style={{ fontSize: 13 }}>
-                                        {t('market.futuresTopMovers', 'En hareketli vadeliler')}
-                                    </strong>
-                                    {futuresTopMovers.map((v) => (
+                                    <strong style={{ fontSize: 13 }}>{t('market.futuresTopMovers', 'En hareketli vadeliler')}</strong>
+                                    {futuresTopMovers.map((v) => {
+                                        const vm = instrumentVms.find((x) => x.symbol === v.symbol);
+                                        const sub =
+                                            vm && vm.displayName && vm.displayName !== v.symbol ? vm.displayName : '';
+                                        return (
                                         <div key={`mv-${v.symbol}`} className="terminal-mini-item">
-                                            <span>{parseViopContractLabel(v.symbol)}</span>
-                                            <span>
+                                            <span style={{ minWidth: 0, flex: '1 1 120px' }}>
+                                                <span className="terminal-mini-item__code" title={v.symbol}>
+                                                    {v.symbol}
+                                                </span>
+                                                {sub ? (
+                                                    <div
+                                                        style={{
+                                                            fontSize: 10,
+                                                            color: tokens.textMuted,
+                                                            lineHeight: 1.2,
+                                                            marginTop: 2,
+                                                            whiteSpace: 'nowrap',
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                        }}
+                                                        title={sub}
+                                                    >
+                                                        {sub}
+                                                    </div>
+                                                ) : null}
+                                            </span>
+                                            <span className={v.changePercent >= 0 ? 'terminal-pct-pos' : 'terminal-pct-neg'}>
                                                 {v.changePercent >= 0 ? '+' : ''}
                                                 {v.changePercent.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
                                             </span>
                                         </div>
-                                    ))}
-                                    {futuresHeaderMetrics && selectedInstrumentVm ? (
-                                        <div className="terminal-mini-item">
-                                            <span>{t('market.direction', 'Yön')}</span>
-                                            <span>
-                                                {selectedInstrumentVm.changePercent >= 0
-                                                    ? t('market.directionUp', 'Yukarı')
-                                                    : t('market.directionDown', 'Aşağı')}
+                                        );
+                                    })}
+                                    <strong style={{ fontSize: 13, marginTop: 6 }}>{t('market.futuresVolumeLeaders', 'En yüksek hacim')}</strong>
+                                    {futuresVolumeLeaders.map((v) => {
+                                        const vm = instrumentVms.find((x) => x.symbol === v.symbol);
+                                        const sub =
+                                            vm && vm.displayName && vm.displayName !== v.symbol ? vm.displayName : '';
+                                        return (
+                                        <div key={`vol-${v.symbol}`} className="terminal-mini-item">
+                                            <span style={{ minWidth: 0, flex: '1 1 120px' }}>
+                                                <span className="terminal-mini-item__code" title={v.symbol}>
+                                                    {v.symbol}
+                                                </span>
+                                                {sub ? (
+                                                    <div
+                                                        style={{
+                                                            fontSize: 10,
+                                                            color: tokens.textMuted,
+                                                            lineHeight: 1.2,
+                                                            marginTop: 2,
+                                                            whiteSpace: 'nowrap',
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                        }}
+                                                        title={sub}
+                                                    >
+                                                        {sub}
+                                                    </div>
+                                                ) : null}
+                                            </span>
+                                            <span>{v.volume.toLocaleString('tr-TR')}</span>
+                                        </div>
+                                        );
+                                    })}
+                                    <strong style={{ fontSize: 13, marginTop: 6 }}>{t('market.futuresTopPositive', 'En pozitif')}</strong>
+                                    {futuresTopPositive.map((v) => {
+                                        const vm = instrumentVms.find((x) => x.symbol === v.symbol);
+                                        const sub =
+                                            vm && vm.displayName && vm.displayName !== v.symbol ? vm.displayName : '';
+                                        return (
+                                        <div key={`tp-${v.symbol}`} className="terminal-mini-item">
+                                            <span style={{ minWidth: 0, flex: '1 1 120px' }}>
+                                                <span className="terminal-mini-item__code" title={v.symbol}>
+                                                    {v.symbol}
+                                                </span>
+                                                {sub ? (
+                                                    <div
+                                                        style={{
+                                                            fontSize: 10,
+                                                            color: tokens.textMuted,
+                                                            lineHeight: 1.2,
+                                                            marginTop: 2,
+                                                            whiteSpace: 'nowrap',
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                        }}
+                                                        title={sub}
+                                                    >
+                                                        {sub}
+                                                    </div>
+                                                ) : null}
+                                            </span>
+                                            <span className="terminal-pct-pos">
+                                                +{v.changePercent.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
                                             </span>
                                         </div>
-                                    ) : null}
+                                        );
+                                    })}
+                                    <strong style={{ fontSize: 13, marginTop: 6 }}>{t('market.futuresTopNegative', 'En negatif')}</strong>
+                                    {futuresTopNegative.map((v) => {
+                                        const vm = instrumentVms.find((x) => x.symbol === v.symbol);
+                                        const sub =
+                                            vm && vm.displayName && vm.displayName !== v.symbol ? vm.displayName : '';
+                                        return (
+                                        <div key={`tn-${v.symbol}`} className="terminal-mini-item">
+                                            <span style={{ minWidth: 0, flex: '1 1 120px' }}>
+                                                <span className="terminal-mini-item__code" title={v.symbol}>
+                                                    {v.symbol}
+                                                </span>
+                                                {sub ? (
+                                                    <div
+                                                        style={{
+                                                            fontSize: 10,
+                                                            color: tokens.textMuted,
+                                                            lineHeight: 1.2,
+                                                            marginTop: 2,
+                                                            whiteSpace: 'nowrap',
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                        }}
+                                                        title={sub}
+                                                    >
+                                                        {sub}
+                                                    </div>
+                                                ) : null}
+                                            </span>
+                                            <span className="terminal-pct-neg">
+                                                {v.changePercent.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
+                                            </span>
+                                        </div>
+                                        );
+                                    })}
+                                    <div className="terminal-mini-item" style={{ marginTop: 6 }}>
+                                        <span>{t('market.breadth', 'Genel yön')}</span>
+                                        <span>{futuresBreadthLabel ?? '—'}</span>
+                                    </div>
+                                    <div className="terminal-mini-item">
+                                        <span>{t('market.dataDelay', 'Veri gecikmesi')}</span>
+                                        <span>
+                                            {viopDelayMinutesDisplay != null && viopDelayMinutesDisplay > 0
+                                                ? `${viopDelayMinutesDisplay} dk`
+                                                : '—'}
+                                        </span>
+                                    </div>
                                 </div>
                             ) : null}
 
@@ -3087,29 +5206,17 @@ export function Market() {
                                 </div>
                             ) : null}
 
-                            {activeCategory !== 'FUTURES' ? <div className="terminal-mini-list">
-                                <strong style={{ fontSize: 13 }}>{t('market.topGainers', 'En Çok Yükselenler')}</strong>
-                                {topGainers.map((r) => (
-                                    <div key={`g-${r.symbol}`} className="terminal-mini-item">
-                                        <span>{r.symbol}</span>
-                                        <span style={{ color: '#22c55e' }}>+{r.changePercent.toFixed(2)}%</span>
-                                    </div>
-                                ))}
-                                <strong style={{ fontSize: 13, marginTop: 4 }}>{t('market.topLosers', 'En Çok Düşenler')}</strong>
-                                {topLosers.map((r) => (
-                                    <div key={`l-${r.symbol}`} className="terminal-mini-item">
-                                        <span>{r.symbol}</span>
-                                        <span style={{ color: '#ef4444' }}>{r.changePercent.toFixed(2)}%</span>
-                                    </div>
-                                ))}
-                                {activeCategory === 'CRYPTO' ? <><strong style={{ fontSize: 13, marginTop: 4 }}>Dominans</strong>
-                                {cryptoDominance.map((r) => (
-                                    <div key={`d-${r.symbol}`} className="terminal-mini-item">
-                                        <span>{r.symbol}</span>
-                                        <span>%{r.dominancePct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
-                                    </div>
-                                ))}</> : null}
-                            </div> : null}
+                            {activeCategory === 'CRYPTO' ? (
+                                <div className="terminal-mini-list">
+                                    <strong style={{ fontSize: 13 }}>{t('market.cryptoDominance', 'Dominans (pay)')}</strong>
+                                    {cryptoDominance.map((r) => (
+                                        <div key={`d-${r.symbol}`} className="terminal-mini-item">
+                                            <span>{r.symbol}</span>
+                                            <span>%{r.dominancePct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : null}
                             </div>
                         </div>
                     </div>
@@ -3128,120 +5235,311 @@ export function Market() {
                     aria-label="Detay panelini kapat"
                     onClick={() => setIsDetailPanelOpen(false)}
                 />
-                <aside className="instrument-drawer">
+                <aside
+                    className={`instrument-drawer ${selectedInstrumentVm.type === 'FUTURES' ? 'instrument-drawer--viop' : ''}`}
+                >
                     <div className="instrument-drawer-head">
-                        <strong>Enstrüman Detayı</strong>
-                        <button type="button" className="terminal-btn" onClick={() => setIsDetailPanelOpen(false)}>
-                            Kapat
+                        <strong>{t('market.instrumentDetail', 'Enstrüman Detayı')}</strong>
+                        <button
+                            type="button"
+                            className="terminal-btn instrument-drawer-close"
+                            onClick={() => setIsDetailPanelOpen(false)}
+                        >
+                            {t('common.close', 'Kapat')}
                         </button>
                     </div>
                     <div className="instrument-drawer-body">
                         <div className="instrument-drawer-symbol">
-                            <div>
+                            <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{ fontWeight: 700 }}>
                                     {selectedInstrumentVm.type === 'BOND'
                                         ? formatBondDisplayName(selectedInstrumentVm.symbol)
                                         : selectedInstrumentVm.symbol}
                                 </div>
-                                <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                                <div className="instrument-drawer-subtext">
                                     {selectedInstrumentVm.type === 'BOND'
                                         ? `ISIN: ${selectedInstrumentVm.symbol}`
                                         : selectedInstrumentVm.displayName}
                                 </div>
-                            </div>
-                        </div>
-                        <div className="instrument-drawer-grid">
-                            <div>Fiyat</div>
-                            <div title={drawerInstrumentPrice?.title}>
-                                {drawerInstrumentPrice ? (
-                                    <>
-                                        <span style={{ opacity: 0.8 }}>{drawerInstrumentPrice.glyph}</span>{' '}
-                                        {drawerInstrumentPrice.amount.toLocaleString('tr-TR', {
-                                            maximumFractionDigits: 4,
-                                        })}
-                                    </>
-                                ) : (
-                                    '—'
-                                )}
-                            </div>
-                            <div>Değişim</div>
-                            <div style={{ color: selectedInstrumentVm.changePercent >= 0 ? '#22c55e' : '#ef4444' }}>
-                                {selectedInstrumentVm.changePercent >= 0 ? '+' : ''}
-                                {selectedInstrumentVm.changePercent.toFixed(2)}%
-                            </div>
-                            {selectedInstrumentVm.type === 'BOND' ? (
-                                <>
-                                    <div>ISIN</div>
-                                    <div>{selectedInstrumentVm.symbol}</div>
-                                    <div>Vade Tarihi</div>
-                                    <div>{formatDateTr(selectedInstrumentVm.maturityDate ?? extractMaturityDate(selectedInstrumentVm.symbol))}</div>
-                                    <div>Vadeye Kalan Gün</div>
-                                    <div>
+                                {selectedInstrumentVm.type === 'FUTURES' ? (
+                                    <div className="viop-drawer-kicker" style={{ marginTop: 8 }}>
                                         {(() => {
-                                            const days = selectedInstrumentVm.daysToMaturity ?? getRemainingDays(selectedInstrumentVm.symbol);
+                                            const cat = viopCategoryFor(selectedInstrumentVm.symbol);
+                                            if (!cat) return null;
                                             return (
-                                        <span className="instrument-highlight-chip">
-                                                    {Number.isFinite(days)
-                                                ? `${days} gün kaldı`
-                                                : '—'}
-                                        </span>
+                                                <span className={viopCatBadgeClass(cat)} title={viopAssetClassTitle(cat)}>
+                                                    {VIOP_CATEGORY_CHIP[cat].label}
+                                                </span>
                                             );
                                         })()}
-                                    </div>
-                                    <div>Kupon Oranı</div>
-                                    <div>%{Number(selectedInstrumentVm.couponRate ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
-                                    <div>YTM</div>
-                                    <div>%{Number(selectedInstrumentVm.yieldToMaturity ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
-                                </>
-                            ) : null}
-                            {selectedInstrumentVm.type === 'FUTURES' ? (
-                                <>
-                                    <div>Kontrat Ayı</div>
-                                    <div>{selectedInstrumentVm.contractMonth ?? '—'}</div>
-                                    <div>Son İşlem (Expiry)</div>
-                                    <div>
-                                        <span className="instrument-highlight-chip">
-                                            {selectedInstrumentVm.expiryDate ?? '—'}
+                                        <span className="instrument-highlight-chip" style={{ borderColor: 'var(--terminal-border)', color: 'var(--terminal-text)' }}>
+                                            {viopAssetClassTitle(viopCategoryFor(selectedInstrumentVm.symbol))}
                                         </span>
+                                        {selectedInstrumentVm.expiryDate ? (
+                                            <span className="instrument-highlight-chip">{selectedInstrumentVm.expiryDate}</span>
+                                        ) : null}
                                     </div>
-                                    <div>Teminat Gereksinimi</div>
-                                    <div>{Number(selectedInstrumentVm.marginRequirement ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
-                                    <div>Long/Short</div>
-                                    <div>{selectedInstrumentVm.longShort ?? 'NÖTR'}</div>
-                                </>
-                            ) : null}
-                        </div>
-                        <div style={{ marginTop: 10 }}>
-                            <button
-                                type="button"
-                                className="terminal-btn active"
-                                onClick={() => navigate('/portfolio')}
-                            >
-                                {t('nav.portfolio', 'Portföy Analizi')}
-                            </button>
-                        </div>
-                        <div style={{ marginTop: 12 }}>
-                            <div className="instrument-meta-card">
-                                <div className="instrument-meta-title">{selectedInstrumentMeta?.title ?? 'Enstrüman Bilgisi'}</div>
-                                {selectedInstrumentMeta ? (
-                                    <>
-                                        <div className="instrument-meta-grid">
-                                            {selectedInstrumentMeta.rows.map(([label, value]) => (
-                                                <div key={label}>
-                                                    <div className="instrument-meta-label">{label}</div>
-                                                    <div className="instrument-meta-value">{value}</div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <div className="instrument-meta-description">{selectedInstrumentMeta.description}</div>
-                                    </>
-                                ) : (
-                                    <div className="instrument-meta-empty">
-                                        Bu enstrüman için özel açıklama yakında eklenecek.
-                                    </div>
-                                )}
+                                ) : null}
                             </div>
                         </div>
+                        {selectedInstrumentVm.type === 'FUTURES' ? (
+                            <div className="instrument-drawer--viop-scroll">
+                                {(() => {
+                                    const symKey = normalizeSymbolKey(selectedInstrumentVm.symbol);
+                                    const s = viopSnapshotBySymbol[symKey];
+                                    const fd = viopPriceDecimals(selectedInstrumentVm.symbol);
+                                    const fmt = (n: number | null | undefined) =>
+                                        n != null && Number.isFinite(Number(n))
+                                            ? Number(n).toLocaleString('tr-TR', { maximumFractionDigits: fd, minimumFractionDigits: 0 })
+                                            : '—';
+                                    const chgCls =
+                                        (s?.changePercent != null && Number(s.changePercent) >= 0) ||
+                                        (s == null && selectedInstrumentVm.changePercent >= 0)
+                                            ? 'terminal-pct-pos'
+                                            : 'terminal-pct-neg';
+                                    const openVal = s?.open ?? s?.openPrice;
+                                    return (
+                                        <>
+                                            <section className="viop-drawer-section">
+                                                <h3 className="viop-drawer-section__title">{t('market.viopSectionPrice', 'Fiyat özeti')}</h3>
+                                                <div className="viop-drawer-kv">
+                                                    <span className="viop-drawer-kv__label">{t('market.last', 'Son')}</span>
+                                                    <span className="viop-drawer-kv__val">{s?.last != null ? fmt(s.last) : drawerInstrumentPrice ? fmt(drawerInstrumentPrice.amount) : '—'}</span>
+                                                    <span className="viop-drawer-kv__label">{t('market.change', 'Değişim')}</span>
+                                                    <span className={`viop-drawer-kv__val ${chgCls}`}>
+                                                        {s?.changePercent != null && Number.isFinite(Number(s.changePercent))
+                                                            ? `${Number(s.changePercent) >= 0 ? '+' : ''}${Number(s.changePercent).toFixed(2)}%`
+                                                            : `${selectedInstrumentVm.changePercent >= 0 ? '+' : ''}${selectedInstrumentVm.changePercent.toFixed(2)}%`}
+                                                    </span>
+                                                    <span className="viop-drawer-kv__label">{t('market.changeTlPct', 'Değişim (TL / %)')}</span>
+                                                    <span className="viop-drawer-kv__val">
+                                                        {fmt(s?.changeAmount)} /{' '}
+                                                        {s?.changePercent != null && Number.isFinite(Number(s.changePercent))
+                                                            ? `${Number(s.changePercent).toFixed(2)}%`
+                                                            : '—'}
+                                                    </span>
+                                                    <span className="viop-drawer-kv__label">{t('market.bidAsk', 'Alış / Satış')}</span>
+                                                    <span className="viop-drawer-kv__val">{fmtViopBidAskLine(s?.bid ?? null, s?.ask ?? null, fd)}</span>
+                                                    <span className="viop-drawer-kv__label">{t('market.open', 'Açılış')}</span>
+                                                    <span className="viop-drawer-kv__val">{fmt(openVal)}</span>
+                                                    <span className="viop-drawer-kv__label">{t('market.dayHighLow', 'Gün Yük / Düş')}</span>
+                                                    <span className="viop-drawer-kv__val">
+                                                        {fmt(s?.high)} / {fmt(s?.low)}
+                                                    </span>
+                                                </div>
+                                            </section>
+                                            <section className="viop-drawer-section">
+                                                <h3 className="viop-drawer-section__title">{t('market.viopSectionActivity', 'Piyasa aktivitesi')}</h3>
+                                                <div className="viop-drawer-kv">
+                                                    <span className="viop-drawer-kv__label">{t('market.volume', 'Hacim')}</span>
+                                                    <span className="viop-drawer-kv__val">
+                                                        {s?.volume != null ? Number(s.volume).toLocaleString('tr-TR') : '—'}
+                                                    </span>
+                                                    <span className="viop-drawer-kv__label">{t('market.quantity', 'Adet')}</span>
+                                                    <span className="viop-drawer-kv__val">
+                                                        {s?.quantity != null ? Number(s.quantity).toLocaleString('tr-TR') : '—'}
+                                                    </span>
+                                                    <span className="viop-drawer-kv__label">{t('market.settlement', 'Uzlaşma')}</span>
+                                                    <span className="viop-drawer-kv__val">{fmt(s?.settlement)}</span>
+                                                    <span className="viop-drawer-kv__label">{t('market.preSettlement', 'Ön uzlaşma')}</span>
+                                                    <span className="viop-drawer-kv__val">{fmt(s?.preSettlement)}</span>
+                                                    <span className="viop-drawer-kv__label">{t('market.limitUpDown', 'Tavan / Taban')}</span>
+                                                    <span className="viop-drawer-kv__val">
+                                                        {fmt(s?.limitUp)} / {fmt(s?.limitDown)}
+                                                    </span>
+                                                </div>
+                                            </section>
+                                            <section className="viop-drawer-section">
+                                                <h3 className="viop-drawer-section__title">{t('market.viopSectionContract', 'Kontrat bilgisi')}</h3>
+                                                <div className="viop-drawer-kv">
+                                                    <span className="viop-drawer-kv__label">{t('market.underlying', 'Dayanak varlık')}</span>
+                                                    <span className="viop-drawer-kv__val">{s?.underlying ?? '—'}</span>
+                                                    <span className="viop-drawer-kv__label">{t('market.contractMonth', 'Vade ayı')}</span>
+                                                    <span className="viop-drawer-kv__val">
+                                                        {s?.maturityMonth != null ? String(s.maturityMonth) : selectedInstrumentVm.contractMonth ?? '—'}
+                                                    </span>
+                                                    <span className="viop-drawer-kv__label">{t('market.contractYear', 'Vade yılı')}</span>
+                                                    <span className="viop-drawer-kv__val">
+                                                        {s?.maturityYear != null ? String(s.maturityYear) : '—'}
+                                                    </span>
+                                                    <span className="viop-drawer-kv__label">{t('market.lastTradeExpiry', 'Son işlem / expiry')}</span>
+                                                    <span className="viop-drawer-kv__val">{selectedInstrumentVm.expiryDate ?? '—'}</span>
+                                                    <span className="viop-drawer-kv__label">{t('market.priceStep', 'Fiyat adımı')}</span>
+                                                    <span className="viop-drawer-kv__val">{s?.priceStep != null ? String(s.priceStep) : '—'}</span>
+                                                    <span className="viop-drawer-kv__label">Long / Short</span>
+                                                    <span className="viop-drawer-kv__val">{selectedInstrumentVm.longShort ?? 'NÖTR'}</span>
+                                                </div>
+                                            </section>
+                                            <section className="viop-drawer-section">
+                                                <h3 className="viop-drawer-section__title">{t('market.viopSectionRisk', 'Risk / teminat')}</h3>
+                                                <div className="viop-drawer-kv">
+                                                    <span className="viop-drawer-kv__label">{t('market.initialMargin', 'Başlangıç teminatı')}</span>
+                                                    <span className="viop-drawer-kv__val">{fmt(s?.initialMargin)}</span>
+                                                    <span className="viop-drawer-kv__label">{t('market.marginRequirement', 'Teminat gereksinimi')}</span>
+                                                    <span className="viop-drawer-kv__val">
+                                                        {Number(selectedInstrumentVm.marginRequirement ?? 0).toLocaleString('tr-TR', {
+                                                            maximumFractionDigits: 2,
+                                                        })}
+                                                    </span>
+                                                    <span className="viop-drawer-kv__label">{t('market.delayAndSource', 'Gecikme / kaynak')}</span>
+                                                    <span className="viop-drawer-kv__val">
+                                                        {s?.delayMinutes != null ? `${s.delayMinutes} dk · ` : ''}
+                                                        {s?.sourceLabel ?? '—'}
+                                                    </span>
+                                                </div>
+                                            </section>
+                                            <section className="viop-drawer-section">
+                                                <h3 className="viop-drawer-section__title">{t('market.viopSectionNotes', 'Açıklama')}</h3>
+                                                <p className="viop-drawer-notes">
+                                                    {s?.contractName?.trim()
+                                                        ? s.contractName.trim()
+                                                        : t(
+                                                              'market.viopMetaFallback',
+                                                              'Bu VİOP kontratı için dayanak, vade ve teminat bilgileri İş Yatırım verisiyle gösterilmektedir.'
+                                                          )}
+                                                </p>
+                                            </section>
+                                        </>
+                                    );
+                                })()}
+                                <div style={{ marginTop: 10 }}>
+                                    <button type="button" className="terminal-btn active" onClick={() => navigate('/portfolio')}>
+                                        {t('nav.portfolio', 'Portföy Analizi')}
+                                    </button>
+                                </div>
+                                <div style={{ marginTop: 12 }}>
+                                    {selectedInstrumentMeta ? (
+                                        <div className="instrument-meta-card">
+                                            <div className="instrument-meta-title">
+                                                {selectedInstrumentMeta.title}
+                                            </div>
+                                            <div className="instrument-meta-grid">
+                                                {selectedInstrumentMeta.rows.map(([label, value]) => (
+                                                    <div key={label}>
+                                                        <div className="instrument-meta-label">{label}</div>
+                                                        <div className="instrument-meta-value">{value}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="instrument-meta-description">{selectedInstrumentMeta.description}</div>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="instrument-drawer-grid">
+                                    <div>{selectedInstrumentVm.type === 'BOND' ? t('market.bondColMarketPrice', 'Piyasa Fiyatı') : 'Fiyat'}</div>
+                                    <div
+                                        title={
+                                            selectedInstrumentVm.type === 'BOND'
+                                                ? t('market.bondHeroMarketPriceTip', 'Piyasa fiyatı (TRY). Bu değer tahvil faizi (yield) değildir.')
+                                                : drawerInstrumentPrice?.title
+                                        }
+                                    >
+                                        {drawerInstrumentPrice ? (
+                                            <>
+                                                <span style={{ opacity: 0.8 }}>{drawerInstrumentPrice.glyph}</span>{' '}
+                                                {drawerInstrumentPrice.amount.toLocaleString('tr-TR', {
+                                                    maximumFractionDigits: 4,
+                                                })}
+                                                {drawerInstrumentPrice.suffix ?? ''}
+                                            </>
+                                        ) : (
+                                            '—'
+                                        )}
+                                    </div>
+                                    <div>
+                                        {selectedInstrumentVm.type === 'BOND'
+                                            ? t('market.bondDrawerDailyPriceChg', 'Günlük fiyat değişimi')
+                                            : 'Değişim'}
+                                    </div>
+                                    <div
+                                        className={
+                                            selectedInstrumentVm.changePercent >= 0 ? 'terminal-pct-pos' : 'terminal-pct-neg'
+                                        }
+                                        title={
+                                            selectedInstrumentVm.type === 'BOND'
+                                                ? t(
+                                                      'market.bondHeroDailyPriceChgTip',
+                                                      'Günlük fiyat değişimi (%). Tahvil faizi veya garanti getiri değildir.',
+                                                  )
+                                                : undefined
+                                        }
+                                    >
+                                        {selectedInstrumentVm.changePercent >= 0 ? '+' : ''}
+                                        {selectedInstrumentVm.changePercent.toFixed(2)}%
+                                    </div>
+                                    {selectedInstrumentVm.type === 'BOND' ? (
+                                        <>
+                                            <div>ISIN</div>
+                                            <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{selectedInstrumentVm.symbol}</div>
+                                            <div>Vade Tarihi</div>
+                                            <div>{formatDateTr(selectedInstrumentVm.maturityDate ?? extractMaturityDate(selectedInstrumentVm.symbol))}</div>
+                                            <div>Vadeye Kalan Gün</div>
+                                            <div>
+                                                {(() => {
+                                                    const days = selectedInstrumentVm.daysToMaturity ?? getRemainingDays(selectedInstrumentVm.symbol);
+                                                    return (
+                                                        <span className="instrument-highlight-chip">
+                                                            {Number.isFinite(days) ? `${days} gün kaldı` : '—'}
+                                                        </span>
+                                                    );
+                                                })()}
+                                            </div>
+                                            <div>Kupon Oranı</div>
+                                            <div>%{Number(selectedInstrumentVm.couponRate ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
+                                            {selectedInstrumentVm.yieldToMaturity != null &&
+                                            Number.isFinite(Number(selectedInstrumentVm.yieldToMaturity)) ? (
+                                                <>
+                                                    <div>YTM (yield)</div>
+                                                    <div>
+                                                        %{Number(selectedInstrumentVm.yieldToMaturity).toLocaleString('tr-TR', {
+                                                            maximumFractionDigits: 2,
+                                                        })}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div>{t('market.bondYieldPendingShort', 'Yield verisi')}</div>
+                                                    <div style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.35 }}>
+                                                        {t(
+                                                            'market.bondYieldPendingDrawer',
+                                                            'Vade-getiri eğrisi için yapılandırılmış yield (ör. YTM) gerekir. Tabloda gördüğünüz % değerleri fiyat performansıdır.',
+                                                        )}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </>
+                                    ) : null}
+                                </div>
+                                <div style={{ marginTop: 10 }}>
+                                    <button type="button" className="terminal-btn active" onClick={() => navigate('/portfolio')}>
+                                        {t('nav.portfolio', 'Portföy Analizi')}
+                                    </button>
+                                </div>
+                                <div style={{ marginTop: 12 }}>
+                                    <div className="instrument-meta-card">
+                                        <div className="instrument-meta-title">{selectedInstrumentMeta?.title ?? 'Enstrüman Bilgisi'}</div>
+                                        {selectedInstrumentMeta ? (
+                                            <>
+                                                <div className="instrument-meta-grid">
+                                                    {selectedInstrumentMeta.rows.map(([label, value]) => (
+                                                        <div key={label}>
+                                                            <div className="instrument-meta-label">{label}</div>
+                                                            <div className="instrument-meta-value">{value}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="instrument-meta-description">{selectedInstrumentMeta.description}</div>
+                                            </>
+                                        ) : (
+                                            <div className="instrument-meta-empty">Bu enstrüman için özel açıklama yakında eklenecek.</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </aside>
                 </>

@@ -1,3 +1,16 @@
+/**
+ * US / BIST ayrımı ve ısı haritası için overview & equity/latest satırlarına eklenebilir alanlar.
+ * Sunucu göndermese de uyumluluk için hepsi opsiyonel.
+ */
+export type EquityMarketMetadata = {
+    name?: string;
+    marketRegion?: string;
+    exchange?: string;
+    currency?: string;
+    sector?: string;
+    delayMinutes?: number;
+};
+
 export type LatestPriceRow = {
     symbol?: string;
     /** marketdata doğrudan; finance overview FX için `buy` / `sell` kullanır */
@@ -12,7 +25,7 @@ export type LatestPriceRow = {
     qualityFlag?: 'EXACT' | 'PREVIOUS_DAY' | 'FALLBACK' | 'MISSING' | string;
     status?: string;
     message?: string;
-};
+} & EquityMarketMetadata;
 
 export type MarketDashboard = {
     latest: {

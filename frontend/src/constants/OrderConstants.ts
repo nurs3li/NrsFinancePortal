@@ -1,6 +1,6 @@
 export type TemplateType = 'SPOT' | 'FUTURES' | 'FIXED_INCOME';
 export type TradeType = 'BUY' | 'SELL';
-export type AssetType = 'CRYPTO' | 'FX' | 'FUND' | 'METAL' | 'STOCK';
+export type AssetType = 'CRYPTO' | 'FX' | 'FUND' | 'METAL' | 'STOCK' | 'BIST';
 
 export type AssetClass =
     | 'SPOT_EQUITY'
@@ -115,6 +115,7 @@ export function tradeTechnicalDetail(symbol: string, assetType: AssetType): stri
         FUND: 'SPOT-FON',
         METAL: 'SPOT-EMTIA',
         STOCK: 'SPOT-HISSE',
+        BIST: 'BIST-HISSE',
     };
     return assetMap[assetType] ?? 'SPOT';
 }

@@ -48,7 +48,7 @@ const dynamicLogoMap: Record<string, string> = {
 };
 
 export function formatAssetLabel(symbol: string, marketType: MarketKind): string {
-    if (symbol === 'XAU_TRY') return 'ALTIN (ONS)';
+    if (symbol === 'XAU_TRY') return 'Gram Altın';
     if (marketType === 'FX' && symbol.length === 6 && symbol.endsWith('TRY')) {
         return `${symbol.slice(0, 3)}/${symbol.slice(3)}`;
     }

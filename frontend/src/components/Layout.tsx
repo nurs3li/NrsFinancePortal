@@ -94,6 +94,7 @@ export function Layout() {
         if (isAdmin) {
             return [
                 { key: 'market', to: '/market', label: t('nav.market', 'Piyasa'), show: true },
+                { key: 'marketMacro', to: '/market/macro', label: t('nav.marketMacro', 'Faiz & Enflasyon Paneli'), show: true },
                 { key: 'news', to: '/news', label: t('nav.news', 'Haberler'), show: true },
                 { key: 'admin', to: '/admin', label: t('nav.admin', 'Yönetim Paneli'), show: true },
                 { key: 'admin-users', to: '/admin/users', label: t('nav.userManagement', 'Kullanıcı Yönetimi'), show: true },
@@ -107,6 +108,7 @@ export function Layout() {
             { key: 'portfolio', to: '/portfolio', label: t('nav.portfolio', 'Portföy Analizi'), show: true },
             { key: 'transactions', to: '/transactions', label: t('nav.transactions', 'İşlem Geçmişi'), show: true },
             { key: 'simulation', to: '/simulation', label: t('nav.simulation', 'Simülasyon'), show: true },
+            { key: 'marketMacro', to: '/market/macro', label: t('nav.marketMacro', 'Faiz & Enflasyon Paneli'), show: true },
         ];
     }, [isAdmin, t]);
     const visibleNavItems = navItems.filter((item) => item.show);

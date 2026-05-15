@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
     Area,
     AreaChart,
@@ -13,6 +13,8 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
+import { useQueryClient } from '@tanstack/react-query';
+import { manualPortfolioKeys } from '../queries/manualPortfolioKeys';
 import { financeClient } from '../api/client';
 import type { LatestPriceRow, MarketDashboard } from '../components/market/marketTypes';
 import { useTheme } from '../theme/ThemeContext';
@@ -35,6 +37,7 @@ import {
 import './TerminalPages.css';
 import './Portfolio.css';
 import { useLanguage } from '../i18n/LanguageContext';
+import { ManualInvestmentAnalysisSection, type ManualInvestmentAnalysisSectionHandle } from '../components/portfolio/ManualInvestmentAnalysisSection';
 
 type AssetType = 'STOCK' | 'CRYPTO' | 'FX' | 'METAL' | 'FUND';
 
@@ -72,21 +75,12 @@ type PortfolioPerformance = {
     items: PerformanceItem[];
 };
 
-type ManualCreatePayload = {
-    type: AssetType;
-    symbol: string;
-    quantity: number;
-    buyPrice: number;
-    buyDate: string;
-    note?: string;
-};
-
 type MarketOverview = {
     doviz?: Record<string, { buyPrice?: number; sellPrice?: number; source?: string }>;
     metals?: Record<string, { buyPrice?: number; source?: string }>;
     crypto?: Record<string, { buyPrice?: number; source?: string }>;
     funds?: Record<string, { buyPrice?: number; source?: string }>;
-    stocks?: Record<string, { buyPrice?: number; source?: string }>;
+    stocks?: Record<string, LatestPriceRow>;
     timestamp?: string;
 };
 
@@ -514,6 +508,7 @@ function buildPageIndices(current: number, totalPages: number): (number | 'gap')
 }
 
 export function Portfolio() {
+    const qc = useQueryClient();
     const { tokens } = useTheme();
     const { t, lang } = useLanguage();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
@@ -525,15 +520,10 @@ export function Portfolio() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [savingManual, setSavingManual] = useState(false);
-    const [editingManualId, setEditingManualId] = useState<number | null>(null);
+    const manualRef = useRef<ManualInvestmentAnalysisSectionHandle>(null);
 
-    const [type, setType] = useState<AssetType>('CRYPTO');
-    const [symbol, setSymbol] = useState('');
-    const [quantity, setQuantity] = useState('0.1');
-    const [buyPrice, setBuyPrice] = useState('100000');
-    const [buyDate, setBuyDate] = useState(new Date().toISOString().slice(0, 10));
-    const [note, setNote] = useState('');
+    const [widgetType, setWidgetType] = useState<AssetType>('CRYPTO');
+    const [widgetSymbol, setWidgetSymbol] = useState('');
     const [overview, setOverview] = useState<MarketOverview | null>(null);
     const [overviewLoading, setOverviewLoading] = useState(true);
     const [marketDashboard, setMarketDashboard] = useState<MarketDashboard | null>(null);
@@ -548,7 +538,7 @@ export function Portfolio() {
 
         const dashboardReq = financeClient
             .get('/api/market/dashboard')
-            .then((dRes) => unwrapData<MarketDashboard>(dRes))
+            .then((dRes: { data?: unknown }) => unwrapData<MarketDashboard>(dRes))
             .catch(() => null);
 
         Promise.all([
@@ -586,11 +576,11 @@ export function Portfolio() {
 
     const symbolOptions = useMemo(() => {
         if (!overview) return [] as string[];
-        const key = getOverviewKey(type);
+        const key = getOverviewKey(widgetType);
         const map = overview[key];
         if (!map || typeof map !== 'object') return [] as string[];
         return Object.keys(map).filter((k) => map[k] != null);
-    }, [overview, type]);
+    }, [overview, widgetType]);
 
     const perfItemMap = useMemo(() => {
         const map = new Map<string, PerformanceItem>();
@@ -629,81 +619,35 @@ export function Portfolio() {
 
     useEffect(() => {
         if (symbolOptions.length === 0) {
-            setSymbol('');
+            setWidgetSymbol('');
             return;
         }
-        if (!symbolOptions.includes(symbol)) {
-            setSymbol(symbolOptions[0]);
+        if (!symbolOptions.includes(widgetSymbol)) {
+            setWidgetSymbol(symbolOptions[0]);
         }
-    }, [symbolOptions, symbol]);
+    }, [symbolOptions, widgetSymbol]);
 
-    const overviewQuote = useMemo(() => getOverviewRowPrice(overview, type, symbol), [overview, type, symbol]);
+    const overviewQuote = useMemo(() => getOverviewRowPrice(overview, widgetType, widgetSymbol), [overview, widgetType, widgetSymbol]);
 
-    const manualFieldCopy = useMemo(() => {
-        switch (type) {
-            case 'STOCK':
-                return {
-                    qty: t('portfolio.fieldQtyStock', 'Miktar (Lot)'),
-                    qtyPh: t('portfolio.fieldQtyPhStock', 'Örn. 10 lot'),
-                    price: t('portfolio.fieldPriceStock', 'Alış fiyatı (1 lot için)'),
-                    pricePh: t('portfolio.fieldPricePhStock', 'TRY / lot'),
-                    focus: 'pf-input--asset-stock',
-                };
-            case 'CRYPTO':
-                return {
-                    qty: t('portfolio.fieldQtyCrypto', 'Miktar (adet / birim)'),
-                    qtyPh: t('portfolio.fieldQtyPhCrypto', 'Örn. 0,25'),
-                    price: t('portfolio.fieldPriceCrypto', 'Alış fiyatı (1 birim için)'),
-                    pricePh: t('portfolio.fieldPricePhCrypto', 'TRY / birim'),
-                    focus: 'pf-input--asset-crypto',
-                };
-            case 'METAL':
-                return {
-                    qty: t('portfolio.fieldQtyMetal', 'Miktar (gram)'),
-                    qtyPh: t('portfolio.fieldQtyPhMetal', 'Örn. 100'),
-                    price: t('portfolio.fieldPriceMetal', 'Alış fiyatı (1 gram için)'),
-                    pricePh: t('portfolio.fieldPricePhMetal', 'TRY / gr'),
-                    focus: 'pf-input--asset-metal',
-                };
-            case 'FX':
-                return {
-                    qty: t('portfolio.fieldQtyFx', 'Miktar (birim)'),
-                    qtyPh: t('portfolio.fieldQtyPhFx', 'Örn. 1000'),
-                    price: t('portfolio.fieldPriceFx', 'Alış fiyatı (1 birim için)'),
-                    pricePh: t('portfolio.fieldPricePhFx', 'TRY karşılığı'),
-                    focus: 'pf-input--asset-fx',
-                };
-            case 'FUND':
-            default:
-                return {
-                    qty: t('portfolio.fieldQtyFund', 'Miktar (adet)'),
-                    qtyPh: t('portfolio.fieldQtyPhFund', 'Örn. 150'),
-                    price: t('portfolio.fieldPriceFund', 'Alış fiyatı (1 pay için)'),
-                    pricePh: t('portfolio.fieldPricePhFund', 'TRY / pay'),
-                    focus: 'pf-input--asset-fund',
-                };
-        }
-    }, [type, t]);
-
-    const dashboardAssetClass = useMemo(() => dashboardAssetClassForPortfolioType(type), [type]);
+    const dashboardAssetClass = useMemo(() => dashboardAssetClassForPortfolioType(widgetType), [widgetType]);
 
     const heatTile = useMemo(() => {
-        if (!marketDashboard || !symbol) return null;
-        return findHeatmapTileFor(marketDashboard, symbol, dashboardAssetClass);
-    }, [marketDashboard, symbol, dashboardAssetClass]);
+        if (!marketDashboard || !widgetSymbol) return null;
+        return findHeatmapTileFor(marketDashboard, widgetSymbol, dashboardAssetClass);
+    }, [marketDashboard, widgetSymbol, dashboardAssetClass]);
 
     const sparkClosesRaw = useMemo(
-        () => sparklineClosesForPortfolio(marketDashboard, symbol, dashboardAssetClass),
-        [marketDashboard, symbol, dashboardAssetClass],
+        () => sparklineClosesForPortfolio(marketDashboard, widgetSymbol, dashboardAssetClass),
+        [marketDashboard, widgetSymbol, dashboardAssetClass],
     );
 
     const marketSynced = useMemo(
-        () => symbolSyncedWithMarketDashboard(marketDashboard, symbol, dashboardAssetClass, type),
-        [marketDashboard, symbol, dashboardAssetClass, type],
+        () => symbolSyncedWithMarketDashboard(marketDashboard, widgetSymbol, dashboardAssetClass, widgetType),
+        [marketDashboard, widgetSymbol, dashboardAssetClass, widgetType],
     );
 
     const showMarketSkeleton = Boolean(
-        symbol &&
+        widgetSymbol &&
             !overviewLoading &&
             marketDashboard != null &&
             !marketSynced &&
@@ -711,11 +655,11 @@ export function Portfolio() {
     );
 
     const dashLatestRow = useMemo(() => {
-        if (!marketDashboard || !symbol) return null;
-        const bucket = getDashboardLatestBucket(type);
+        if (!marketDashboard || !widgetSymbol) return null;
+        const bucket = getDashboardLatestBucket(widgetType);
         const map = marketDashboard.latest[bucket] as Record<string, LatestPriceRow> | undefined;
-        return map?.[symbol] ?? null;
-    }, [marketDashboard, symbol, type]);
+        return map?.[widgetSymbol] ?? null;
+    }, [marketDashboard, widgetSymbol, widgetType]);
 
     const dashPrice = useMemo(() => pickDashboardPrice(dashLatestRow), [dashLatestRow]);
 
@@ -756,7 +700,7 @@ export function Portfolio() {
             cancelAnimationFrame(rafId);
             cancelAnimationFrame(readyRafId);
         };
-    }, [widgetYearlyValues, symbol, type]);
+    }, [widgetYearlyValues, widgetSymbol, widgetType]);
 
     const widgetStatusLine = useMemo(() => {
         const raw = marketDashboard?.computedAt;
@@ -771,88 +715,6 @@ export function Portfolio() {
         }
         return { kind: 'open' as const, text: t('portfolio.marketOpenStatus', 'Piyasa durumu: Açık') };
     }, [marketDashboard?.computedAt, t, locale]);
-
-    const resetManualForm = () => {
-        setEditingManualId(null);
-        setQuantity('0.1');
-        setBuyPrice('100000');
-        setBuyDate(new Date().toISOString().slice(0, 10));
-        setNote('');
-    };
-
-    const saveManual = async (e: FormEvent) => {
-        e.preventDefault();
-
-        const q = Number(quantity);
-        const bp = Number(buyPrice);
-        if (!q || q <= 0 || !bp || bp <= 0) {
-            alert(t('portfolio.alertQtyPrice', 'Miktar ve alış fiyatı sıfırdan büyük olmalı.'));
-            return;
-        }
-
-        const normalizedSymbol = symbol.trim().toUpperCase();
-        if (!normalizedSymbol) {
-            alert(t('portfolio.alertSymbol', 'Lütfen sembol seçin.'));
-            return;
-        }
-
-        const payload: ManualCreatePayload = {
-            type,
-            symbol: normalizedSymbol,
-            quantity: q,
-            buyPrice: bp,
-            buyDate,
-            note: note?.trim() || undefined,
-        };
-
-        try {
-            setSavingManual(true);
-            if (editingManualId != null) {
-                await financeClient.put(`/api/portfolio/manual/${editingManualId}`, payload);
-            } else {
-                await financeClient.post('/api/portfolio/manual', payload);
-            }
-            resetManualForm();
-            await fetchAll();
-        } catch (err: any) {
-            alert(
-                err?.response?.data?.errors?.error ??
-                    err?.response?.data?.message ??
-                    err?.message ??
-                    t('portfolio.manualSaveFailed', 'Manuel pozisyon kaydedilemedi'),
-            );
-        } finally {
-            setSavingManual(false);
-        }
-    };
-
-    const startEditManual = (row: UnifiedPortfolioItem) => {
-        if (row.source !== 'MANUAL' || row.manualPositionId == null) return;
-        setEditingManualId(row.manualPositionId);
-        setType((row.type as AssetType) ?? 'CRYPTO');
-        setSymbol(String(row.symbol ?? '').trim());
-        setQuantity(String(row.quantity ?? ''));
-        setBuyPrice(String(row.avgBuyPrice ?? ''));
-        const d = row.manualBuyDate;
-        setBuyDate(typeof d === 'string' && d.length >= 10 ? d.slice(0, 10) : new Date().toISOString().slice(0, 10));
-        setNote(row.manualNote ?? '');
-    };
-
-    const deleteManual = async (id: number) => {
-        if (!window.confirm(t('portfolio.confirmDelete', 'Bu manuel pozisyonu silmek istediğinize emin misiniz?'))) return;
-        try {
-            await financeClient.delete(`/api/portfolio/manual/${id}`);
-            if (editingManualId === id) resetManualForm();
-            await fetchAll();
-        } catch (err: any) {
-            alert(
-                err?.response?.data?.errors?.error ??
-                    err?.response?.data?.message ??
-                    err?.message ??
-                    t('portfolio.deleteFailed', 'Pozisyon silinemedi'),
-            );
-        }
-    };
 
     const fmtMoney = (v: number) => `₺${Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`;
 
@@ -877,7 +739,23 @@ export function Portfolio() {
     const tablePageItems = buildPageIndices(tablePage, tableTotalPages);
 
     const liveWidgetGlowClass =
-        type === 'CRYPTO' ? 'pf-live-widget--crypto' : type === 'METAL' ? 'pf-live-widget--metal' : 'pf-live-widget--neutral';
+        widgetType === 'CRYPTO' ? 'pf-live-widget--crypto' : widgetType === 'METAL' ? 'pf-live-widget--metal' : 'pf-live-widget--neutral';
+
+    const deleteManual = async (id: number) => {
+        if (!window.confirm(t('portfolio.confirmDelete', 'Bu manuel pozisyonu silmek istediğinize emin misiniz?'))) return;
+        try {
+            await financeClient.delete(`/api/portfolio/manual/${id}`);
+            await qc.invalidateQueries({ queryKey: manualPortfolioKeys.all });
+            await fetchAll();
+        } catch (err: any) {
+            alert(
+                err?.response?.data?.errors?.error ??
+                    err?.response?.data?.message ??
+                    err?.message ??
+                    t('portfolio.deleteFailed', 'Pozisyon silinemedi'),
+            );
+        }
+    };
 
     if (loading) {
         return (
@@ -993,118 +871,74 @@ export function Portfolio() {
                     </div>
                 </div>
 
-                <div className="pf-form-widget-row">
-                    <aside className="pf-manual-panel pf-card-premium">
-                        <h2>{editingManualId != null ? t('portfolio.editManualPosition', 'Manuel pozisyonu düzenle') : t('portfolio.addManualPosition', 'Manuel pozisyon ekle')}</h2>
-                        <form onSubmit={saveManual} className="pf-manual-form">
-                            <label className="pf-field-label">
-                                {t('portfolio.assetType', 'Varlık türü')}
-                                <select
-                                    className={`pf-input ${manualFieldCopy.focus}`}
-                                    value={type}
-                                    onChange={(e) => setType(e.target.value as AssetType)}
-                                >
-                                    {(Object.keys(ASSET_TYPE_LABEL_TR) as AssetType[]).map((k) => (
-                                        <option key={k} value={k}>
-                                            {ASSET_TYPE_LABEL_TR[k]}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
+                <ManualInvestmentAnalysisSection
+                    ref={manualRef}
+                    tokens={{
+                        bg: tokens.bg,
+                        bgCard: tokens.bgCard,
+                        border: tokens.border,
+                        text: tokens.text,
+                        textMuted: tokens.textMuted,
+                        error: tokens.error,
+                    }}
+                    locale={locale}
+                    onPortfolioMutated={fetchAll}
+                />
 
-                            <label className="pf-field-label">
-                                {t('portfolio.symbol', 'Sembol')}
-                                {loading || overviewLoading ? (
-                                    <div className="pf-input" style={{ color: tokens.textMuted }}>
-                                        {t('common.loading', 'Yükleniyor...')}
-                                    </div>
-                                ) : symbolOptions.length === 0 ? (
-                                    <div className="pf-input" style={{ color: tokens.textMuted }}>
-                                        {t('portfolio.noSymbolsType', 'Bu tür için sembol yok.')}
-                                    </div>
-                                ) : (
-                                    <select className={`pf-input ${manualFieldCopy.focus}`} value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-                                        {symbolOptions.map((opt) => (
-                                            <option key={opt} value={opt}>
-                                                {opt}
+                <div className="pf-form-widget-row pf-form-widget-row--widget-only">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+                        <div className="pf-card-premium" style={{ padding: 12 }}>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: 8, color: tokens.textMuted }}>
+                                {t('manualInvest.widgetPicker', 'Piyasa özeti için enstrüman')}
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                                <label className="pf-field-label" style={{ margin: 0 }}>
+                                    {t('portfolio.assetType', 'Varlık türü')}
+                                    <select
+                                        className="pf-input"
+                                        value={widgetType}
+                                        onChange={(e) => setWidgetType(e.target.value as AssetType)}
+                                    >
+                                        {(Object.keys(ASSET_TYPE_LABEL_TR) as AssetType[]).map((k) => (
+                                            <option key={k} value={k}>
+                                                {ASSET_TYPE_LABEL_TR[k]}
                                             </option>
                                         ))}
                                     </select>
-                                )}
-                            </label>
-
-                            <label className="pf-field-label">
-                                {manualFieldCopy.qty}
-                                <input
-                                    className={`pf-input ${manualFieldCopy.focus}`}
-                                    type="number"
-                                    step="0.00000001"
-                                    placeholder={manualFieldCopy.qtyPh}
-                                    value={quantity}
-                                    onChange={(e) => setQuantity(e.target.value)}
-                                />
-                            </label>
-
-                            <label className="pf-field-label">
-                                {manualFieldCopy.price}
-                                <input
-                                    className={`pf-input ${manualFieldCopy.focus}`}
-                                    type="number"
-                                    step="0.00000001"
-                                    placeholder={manualFieldCopy.pricePh}
-                                    value={buyPrice}
-                                    onChange={(e) => setBuyPrice(e.target.value)}
-                                />
-                            </label>
-
-                            <label className="pf-field-label">
-                                {t('portfolio.buyDate', 'Alış tarihi')}
-                                <input className={`pf-input ${manualFieldCopy.focus}`} type="date" value={buyDate} onChange={(e) => setBuyDate(e.target.value)} />
-                            </label>
-
-                            <label className="pf-field-label">
-                                {t('portfolio.note', 'Not')}
-                                <textarea
-                                    className={`pf-input ${manualFieldCopy.focus}`}
-                                    rows={3}
-                                    value={note}
-                                    onChange={(e) => setNote(e.target.value)}
-                                    style={{ resize: 'vertical' }}
-                                />
-                            </label>
-
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                <button type="submit" disabled={savingManual} className="pf-btn-submit-silver">
-                                    {savingManual ? t('portfolio.saving', 'Kaydediliyor...') : editingManualId != null ? t('common.update', 'Güncelle') : t('portfolio.addPosition', 'Pozisyon ekle')}
-                                </button>
-                                {editingManualId != null ? (
-                                    <button
-                                        type="button"
-                                        onClick={resetManualForm}
-                                        disabled={savingManual}
-                                        style={{
-                                            padding: '10px 16px',
-                                            borderRadius: 10,
-                                            border: `1px solid ${tokens.border}`,
-                                            background: tokens.bgCard,
-                                            color: tokens.text,
-                                            fontWeight: 600,
-                                            cursor: savingManual ? 'default' : 'pointer',
-                                        }}
-                                    >
-                                        {t('common.cancel', 'İptal')}
-                                    </button>
-                                ) : null}
+                                </label>
+                                <label className="pf-field-label" style={{ margin: 0 }}>
+                                    {t('portfolio.symbol', 'Sembol')}
+                                    {loading || overviewLoading ? (
+                                        <div className="pf-input" style={{ color: tokens.textMuted }}>
+                                            {t('common.loading', 'Yükleniyor...')}
+                                        </div>
+                                    ) : symbolOptions.length === 0 ? (
+                                        <input
+                                            className="pf-input"
+                                            value={widgetSymbol}
+                                            onChange={(e) => setWidgetSymbol(e.target.value)}
+                                            onBlur={() => setWidgetSymbol((s) => s.trim().toUpperCase())}
+                                            placeholder="BTCUSDT"
+                                        />
+                                    ) : (
+                                        <select className="pf-input" value={widgetSymbol} onChange={(e) => setWidgetSymbol(e.target.value)}>
+                                            {symbolOptions.map((opt) => (
+                                                <option key={opt} value={opt}>
+                                                    {opt}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </label>
                             </div>
-                        </form>
-                    </aside>
+                        </div>
 
                     <div className={`pf-live-widget pf-card-premium ${liveWidgetGlowClass}`}>
                         <div className="pf-live-widget-head">
                             <span className="pf-live-widget-kicker">{t('portfolio.liveWidgetTitle', 'Piyasa özeti')}</span>
-                            <span className="pf-live-widget-symbol">{symbol || '—'}</span>
+                            <span className="pf-live-widget-symbol">{widgetSymbol || '—'}</span>
                         </div>
-                        <div key={`${type}-${symbol}`} className="pf-live-widget-body-inner">
+                        <div key={`${widgetType}-${widgetSymbol}`} className="pf-live-widget-body-inner">
                             {overviewLoading ? (
                                 <p className="pf-live-widget-muted">{t('common.loading', 'Yükleniyor...')}</p>
                             ) : showMarketSkeleton ? (
@@ -1173,6 +1007,7 @@ export function Portfolio() {
                         </div>
                         <p className="pf-live-widget-status">{widgetStatusLine.text}</p>
                     </div>
+                    </div>
                 </div>
 
                 <div className="pf-card-premium pf-asset-list-block portfolio-fade-in portfolio-fade-in--delay-2">
@@ -1235,7 +1070,7 @@ export function Portfolio() {
                                                 <td style={{ textAlign: 'right' }}>
                                                     {row.source === 'MANUAL' && row.manualPositionId != null ? (
                                                         <span className="pf-row-actions">
-                                                            <button type="button" className="pf-icon-ghost" onClick={() => startEditManual(row)} title={t('common.update', 'Düzenle')}>
+                                                            <button type="button" className="pf-icon-ghost" onClick={() => manualRef.current?.openEdit(row.manualPositionId!)} title={t('common.update', 'Düzenle')}>
                                                                 <Pencil size={16} />
                                                             </button>
                                                             <button

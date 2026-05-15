@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { metricsClient } from '../api/client';
+import { financeClient, metricsClient, readFinanceBinaryErrorMessage } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Activity, AlertTriangle, ShieldAlert } from 'lucide-react';
@@ -24,12 +24,81 @@ type MetricsApiResponse = { success: boolean; data: DashboardMetricsDto | null; 
 
 const COLORS = ['#64FFDA', '#22c55e', '#38bdf8', '#8892B0', '#eab308', '#f97316', '#a855f7', '#ef4444'];
 
+/** İş Yatırım USD/ons kıymetli maden — dashboard sparkline için tam kapsama. */
+const ISYATIRIM_METAL_USD_OZ_SYMBOLS = 'XAU_USD_OZ,XAG_USD_OZ,XPT_USD_OZ,XPD_USD_OZ';
+
+const MARKET_BACKFILL_HTTP_TIMEOUT_MS = 900_000;
+
+function formatIstanbulDateOnly(d: Date): string {
+    return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+}
+
 export function AdminDashboard() {
     const { tokens } = useTheme();
     const { t, lang } = useLanguage();
     const [metrics, setMetrics] = useState<DashboardMetricsDto | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [backfillBusy, setBackfillBusy] = useState<'bist' | 'metals' | null>(null);
+    const [backfillResult, setBackfillResult] = useState<string | null>(null);
+    const [backfillError, setBackfillError] = useState<string | null>(null);
+
+    const runBistBackfill = useCallback(async () => {
+        setBackfillBusy('bist');
+        setBackfillError(null);
+        setBackfillResult(null);
+        try {
+            const { data } = await financeClient.post<unknown>(
+                '/api/admin/market/equities/bist/backfill',
+                {},
+                { timeout: MARKET_BACKFILL_HTTP_TIMEOUT_MS },
+            );
+            setBackfillResult(JSON.stringify(data, null, 2));
+        } catch (e: unknown) {
+            const msg =
+                readFinanceBinaryErrorMessage(e) ??
+                (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                (e as Error)?.message ??
+                'BIST backfill başarısız';
+            setBackfillError(msg);
+        } finally {
+            setBackfillBusy(null);
+        }
+    }, []);
+
+    const runMetalsIsyatirimBackfill = useCallback(async () => {
+        setBackfillBusy('metals');
+        setBackfillError(null);
+        setBackfillResult(null);
+        const now = new Date();
+        const from = new Date(now);
+        from.setFullYear(from.getFullYear() - 2);
+        try {
+            const { data } = await financeClient.post<unknown>(
+                '/api/admin/market/metals/isyatirim/backfill',
+                {},
+                {
+                    timeout: MARKET_BACKFILL_HTTP_TIMEOUT_MS,
+                    params: {
+                        symbols: ISYATIRIM_METAL_USD_OZ_SYMBOLS,
+                        from: formatIstanbulDateOnly(from),
+                        to: formatIstanbulDateOnly(now),
+                        force: false,
+                    },
+                },
+            );
+            setBackfillResult(JSON.stringify(data, null, 2));
+        } catch (e: unknown) {
+            const msg =
+                readFinanceBinaryErrorMessage(e) ??
+                (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                (e as Error)?.message ??
+                'Kıymetli maden backfill başarısız';
+            setBackfillError(msg);
+        } finally {
+            setBackfillBusy(null);
+        }
+    }, []);
 
     useEffect(() => {
         metricsClient
@@ -105,6 +174,91 @@ export function AdminDashboard() {
             <h1 style={titleStyle}>{t('nav.admin', 'Yönetim Paneli')}</h1>
             <p style={{ ...mutedStyle, marginBottom: 10 }}>{t('admin.dashboardSubtitle', 'Back-office operasyonlarının canlı özeti ve hızlı aksiyon alanı.')}</p>
             <p style={{ ...mutedStyle, marginBottom: 18 }}>{t('admin.legacyMetricsHint')}</p>
+
+            <div style={{ ...panelStyle, marginBottom: 16 }}>
+                <h2 style={{ marginTop: 0, fontSize: '1rem', color: tokens.text }}>
+                    {t('admin.marketBackfillDevTitle', 'Piyasa verisi (geçici — geliştirici)')}
+                </h2>
+                <p style={{ ...mutedStyle, marginBottom: 12 }}>
+                    {t(
+                        'admin.marketBackfillDevHint',
+                        'Finance-service üzerinden market-data iç backfill tetiklenir (tarayıcı JWT ile 8083 issuer uyumsuzluğu olmaz). Keycloak’ta ADMIN veya OPS rolü; Docker’da finance ve market-data için aynı NRS_INTERNAL_BACKFILL_TOKEN gerekir. İşlem uzun sürebilir.',
+                    )}
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                    <button
+                        type="button"
+                        disabled={backfillBusy !== null}
+                        onClick={runBistBackfill}
+                        style={{
+                            padding: '10px 16px',
+                            borderRadius: 8,
+                            border: `1px solid ${tokens.border}`,
+                            background: tokens.bg,
+                            color: tokens.text,
+                            fontWeight: 600,
+                            cursor: backfillBusy !== null ? 'not-allowed' : 'pointer',
+                            opacity: backfillBusy !== null ? 0.65 : 1,
+                        }}
+                    >
+                        {backfillBusy === 'bist'
+                            ? t('admin.marketBackfillRunning', 'Çalışıyor…')
+                            : t('admin.marketBackfillBist', 'BIST günlük backfill')}
+                    </button>
+                    <button
+                        type="button"
+                        disabled={backfillBusy !== null}
+                        onClick={runMetalsIsyatirimBackfill}
+                        style={{
+                            padding: '10px 16px',
+                            borderRadius: 8,
+                            border: `1px solid ${tokens.border}`,
+                            background: tokens.bg,
+                            color: tokens.text,
+                            fontWeight: 600,
+                            cursor: backfillBusy !== null ? 'not-allowed' : 'pointer',
+                            opacity: backfillBusy !== null ? 0.65 : 1,
+                        }}
+                    >
+                        {backfillBusy === 'metals'
+                            ? t('admin.marketBackfillRunning', 'Çalışıyor…')
+                            : t('admin.marketBackfillMetals', 'İş Yatırım USD/ons maden (2Y)')}
+                    </button>
+                </div>
+                {backfillError ? (
+                    <pre
+                        style={{
+                            marginTop: 12,
+                            padding: 12,
+                            borderRadius: 8,
+                            background: 'rgba(239,68,68,0.12)',
+                            color: tokens.error,
+                            fontSize: 12,
+                            overflow: 'auto',
+                            whiteSpace: 'pre-wrap',
+                        }}
+                    >
+                        {backfillError}
+                    </pre>
+                ) : null}
+                {backfillResult ? (
+                    <pre
+                        style={{
+                            marginTop: 12,
+                            padding: 12,
+                            borderRadius: 8,
+                            background: tokens.bg,
+                            border: `1px solid ${tokens.border}`,
+                            color: tokens.textMuted,
+                            fontSize: 12,
+                            overflow: 'auto',
+                            maxHeight: 320,
+                        }}
+                    >
+                        {backfillResult}
+                    </pre>
+                ) : null}
+            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, marginBottom: 16 }}>
                 {kpis.map((kpi) => (
