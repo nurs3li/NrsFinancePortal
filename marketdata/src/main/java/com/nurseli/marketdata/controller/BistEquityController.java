@@ -5,6 +5,7 @@ import com.nurseli.marketdata.api.dto.BistEquityCandleResponse;
 import com.nurseli.marketdata.api.dto.BistEquityHistoryResponse;
 import com.nurseli.marketdata.api.dto.BistEquityLatestResponse;
 import com.nurseli.marketdata.api.dto.BistSymbolResponse;
+import com.nurseli.marketdata.api.dto.PagedResponse;
 import com.nurseli.marketdata.api.exception.InvalidRequestException;
 import com.nurseli.marketdata.application.bist.BistEquityDailyConstants;
 import com.nurseli.marketdata.application.bist.BistEquityQueryService;
@@ -41,6 +42,17 @@ public class BistEquityController {
     @GetMapping("/latest")
     public List<BistEquityLatestResponse> latestAll() {
         return bistEquityQueryService.getLatest();
+    }
+
+    @GetMapping("/latest/page")
+    public PagedResponse<BistEquityLatestResponse> latestPage(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size,
+            @RequestParam(defaultValue = "changePercent") String sort,
+            @RequestParam(defaultValue = "desc") String dir,
+            @RequestParam(defaultValue = "ALL") String filter,
+            @RequestParam(required = false) String search) {
+        return bistEquityQueryService.getLatestPage(page, size, sort, dir, filter, search);
     }
 
     @GetMapping("/batch-history")
