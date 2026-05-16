@@ -5,6 +5,7 @@ import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioCloseRequest;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioCreateRequest;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioNominalAnalysis;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioSummaryView;
+import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioTimeseriesPointDto;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioView;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPriceResolveDto;
 import com.nurseli.nrsfinanceportal.common.exception.ApiBusinessException;
@@ -30,10 +31,18 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
 
 @Slf4j
 @Service
@@ -41,6 +50,7 @@ import java.util.Objects;
 public class ManualPortfolioService {
 
     private static final ZoneId TZ = ZoneId.of("Europe/Istanbul");
+    private static final int MANUAL_TS_MAX_POINTS = 400;
 
     private final ManualPortfolioPositionRepository manualRepo;
     private final CurrentUserResolver currentUserResolver;
@@ -248,6 +258,653 @@ public class ManualPortfolioService {
     public List<ManualPortfolioPosition> listMine() {
         Long userId = currentUserResolver.getCurrentUserId();
         return manualRepo.findByUserIdOrderByBuyDateAsc(userId);
+    }
+
+    /**
+     * Seçilen tarih aralığında kümülatif açık maliyet tabanı + günlük kapanışlardan (mümkünse) portföy piyasa değeri.
+     * Anlık tablo kaydı gerektirmez; pozisyon ve HistoricalManualPriceResolverService verisine dayanır.
+     */
+    @Transactional(readOnly = true)
+    public List<ManualPortfolioTimeseriesPointDto> timeseriesMine(LocalDate from, LocalDate to) {
+        Long userId = currentUserResolver.getCurrentUserId();
+        List<ManualPortfolioPosition> posList = manualRepo.findByUserIdOrderByBuyDateAsc(userId);
+        return buildManualTimeseries(posList, posList, from, to);
+    }
+
+    /**
+     * Aynı tarih örneklemesi ile (tüm portföyün en erken alımına göre) yalnızca seçilen tür veya sembole ait
+     * pozisyonların maliyet + piyasa değeri zaman serisi. Grafik üstüne karşılaştırma çizgisi için.
+     */
+    @Transactional(readOnly = true)
+    public List<ManualPortfolioTimeseriesPointDto> timeseriesMineSegment(LocalDate from, LocalDate to, String mode, String key) {
+        Long userId = currentUserResolver.getCurrentUserId();
+        List<ManualPortfolioPosition> posList = manualRepo.findByUserIdOrderByBuyDateAsc(userId);
+        if (posList.isEmpty()) {
+            return List.of();
+        }
+        List<ManualPortfolioPosition> segment = filterTimeseriesSegment(posList, mode, key);
+        if (segment.isEmpty()) {
+            return List.of();
+        }
+        return buildManualTimeseries(posList, segment, from, to);
+    }
+
+    /**
+     * Yalnızca açık pozisyonlar: günlük gerçekleşmemiş nominal K/Z (piyasa değeri − açık maliyet).
+     * Gerçekleşmemiş K/Z KPI grafiği için.
+     */
+    @Transactional(readOnly = true)
+    public List<ManualPortfolioTimeseriesPointDto> timeseriesMineOpenUnrealizedPnl(LocalDate from, LocalDate to) {
+        if (from == null || to == null || to.isBefore(from)) {
+            return List.of();
+        }
+        Long userId = currentUserResolver.getCurrentUserId();
+        List<ManualPortfolioPosition> open = listOpenPositions(manualRepo.findByUserIdOrderByBuyDateAsc(userId));
+        if (open.isEmpty()) {
+            return List.of();
+        }
+        return buildManualTimeseries(open, open, from, to);
+    }
+
+    /**
+     * {@link #timeseriesMineOpenUnrealizedPnl} ile aynı tarih ızgarası; seçilen tür veya sembol (açık pozisyonlar).
+     */
+    @Transactional(readOnly = true)
+    public List<ManualPortfolioTimeseriesPointDto> timeseriesMineOpenUnrealizedPnlSegment(
+            LocalDate from,
+            LocalDate to,
+            String mode,
+            String key
+    ) {
+        if (from == null || to == null || to.isBefore(from)) {
+            return List.of();
+        }
+        Long userId = currentUserResolver.getCurrentUserId();
+        List<ManualPortfolioPosition> open = listOpenPositions(manualRepo.findByUserIdOrderByBuyDateAsc(userId));
+        if (open.isEmpty()) {
+            return List.of();
+        }
+        List<ManualPortfolioPosition> segment = filterTimeseriesSegment(open, mode, key);
+        if (segment.isEmpty()) {
+            return List.of();
+        }
+        return buildManualTimeseries(open, segment, from, to);
+    }
+
+    private static List<ManualPortfolioPosition> listOpenPositions(List<ManualPortfolioPosition> all) {
+        List<ManualPortfolioPosition> open = new ArrayList<>();
+        for (ManualPortfolioPosition p : all) {
+            if (p.getStatus() != ManualPositionStatus.SOLD) {
+                open.add(p);
+            }
+        }
+        return open;
+    }
+
+    private static List<ManualPortfolioPosition> filterTimeseriesSegment(
+            List<ManualPortfolioPosition> all,
+            String mode,
+            String key
+    ) {
+        if (key == null || key.isBlank()) {
+            return List.of();
+        }
+        String m = mode == null ? "" : mode.trim().toUpperCase(Locale.ROOT);
+        if ("TYPE".equals(m)) {
+            String k = key.trim().toUpperCase(Locale.ROOT);
+            List<ManualPortfolioPosition> out = new ArrayList<>();
+            for (ManualPortfolioPosition p : all) {
+                if (p.getType() != null && p.getType().name().equalsIgnoreCase(k)) {
+                    out.add(p);
+                }
+            }
+            return out;
+        }
+        if ("SYMBOL".equals(m)) {
+            String k = key.trim().replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
+            List<ManualPortfolioPosition> out = new ArrayList<>();
+            for (ManualPortfolioPosition p : all) {
+                if (p.getSymbol() == null || p.getSymbol().isBlank() || p.getType() == null) {
+                    continue;
+                }
+                String normalized = SymbolNormalizer.normalize(p.getType(), p.getSymbol().trim().toUpperCase(Locale.ROOT));
+                if (normalized.equalsIgnoreCase(k)) {
+                    out.add(p);
+                    continue;
+                }
+                String raw = p.getSymbol().trim().replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
+                if (raw.equalsIgnoreCase(k)) {
+                    out.add(p);
+                }
+            }
+            return out;
+        }
+        throw new ApiBusinessException(HttpStatus.BAD_REQUEST, ApiErrorCode.BAD_REQUEST,
+                "Geçersiz segment modu. TYPE veya SYMBOL kullanın.");
+    }
+
+    /**
+     * @param axisScope   tarih ızgarası (step) ve effectiveFrom için tüm pozisyonlar (ana portföy)
+     * @param valueScope  maliyet olayları, fiyat ağaçları ve piyasa değeri bu alt kümeden hesaplanır
+     */
+    private List<ManualPortfolioTimeseriesPointDto> buildManualTimeseries(
+            List<ManualPortfolioPosition> axisScope,
+            List<ManualPortfolioPosition> valueScope,
+            LocalDate from,
+            LocalDate to
+    ) {
+        if (from == null || to == null || to.isBefore(from)) {
+            return List.of();
+        }
+        if (axisScope.isEmpty() || valueScope.isEmpty()) {
+            return List.of();
+        }
+        LocalDate today = LocalDate.now(TZ);
+        LocalDate end = to.isAfter(today) ? today : to;
+        LocalDate earliestBuy = axisScope.stream()
+                .map(ManualPortfolioPosition::getBuyDate)
+                .filter(Objects::nonNull)
+                .min(Comparator.naturalOrder())
+                .orElse(end);
+        LocalDate effectiveFrom = from.isBefore(earliestBuy) ? earliestBuy : from;
+        if (effectiveFrom.isAfter(end)) {
+            return List.of();
+        }
+
+        record CostEv(LocalDate d, int phase, BigDecimal delta) {}
+        List<CostEv> cev = new ArrayList<>(valueScope.size() * 2);
+        for (ManualPortfolioPosition p : valueScope) {
+            if (p.getBuyDate() == null) {
+                log.warn("[MANUAL_TS] position id={} skipped (buyDate null)", p.getId());
+                continue;
+            }
+            BigDecimal buyCost = buyCostBasisFromPosition(p);
+            cev.add(new CostEv(p.getBuyDate(), 0, buyCost));
+            if (p.getStatus() == ManualPositionStatus.SOLD && p.getSellDate() != null) {
+                cev.add(new CostEv(p.getSellDate(), 1, buyCost.negate()));
+            }
+        }
+        cev.sort(Comparator.comparing(CostEv::d).thenComparing(CostEv::phase));
+
+        record SymKey(AssetType type, String symbol) {}
+        Set<SymKey> keys = new HashSet<>();
+        for (ManualPortfolioPosition p : valueScope) {
+            if (p.getType() == null || p.getSymbol() == null || p.getSymbol().isBlank()) {
+                continue;
+            }
+            if (overlapsTimeseriesWindow(p, effectiveFrom, end)) {
+                keys.add(new SymKey(p.getType(), p.getSymbol().trim()));
+            }
+        }
+        Map<String, NavigableMap<LocalDate, BigDecimal>> priceTrees = new HashMap<>();
+        LocalDate histFrom = effectiveFrom.minusDays(14);
+        for (SymKey k : keys) {
+            TreeMap<LocalDate, BigDecimal> tree = new TreeMap<>();
+            try {
+                List<ManualChartPoint> pts = priceResolver.loadDailyCloseSeriesTry(k.type(), k.symbol(), histFrom, end);
+                for (ManualChartPoint pt : pts) {
+                    if (pt.priceTry() != null && pt.priceTry().signum() > 0) {
+                        tree.put(pt.date(), pt.priceTry());
+                    }
+                }
+            } catch (RuntimeException ex) {
+                log.warn("[MANUAL_TS] price series failed type={} symbol={}: {}", k.type(), k.symbol(), ex.toString());
+            }
+            priceTrees.put(priceTreeKey(k.type(), k.symbol()), tree);
+        }
+
+        long spanDays = ChronoUnit.DAYS.between(effectiveFrom, end) + 1;
+        int step = (int) Math.max(1, Math.ceil(spanDays / (double) MANUAL_TS_MAX_POINTS));
+
+        int evi = 0;
+        BigDecimal costRun = BigDecimal.ZERO;
+        while (evi < cev.size() && cev.get(evi).d().isBefore(effectiveFrom)) {
+            costRun = costRun.add(cev.get(evi).delta());
+            evi++;
+        }
+
+        List<ManualPortfolioTimeseriesPointDto> out = new ArrayList<>();
+        LocalDate d = effectiveFrom;
+        while (!d.isAfter(end)) {
+            while (evi < cev.size() && !cev.get(evi).d().isAfter(d)) {
+                costRun = costRun.add(cev.get(evi).delta());
+                evi++;
+            }
+            BigDecimal mval = portfolioMarketValueTry(valueScope, priceTrees, d);
+            out.add(new ManualPortfolioTimeseriesPointDto(
+                    d,
+                    costRun.setScale(8, RoundingMode.HALF_UP),
+                    mval != null ? mval.setScale(8, RoundingMode.HALF_UP) : null
+            ));
+            d = d.plusDays(step);
+        }
+
+        LocalDate lastSample = out.isEmpty() ? null : out.get(out.size() - 1).date();
+        if (lastSample != null && lastSample.isBefore(end)) {
+            while (evi < cev.size() && !cev.get(evi).d().isAfter(end)) {
+                costRun = costRun.add(cev.get(evi).delta());
+                evi++;
+            }
+            BigDecimal mval = portfolioMarketValueTry(valueScope, priceTrees, end);
+            out.add(new ManualPortfolioTimeseriesPointDto(
+                    end,
+                    costRun.setScale(8, RoundingMode.HALF_UP),
+                    mval != null ? mval.setScale(8, RoundingMode.HALF_UP) : null
+            ));
+        }
+        return out;
+    }
+
+    /**
+     * Satılmış pozisyonlar için: satış tarihinden itibaren satılan miktarla tutulsaydı günlük TRY piyasa değeri toplamı
+     * (tut ve gör senaryosu). Kaçırılan fırsat / satış sonrası değişim grafiği için.
+     */
+    @Transactional(readOnly = true)
+    public List<ManualPortfolioTimeseriesPointDto> timeseriesMineSoldHoldHypothetical(LocalDate from, LocalDate to) {
+        if (from == null || to == null || to.isBefore(from)) {
+            return List.of();
+        }
+        Long userId = currentUserResolver.getCurrentUserId();
+        List<ManualPortfolioPosition> sold = listSoldWithSellDate(userId);
+        if (sold.isEmpty()) {
+            return List.of();
+        }
+        return buildSoldHoldHypotheticalTimeseries(sold, sold, from, to);
+    }
+
+    /**
+     * {@link #timeseriesMineSoldHoldHypothetical} ile aynı tarih ızgarası; yalnızca seçilen tür veya sembole ait
+     * satılmış pozisyonların tutulsaydı toplamı (grafik üstüne karşılaştırma çizgisi).
+     */
+    @Transactional(readOnly = true)
+    public List<ManualPortfolioTimeseriesPointDto> timeseriesMineSoldHoldHypotheticalSegment(
+            LocalDate from,
+            LocalDate to,
+            String mode,
+            String key
+    ) {
+        if (from == null || to == null || to.isBefore(from)) {
+            return List.of();
+        }
+        Long userId = currentUserResolver.getCurrentUserId();
+        List<ManualPortfolioPosition> sold = listSoldWithSellDate(userId);
+        if (sold.isEmpty()) {
+            return List.of();
+        }
+        List<ManualPortfolioPosition> segment = filterTimeseriesSegment(sold, mode, key);
+        if (segment.isEmpty()) {
+            return List.of();
+        }
+        return buildSoldHoldHypotheticalTimeseries(sold, segment, from, to);
+    }
+
+    /**
+     * Satılmış pozisyonlar için birleşik seri: alım gününden satış gününe kadar (dahil) günlük nominal K/Z
+     * (kapanış × miktar − alış maliyeti); satıştan sonraki günlerde aynı satılan miktar için günlük piyasa değeri
+     * (kapanış × miktar, TRY). Gerçekleşmiş K/Z kartı grafiği için.
+     */
+    @Transactional(readOnly = true)
+    public List<ManualPortfolioTimeseriesPointDto> timeseriesMineSoldLifecyclePnl(LocalDate from, LocalDate to) {
+        if (from == null || to == null || to.isBefore(from)) {
+            return List.of();
+        }
+        Long userId = currentUserResolver.getCurrentUserId();
+        List<ManualPortfolioPosition> sold = listSoldWithSellDate(userId);
+        if (sold.isEmpty()) {
+            return List.of();
+        }
+        return buildSoldLifecyclePnlTimeseries(sold, sold, from, to);
+    }
+
+    /**
+     * {@link #timeseriesMineSoldLifecyclePnl} ile aynı tarih ızgarası; yalnızca seçilen tür veya sembole ait
+     * satılmış pozisyonların günlük serisi (K/Z satışa kadar, sonrasında tutulsaydı TRY değeri).
+     */
+    @Transactional(readOnly = true)
+    public List<ManualPortfolioTimeseriesPointDto> timeseriesMineSoldLifecyclePnlSegment(
+            LocalDate from,
+            LocalDate to,
+            String mode,
+            String key
+    ) {
+        if (from == null || to == null || to.isBefore(from)) {
+            return List.of();
+        }
+        Long userId = currentUserResolver.getCurrentUserId();
+        List<ManualPortfolioPosition> sold = listSoldWithSellDate(userId);
+        if (sold.isEmpty()) {
+            return List.of();
+        }
+        List<ManualPortfolioPosition> segment = filterTimeseriesSegment(sold, mode, key);
+        if (segment.isEmpty()) {
+            return List.of();
+        }
+        return buildSoldLifecyclePnlTimeseries(sold, segment, from, to);
+    }
+
+    private List<ManualPortfolioPosition> listSoldWithSellDate(Long userId) {
+        List<ManualPortfolioPosition> all = manualRepo.findByUserIdOrderByBuyDateAsc(userId);
+        List<ManualPortfolioPosition> sold = new ArrayList<>();
+        for (ManualPortfolioPosition p : all) {
+            if (p.getStatus() == ManualPositionStatus.SOLD && p.getSellDate() != null) {
+                sold.add(p);
+            }
+        }
+        return sold;
+    }
+
+    /**
+     * @param axisSold  Tarih penceresi (min satış) için tüm satılmış pozisyonlar — ana grafik ile aynı örneklem
+     * @param sumSold   Değer toplamı ve fiyat anahtarları bu alt kümeden
+     */
+    private List<ManualPortfolioTimeseriesPointDto> buildSoldHoldHypotheticalTimeseries(
+            List<ManualPortfolioPosition> axisSold,
+            List<ManualPortfolioPosition> sumSold,
+            LocalDate from,
+            LocalDate to
+    ) {
+        if (axisSold.isEmpty() || sumSold.isEmpty()) {
+            return List.of();
+        }
+        LocalDate minSell = axisSold.stream()
+                .map(ManualPortfolioPosition::getSellDate)
+                .filter(Objects::nonNull)
+                .min(Comparator.naturalOrder())
+                .orElse(null);
+        if (minSell == null) {
+            return List.of();
+        }
+        LocalDate today = LocalDate.now(TZ);
+        LocalDate end = to.isAfter(today) ? today : to;
+        LocalDate effectiveFrom = from.isBefore(minSell) ? minSell : from;
+        if (effectiveFrom.isAfter(end)) {
+            return List.of();
+        }
+
+        record SymKey(AssetType type, String symbol) {}
+        Set<SymKey> keys = new HashSet<>();
+        for (ManualPortfolioPosition p : sumSold) {
+            if (p.getType() == null || p.getSymbol() == null || p.getSymbol().isBlank()) {
+                continue;
+            }
+            if (soldPositionNeedsPriceSeries(p, end)) {
+                keys.add(new SymKey(p.getType(), p.getSymbol().trim()));
+            }
+        }
+        Map<String, NavigableMap<LocalDate, BigDecimal>> priceTrees = new HashMap<>();
+        LocalDate histFrom = effectiveFrom.minusDays(14);
+        for (SymKey k : keys) {
+            TreeMap<LocalDate, BigDecimal> tree = new TreeMap<>();
+            try {
+                List<ManualChartPoint> pts = priceResolver.loadDailyCloseSeriesTry(k.type(), k.symbol(), histFrom, end);
+                for (ManualChartPoint pt : pts) {
+                    if (pt.priceTry() != null && pt.priceTry().signum() > 0) {
+                        tree.put(pt.date(), pt.priceTry());
+                    }
+                }
+            } catch (RuntimeException ex) {
+                log.warn("[MANUAL_TS_SOLD_HOLD] price series failed type={} symbol={}: {}", k.type(), k.symbol(), ex.toString());
+            }
+            priceTrees.put(priceTreeKey(k.type(), k.symbol()), tree);
+        }
+
+        long spanDays = ChronoUnit.DAYS.between(effectiveFrom, end) + 1;
+        int step = (int) Math.max(1, Math.ceil(spanDays / (double) MANUAL_TS_MAX_POINTS));
+
+        BigDecimal zeroCost = BigDecimal.ZERO.setScale(8, RoundingMode.HALF_UP);
+        List<ManualPortfolioTimeseriesPointDto> out = new ArrayList<>();
+        LocalDate d = effectiveFrom;
+        while (!d.isAfter(end)) {
+            BigDecimal mval = soldHypotheticalHoldValueTry(sumSold, priceTrees, d);
+            out.add(new ManualPortfolioTimeseriesPointDto(
+                    d,
+                    zeroCost,
+                    mval != null ? mval.setScale(8, RoundingMode.HALF_UP) : null
+            ));
+            d = d.plusDays(step);
+        }
+
+        LocalDate lastSample = out.isEmpty() ? null : out.get(out.size() - 1).date();
+        if (lastSample != null && lastSample.isBefore(end)) {
+            BigDecimal mval = soldHypotheticalHoldValueTry(sumSold, priceTrees, end);
+            out.add(new ManualPortfolioTimeseriesPointDto(
+                    end,
+                    zeroCost,
+                    mval != null ? mval.setScale(8, RoundingMode.HALF_UP) : null
+            ));
+        }
+        return out;
+    }
+
+    /**
+     * @param axisSold tüm satılmışlar — tarih aralığı (min alım … bugün) için
+     * @param sumSold  günlük değer bu alt kümeden (satışa kadar K/Z, sonra tutulsaydı TRY değeri)
+     */
+    private List<ManualPortfolioTimeseriesPointDto> buildSoldLifecyclePnlTimeseries(
+            List<ManualPortfolioPosition> axisSold,
+            List<ManualPortfolioPosition> sumSold,
+            LocalDate from,
+            LocalDate to
+    ) {
+        if (axisSold.isEmpty() || sumSold.isEmpty()) {
+            return List.of();
+        }
+        LocalDate minBuy = axisSold.stream()
+                .map(ManualPortfolioPosition::getBuyDate)
+                .filter(Objects::nonNull)
+                .min(Comparator.naturalOrder())
+                .orElse(null);
+        if (minBuy == null) {
+            return List.of();
+        }
+        LocalDate today = LocalDate.now(TZ);
+        LocalDate end = to;
+        if (end.isAfter(today)) {
+            end = today;
+        }
+        LocalDate effectiveFrom = from.isBefore(minBuy) ? minBuy : from;
+        if (effectiveFrom.isAfter(end)) {
+            return List.of();
+        }
+
+        record SymKey(AssetType type, String symbol) {}
+        Set<SymKey> keys = new HashSet<>();
+        for (ManualPortfolioPosition p : sumSold) {
+            if (p.getBuyDate() == null || p.getSellDate() == null) {
+                continue;
+            }
+            if (p.getType() == null || p.getSymbol() == null || p.getSymbol().isBlank()) {
+                continue;
+            }
+            if (p.getBuyDate().isAfter(end)) {
+                continue;
+            }
+            keys.add(new SymKey(p.getType(), p.getSymbol().trim()));
+        }
+        Map<String, NavigableMap<LocalDate, BigDecimal>> priceTrees = new HashMap<>();
+        LocalDate histFrom = effectiveFrom.minusDays(14);
+        for (SymKey k : keys) {
+            TreeMap<LocalDate, BigDecimal> tree = new TreeMap<>();
+            try {
+                List<ManualChartPoint> pts = priceResolver.loadDailyCloseSeriesTry(k.type(), k.symbol(), histFrom, end);
+                for (ManualChartPoint pt : pts) {
+                    if (pt.priceTry() != null && pt.priceTry().signum() > 0) {
+                        tree.put(pt.date(), pt.priceTry());
+                    }
+                }
+            } catch (RuntimeException ex) {
+                log.warn("[MANUAL_TS_SOLD_LIFE] price series failed type={} symbol={}: {}", k.type(), k.symbol(), ex.toString());
+            }
+            priceTrees.put(priceTreeKey(k.type(), k.symbol()), tree);
+        }
+
+        long spanDays = ChronoUnit.DAYS.between(effectiveFrom, end) + 1;
+        int step = (int) Math.max(1, Math.ceil(spanDays / (double) MANUAL_TS_MAX_POINTS));
+
+        BigDecimal zeroCost = BigDecimal.ZERO.setScale(8, RoundingMode.HALF_UP);
+        List<ManualPortfolioTimeseriesPointDto> out = new ArrayList<>();
+        LocalDate d = effectiveFrom;
+        while (!d.isAfter(end)) {
+            BigDecimal v = soldLifecyclePnlThenHypotheticalHoldValueDailyTry(sumSold, priceTrees, d);
+            out.add(new ManualPortfolioTimeseriesPointDto(
+                    d,
+                    zeroCost,
+                    v != null ? v.setScale(8, RoundingMode.HALF_UP) : null
+            ));
+            d = d.plusDays(step);
+        }
+
+        LocalDate lastSample = out.isEmpty() ? null : out.get(out.size() - 1).date();
+        if (lastSample != null && lastSample.isBefore(end)) {
+            BigDecimal v = soldLifecyclePnlThenHypotheticalHoldValueDailyTry(sumSold, priceTrees, end);
+            out.add(new ManualPortfolioTimeseriesPointDto(
+                    end,
+                    zeroCost,
+                    v != null ? v.setScale(8, RoundingMode.HALF_UP) : null
+            ));
+        }
+        return out;
+    }
+
+    /**
+     * Satış günü (dahil): nominal K/Z (mtm − maliyet). Satıştan sonraki günler: satılan miktarda günlük TRY değeri (mtm).
+     */
+    private static BigDecimal soldLifecyclePnlThenHypotheticalHoldValueDailyTry(
+            List<ManualPortfolioPosition> positions,
+            Map<String, NavigableMap<LocalDate, BigDecimal>> priceTrees,
+            LocalDate d
+    ) {
+        BigDecimal sum = BigDecimal.ZERO;
+        boolean any = false;
+        for (ManualPortfolioPosition p : positions) {
+            if (p.getStatus() != ManualPositionStatus.SOLD || p.getSellDate() == null || p.getBuyDate() == null) {
+                continue;
+            }
+            if (p.getType() == null || p.getSymbol() == null || p.getSymbol().isBlank()) {
+                continue;
+            }
+            if (d.isBefore(p.getBuyDate())) {
+                continue;
+            }
+            any = true;
+            NavigableMap<LocalDate, BigDecimal> tree = priceTrees.get(priceTreeKey(p.getType(), p.getSymbol().trim()));
+            if (tree == null || tree.isEmpty()) {
+                return null;
+            }
+            Map.Entry<LocalDate, BigDecimal> e = tree.floorEntry(d);
+            if (e == null || e.getValue() == null || e.getValue().signum() <= 0) {
+                return null;
+            }
+            BigDecimal q = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
+            BigDecimal mtm = e.getValue().multiply(q);
+            if (!d.isAfter(p.getSellDate())) {
+                sum = sum.add(mtm.subtract(buyCostBasisFromPosition(p)));
+            } else {
+                sum = sum.add(mtm);
+            }
+        }
+        return any ? sum : BigDecimal.ZERO;
+    }
+
+    private static boolean soldPositionNeedsPriceSeries(ManualPortfolioPosition p, LocalDate to) {
+        return p.getSellDate() != null && !p.getSellDate().isAfter(to);
+    }
+
+    /**
+     * Satış tarihi {@code d} veya öncesi olan satılmış pozisyonlar için: o günkü kapanış × satılan miktar toplamı.
+     */
+    private static BigDecimal soldHypotheticalHoldValueTry(
+            List<ManualPortfolioPosition> soldPositions,
+            Map<String, NavigableMap<LocalDate, BigDecimal>> priceTrees,
+            LocalDate d
+    ) {
+        BigDecimal sum = BigDecimal.ZERO;
+        boolean any = false;
+        for (ManualPortfolioPosition p : soldPositions) {
+            if (p.getSellDate() == null || d.isBefore(p.getSellDate())) {
+                continue;
+            }
+            if (p.getType() == null || p.getSymbol() == null || p.getSymbol().isBlank()) {
+                continue;
+            }
+            any = true;
+            NavigableMap<LocalDate, BigDecimal> tree = priceTrees.get(priceTreeKey(p.getType(), p.getSymbol().trim()));
+            if (tree == null || tree.isEmpty()) {
+                return null;
+            }
+            Map.Entry<LocalDate, BigDecimal> e = tree.floorEntry(d);
+            if (e == null || e.getValue() == null || e.getValue().signum() <= 0) {
+                return null;
+            }
+            BigDecimal q = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
+            sum = sum.add(e.getValue().multiply(q));
+        }
+        return any ? sum : BigDecimal.ZERO;
+    }
+
+    /**
+     * Piyasa çağrısı olmadan alış maliyeti (nominal analizdeki buyCost ile aynı).
+     */
+    private static BigDecimal buyCostBasisFromPosition(ManualPortfolioPosition p) {
+        BigDecimal qty = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
+        BigDecimal buyPx = p.getBuyPrice() == null ? BigDecimal.ZERO : p.getBuyPrice();
+        BigDecimal buyFee = p.getBuyFee();
+        if (buyFee == null || buyFee.signum() < 0) {
+            buyFee = BigDecimal.ZERO;
+        }
+        return buyPx.multiply(qty).add(buyFee).setScale(8, RoundingMode.HALF_UP);
+    }
+
+    private static boolean overlapsTimeseriesWindow(ManualPortfolioPosition p, LocalDate from, LocalDate to) {
+        if (p.getBuyDate() == null || p.getBuyDate().isAfter(to)) {
+            return false;
+        }
+        return p.getStatus() != ManualPositionStatus.SOLD
+                || p.getSellDate() == null
+                || !p.getSellDate().isBefore(from);
+    }
+
+    private static boolean isOpenOnDateForTs(ManualPortfolioPosition p, LocalDate d) {
+        if (p.getBuyDate() == null || d.isBefore(p.getBuyDate())) {
+            return false;
+        }
+        if (p.getStatus() == ManualPositionStatus.SOLD && p.getSellDate() != null) {
+            return d.isBefore(p.getSellDate());
+        }
+        return true;
+    }
+
+    private static String priceTreeKey(AssetType type, String symbol) {
+        return type.name() + "|" + symbol;
+    }
+
+    private static BigDecimal portfolioMarketValueTry(
+            List<ManualPortfolioPosition> positions,
+            Map<String, NavigableMap<LocalDate, BigDecimal>> priceTrees,
+            LocalDate d
+    ) {
+        BigDecimal sum = BigDecimal.ZERO;
+        boolean anyOpen = false;
+        for (ManualPortfolioPosition p : positions) {
+            if (!isOpenOnDateForTs(p, d)) {
+                continue;
+            }
+            if (p.getType() == null || p.getSymbol() == null || p.getSymbol().isBlank()) {
+                continue;
+            }
+            anyOpen = true;
+            NavigableMap<LocalDate, BigDecimal> tree = priceTrees.get(priceTreeKey(p.getType(), p.getSymbol().trim()));
+            if (tree == null || tree.isEmpty()) {
+                return null;
+            }
+            Map.Entry<LocalDate, BigDecimal> e = tree.floorEntry(d);
+            if (e == null || e.getValue() == null || e.getValue().signum() <= 0) {
+                return null;
+            }
+            BigDecimal q = p.getQuantity() == null ? BigDecimal.ZERO : p.getQuantity();
+            sum = sum.add(e.getValue().multiply(q));
+        }
+        return anyOpen ? sum : BigDecimal.ZERO;
     }
 
     @Transactional(readOnly = true)

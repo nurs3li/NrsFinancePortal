@@ -3,6 +3,7 @@ package com.nurseli.nrsfinanceportal.service;
 import com.nurseli.nrsfinanceportal.common.dto.SimulationResponseDto;
 import com.nurseli.nrsfinanceportal.common.dto.SimulationPerformancePointDto;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
+import com.nurseli.nrsfinanceportal.domain.asset.SimulationDisplayCurrency;
 import com.nurseli.nrsfinanceportal.domain.pricing.SymbolNormalizer;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.dto.MarketPriceHistoryDto;
@@ -14,20 +15,28 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
 public class SimulationService {
 
+    private static final ZoneId TZ = ZoneId.of("Europe/Istanbul");
+
     /**
      * USD cinsinden hisse/kripto/fon geçmiş serisi TRY'ye çevrilirken kullanıcıya gösterilecek kısa uyarı kodu
      * (frontend i18n anahtarı ile eşlenir). TRY kotasyonlu varlıklar (FX, METAL, BIST) için kullanılmaz.
      */
     public static final String NOTICE_USD_DENOMINATED = "SIMULATION_USD_DENOMINATED";
+
+    /** Seçilen tarihte veya öncesinde sistem fiyatı yok; istemci manuel birim fiyat istemeli. */
+    public static final String MANUAL_PRICE_REQUIRED = "MANUAL_PRICE_REQUIRED";
 
     private final MarketDataClient marketDataClient;
     private final DateToDaysHelper dateToDaysHelper;
@@ -36,28 +45,40 @@ public class SimulationService {
     public SimulationResponseDto simulate(
             AssetType type,
             String rawSymbol,
-            BigDecimal amountTry,
+            BigDecimal amount,
             LocalDate buyDate,
-            BigDecimal manualBuyPriceTry
+            BigDecimal manualBuyPrice
+    ) {
+        return simulate(type, rawSymbol, amount, buyDate, manualBuyPrice, SimulationDisplayCurrency.TRY);
+    }
+
+    @Transactional(readOnly = true)
+    public SimulationResponseDto simulate(
+            AssetType type,
+            String rawSymbol,
+            BigDecimal amount,
+            LocalDate buyDate,
+            BigDecimal manualBuyPrice,
+            SimulationDisplayCurrency displayCurrency
     ) {
         if (rawSymbol == null || rawSymbol.isBlank()) {
             throw new IllegalArgumentException("Symbol is required");
         }
-        if (amountTry == null || amountTry.signum() <= 0) {
+        if (amount == null || amount.signum() <= 0) {
             throw new IllegalArgumentException("Amount must be positive");
         }
+        SimulationDisplayCurrency currency = displayCurrency == null ? SimulationDisplayCurrency.TRY : displayCurrency;
         if (buyDate == null) {
             throw new IllegalArgumentException("Buy date is required");
         }
-        if (!buyDate.isBefore(LocalDate.now())) {
-            throw new IllegalArgumentException("Buy date must be in the past");
+        LocalDate today = todayIstanbul();
+        if (buyDate.isAfter(today)) {
+            throw new IllegalArgumentException("Buy date cannot be in the future");
         }
 
         String symbol = SymbolNormalizer.normalize(type, rawSymbol.trim().toUpperCase());
         // Add a small buffer to avoid boundary misses from provider/day-cutoff behavior.
         int days = Math.min(dateToDaysHelper.toDays(buyDate) + 7, 3650);
-        LocalDate today = LocalDate.now();
-
         List<MarketPriceHistoryDto> history;
         if (type == AssetType.BIST) {
             LocalDate from = buyDate.minusDays(30);
@@ -71,14 +92,29 @@ public class SimulationService {
 
         BigDecimal spotUsdTry = resolveUsdTryRate();
         List<MarketPriceHistoryDto> usdTryHistory = List.of();
-        if (needsHistoricalUsdTrySeries(type)) {
+        if (needsHistoricalUsdTrySeries(type) || currency == SimulationDisplayCurrency.USD) {
             List<MarketPriceHistoryDto> fx = marketDataClient.getHistory(AssetType.FX, "USDTRY", days);
             usdTryHistory = fx != null ? fx : List.of();
+        }
+        List<MarketPriceHistoryDto> fxSorted = usdTryHistory.stream()
+                .filter(Objects::nonNull)
+                .filter(h -> h.timestamp() != null)
+                .sorted(Comparator.comparing(MarketPriceHistoryDto::timestamp))
+                .toList();
+
+        BigDecimal amountTry = amount;
+        BigDecimal manualBuyPriceTry = manualBuyPrice;
+        if (currency == SimulationDisplayCurrency.USD) {
+            BigDecimal usdTryAtBuy = resolveUsdTryAt(buyDate.atStartOfDay(), fxSorted, spotUsdTry);
+            amountTry = amount.multiply(usdTryAtBuy);
+            if (manualBuyPrice != null && manualBuyPrice.signum() > 0) {
+                manualBuyPriceTry = manualBuyPrice.multiply(usdTryAtBuy);
+            }
         }
 
         List<MarketPriceHistoryDto> normalizedHistory =
                 normalizeHistoryPricesToTry(history, type, usdTryHistory, spotUsdTry);
-        BigDecimal currentPrice = nz(marketDataClient.getPriceTry(type, symbol));
+        BigDecimal currentPrice = resolveCurrentPriceTry(type, symbol, normalizedHistory);
         if (currentPrice.signum() <= 0) {
             throw new IllegalStateException("Current price not found");
         }
@@ -94,63 +130,120 @@ public class SimulationService {
         } else if (!normalizedHistory.isEmpty()) {
             historicalRef = resolveHistoricalPriceAtOrBeforeDate(normalizedHistory, buyDate);
         } else {
-            // History may be temporarily missing for some symbols although latest quote exists.
-            // In that case, allow simulation with latest price fallback instead of hard-failing.
-            historicalRef = new HistoricalPriceRef(
-                    currentPrice,
-                    buyDate,
-                    "SYSTEM_LATEST_FALLBACK",
-                    "FALLBACK"
+            String unit = currency == SimulationDisplayCurrency.USD ? "USD/birim" : "TRY/birim";
+            throw new IllegalArgumentException(
+                    MANUAL_PRICE_REQUIRED + ": Seçilen tarih için geçmiş fiyat bulunamadı. Lütfen o güne ait alış fiyatını (" + unit + ") girin."
             );
         }
-        BigDecimal historicalPrice = historicalRef.priceTry();
+        BigDecimal historicalPriceTry = historicalRef.priceTry();
 
-        BigDecimal units = amountTry.divide(historicalPrice, 8, RoundingMode.HALF_UP);
-        BigDecimal currentValue = units.multiply(currentPrice);
-        BigDecimal pnl = currentValue.subtract(amountTry);
+        BigDecimal units = amountTry.divide(historicalPriceTry, 8, RoundingMode.HALF_UP);
+        BigDecimal currentValueTry = units.multiply(currentPrice);
+        BigDecimal pnlTry = currentValueTry.subtract(amountTry);
 
         BigDecimal pnlPct = amountTry.signum() == 0
                 ? BigDecimal.ZERO
-                : pnl.divide(amountTry, 6, RoundingMode.HALF_UP)
+                : pnlTry.divide(amountTry, 6, RoundingMode.HALF_UP)
                 .multiply(new BigDecimal("100"));
 
-        String message = "%s tarihinde %s TRY %s yatırımı bugün %s TRY olurdu. (alış: %s, kaynak: %s)"
-                .formatted(
-                        buyDate,
-                        amountTry.stripTrailingZeros().toPlainString(),
-                        symbol,
-                        currentValue.setScale(2, RoundingMode.HALF_UP).toPlainString(),
-                        historicalRef.priceDate(),
-                        historicalRef.source()
-                );
-
-        List<SimulationPerformancePointDto> performanceSeries = buildPerformanceSeries(
+        List<SimulationPerformancePointDto> performanceSeriesTry = buildPerformanceSeries(
                 normalizedHistory,
                 buyDate,
-                historicalPrice,
+                historicalPriceTry,
                 currentPrice
         );
 
         String approximationNoticeCode = needsHistoricalUsdTrySeries(type) ? NOTICE_USD_DENOMINATED : null;
 
+        if (currency == SimulationDisplayCurrency.TRY) {
+            String message = "%s tarihinde %s TRY %s yatırımı bugün %s TRY olurdu. (alış: %s, kaynak: %s)"
+                    .formatted(
+                            buyDate,
+                            amount.stripTrailingZeros().toPlainString(),
+                            symbol,
+                            currentValueTry.setScale(2, RoundingMode.HALF_UP).toPlainString(),
+                            historicalRef.priceDate(),
+                            historicalRef.source()
+                    );
+            return new SimulationResponseDto(
+                    type.name(),
+                    symbol,
+                    buyDate,
+                    amount,
+                    historicalPriceTry,
+                    currentPrice,
+                    units,
+                    currentValueTry,
+                    pnlTry,
+                    pnlPct,
+                    historicalRef.source(),
+                    historicalRef.priceDate(),
+                    historicalRef.qualityFlag(),
+                    performanceSeriesTry,
+                    approximationNoticeCode,
+                    message,
+                    SimulationDisplayCurrency.TRY.name()
+            );
+        }
+
+        BigDecimal historicalPriceUsd = toUsd(historicalPriceTry, historicalRef.priceDate(), fxSorted, spotUsdTry);
+        BigDecimal currentPriceUsd = toUsd(currentPrice, today, fxSorted, spotUsdTry);
+        BigDecimal currentValueUsd = units.multiply(currentPriceUsd);
+        BigDecimal pnlUsd = currentValueUsd.subtract(amount);
+
+        List<SimulationPerformancePointDto> performanceSeriesUsd = performanceSeriesTry.stream()
+                .map(p -> new SimulationPerformancePointDto(
+                        p.date(),
+                        toUsd(p.priceTry(), p.date(), fxSorted, spotUsdTry),
+                        p.cumulativeReturnPct()
+                ))
+                .toList();
+
+        String message = "%s tarihinde %s USD %s yatırımı bugün %s USD olurdu. (alış: %s, kaynak: %s)"
+                .formatted(
+                        buyDate,
+                        amount.stripTrailingZeros().toPlainString(),
+                        symbol,
+                        currentValueUsd.setScale(2, RoundingMode.HALF_UP).toPlainString(),
+                        historicalRef.priceDate(),
+                        historicalRef.source()
+                );
+
         return new SimulationResponseDto(
                 type.name(),
                 symbol,
                 buyDate,
-                amountTry,
-                historicalPrice,
-                currentPrice,
+                amount,
+                historicalPriceUsd,
+                currentPriceUsd,
                 units,
-                currentValue,
-                pnl,
+                currentValueUsd,
+                pnlUsd,
                 pnlPct,
                 historicalRef.source(),
                 historicalRef.priceDate(),
                 historicalRef.qualityFlag(),
-                performanceSeries,
+                performanceSeriesUsd,
                 approximationNoticeCode,
-                message
+                message,
+                SimulationDisplayCurrency.USD.name()
         );
+    }
+
+    private BigDecimal toUsd(
+            BigDecimal tryAmount,
+            LocalDate date,
+            List<MarketPriceHistoryDto> fxSorted,
+            BigDecimal spotUsdTryFallback
+    ) {
+        if (tryAmount == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal rate = resolveUsdTryAt(date.atStartOfDay(), fxSorted, spotUsdTryFallback);
+        if (rate.signum() <= 0) {
+            return tryAmount;
+        }
+        return tryAmount.divide(rate, 8, RoundingMode.HALF_UP);
     }
 
     /**
@@ -169,25 +262,16 @@ public class SimulationService {
                 .orElse(null);
 
         if (row == null) {
-            // If there is no point at/before the selected date, fallback to earliest available point.
-            row = history.stream()
-                    .filter(h -> h.timestamp() != null)
-                    .min(Comparator.comparing(MarketPriceHistoryDto::timestamp))
-                    .orElseThrow(() -> new IllegalStateException("No historical point available for selected symbol"));
+            throw new IllegalArgumentException(
+                    MANUAL_PRICE_REQUIRED + ": Seçilen tarih veya öncesinde fiyat yok. İlk geçmiş veri daha sonraki bir günde; lütfen alım günü için manuel fiyat girin."
+            );
         }
 
         BigDecimal price = midPrice(row);
         if (price == null || price.signum() <= 0) {
             throw new IllegalStateException("Historical price is invalid");
         }
-        String quality;
-        if (row.timestamp().toLocalDate().isEqual(buyDate)) {
-            quality = "EXACT";
-        } else if (row.timestamp().toLocalDate().isBefore(buyDate)) {
-            quality = "PREVIOUS_DAY";
-        } else {
-            quality = "FALLBACK";
-        }
+        String quality = row.timestamp().toLocalDate().isEqual(buyDate) ? "EXACT" : "PREVIOUS_DAY";
         return new HistoricalPriceRef(price, row.timestamp().toLocalDate(), "SYSTEM_HISTORY", quality);
     }
 
@@ -206,41 +290,56 @@ public class SimulationService {
             return List.of();
         }
 
-        List<SimulationPerformancePointDto> points = history.stream()
+        // Alım tarihinden itibaren yalnızca veri olan işlem günleri (gün başına tek mum).
+        Map<LocalDate, MarketPriceHistoryDto> dayCandles = new LinkedHashMap<>();
+        history.stream()
                 .filter(Objects::nonNull)
                 .filter(h -> h.timestamp() != null)
                 .filter(h -> !h.timestamp().toLocalDate().isBefore(buyDate))
                 .sorted(Comparator.comparing(MarketPriceHistoryDto::timestamp))
+                .forEach(h -> dayCandles.put(h.timestamp().toLocalDate(), h));
+
+        List<SimulationPerformancePointDto> points = dayCandles.values().stream()
                 .map(h -> toPoint(h.timestamp(), midPrice(h), safeBuy))
                 .filter(Objects::nonNull)
                 .toList();
 
-        LocalDate today = LocalDate.now();
+        ArrayList<SimulationPerformancePointDto> series = new ArrayList<>(points);
+        if (series.isEmpty()) {
+            series.add(new SimulationPerformancePointDto(buyDate, safeBuy, BigDecimal.ZERO));
+        } else if (series.get(0).date().isAfter(buyDate)) {
+            series.add(0, new SimulationPerformancePointDto(buyDate, safeBuy, BigDecimal.ZERO));
+        } else if (series.get(0).date().isEqual(buyDate)
+                && series.get(0).priceTry().compareTo(safeBuy) != 0) {
+            series.set(0, new SimulationPerformancePointDto(buyDate, safeBuy, BigDecimal.ZERO));
+        }
+
+        LocalDate today = todayIstanbul();
         BigDecimal todayPct = currentPriceTry.subtract(safeBuy)
                 .divide(safeBuy, 8, RoundingMode.HALF_UP)
                 .multiply(new BigDecimal("100"));
         SimulationPerformancePointDto todayPoint =
                 new SimulationPerformancePointDto(today, currentPriceTry, todayPct);
 
-        if (points.isEmpty()) {
+        if (series.isEmpty()) {
             return List.of(
                     new SimulationPerformancePointDto(buyDate, safeBuy, BigDecimal.ZERO),
                     todayPoint
             );
         }
 
-        SimulationPerformancePointDto last = points.get(points.size() - 1);
+        SimulationPerformancePointDto last = series.get(series.size() - 1);
         // Günlük mum son noktası bugün olsa bile alış anındaki kapanıştan farklı olabilir; canlı kotasyonu yansıt.
         if (last.date().equals(today)) {
             ArrayList<SimulationPerformancePointDto> head =
-                    new ArrayList<>(points.subList(0, points.size() - 1));
+                    new ArrayList<>(series.subList(0, series.size() - 1));
             head.add(todayPoint);
             return List.copyOf(head);
         }
         if (today.isAfter(last.date())) {
-            return java.util.stream.Stream.concat(points.stream(), java.util.stream.Stream.of(todayPoint)).toList();
+            series.add(todayPoint);
         }
-        return points;
+        return List.copyOf(series);
     }
 
     private SimulationPerformancePointDto toPoint(LocalDateTime ts, BigDecimal priceTry, BigDecimal buyPriceTry) {
@@ -375,6 +474,34 @@ public class SimulationService {
             return spot;
         }
         return BigDecimal.ONE;
+    }
+
+    private static LocalDate todayIstanbul() {
+        return LocalDate.now(TZ);
+    }
+
+    /**
+     * Canlı kotasyon yoksa (ör. BIST latest listesinde sembol yok) geçmiş serinin son geçerli gününü kullan.
+     */
+    private BigDecimal resolveCurrentPriceTry(
+            AssetType type,
+            String symbol,
+            List<MarketPriceHistoryDto> normalizedHistory
+    ) {
+        BigDecimal spot = nz(marketDataClient.getPriceTry(type, symbol));
+        if (spot.signum() > 0) {
+            return spot;
+        }
+        if (normalizedHistory == null || normalizedHistory.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        return normalizedHistory.stream()
+                .filter(Objects::nonNull)
+                .filter(h -> h.timestamp() != null)
+                .max(Comparator.comparing(MarketPriceHistoryDto::timestamp))
+                .map(this::midPrice)
+                .filter(p -> p != null && p.signum() > 0)
+                .orElse(BigDecimal.ZERO);
     }
 
     private record HistoricalPriceRef(

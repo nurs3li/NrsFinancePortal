@@ -41,7 +41,16 @@ public class MarketDataClient {
             new ParameterizedTypeReference<>() {};
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record BistLatestRow(String symbol, BigDecimal adjustedClose, BigDecimal rawClose) {}
+    public record BistLatestRow(
+            String symbol,
+            String displayName,
+            String sector,
+            BigDecimal adjustedClose,
+            BigDecimal rawClose,
+            BigDecimal changePercent,
+            BigDecimal volume,
+            String source,
+            String dataQuality) {}
 
     private static final ParameterizedTypeReference<List<BistLatestRow>> BIST_LATEST_LIST =
             new ParameterizedTypeReference<>() {};
@@ -51,6 +60,43 @@ public class MarketDataClient {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record BistBatchBody(Map<String, List<BistHistRow>> historiesBySymbol) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record BistLatestPage(
+            List<BistLatestRow> content,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages,
+            boolean hasNext,
+            boolean hasPrevious) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ViopLatestRow(
+            String contractCode,
+            String contractMonth,
+            BigDecimal price,
+            BigDecimal basis,
+            BigDecimal marginRequirement,
+            BigDecimal listPctChange1d,
+            BigDecimal listPctChange7d,
+            BigDecimal listPctChange30d,
+            BigDecimal listPctChange365d,
+            BigDecimal listPctChange14d,
+            BigDecimal seqMovePct,
+            Long dailyVolume,
+            List<BigDecimal> sparklineCloses) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record DebtLatestRow(
+            String isin,
+            BigDecimal dirtyPrice,
+            BigDecimal yieldPct,
+            BigDecimal couponRate,
+            String maturityDate,
+            Integer daysToMaturity,
+            Boolean synthetic,
+            java.time.LocalDateTime asOf) {}
 
     private final WebClient marketDataWebClient;
 
@@ -323,6 +369,64 @@ public class MarketDataClient {
             return out;
         } catch (RuntimeException ignored) {
             return Map.of();
+        }
+    }
+
+    public BistLatestPage getBistLatestPage(
+            int page, int size, String sort, String dir, String filter, String search) {
+        try {
+            BistLatestPage body = marketDataWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/market/equities/bist/latest/page")
+                            .queryParam("page", page)
+                            .queryParam("size", size)
+                            .queryParam("sort", sort != null ? sort : "changePercent")
+                            .queryParam("dir", dir != null ? dir : "desc")
+                            .queryParam("filter", filter != null ? filter : "ALL")
+                            .queryParamIfPresent("search", java.util.Optional.ofNullable(search).filter(s -> !s.isBlank()))
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BistLatestPage.class)
+                    .timeout(REQUEST_TIMEOUT.plusSeconds(5))
+                    .onErrorReturn(emptyBistPage())
+                    .block(REQUEST_TIMEOUT.plusSeconds(6));
+            return body != null ? body : emptyBistPage();
+        } catch (RuntimeException ignored) {
+            return emptyBistPage();
+        }
+    }
+
+    private static BistLatestPage emptyBistPage() {
+        return new BistLatestPage(List.of(), 0, 5, 0, 0, false, false);
+    }
+
+    public List<ViopLatestRow> getViopLatestRows() {
+        try {
+            List<ViopLatestRow> rows = marketDataWebClient.get()
+                    .uri("/api/market/viop/latest")
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<List<ViopLatestRow>>() {})
+                    .timeout(REQUEST_TIMEOUT.plusSeconds(8))
+                    .onErrorReturn(List.of())
+                    .block(REQUEST_TIMEOUT.plusSeconds(10));
+            return rows != null ? rows : List.of();
+        } catch (RuntimeException ignored) {
+            return List.of();
+        }
+    }
+
+    public List<DebtLatestRow> getDebtLatestRows() {
+        try {
+            List<DebtLatestRow> rows = marketDataWebClient.get()
+                    .uri("/api/market/debt/latest")
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<List<DebtLatestRow>>() {})
+                    .timeout(REQUEST_TIMEOUT)
+                    .onErrorReturn(List.of())
+                    .block(REQUEST_TIMEOUT.plusSeconds(2));
+            return rows != null ? rows : List.of();
+        } catch (RuntimeException ignored) {
+            return List.of();
         }
     }
 

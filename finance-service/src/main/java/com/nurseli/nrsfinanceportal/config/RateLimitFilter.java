@@ -60,8 +60,8 @@ public class RateLimitFilter implements Filter {
             return;
         }
 
-        // 1b) Portföy snapshot okuma — sayfa başına çoklu istekte 429 önlemek için GET muaf
-        if ("GET".equals(method) && path.startsWith("/api/portfolio/snapshots")) {
+        // 1b) Portföy snapshot / manuel zaman serisi okuma — dashboard yüklemede 429 önlemek için GET muaf
+        if ("GET".equals(method) && (path.startsWith("/api/portfolio/snapshots") || path.startsWith("/api/portfolio/manual/timeseries"))) {
             chain.doFilter(request, response);
             return;
         }

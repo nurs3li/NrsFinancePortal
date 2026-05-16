@@ -22,6 +22,8 @@ public class SimulationResponseDto {
     private final List<SimulationPerformancePointDto> performanceSeries;
     private final String approximationNoticeCode;
     private final String message;
+    /** TRY veya USD — parasal alanlar bu birimde. */
+    private final String displayCurrency;
 
     public SimulationResponseDto(
             String type,
@@ -39,7 +41,8 @@ public class SimulationResponseDto {
             String qualityFlag,
             List<SimulationPerformancePointDto> performanceSeries,
             String approximationNoticeCode,
-            String message
+            String message,
+            String displayCurrency
     ) {
         this.type = type;
         this.symbol = symbol;
@@ -57,6 +60,7 @@ public class SimulationResponseDto {
         this.performanceSeries = performanceSeries;
         this.approximationNoticeCode = approximationNoticeCode;
         this.message = message;
+        this.displayCurrency = displayCurrency;
     }
 
     public String getType() { return type; }
@@ -75,4 +79,5 @@ public class SimulationResponseDto {
     public List<SimulationPerformancePointDto> getPerformanceSeries() { return performanceSeries; }
     public String getApproximationNoticeCode() { return approximationNoticeCode; }
     public String getMessage() { return message; }
+    public String getDisplayCurrency() { return displayCurrency; }
 }

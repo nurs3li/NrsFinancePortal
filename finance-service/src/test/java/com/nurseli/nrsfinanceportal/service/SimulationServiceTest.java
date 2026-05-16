@@ -13,6 +13,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -172,6 +174,115 @@ class SimulationServiceTest {
         assertEquals(0, response.getCurrentValueTry().compareTo(new BigDecimal("6000.00")));
         assertEquals("EXACT", response.getQualityFlag());
         assertEquals(SimulationService.NOTICE_USD_DENOMINATED, response.getApproximationNoticeCode());
+    }
+
+    @Test
+    void shouldRequireManualPriceWhenHistoryOnlyAfterBuyDate() {
+        MarketDataClient marketDataClient = Mockito.mock(MarketDataClient.class);
+        DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
+        SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
+
+        LocalDate buyDate = LocalDate.of(2024, 1, 1);
+        LocalDate firstData = buyDate.plusMonths(6);
+        Mockito.when(marketDataClient.getHistory(eq(AssetType.FX), eq("USDTRY"), anyInt()))
+                .thenReturn(List.of(
+                        new MarketPriceHistoryDto(new BigDecimal("35"), new BigDecimal("35"), firstData.atStartOfDay())
+                ));
+        Mockito.when(marketDataClient.getPriceTry(eq(AssetType.FX), eq("USDTRY")))
+                .thenReturn(new BigDecimal("37"));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                service.simulate(AssetType.FX, "USDTRY", new BigDecimal("1000"), buyDate, null)
+        );
+        assertTrue(ex.getMessage().contains(SimulationService.MANUAL_PRICE_REQUIRED));
+    }
+
+    @Test
+    void shouldRequireManualPriceWhenHistoryEmpty() {
+        MarketDataClient marketDataClient = Mockito.mock(MarketDataClient.class);
+        DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
+        SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
+
+        LocalDate buyDate = LocalDate.now().minusDays(10);
+        Mockito.when(marketDataClient.getHistory(eq(AssetType.METAL), eq("XAU_TRY"), anyInt()))
+                .thenReturn(List.of());
+        Mockito.when(marketDataClient.getPriceTry(eq(AssetType.METAL), eq("XAU_TRY")))
+                .thenReturn(new BigDecimal("2500"));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                service.simulate(AssetType.METAL, "XAU_TRY", new BigDecimal("1000"), buyDate, null)
+        );
+        assertTrue(ex.getMessage().contains(SimulationService.MANUAL_PRICE_REQUIRED));
+    }
+
+    @Test
+    void shouldAnchorChartAtBuyDateWhenFirstHistoryIsLater() {
+        MarketDataClient marketDataClient = Mockito.mock(MarketDataClient.class);
+        DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
+        SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
+
+        LocalDate buyDate = LocalDate.of(2024, 1, 1);
+        LocalDate firstData = LocalDate.of(2024, 3, 1);
+        Mockito.when(marketDataClient.getHistory(eq(AssetType.FX), eq("USDTRY"), anyInt()))
+                .thenReturn(List.of(
+                        new MarketPriceHistoryDto(new BigDecimal("30"), new BigDecimal("30"), buyDate.minusDays(5).atStartOfDay()),
+                        new MarketPriceHistoryDto(new BigDecimal("32"), new BigDecimal("32"), firstData.atStartOfDay())
+                ));
+        Mockito.when(marketDataClient.getPriceTry(eq(AssetType.FX), eq("USDTRY")))
+                .thenReturn(new BigDecimal("40"));
+
+        SimulationResponseDto response = service.simulate(
+                AssetType.FX, "USDTRY", new BigDecimal("1000"), buyDate, new BigDecimal("31")
+        );
+
+        assertEquals(buyDate, response.getPerformanceSeries().get(0).date());
+        assertEquals(0, response.getPerformanceSeries().get(0).cumulativeReturnPct().compareTo(BigDecimal.ZERO));
+    }
+
+    @Test
+    void shouldAllowBuyDateTodayWhenHistoryContainsToday() {
+        MarketDataClient marketDataClient = Mockito.mock(MarketDataClient.class);
+        DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
+        SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
+
+        LocalDate buyDate = LocalDate.now();
+        Mockito.when(marketDataClient.getHistory(eq(AssetType.FX), eq("GBPTRY"), anyInt()))
+                .thenReturn(List.of(
+                        new MarketPriceHistoryDto(new BigDecimal("44"), new BigDecimal("44"), buyDate.atStartOfDay())
+                ));
+        Mockito.when(marketDataClient.getPriceTry(eq(AssetType.FX), eq("GBPTRY")))
+                .thenReturn(new BigDecimal("45"));
+
+        SimulationResponseDto response = service.simulate(
+                AssetType.FX, "GBPTRY", new BigDecimal("5000"), buyDate, null
+        );
+
+        assertEquals("EXACT", response.getQualityFlag());
+        assertEquals(0, response.getHistoricalPriceTry().compareTo(new BigDecimal("44")));
+    }
+
+    @Test
+    void shouldUseLastHistoryWhenBistSpotMissing() {
+        MarketDataClient marketDataClient = Mockito.mock(MarketDataClient.class);
+        DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
+        SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
+
+        LocalDate buyDate = LocalDate.of(2024, 6, 10);
+        LocalDate later = buyDate.plusDays(2);
+        Mockito.when(marketDataClient.getBistHistoryBetween(eq("AKBNK"), any(LocalDate.class), any(LocalDate.class)))
+                .thenReturn(List.of(
+                        new MarketPriceHistoryDto(new BigDecimal("50"), new BigDecimal("50"), buyDate.atStartOfDay()),
+                        new MarketPriceHistoryDto(new BigDecimal("55"), new BigDecimal("55"), later.atStartOfDay())
+                ));
+        Mockito.when(marketDataClient.getPriceTry(eq(AssetType.BIST), eq("AKBNK")))
+                .thenReturn(BigDecimal.ZERO);
+
+        SimulationResponseDto response = service.simulate(
+                AssetType.BIST, "AKBNK", new BigDecimal("5000"), buyDate, null
+        );
+
+        assertEquals(0, response.getCurrentPriceTry().compareTo(new BigDecimal("55")));
+        assertTrue(response.getPerformanceSeries().size() >= 2);
     }
 
     @Test

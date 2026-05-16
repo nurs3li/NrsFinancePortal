@@ -4,6 +4,7 @@ import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioAnalysisResponse;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioCloseRequest;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioCreateRequest;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioSummaryView;
+import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioTimeseriesPointDto;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioView;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPriceResolveDto;
 import com.nurseli.nrsfinanceportal.common.dto.UnifiedPortfolioItemView;
@@ -91,6 +92,86 @@ public class PortfolioController {
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<ManualPortfolioSummaryView> manualSummary() {
         return ApiResponse.success(manualPortfolioService.summaryMine());
+    }
+
+    @GetMapping("/manual/timeseries/me")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<List<ManualPortfolioTimeseriesPointDto>> manualTimeseries(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ApiResponse.success(manualPortfolioService.timeseriesMine(from, to));
+    }
+
+    @GetMapping("/manual/timeseries/me/segment")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<List<ManualPortfolioTimeseriesPointDto>> manualTimeseriesSegment(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam String mode,
+            @RequestParam String key
+    ) {
+        return ApiResponse.success(manualPortfolioService.timeseriesMineSegment(from, to, mode, key));
+    }
+
+    @GetMapping("/manual/timeseries/me/sold-hold-hypothetical")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<List<ManualPortfolioTimeseriesPointDto>> manualTimeseriesSoldHoldHypothetical(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ApiResponse.success(manualPortfolioService.timeseriesMineSoldHoldHypothetical(from, to));
+    }
+
+    @GetMapping("/manual/timeseries/me/sold-hold-hypothetical/segment")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<List<ManualPortfolioTimeseriesPointDto>> manualTimeseriesSoldHoldHypotheticalSegment(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam String mode,
+            @RequestParam String key
+    ) {
+        return ApiResponse.success(manualPortfolioService.timeseriesMineSoldHoldHypotheticalSegment(from, to, mode, key));
+    }
+
+    @GetMapping("/manual/timeseries/me/sold-lifecycle-pnl")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<List<ManualPortfolioTimeseriesPointDto>> manualTimeseriesSoldLifecyclePnl(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ApiResponse.success(manualPortfolioService.timeseriesMineSoldLifecyclePnl(from, to));
+    }
+
+    @GetMapping("/manual/timeseries/me/sold-lifecycle-pnl/segment")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<List<ManualPortfolioTimeseriesPointDto>> manualTimeseriesSoldLifecyclePnlSegment(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam String mode,
+            @RequestParam String key
+    ) {
+        return ApiResponse.success(manualPortfolioService.timeseriesMineSoldLifecyclePnlSegment(from, to, mode, key));
+    }
+
+    @GetMapping("/manual/timeseries/me/open-unrealized-pnl")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<List<ManualPortfolioTimeseriesPointDto>> manualTimeseriesOpenUnrealizedPnl(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ApiResponse.success(manualPortfolioService.timeseriesMineOpenUnrealizedPnl(from, to));
+    }
+
+    @GetMapping("/manual/timeseries/me/open-unrealized-pnl/segment")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<List<ManualPortfolioTimeseriesPointDto>> manualTimeseriesOpenUnrealizedPnlSegment(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam String mode,
+            @RequestParam String key
+    ) {
+        return ApiResponse.success(manualPortfolioService.timeseriesMineOpenUnrealizedPnlSegment(from, to, mode, key));
     }
 
     @GetMapping("/manual/{id}/analysis")

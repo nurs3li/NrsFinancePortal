@@ -46,10 +46,6 @@ public class HistoricalManualPriceResolverService {
         int maxLb = Math.max(1, resolveProperties.getMaxLookbackDays());
         long spanDays = ChronoUnit.DAYS.between(requestedDate, today) + maxLb;
         int allowed = AllowedHistoryDays.smallestCovering(spanDays);
-        if (allowed < 0) {
-            return ManualPriceResolveDto.notFound(type, symbol, requestedDate,
-                    "Seçilen tarih için fiyat bulunamadı. Manuel fiyat girin.");
-        }
 
         List<MarketPriceHistoryDto> raw = loadHistory(type, symbol, requestedDate, today, maxLb, allowed);
         NavigableMap<LocalDate, BigDecimal> byDay = aggregateLastPricePerDay(type, symbol, raw, snap);
@@ -95,7 +91,7 @@ public class HistoricalManualPriceResolverService {
      * Günlük kapanış (TRY) serisi — grafik için; {@code from}–{@code to} aralığı.
      */
     public List<ManualChartPoint> loadDailyCloseSeriesTry(AssetType type, String symbol, LocalDate from, LocalDate to) {
-        if (from == null || to == null || to.isBefore(from)) {
+        if (type == null || symbol == null || symbol.isBlank() || from == null || to == null || to.isBefore(from)) {
             return List.of();
         }
         LocalDate today = LocalDate.now(TZ);
@@ -103,9 +99,6 @@ public class HistoricalManualPriceResolverService {
         int maxLb = Math.max(1, resolveProperties.getMaxLookbackDays());
         long spanDays = ChronoUnit.DAYS.between(from, end) + 2;
         int allowed = AllowedHistoryDays.smallestCovering(spanDays + maxLb);
-        if (allowed < 0) {
-            return List.of();
-        }
         LatestPricingSnapshot snap = marketDataClient.loadLatestPricing();
         List<MarketPriceHistoryDto> raw = loadHistory(type, symbol, from, end, maxLb, allowed);
         NavigableMap<LocalDate, BigDecimal> byDay = aggregateLastPricePerDay(type, symbol, raw, snap);
