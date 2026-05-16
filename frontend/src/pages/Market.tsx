@@ -7,7 +7,9 @@ import {
     useState,
     type CSSProperties,
     type MouseEvent,
+    type ReactElement,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AxiosResponse } from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -37,9 +39,29 @@ import { BondTerminalChart } from '../components/market/BondTerminalChart';
 import { ViopTerminalChart } from '../components/market/ViopTerminalChart';
 import { SpotTerminalChart } from '../components/market/SpotTerminalChart';
 import { FxEffectiveRatesComparisonSection } from '../components/market/FxEffectiveRatesComparisonSection';
+import { MarketCategoryScrollTabs } from '../components/market/MarketCategoryScrollTabs';
+import { ChartIndicatorToggles } from '../components/market/ChartIndicatorToggles';
 import { MarketCompareLwChart } from '../components/market/MarketCompareLwChart';
-import { usePolling } from '../hooks/usePolling';
-import { ChevronDown, GitCompare, Info, Star, TrendingUp } from 'lucide-react';
+import { MarketMacroInfoCard } from '../components/market/MarketMacroInfoCard';
+import { MarketPurchasingPowerSummaryLive } from '../components/market/MarketPurchasingPowerSummaryLive';
+import { MarketPurchasingPowerCompareChart } from '../components/market/MarketPurchasingPowerCompareChart';
+import { usePurchasingPowerData } from '../hooks/usePurchasingPowerData';
+import { fetchMarketTerminalList, MARKET_LIST_PAGE_SIZE } from '../services/marketTerminalListApi';
+import { terminalListItemToVm } from '../utils/marketTerminalListVm';
+import { useThrottledCallback } from '../lib/useThrottledCallback';
+import { istanbulTodayYmd } from '../components/simulation/simDates';
+import { clampPpAnchorYmd, firstYmdFromCandles, lastYmdFromCandles } from '../utils/marketPurchasingPower';
+import {
+    ChartCandlestick,
+    ChartLine,
+    ChevronDown,
+    GitCompare,
+    Info,
+    Maximize2,
+    Star,
+    TrendingUp,
+    X,
+} from 'lucide-react';
 import { extractMaturityDate, formatBondDisplayName, getRemainingDays } from '../utils/bondFormatter';
 import { debtHasStructuredYieldData, pickStructuredYieldDecimal } from '../utils/bondYieldSemantics';
 import { cryptoMeta, etfMeta, fxMeta, getBondMeta, instrumentMeta } from '../utils/instrumentMeta';
@@ -810,10 +832,6 @@ function effectiveViopCarryPercent(v: ViopSnapshot, price: number): number {
  * 96 çok agresifti (200+ kontratın yarısı 6 paralel kanaldan saniyelerce frontend'i bloke ediyordu);
  * orta seviye olarak küçük tutuyoruz — gerçek mod sadece boş latest senaryosunda devrede.
  */
-/** Tablo gövdesi: yalnızca görünür aralık + overscan render (VİOP’ta binlerce <tr> = navigasyon kilitlenmesi) */
-const MARKET_LIST_ROW_HEIGHT = 56;
-const MARKET_LIST_OVERSCAN_ROWS = 12;
-
 type EquitySubmarket = 'US' | 'BIST';
 
 /** Grafik aralığı: dahili `1D` vb. — Türkçe kısa etiket (UI). */
@@ -1276,6 +1294,13 @@ export function Market() {
     const [liveOverrides, setLiveOverrides] = useState<Record<string, LiveTick>>({});
     const [range, setRange] = useState<ChartRangeId>('1M');
     const [equitySubmarket, setEquitySubmarket] = useState<EquitySubmarket>('US');
+    /** Hisse / kripto / FX / metaller / fonlar: sol piyasa listesi sürekli kartta; VİOP–tahvilde liste popover’da kalır. */
+    const isSpotHeatmapRail =
+        activeCategory === 'EQUITY' ||
+        activeCategory === 'CRYPTO' ||
+        activeCategory === 'FX' ||
+        activeCategory === 'METALS' ||
+        activeCategory === 'FUNDS';
     /** Açılır piyasa listesinde gezilen kategori / alt pazar; grafik `activeCategory` ile ayrılır — chip’e basınca hero değişmez. */
     const [pickerCategory, setPickerCategory] = useState<MarketCategory>('EQUITY');
     const [pickerEquitySubmarket, setPickerEquitySubmarket] = useState<EquitySubmarket>('US');
@@ -1283,19 +1308,24 @@ export function Market() {
     const trendChartRange: ChartRangeId =
         activeCategory === 'EQUITY' && equitySubmarket === 'BIST' ? bistRange : range;
     const [showMa, setShowMa] = useState(true);
-    const [showRsi, setShowRsi] = useState(true);
+    const [showRsi, setShowRsi] = useState(false);
     const [bondChartMode, setBondChartMode] = useState<'DUAL' | 'CANDLE'>('DUAL');
     const [viopChartMode, setViopChartMode] = useState<'LINE' | 'CANDLE'>('LINE');
     const [spotChartMode, setSpotChartMode] = useState<'ANALYSIS' | 'CANDLE'>('ANALYSIS');
+    /** Karşılaştırma grafiği: zaman aralığının başlangıç günü (crosshair ile değişmez). */
+    const [ppChartAnchor, setPpChartAnchor] = useState('');
+    const ppAnchorBoundsRef = useRef({ first: '', last: '', today: '' });
+    const ppCrosshairHandlerRef = useRef<((dateYmd: string) => void) | null>(null);
     const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down'>>({});
     const prevPricesRef = useRef<Record<string, number>>({});
     const prevTerminalCategoryRef = useRef<MarketCategory>(activeCategory);
     const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
     const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
     const [loadingCompare, setLoadingCompare] = useState(false);
-    /** Piyasa listesi yalnızca enstrüman seçicide tıklanınca açılan sabit konumlu panelde (yan sütun yok). */
+    /** Piyasa listesi: spot’ta sol kartta sabit; VİOP/tahvilde enstrüman seçicide açılır panel. */
     const [instrumentListOpen, setInstrumentListOpen] = useState(false);
     const terminalHeroRef = useRef<HTMLDivElement | null>(null);
+    const leftMarketPanelRef = useRef<HTMLDivElement | null>(null);
     const [instrumentListPopoverBox, setInstrumentListPopoverBox] = useState<{
         top: number;
         left: number;
@@ -1303,10 +1333,13 @@ export function Market() {
     } | null>(null);
     /** Sol liste: arama sonrası hızlı filtre (Tümü / yükselen / düşen / hacim veya VİOP türü). */
     const [marketListQuickFilter, setMarketListQuickFilter] = useState<string>('ALL');
+    /** Piyasa listesi tam ekrana yakın büyük görünüm (bulanık arka plan). */
+    const [marketListExpanded, setMarketListExpanded] = useState(false);
     /** Piyasa listesi: Fiyat / Gün / Hafta / Ay / Yıl başlık tıklaması ile sıralama */
     const [pickerTableSort, setPickerTableSort] = useState<{ key: PickerListSortKey; dir: 'asc' | 'desc' } | null>(
         null,
     );
+    const [marketListPage, setMarketListPage] = useState(0);
 
     const togglePickerListSort = useCallback((key: PickerListSortKey) => {
         setPickerTableSort((prev) => {
@@ -1316,6 +1349,24 @@ export function Market() {
             return { key, dir: 'desc' };
         });
     }, []);
+
+    useEffect(() => {
+        if (!marketListExpanded) return;
+        const prevOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prevOverflow;
+        };
+    }, [marketListExpanded]);
+
+    useEffect(() => {
+        if (!marketListExpanded) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setMarketListExpanded(false);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [marketListExpanded]);
 
     const queryClient = useQueryClient();
     const { data: starredAssets } = useQuery({
@@ -1363,6 +1414,12 @@ export function Market() {
     );
 
     const handleInstrumentSelectorClick = useCallback(() => {
+        if (isSpotHeatmapRail) {
+            setPickerCategory(activeCategory);
+            setPickerEquitySubmarket(equitySubmarket);
+            leftMarketPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            return;
+        }
         setInstrumentListOpen((wasOpen) => {
             if (!wasOpen) {
                 setPickerCategory(activeCategory);
@@ -1370,7 +1427,7 @@ export function Market() {
             }
             return !wasOpen;
         });
-    }, [activeCategory, equitySubmarket]);
+    }, [activeCategory, equitySubmarket, isSpotHeatmapRail]);
 
     useEffect(() => {
         setInstrumentListOpen(false);
@@ -1408,14 +1465,20 @@ export function Market() {
         };
     }, [instrumentListOpen]);
 
-    /** Ana görünüm veya açık piyasa seçicide BIST listesi / spark için BIST API gerekir. */
-    const needBistTerminalData =
-        (activeCategory === 'EQUITY' && equitySubmarket === 'BIST') ||
-        (instrumentListOpen && pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST');
+    /** Grafik BIST veya piyasa listesinde Türk Hisseleri — spot sol kartta liste sürekli açık. */
+    const needBistTerminalData = activeCategory === 'EQUITY' && equitySubmarket === 'BIST';
 
     /** Tahvil listesi: ana sayfa Tahvil’de veya seçicide Tahvil sekmesindeyken yükle. */
     const needDebtTerminalData =
         activeCategory === 'BOND' || (instrumentListOpen && pickerCategory === 'BOND');
+
+    /** VİOP: yalnızca VİOP sekmesi veya seçicide VİOP açıkken — equity açılışında 12 snapshot isteği yok. */
+    const needViopTerminalData =
+        activeCategory === 'FUTURES' || (instrumentListOpen && pickerCategory === 'FUTURES');
+
+    const pickerMatchesChart =
+        pickerCategory === activeCategory &&
+        (activeCategory !== 'EQUITY' || pickerEquitySubmarket === equitySubmarket);
 
     /** Grafik ve batch istekleri seçili `range` ile aynı kalır (VİOP/tahvil 1G dahil). */
     const dataRangeForChart: ChartRangeId = range;
@@ -1424,12 +1487,14 @@ export function Market() {
         data: dashboard,
         isLoading: loadingDashboard,
         error: dashboardError,
-        refetch: refetchDashboard,
     } = useQuery({
         queryKey: ['market', 'dashboard', 'terminal'],
         queryFn: () =>
             financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => unwrapData(r)),
+        enabled: activeCategory !== 'FUTURES' && activeCategory !== 'BOND',
+        staleTime: 30_000,
         refetchInterval: activeCategory === 'FUTURES' || activeCategory === 'BOND' ? false : 12_000,
+        refetchOnWindowFocus: false,
     });
 
     const {
@@ -1443,14 +1508,76 @@ export function Market() {
         refetchInterval: needBistTerminalData ? 60_000 : false,
     });
 
+    const terminalListSortKey = pickerTableSort?.key ?? null;
+    const terminalListSortDir = pickerTableSort?.dir ?? 'desc';
+
+    const {
+        data: terminalListPageData,
+        isLoading: loadingTerminalList,
+        error: terminalListError,
+    } = useQuery({
+        queryKey: [
+            'market',
+            'terminal',
+            'list',
+            pickerCategory,
+            pickerEquitySubmarket,
+            marketListPage,
+            marketListQuickFilter,
+            searchTerm,
+            terminalListSortKey,
+            terminalListSortDir,
+        ],
+        queryFn: ({ signal }) =>
+            fetchMarketTerminalList(
+                {
+                    category: pickerCategory,
+                    equitySubmarket: pickerCategory === 'EQUITY' ? pickerEquitySubmarket : undefined,
+                    page: marketListPage,
+                    size: MARKET_LIST_PAGE_SIZE,
+                    filter: marketListQuickFilter,
+                    sort: terminalListSortKey,
+                    dir: terminalListSortDir,
+                    search: searchTerm,
+                },
+                signal,
+            ),
+        placeholderData: (prev) => prev,
+        staleTime: 8_000,
+    });
+
+    /** Dashboard beklenmeden ilk satırdan sembol seç — grafik istekleri hemen başlasın. */
+    const bootstrapSymbolFromList = useMemo(() => {
+        if (!pickerMatchesChart) return '';
+        const first = terminalListPageData?.items?.[0]?.symbol;
+        return first ? normalizeSymbolKey(first) : '';
+    }, [pickerMatchesChart, terminalListPageData]);
+
+    useEffect(() => {
+        if (activeCategory === 'FUTURES' || activeCategory === 'BOND') return;
+        if (!pickerMatchesChart || !bootstrapSymbolFromList) return;
+        setSelectedSymbol((prev) => prev || bootstrapSymbolFromList);
+    }, [activeCategory, pickerMatchesChart, bootstrapSymbolFromList]);
+
+    useEffect(() => {
+        setMarketListPage(0);
+    }, [pickerCategory, pickerEquitySubmarket, marketListQuickFilter, searchTerm, terminalListSortKey, terminalListSortDir]);
+
     const bistSparkSymbolsCsv = useMemo(() => {
+        if (pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST') {
+            const fromPage = (terminalListPageData?.items ?? [])
+                .map((r) => normalizeSymbolKey(r.symbol))
+                .filter(Boolean)
+                .join(',');
+            if (fromPage) return fromPage;
+        }
         if (!bistLatest.length) return '';
         return bistLatest
             .slice(0, 22)
             .map((r) => normalizeSymbolKey(String(r.symbol ?? '')))
             .filter(Boolean)
             .join(',');
-    }, [bistLatest]);
+    }, [pickerCategory, pickerEquitySubmarket, terminalListPageData, bistLatest]);
 
     const bistSparkRange = useMemo(() => bistCalendarRange(400), []);
 
@@ -1460,7 +1587,10 @@ export function Market() {
             const syms = bistSparkSymbolsCsv.split(',').map((s) => s.trim()).filter(Boolean);
             return getBistBatchHistory(syms, bistSparkRange.from, bistSparkRange.to, signal);
         },
-        enabled: needBistTerminalData && bistSparkSymbolsCsv.length > 0,
+        enabled:
+            (needBistTerminalData ||
+                (pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST')) &&
+            bistSparkSymbolsCsv.length > 0,
         staleTime: 120_000,
     });
 
@@ -1552,9 +1682,11 @@ export function Market() {
 
     const usdTryRateQueryEnabled =
         showUsdInTry &&
+        isSpotHeatmapRail &&
         ((activeCategory === 'EQUITY' && equitySubmarket !== 'BIST') ||
             activeCategory === 'CRYPTO' ||
-            activeCategory === 'FUNDS');
+            activeCategory === 'FUNDS' ||
+            activeCategory === 'METALS');
     const { data: usdTryRatePayload } = useQuery({
         queryKey: ['market', 'terminal', 'usd-try-rate'],
         queryFn: () =>
@@ -1640,18 +1772,12 @@ export function Market() {
     const rightPanelStyle: CSSProperties | undefined =
         activeCategory === 'FUTURES' || activeCategory === 'BOND' ? undefined : sideRailBoxStyle;
 
-    const isSpotHeatmapRail =
-        activeCategory === 'EQUITY' ||
-        activeCategory === 'CRYPTO' ||
-        activeCategory === 'FX' ||
-        activeCategory === 'METALS' ||
-        activeCategory === 'FUNDS';
-
     // VIOP: kontrat listesi + kontrat başına snapshot (`/api/market/viop/contracts/{code}/snapshot`).
     const { data: viopContracts = [] } = useQuery({
         queryKey: ['market', 'viop', 'contracts', 'terminal'],
         queryFn: ({ signal }) =>
             marketClient.get<ViopContract[]>('/api/market/viop/contracts', { signal }).then((r) => r.data),
+        enabled: needViopTerminalData,
         select: (rows) => (rows ?? []).filter((c) => isViopWhitelisted(c?.contractCode)),
         refetchInterval: false,
         refetchOnWindowFocus: false,
@@ -1671,7 +1797,7 @@ export function Market() {
                             signal,
                         })
                         .then((r) => r.data),
-                enabled: Boolean(sym) && isViopWhitelisted(sym),
+                enabled: needViopTerminalData && Boolean(sym) && isViopWhitelisted(sym),
                 staleTime: 20_000,
                 refetchInterval: activeCategory === 'FUTURES' ? 30_000 : false,
                 refetchOnWindowFocus: activeCategory === 'FUTURES',
@@ -1714,11 +1840,28 @@ export function Market() {
         enabled: needDebtTerminalData,
         refetchInterval: needDebtTerminalData ? 60_000 : false,
     });
+    const debtHistoryIsinsCsv = useMemo(() => {
+        if (!needDebtTerminalData) return '';
+        const keys = new Set<string>();
+        const add = (raw?: string) => {
+            const k = normalizeSymbolKey(raw ?? '');
+            if (k) keys.add(k);
+        };
+        add(selectedSymbol);
+        if (pickerCategory === 'BOND') {
+            (terminalListPageData?.items ?? []).forEach((r) => add(r.symbol));
+        }
+        if (keys.size === 0 && debtCatalog.length > 0) {
+            add(debtCatalog[0]?.isin);
+        }
+        return [...keys].sort().join(',');
+    }, [needDebtTerminalData, selectedSymbol, pickerCategory, terminalListPageData, debtCatalog]);
+
     const { data: debtHistoryByIsin = {} } = useQuery({
-        queryKey: ['market', 'debt', 'history-by-isin', 'terminal', dataRangeForChart, debtCatalog.length],
-        enabled: needDebtTerminalData && debtCatalog.length > 0,
+        queryKey: ['market', 'debt', 'history-by-isin', 'terminal', dataRangeForChart, debtHistoryIsinsCsv],
+        enabled: needDebtTerminalData && debtHistoryIsinsCsv.length > 0,
         queryFn: async ({ signal }) => {
-            const uniq = [...new Set(debtCatalog.map((d) => normalizeSymbolKey(d.isin)).filter(Boolean))];
+            const uniq = debtHistoryIsinsCsv.split(',').map((s) => s.trim()).filter(Boolean);
             const entries = await mapPool(uniq, 4, async (isin) => {
                 const rows = await marketClient
                     .get<DebtSnapshot[]>('/api/market/debt/history', {
@@ -1849,7 +1992,10 @@ export function Market() {
                             ? currentFromLatest
                             : (validHistoryPrices.at(-1) ?? 0);
                     const prev = validHistoryPrices.length > 1 ? validHistoryPrices[validHistoryPrices.length - 2] : 0;
-                    const changePercent = prev > 0 && current > 0 ? ((current - prev) / prev) * 100 : 0;
+                    const changePercent =
+                        prev > 0 && current > 0
+                            ? ((current - prev) / prev) * 100
+                            : Number(d.changePercent ?? 0) || 0;
                     return {
                         symbol,
                         category: 'BOND' as const,
@@ -2062,19 +2208,17 @@ export function Market() {
         () => buildInstruments(activeCategory, equitySubmarket),
         [buildInstruments, activeCategory, equitySubmarket]
     );
-    const pickerInstruments = useMemo(
-        () => buildInstruments(pickerCategory, pickerEquitySubmarket),
-        [buildInstruments, pickerCategory, pickerEquitySubmarket]
-    );
-
     useEffect(() => {
-        if (!instruments.length) {
-            setSelectedSymbol('');
+        if (activeCategory === 'FUTURES' || activeCategory === 'BOND') {
+            if (!instruments.length) return;
+            const stillExists = instruments.some((i) => i.symbol === selectedSymbol);
+            if (!selectedSymbol || !stillExists) setSelectedSymbol(instruments[0].symbol);
             return;
         }
+        if (!instruments.length) return;
         const stillExists = instruments.some((i) => i.symbol === selectedSymbol);
         if (!selectedSymbol || !stillExists) setSelectedSymbol(instruments[0].symbol);
-    }, [instruments, selectedSymbol]);
+    }, [instruments, selectedSymbol, activeCategory]);
 
     useEffect(() => {
         setCompareSymbols([]);
@@ -2170,6 +2314,13 @@ export function Market() {
                 : normalizeSymbolKey(selectedSymbol) || selectedSymbol
             : selectedSymbol;
 
+    const chartIndicatorsEnabled =
+        Boolean(selectedSymbol && marketType) &&
+        !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST') &&
+        (showMa || showRsi || spotChartMode === 'CANDLE');
+
+    const macroSidebarQueriesEnabled = Boolean(selectedSymbol);
+
     /** Hisse / döviz / kripto / altın: backend `bucket=hourly`. Tahvil / VİOP: yalnızca snapshot/günlük seri (saatlik istemci uydurması yok). */
     const terminalHourlyRange =
         ((activeCategory === 'EQUITY' && equitySubmarket !== 'BIST') ||
@@ -2180,9 +2331,7 @@ export function Market() {
 
     const { data: indicatorData, isLoading: loadingIndicators } = useQuery({
         queryKey: ['market', 'indicators', 'terminal', activeCategory, selectedSymbol, days, terminalHourlyRange ? `hourly:${range}` : 'daily'],
-        enabled:
-            Boolean(selectedSymbol && marketType) &&
-            !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST'),
+        enabled: chartIndicatorsEnabled,
         queryFn: ({ signal }) =>
             marketClient
                 .get<IndicatorsResponse>('/api/market/indicators', {
@@ -2196,10 +2345,8 @@ export function Market() {
                     signal,
                 })
                 .then((r) => r.data),
-        refetchInterval:
-            Boolean(selectedSymbol && marketType) && !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST')
-                ? 15_000
-                : false,
+        refetchInterval: chartIndicatorsEnabled ? 120_000 : false,
+        refetchOnWindowFocus: false,
     });
 
     const { data: batchData, isLoading: loadingCandles } = useQuery({
@@ -2302,13 +2449,12 @@ export function Market() {
         refetchInterval:
             Boolean(selectedSymbol && marketType) && !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST')
                 ? terminalHourlyRange
-                    ? range === '1W'
-                        ? 90_000
-                        : 60_000
-                    : 120_000
+                    ? 90_000
+                    : 300_000
                 : false,
-        refetchOnWindowFocus: true,
-        staleTime: terminalHourlyRange ? (range === '1W' ? 45_000 : 30_000) : 45_000,
+        refetchOnWindowFocus: false,
+        staleTime: 300_000,
+        placeholderData: (prev) => prev,
     });
 
     const { data: viopHistoryApi, isLoading: loadingViopHistory } = useQuery({
@@ -2698,27 +2844,6 @@ export function Market() {
         if (activeCategory !== 'BOND' || !selectedSymbol) return false;
         return debtHasStructuredYieldData(debtLatestMap[normalizeSymbolKey(selectedSymbol)]);
     }, [activeCategory, selectedSymbol, debtLatestMap]);
-    const pickerInstrumentVms = useMemo(() => mapInstrumentsToVms(pickerInstruments), [mapInstrumentsToVms, pickerInstruments]);
-
-    const pickerFilteredInstruments = useMemo(() => {
-        const q = searchTerm.trim().toLowerCase();
-        if (!q) return pickerInstrumentVms;
-        return pickerInstrumentVms.filter((x) => {
-            if (
-                x.symbol.toLowerCase().includes(q) ||
-                x.displayName.toLowerCase().includes(q) ||
-                String(x.type).toLowerCase().includes(q)
-            ) {
-                return true;
-            }
-            if (pickerCategory !== 'METALS') return false;
-            const meta = getPreciousMetalDisplayMeta(x.symbol);
-            const sub = String(x.listSubtitle ?? '').toLowerCase();
-            const bag = [x.symbol, x.displayName, sub, ...(meta?.searchTerms ?? [])].join(' ').toLowerCase();
-            return bag.includes(q);
-        });
-    }, [pickerInstrumentVms, searchTerm, pickerCategory]);
-
     const pickerMarketListQuickChips = useMemo(() => {
         if (pickerCategory === 'FUTURES') {
             return [
@@ -2747,53 +2872,22 @@ export function Market() {
         }
     }, [pickerCategory, marketListQuickFilter]);
 
-    const pickerDisplayedInstruments = useMemo(() => {
-        const rows = pickerFilteredInstruments;
-        const sortOut = (list: InstrumentVm[]) => applyPickerTableSort(list, pickerTableSort);
-
-        if (pickerCategory === 'FUTURES') {
-            if (marketListQuickFilter === 'ALL') return sortOut(rows);
-            const catMap: Record<string, 'FX' | 'INDEX' | 'COMMODITY' | 'EQUITY'> = {
-                VIOP_FX: 'FX',
-                VIOP_INDEX: 'INDEX',
-                VIOP_COMMODITY: 'COMMODITY',
-                VIOP_EQUITY: 'EQUITY',
-            };
-            const want = catMap[marketListQuickFilter];
-            if (!want) return sortOut(rows);
-            return sortOut(rows.filter((r) => viopCategoryFor(r.symbol) === want));
-        }
-        if (marketListQuickFilter === 'ALL') return sortOut(rows);
-        if (marketListQuickFilter === 'UP') {
-            return sortOut(
-                rows.filter((r) => {
-                    const d = finiteOrNull(r.pctDay);
-                    return d != null && d > 0.02;
-                }),
-            );
-        }
-        if (marketListQuickFilter === 'DOWN') {
-            return sortOut(
-                rows.filter((r) => {
-                    const d = finiteOrNull(r.pctDay);
-                    return d != null && d < -0.02;
-                }),
-            );
-        }
-        if (marketListQuickFilter === 'VOL') {
-            const byVol = [...rows].sort((a, b) => {
-                const va = a.volume != null && Number.isFinite(Number(a.volume)) ? Number(a.volume) : 0;
-                const vb = b.volume != null && Number.isFinite(Number(b.volume)) ? Number(b.volume) : 0;
-                return vb - va;
-            });
-            return sortOut(byVol);
-        }
-        return sortOut(rows);
-    }, [pickerFilteredInstruments, marketListQuickFilter, pickerCategory, pickerTableSort]);
-    const selectedInstrumentVm = useMemo(
-        () => instrumentVms.find((x) => x.symbol === selectedSymbol) ?? instrumentVms[0] ?? null,
-        [instrumentVms, selectedSymbol]
+    const pickerDisplayedInstruments = useMemo(
+        () => (terminalListPageData?.items ?? []).map((row) => terminalListItemToVm(row) as InstrumentVm),
+        [terminalListPageData],
     );
+    const marketListTotalPages = terminalListPageData?.totalPages ?? 0;
+    const marketListTotalElements = terminalListPageData?.totalElements ?? 0;
+    const selectedInstrumentVm = useMemo(() => {
+        const fromInstruments =
+            instrumentVms.find((x) => x.symbol === selectedSymbol) ?? instrumentVms[0] ?? null;
+        if (fromInstruments) return fromInstruments;
+        return (
+            pickerDisplayedInstruments.find((x) => x.symbol === selectedSymbol) ??
+            pickerDisplayedInstruments[0] ??
+            null
+        );
+    }, [instrumentVms, selectedSymbol, pickerDisplayedInstruments]);
 
     const chartComparisonAvailable = useMemo(
         () =>
@@ -2849,7 +2943,7 @@ export function Market() {
         [chartComparisonAvailable, selectedInstrumentVm, activeCategory, equitySubmarket],
     );
 
-    const heroCompareStrip =
+    const compareSymbolChipStrip =
         chartComparisonAvailable && heroCompareExtras.length > 0 ? (
             <div
                 className="terminal-hero-compare-strip"
@@ -2882,85 +2976,10 @@ export function Market() {
         ) : null;
 
     const tableWrapRef = useRef<HTMLDivElement>(null);
-    const [listScrollTop, setListScrollTop] = useState(0);
-    const [listViewportH, setListViewportH] = useState(560);
-    const scrollRafRef = useRef<number | null>(null);
-    const lastReportedScrollTopRef = useRef(0);
-
-    const lastListViewportHRef = useRef(0);
-
-    useLayoutEffect(() => {
-        const el = tableWrapRef.current;
-        if (!el || typeof ResizeObserver === 'undefined') return;
-
-        // SCROLL THROTTLE: native scroll her pikselde tetiklenir. Onceden her pikselde
-        // setListScrollTop cagrilip Market.tsx (~2900 satir, ~10 chart) re-render
-        // ediliyordu; bu da scroll sirasinda gorsel titremeye yol aciyordu.
-        //
-        // (1) rAF throttle ile setState frekansi max 60Hz'a indirilir.
-        // (2) Satir-esikli (rowHeight) guard: scroll 1 satirdan az kaymisken state
-        //     guncellenmez. Overscan zaten 12 satir oldugu icin bu guvenli.
-        // Net etki: scroll sirasinda Market.tsx re-render frekansi 60Hz -> ~5Hz'a duser
-        // ve chart'lar artik titremiyor; native scroll smoothness korunuyor.
-        const onScroll = () => {
-            if (scrollRafRef.current != null) return;
-            scrollRafRef.current = requestAnimationFrame(() => {
-                scrollRafRef.current = null;
-                const current = el.scrollTop;
-                if (Math.abs(current - lastReportedScrollTopRef.current) >= MARKET_LIST_ROW_HEIGHT) {
-                    lastReportedScrollTopRef.current = current;
-                    setListScrollTop(current);
-                }
-            });
-        };
-        el.addEventListener('scroll', onScroll, { passive: true });
-        const ro = new ResizeObserver(() => {
-            const h = el.clientHeight;
-            if (Math.abs(h - lastListViewportHRef.current) < 12) return;
-            lastListViewportHRef.current = h;
-            requestAnimationFrame(() => setListViewportH(h));
-        });
-        ro.observe(el);
-        lastReportedScrollTopRef.current = el.scrollTop;
-        setListScrollTop(el.scrollTop);
-        lastListViewportHRef.current = el.clientHeight;
-        setListViewportH(el.clientHeight);
-        return () => {
-            if (scrollRafRef.current != null) {
-                cancelAnimationFrame(scrollRafRef.current);
-                scrollRafRef.current = null;
-            }
-            el.removeEventListener('scroll', onScroll);
-            ro.disconnect();
-        };
-    }, []);
-
-    useEffect(() => {
-        const el = tableWrapRef.current;
-        if (el) el.scrollTop = 0;
-        lastReportedScrollTopRef.current = 0;
-        setListScrollTop(0);
-    }, [pickerCategory, pickerEquitySubmarket, marketListQuickFilter, searchTerm]);
 
     useEffect(() => {
         setPickerTableSort(null);
     }, [pickerCategory, pickerEquitySubmarket, searchTerm]);
-
-    const listVirtual = useMemo(() => {
-        const total = pickerDisplayedInstruments.length;
-        const rowH = MARKET_LIST_ROW_HEIGHT;
-        const start = Math.min(total, Math.max(0, Math.floor(listScrollTop / rowH) - MARKET_LIST_OVERSCAN_ROWS));
-        const visibleRows = Math.ceil(listViewportH / rowH) + 2 * MARKET_LIST_OVERSCAN_ROWS + 2;
-        const end = Math.min(total, start + visibleRows);
-        const rows = pickerDisplayedInstruments.slice(start, end);
-        return {
-            rowHeight: rowH,
-            topSpacer: start * rowH,
-            bottomSpacer: Math.max(0, (total - end) * rowH),
-            rows,
-            totalHeight: total * rowH,
-        };
-    }, [pickerDisplayedInstruments, listScrollTop, listViewportH]);
     const sparklinePath = useCallback((values: number[]) => {
         if (!values.length) return '';
         const min = Math.min(...values);
@@ -3007,7 +3026,7 @@ export function Market() {
             high: highs.length ? Math.max(...highs) : current.price,
             low: lows.length ? Math.min(...lows) : current.price,
         };
-    }, [instrumentVms, selectedSymbol, candles, trendChartRange]);
+    }, [selectedInstrumentVm, candles, trendChartRange]);
     const heroScaled = useMemo(() => {
         if (!hero) return null;
         const pd = terminalPriceDisplay(hero, { showUsdInTry, usdTryRate });
@@ -3019,6 +3038,55 @@ export function Market() {
         const mult = isUsdConv ? usdTryRate : 1;
         return { ...pd, high: hero.high * mult, low: hero.low * mult };
     }, [hero, showUsdInTry, usdTryRate]);
+
+    const macroCompareEnabled =
+        isSpotHeatmapRail && Boolean(selectedSymbol) && spotChartMode === 'ANALYSIS';
+
+    const macroAssetInTry = useMemo(() => {
+        const ins = selectedInstrumentVm ?? hero;
+        if (!ins) return true;
+        if (isUsdPerOunceMetalSymbol(ins.symbol)) return false;
+        return resolveDisplayCurrency(ins) === 'TRY';
+    }, [selectedInstrumentVm, hero]);
+
+    const ppChartResetKey = `${selectedSymbol ?? ''}|${activeCategory}|${trendChartRange}`;
+
+    useEffect(() => {
+        const today = istanbulTodayYmd();
+        const first = firstYmdFromCandles(candles);
+        const last = lastYmdFromCandles(candles);
+        ppAnchorBoundsRef.current = { first, last, today };
+    }, [candles]);
+
+    useEffect(() => {
+        setPpChartAnchor('');
+    }, [selectedSymbol, activeCategory]);
+
+    useEffect(() => {
+        if (!macroCompareEnabled) return;
+        const { first, last, today } = ppAnchorBoundsRef.current;
+        if (!first) return;
+        setPpChartAnchor(clampPpAnchorYmd(first, first, last, today));
+    }, [macroCompareEnabled, ppChartResetKey]);
+
+    useEffect(() => {
+        if (!macroCompareEnabled || ppChartAnchor) return;
+        const { first, last, today } = ppAnchorBoundsRef.current;
+        if (first) setPpChartAnchor(clampPpAnchorYmd(first, first, last, today));
+    }, [macroCompareEnabled, ppChartAnchor, candles.length]);
+
+    const purchasingPowerChartData = usePurchasingPowerData(
+        macroCompareEnabled,
+        trendChartRange,
+        candles,
+        ppChartAnchor,
+        macroAssetInTry,
+    );
+
+    const onAnalysisCrosshairDate = useCallback((d: string) => {
+        ppCrosshairHandlerRef.current?.(d);
+    }, []);
+
     const drawerInstrumentPrice = useMemo(
         () =>
             selectedInstrumentVm
@@ -3417,14 +3485,6 @@ export function Market() {
         }
     }, [compareSymbols, loadCompare]);
 
-    /** VİOP sekmesinde canlı tick kullanılmıyor; WS + dashboard poll ana iş parçacığını kilitliyordu (üst menü tıklanmıyor gibi). */
-    usePolling(
-        () => {
-            void refetchDashboard();
-        },
-        12_000,
-        activeCategory !== 'FUTURES'
-    );
     useEffect(() => {
         if (activeCategory === 'FUTURES') {
             setLiveOverrides({});
@@ -3434,6 +3494,7 @@ export function Market() {
         const wsUrl = `${base}/ws/market`;
         let socket: WebSocket | null = null;
         let isCancelled = false;
+        let connectTimer: ReturnType<typeof setTimeout> | null = null;
         const connect = () => {
             if (isCancelled) return;
             socket = new WebSocket(wsUrl);
@@ -3464,20 +3525,17 @@ export function Market() {
                 }
             };
         };
-        connect();
+        connectTimer = setTimeout(connect, 1500);
         return () => {
             isCancelled = true;
+            if (connectTimer) clearTimeout(connectTimer);
             socket?.close();
         };
     }, [activeCategory]);
 
     const errMsg = dashboardError instanceof Error ? dashboardError.message : '';
-    /** VİOP / tahvil listesi finance dashboard’undan bağımsız; dashboard beklerken tüm sayfayı kilitleme */
-    const showDashboardBlockingSpinner =
-        loadingDashboard &&
-        activeCategory !== 'FUTURES' &&
-        activeCategory !== 'BOND' &&
-        !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST');
+    /** Sayfa hemen açılır; dashboard/treemap arka planda dolar. */
+    const showDashboardBlockingSpinner = false;
     const categoryLabel = useCallback(
         (id: MarketCategory) => {
             const key =
@@ -3497,6 +3555,76 @@ export function Market() {
             const fallback = CATEGORY_LABELS.find((c) => c.id === id)?.label ?? id;
             return t(key, fallback);
         },
+        [t]
+    );
+    const marketListCategoryTabs = useMemo(
+        () => CATEGORY_LABELS.map((c) => ({ id: c.id, label: categoryLabel(c.id) })),
+        [categoryLabel]
+    );
+    const fxQuoteScrollTabs = useMemo(
+        () => [
+            {
+                id: 'USD' as const,
+                label: t('market.showUsd', 'USD göster'),
+                icon: <span className="terminal-fx-quote-tab__glyph" aria-hidden>$</span>,
+            },
+            {
+                id: 'TRY' as const,
+                label: t('market.convertTry', 'TL’ye çevir'),
+                icon: <span className="terminal-fx-quote-tab__glyph" aria-hidden>₺</span>,
+            },
+        ],
+        [t]
+    );
+    const chartRangeScrollTabs = useMemo(
+        () => TERMINAL_CHART_RANGE_SEQUENCE.map((r) => ({ id: r, label: chartRangeUiShortLabel(r) })),
+        []
+    );
+    const chartIndicatorRsiAvailable = activeCategory !== 'BOND' && activeCategory !== 'FUTURES';
+
+    const spotChartModeTabs = useMemo(
+        () => [
+            {
+                id: 'ANALYSIS' as const,
+                label: t('market.marketAnalysis', 'Piyasa Analiz'),
+                icon: <ChartLine size={17} strokeWidth={2} aria-hidden />,
+            },
+            {
+                id: 'CANDLE' as const,
+                label: t('market.detailedCandle', 'Detaylı Mum'),
+                icon: <ChartCandlestick size={17} strokeWidth={2} aria-hidden />,
+            },
+        ],
+        [t]
+    );
+    const bondChartModeTabs = useMemo(
+        () => [
+            {
+                id: 'DUAL' as const,
+                label: t('market.bondAnalysis', 'Tahvil Analiz'),
+                icon: <ChartLine size={17} strokeWidth={2} aria-hidden />,
+            },
+            {
+                id: 'CANDLE' as const,
+                label: t('market.detailedCandle', 'Detaylı Mum'),
+                icon: <ChartCandlestick size={17} strokeWidth={2} aria-hidden />,
+            },
+        ],
+        [t]
+    );
+    const viopChartModeTabs = useMemo(
+        () => [
+            {
+                id: 'LINE' as const,
+                label: t('market.viopAnalysis', 'VİOP Analiz'),
+                icon: <ChartLine size={17} strokeWidth={2} aria-hidden />,
+            },
+            {
+                id: 'CANDLE' as const,
+                label: t('market.detailedCandle', 'Detaylı Mum'),
+                icon: <ChartCandlestick size={17} strokeWidth={2} aria-hidden />,
+            },
+        ],
         [t]
     );
     const spotTerminalTitle = useMemo(() => {
@@ -3572,8 +3700,11 @@ export function Market() {
                 overflow: 'hidden',
             };
         }
+        if (isSpotHeatmapRail) {
+            return undefined;
+        }
         return { display: 'none' };
-    }, [instrumentListOpen, instrumentListPopoverBox, tokens.border, tokens.bgCard]);
+    }, [instrumentListOpen, instrumentListPopoverBox, isSpotHeatmapRail, tokens.border, tokens.bgCard]);
 
     const renderComparisonCard = (cardClass: string) => {
         if (!canShowComparisonChart(activeCategory, marketType, equitySubmarket) || activeCategory === 'BOND') {
@@ -3590,6 +3721,9 @@ export function Market() {
                             : t('market.compareFromListHint', 'Karşılaştırma sembollerini piyasa listesindeki sütundan ekleyin veya çıkarın.')}
                     </div>
                 </div>
+                {compareSymbolChipStrip ? (
+                    <div className="terminal-comparison-card__chip-row">{compareSymbolChipStrip}</div>
+                ) : null}
                 <div style={{ marginTop: 4, position: 'relative', minHeight: chartH }}>
                     {loadingCompare ? (
                         <div
@@ -3641,521 +3775,53 @@ export function Market() {
         );
     };
 
-    if (errMsg) {
-        return <div className="terminal-page">{t('market.pageError', 'Piyasa terminali hatası')}: {errMsg}</div>;
+    function renderMarketListSubtitleKicker(): ReactElement | null {
+        if (pickerCategory === 'FUTURES') {
+            return (
+                <div
+                    style={{
+                        fontSize: 11,
+                        color: tokens.textMuted,
+                        lineHeight: 1.25,
+                        letterSpacing: 0.2,
+                    }}
+                >
+                    BIST 30 vadeli ({viopContracts.length} kontrat)
+                </div>
+            );
+        }
+        if (pickerCategory === 'BOND') {
+            return (
+                <div
+                    style={{
+                        fontSize: 11,
+                        color: tokens.textMuted,
+                        lineHeight: 1.25,
+                        letterSpacing: 0.2,
+                    }}
+                >
+                    {t(
+                        'market.bondListKicker',
+                        'Gösterilen % değerleri dönemsel fiyat değişimidir; tahvil faizi (yield) değildir.',
+                    )}
+                </div>
+            );
+        }
+        return null;
     }
 
-    return (
-        <div className="terminal-page" style={terminalVars}>
-            <div
-                ref={terminalHeroRef}
-                className={`terminal-hero ${activeCategory === 'FUTURES' ? 'terminal-hero--viop' : ''}`}
-            >
-                {hero && activeCategory === 'FUTURES' ? (
-                    <>
-                        <div className="terminal-hero-viop__selector-wrap">
-                            <button
-                                type="button"
-                                className={`terminal-hero-selector terminal-hero-selector--viop ${
-                                    instrumentListOpen ? 'is-open' : ''
-                                }`}
-                                onClick={handleInstrumentSelectorClick}
-                                aria-expanded={instrumentListOpen}
-                                aria-haspopup="dialog"
-                                title={t('market.instrumentPickerHint', 'Piyasa listesini aç / kapat')}
-                            >
-                            <div className="terminal-hero-viop__left">
-                            <div className="terminal-hero-viop__eyebrow">{t('market.selectedInstrument', 'Seçili Enstrüman')}</div>
-                            <div className="terminal-hero-viop__code" title={hero.symbol}>
-                                {hero.symbol}
-                            </div>
-                            <div className="terminal-hero-viop__name">
-                                {(() => {
-                                    const snap = viopSnapshotBySymbol[normalizeSymbolKey(hero.symbol)];
-                                    const n = getInstrumentDisplayName({
-                                        symbol: hero.symbol,
-                                        displayName: hero.displayName,
-                                        name: snap?.contractName,
-                                    });
-                                    return n !== hero.symbol ? n : parseViopContractLabel(hero.symbol);
-                                })()}
-                            </div>
-                            <div className="terminal-hero-viop__badges">
-                                {(() => {
-                                    const cat = viopCategoryFor(hero.symbol);
-                                    if (!cat) return null;
-                                    return (
-                                        <span className={viopCatBadgeClass(cat)} title={viopAssetClassTitle(cat)}>
-                                            {VIOP_CATEGORY_CHIP[cat].label}
-                                        </span>
-                                    );
-                                })()}
-                                <span className="instrument-highlight-chip" style={{ borderColor: 'var(--terminal-border)', color: 'var(--terminal-text)' }}>
-                                    {viopAssetClassTitle(viopCategoryFor(hero.symbol))}
-                                </span>
-                                {(() => {
-                                    const snap = viopSnapshotBySymbol[normalizeSymbolKey(hero.symbol)];
-                                    const hint = viopDataQualityHint(snap);
-                                    return hint ? <span className="viop-stale-pill">{hint}</span> : null;
-                                })()}
-                            </div>
-                            <div className="terminal-hero-viop__src">
-                                {t('market.source', 'Kaynak')}: {futuresHeaderMetrics?.sourceLabel ?? '—'}
-                                {futuresHeaderMetrics?.delayMinutes != null && futuresHeaderMetrics.delayMinutes > 0
-                                    ? ` · ${t('market.delayedData', 'Gecikmeli veri')}: ${futuresHeaderMetrics.delayMinutes} dk`
-                                    : viopDelayMinutesDisplay != null && viopDelayMinutesDisplay > 0
-                                      ? ` · ${viopDelayMinutesDisplay} dk`
-                                      : ''}
-                            </div>
-                            <ChevronDown className="terminal-hero-selector__chevron" size={18} aria-hidden />
-                        </div>
-                            </button>
-                            {heroCompareStrip}
-                        </div>
-                        <div className="terminal-hero-viop__mid">
-                            <div className="terminal-hero-price" title={heroScaled?.title}>
-                                {heroScaled ? (
-                                    <>
-                                        <span style={{ opacity: 0.85 }}>{heroScaled.glyph}</span>{' '}
-                                        {heroScaled.amount.toLocaleString('tr-TR', {
-                                            maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                        })}
-                                    </>
-                                ) : (
-                                    '—'
-                                )}
-                            </div>
-                            <div
-                                className={`terminal-hero-change ${
-                                    Math.abs(hero.changePercent) < 0.005 ? 'is-flat' : hero.trend === 'UP' ? 'up' : 'down'
-                                }`}
-                            >
-                                {Math.abs(hero.changePercent) < 0.005 ? <>0,00% →</> : (
-                                    <>
-                                        {hero.changePercent >= 0 ? '+' : ''}
-                                        {hero.changePercent.toFixed(2)}% {hero.trend === 'UP' ? '↑' : '↓'}
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                        <div className="terminal-hero-viop__metrics">
-                            <dl className="terminal-hero-viop-metric-grid">
-                                <dt>{t('market.bidAsk', 'Alış / Satış')}</dt>
-                                <dd>
-                                    {fmtViopBidAskLine(
-                                        futuresHeaderMetrics?.bid ?? null,
-                                        futuresHeaderMetrics?.ask ?? null,
-                                        viopPriceDecimals(hero.symbol)
-                                    )}
-                                </dd>
-                                <dt>{t('market.open', 'Açılış')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.open != null && Number.isFinite(futuresHeaderMetrics.open)
-                                        ? futuresHeaderMetrics.open.toLocaleString('tr-TR', {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.dayHighLow', 'Gün Yük / Düş')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.high != null && Number.isFinite(futuresHeaderMetrics.high)
-                                        ? futuresHeaderMetrics.high.toLocaleString('tr-TR', {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}{' '}
-                                    /{' '}
-                                    {futuresHeaderMetrics?.low != null && Number.isFinite(futuresHeaderMetrics.low)
-                                        ? futuresHeaderMetrics.low.toLocaleString('tr-TR', {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.volumeQty', 'Hacim / Adet')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.volume != null
-                                        ? futuresHeaderMetrics.volume.toLocaleString('tr-TR')
-                                        : '—'}{' '}
-                                    /{' '}
-                                    {futuresHeaderMetrics?.quantity != null
-                                        ? futuresHeaderMetrics.quantity.toLocaleString('tr-TR')
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.settlement', 'Uzlaşma')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.settlement != null && Number.isFinite(futuresHeaderMetrics.settlement)
-                                        ? futuresHeaderMetrics.settlement.toLocaleString('tr-TR', {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.preSettlement', 'Ön uzlaşma')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.preSettlement != null && Number.isFinite(futuresHeaderMetrics.preSettlement)
-                                        ? futuresHeaderMetrics.preSettlement.toLocaleString('tr-TR', {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.initialMargin', 'Teminat')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.initialMargin != null && Number.isFinite(futuresHeaderMetrics.initialMargin)
-                                        ? futuresHeaderMetrics.initialMargin.toLocaleString('tr-TR')
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.limitUpDown', 'Tavan / Taban')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.limitUp != null && Number.isFinite(futuresHeaderMetrics.limitUp)
-                                        ? futuresHeaderMetrics.limitUp.toLocaleString('tr-TR', {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}{' '}
-                                    /{' '}
-                                    {futuresHeaderMetrics?.limitDown != null && Number.isFinite(futuresHeaderMetrics.limitDown)
-                                        ? futuresHeaderMetrics.limitDown.toLocaleString('tr-TR', {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}
-                                </dd>
-                            </dl>
-                        </div>
-                    </>
-                ) : (
-                    <>
-                        <div className="terminal-hero-selector-row">
-                            <button
-                                type="button"
-                                className={`terminal-hero-selector terminal-hero-selector--with-inline-quote ${
-                                    instrumentListOpen ? 'is-open' : ''
-                                }`}
-                                onClick={handleInstrumentSelectorClick}
-                                aria-expanded={instrumentListOpen}
-                                aria-haspopup="dialog"
-                                title={t('market.instrumentPickerHint', 'Piyasa listesini aç / kapat')}
-                            >
-                            <div
-                                style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 auto' }}
-                            >
-                            {/* AssetLogo en basta -- onceden hero'da hic gorsel yoktu, sadece "Secili Enstrüman" yazisi
-                             * ve sembol kodu vardi; kullanici "secili enstrumanin basinda adi gorunmuyor" geri bildirimi
-                             * verdi. VIOP/Bond kontrat kodlarini logo CDN'e gondermek 404 doguruyor (assetBranding
-                             * helper'i bunu yakalayip null donuyor), AssetLogo da fallback ikona dusuyor. */}
-                            {hero && activeCategory === 'EQUITY' && equitySubmarket === 'BIST' ? (
-                                <span
-                                    className="bist-symbol-badge"
-                                    style={{
-                                        ...bistSymbolBadgeStyle(hero.symbol),
-                                        width: 36,
-                                        height: 36,
-                                        fontSize: 11,
-                                    }}
-                                    title={hero.symbol}
-                                    aria-hidden
-                                >
-                                    {hero.symbol.slice(0, 2)}
-                                </span>
-                            ) : (
-                                <AssetLogo
-                                    src={
-                                        hero && (activeCategory === 'EQUITY' || activeCategory === 'CRYPTO' || activeCategory === 'FX' || activeCategory === 'METALS' || activeCategory === 'FUNDS')
-                                            ? getDynamicLogoUrl(hero.symbol, marketKindForCategory(activeCategory))
-                                            : null
-                                    }
-                                    alt={hero ? `${hero.symbol} logo` : 'logo'}
-                                    fallbackIcon={TrendingUp}
-                                    fallbackColor={tokens.textMuted}
-                                    size={36}
-                                />
-                            )}
-                            <div style={{ minWidth: 0 }}>
-                                <div style={{ fontSize: 12, color: tokens.textMuted, marginBottom: 2 }}>{t('market.selectedInstrument', 'Seçili Enstrüman')}</div>
-                                <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.15 }}>
-                                    {hero
-                                        ? activeCategory === 'FUTURES'
-                                            ? parseViopContractLabel(hero.symbol)
-                                            : activeCategory === 'BOND'
-                                            ? debtNameMap[hero.symbol] ?? hero.symbol
-                                            : activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
-                                            ? hero.displayName
-                                            : activeCategory === 'METALS'
-                                            ? hero.displayName
-                                            : formatAssetLabel(hero.symbol, marketKindForCategory(activeCategory))
-                                        : '—'}
-                                </div>
-                                {activeCategory === 'BOND' && hero ? (
-                                    <div
-                                        style={{
-                                            fontFamily: 'ui-monospace, monospace',
-                                            fontSize: 13,
-                                            fontWeight: 600,
-                                            color: tokens.text,
-                                            marginTop: 4,
-                                            letterSpacing: 0.02,
-                                        }}
-                                        title={t('market.bondHeroIsinTitle', 'Devlet tahvili ISIN kodu')}
-                                    >
-                                        ISIN: {hero.symbol}
-                                    </div>
-                                ) : (
-                                    <div style={{ fontSize: 12, color: tokens.textMuted }}>{hero?.symbol ?? ''}</div>
-                                )}
-                            </div>
-                            </div>
-                            <div className="terminal-hero-selector__quote">
-                                <div
-                                    className="terminal-hero-selector__price"
-                                    title={
-                                        activeCategory === 'BOND'
-                                            ? t('market.bondHeroMarketPriceTip', 'Piyasa fiyatı (TRY). Bu değer tahvil faizi (yield) değildir.')
-                                            : heroScaled?.title
-                                    }
-                                >
-                                    {heroScaled ? (
-                                        <>
-                                            <span style={{ opacity: 0.8 }}>{heroScaled.glyph}</span>{' '}
-                                            {heroScaled.amount.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}
-                                            {heroScaled.suffix ?? ''}
-                                        </>
-                                    ) : (
-                                        '—'
-                                    )}
-                                </div>
-                                <div
-                                    className={`terminal-hero-selector__pct ${
-                                        !hero || Math.abs(hero.changePercent) < 0.005
-                                            ? 'is-flat'
-                                            : hero.trend === 'UP'
-                                              ? 'is-up'
-                                              : 'is-down'
-                                    }`}
-                                    title={
-                                        activeCategory === 'BOND'
-                                            ? t(
-                                                  'market.bondHeroDailyPriceChgTip',
-                                                  'Günlük fiyat değişimi (%). Tahvil faizi veya garanti getiri değildir.',
-                                              )
-                                            : undefined
-                                    }
-                                    style={activeCategory === 'BOND' ? { display: 'flex', alignItems: 'center', gap: 6 } : undefined}
-                                >
-                                    {hero ? (
-                                        Math.abs(hero.changePercent) < 0.005 ? (
-                                            <>0,00%</>
-                                        ) : (
-                                            <>
-                                                {hero.changePercent >= 0 ? '+' : ''}
-                                                {hero.changePercent.toFixed(2)}% {hero.trend === 'UP' ? '↑' : '↓'}
-                                            </>
-                                        )
-                                    ) : (
-                                        '—'
-                                    )}
-                                    {activeCategory === 'BOND' ? (
-                                        <span
-                                            title={t(
-                                                'market.bondHeroNotYieldTip',
-                                                'Bu değer faiz oranı (yield) değildir; gösterilenler piyasa fiyatı ve fiyat performansıdır.',
-                                            )}
-                                            style={{ display: 'inline-flex', color: tokens.textMuted, cursor: 'help' }}
-                                            aria-label={t('market.bondHeroNotYieldAria', 'Fiyat ile yield ayrımı bilgisi')}
-                                        >
-                                            <Info size={15} strokeWidth={2.2} aria-hidden />
-                                        </span>
-                                    ) : null}
-                                </div>
-                            </div>
-                            <ChevronDown className="terminal-hero-selector__chevron" size={20} aria-hidden />
-                        </button>
-                            {heroCompareStrip}
-                        </div>
-                        <div style={{ textAlign: 'right', fontSize: 12, color: tokens.textMuted }}>
-                            <div title={heroScaled?.title}>
-                                H:{' '}
-                                <span style={{ opacity: 0.8 }}>{heroScaled?.glyph ?? ''}</span>
-                                {heroScaled ? ' ' : ''}
-                                {heroScaled || hero
-                                    ? (heroScaled?.high ?? hero?.high ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })
-                                    : '—'}
-                            </div>
-                            <div title={heroScaled?.title}>
-                                L:{' '}
-                                <span style={{ opacity: 0.8 }}>{heroScaled?.glyph ?? ''}</span>
-                                {heroScaled ? ' ' : ''}
-                                {heroScaled || hero
-                                    ? (heroScaled?.low ?? hero?.low ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })
-                                    : '—'}
-                            </div>
-                            {activeCategory === 'FUTURES' && futuresHeaderMetrics ? (
-                                <>
-                                    <div>
-                                        Δ:{' '}
-                                        {futuresHeaderMetrics.changeAmount != null && Number.isFinite(futuresHeaderMetrics.changeAmount)
-                                            ? futuresHeaderMetrics.changeAmount.toLocaleString('tr-TR', { maximumFractionDigits: 2 })
-                                            : '—'}
-                                        {futuresHeaderMetrics.changePercent != null && Number.isFinite(futuresHeaderMetrics.changePercent)
-                                            ? ` (${futuresHeaderMetrics.changePercent >= 0 ? '+' : ''}${futuresHeaderMetrics.changePercent.toLocaleString('tr-TR', {
-                                                  maximumFractionDigits: 2,
-                                              })}%)`
-                                            : ''}
-                                    </div>
-                                    <div>
-                                        A/S:{' '}
-                                        {futuresHeaderMetrics.bid != null ? futuresHeaderMetrics.bid.toLocaleString('tr-TR') : '—'} /{' '}
-                                        {futuresHeaderMetrics.ask != null ? futuresHeaderMetrics.ask.toLocaleString('tr-TR') : '—'}
-                                    </div>
-                                    <div>
-                                        Açılış / G / D:{' '}
-                                        {futuresHeaderMetrics.open != null ? futuresHeaderMetrics.open.toLocaleString('tr-TR') : '—'} ·{' '}
-                                        {futuresHeaderMetrics.high != null ? futuresHeaderMetrics.high.toLocaleString('tr-TR') : '—'} ·{' '}
-                                        {futuresHeaderMetrics.low != null ? futuresHeaderMetrics.low.toLocaleString('tr-TR') : '—'}
-                                    </div>
-                                    <div>
-                                        Hacim / Adet:{' '}
-                                        {futuresHeaderMetrics.volume != null
-                                            ? futuresHeaderMetrics.volume.toLocaleString('tr-TR')
-                                            : '—'}{' '}
-                                        /{' '}
-                                        {futuresHeaderMetrics.quantity != null
-                                            ? futuresHeaderMetrics.quantity.toLocaleString('tr-TR')
-                                            : '—'}
-                                    </div>
-                                    <div>
-                                        Uzlaşma / Ön uzlaşma:{' '}
-                                        {futuresHeaderMetrics.settlement != null
-                                            ? futuresHeaderMetrics.settlement.toLocaleString('tr-TR')
-                                            : '—'}{' '}
-                                        /{' '}
-                                        {futuresHeaderMetrics.preSettlement != null
-                                            ? futuresHeaderMetrics.preSettlement.toLocaleString('tr-TR')
-                                            : '—'}
-                                    </div>
-                                    <div>
-                                        Teminat / Tavan–Taban:{' '}
-                                        {futuresHeaderMetrics.initialMargin != null
-                                            ? futuresHeaderMetrics.initialMargin.toLocaleString('tr-TR')
-                                            : '—'}{' '}
-                                        /{' '}
-                                        {futuresHeaderMetrics.limitUp != null ? futuresHeaderMetrics.limitUp.toLocaleString('tr-TR') : '—'} –{' '}
-                                        {futuresHeaderMetrics.limitDown != null
-                                            ? futuresHeaderMetrics.limitDown.toLocaleString('tr-TR')
-                                            : '—'}
-                                    </div>
-                                    <div style={{ fontSize: 11, opacity: 0.85 }}>
-                                        {futuresHeaderMetrics.sourceLabel}
-                                        {futuresHeaderMetrics.delayMinutes != null
-                                            ? ` · ${futuresHeaderMetrics.delayMinutes} dk gecikme`
-                                            : ''}
-                                    </div>
-                                </>
-                            ) : null}
-                        </div>
-                    </>
-                )}
-            </div>
-
-            {instrumentListOpen ? (
-                <button
-                    type="button"
-                    className="terminal-market-list-backdrop"
-                    aria-label={t('market.closeMarketListPopover', 'Listeyi kapat')}
-                    onClick={() => setInstrumentListOpen(false)}
-                />
-            ) : null}
-
-            {showDashboardBlockingSpinner ? (
-                <div className="terminal-card">{t('market.loading', 'Piyasa terminali yükleniyor...')}</div>
-            ) : (
-                <>
-                    <div
-                        className={`terminal-grid ${activeCategory === 'FUTURES' ? 'terminal-grid--viop' : ''} ${
-                            activeCategory === 'FUTURES' || activeCategory === 'BOND' ? 'terminal-grid--page-flow' : ''
-                        } terminal-grid--list-undocked${isSpotHeatmapRail ? ' terminal-grid--heatmap-rail' : ''}`}
-                    >
-                        <div
-                            className={`terminal-card terminal-left-panel ${
-                                pickerCategory === 'FUTURES' || pickerCategory === 'BOND'
-                                    ? 'terminal-left-panel--page-flow'
-                                    : ''
-                            } terminal-left-panel--undocked-slot`}
-                        >
-                            <div
-                                className={`terminal-left-panel__inner${
-                                    instrumentListOpen ? ' terminal-left-panel__inner--popover-sheet' : ''
-                                }`}
-                                style={instrumentListSheetStyle}
-                            >
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    gap: 6,
-                                    marginBottom: 6,
+    function renderMarketListTableSection(): ReactElement {
+        return (
+            <div className="terminal-market-list-body">
+                            <MarketCategoryScrollTabs
+                                categories={marketListCategoryTabs}
+                                value={pickerCategory}
+                                onChange={(id) => {
+                                    setPickerCategory(id);
+                                    setMarketListQuickFilter('ALL');
                                 }}
-                            >
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 700 }}>{t('market.marketList', 'Piyasa Listesi')}</div>
-                                    {pickerCategory === 'FUTURES' ? (
-                                        <div
-                                            style={{
-                                                fontSize: 11,
-                                                color: tokens.textMuted,
-                                                lineHeight: 1.25,
-                                                letterSpacing: 0.2,
-                                            }}
-                                        >
-                                            BIST 30 vadeli ({viopContracts.length} kontrat)
-                                        </div>
-                                    ) : pickerCategory === 'BOND' ? (
-                                        <div
-                                            style={{
-                                                fontSize: 11,
-                                                color: tokens.textMuted,
-                                                lineHeight: 1.25,
-                                                letterSpacing: 0.2,
-                                            }}
-                                        >
-                                            {t(
-                                                'market.bondListKicker',
-                                                'Gösterilen % değerleri dönemsel fiyat değişimidir; tahvil faizi (yield) değildir.',
-                                            )}
-                                        </div>
-                                    ) : null}
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                                    {(pickerCategory === 'CRYPTO' ||
-                                    (pickerCategory === 'EQUITY' && pickerEquitySubmarket !== 'BIST') ||
-                                    pickerCategory === 'FUNDS') ? (
-                                    <button
-                                        type="button"
-                                        className={`terminal-btn ${showUsdInTry ? 'active' : ''}`}
-                                        onClick={() => setShowUsdInTry((v) => !v)}
-                                    >
-                                        {showUsdInTry ? t('market.showUsd', 'USD göster') : t('market.convertTry', 'TL’ye çevir')}
-                                    </button>
-                                ) : null}
-                                </div>
-                            </div>
-                            <div
-                                className="terminal-btn-row terminal-category-row terminal-category-row--sidebar"
-                                role="tablist"
-                                aria-label={t('market.categorySelectAria', 'Piyasa kategorisi')}
-                            >
-                                {CATEGORY_LABELS.map((cat) => (
-                                    <button
-                                        key={cat.id}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={pickerCategory === cat.id}
-                                        className={`terminal-btn ${pickerCategory === cat.id ? 'active' : ''}`}
-                                        onClick={() => {
-                                            setPickerCategory(cat.id);
-                                            setMarketListQuickFilter('ALL');
-                                        }}
-                                    >
-                                        {categoryLabel(cat.id)}
-                                    </button>
-                                ))}
-                            </div>
+                                ariaLabel={t('market.categorySelectAria', 'Piyasa kategorisi')}
+                            />
                             {pickerCategory === 'EQUITY' ? (
                                 <div
                                     className="terminal-equity-submarket"
@@ -4186,29 +3852,26 @@ export function Market() {
                                     </button>
                                 </div>
                             ) : null}
-                            <div
-                                className="terminal-list-quick-filters"
-                                role="group"
-                                aria-label={t('market.quickFiltersAria', 'Hızlı filtre')}
-                            >
-                                {pickerMarketListQuickChips.map((chip) => (
-                                    <button
-                                        key={chip.id}
-                                        type="button"
-                                        className={`terminal-quick-filter ${marketListQuickFilter === chip.id ? 'is-active' : ''}`}
-                                        onClick={() => setMarketListQuickFilter(chip.id)}
-                                    >
-                                        {chip.label}
-                                    </button>
-                                ))}
-                            </div>
+                            <MarketCategoryScrollTabs
+                                className="terminal-category-scroll-shell--quick-filters"
+                                categories={pickerMarketListQuickChips}
+                                value={marketListQuickFilter}
+                                onChange={setMarketListQuickFilter}
+                                ariaLabel={t('market.quickFiltersAria', 'Hızlı filtre')}
+                            />
                             <input
                                 className="terminal-search"
                                 placeholder={t('market.searchPlaceholder', 'Sembol / enstrüman ara')}
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
-                            <div ref={tableWrapRef} className="terminal-table-wrap">
+                            <div className="terminal-market-list-scroll-host">
+                            <div
+                                ref={tableWrapRef}
+                                className="terminal-table-wrap"
+                                role="region"
+                                aria-label={t('market.marketList', 'Piyasa Listesi')}
+                            >
                                 <table
                                     className={`terminal-data-table terminal-data-table--picker-horizons ${
                                         pickerCategory === 'FUTURES' ? 'terminal-data-table--viop' : ''
@@ -4402,39 +4065,39 @@ export function Market() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {pickerDisplayedInstruments.length === 0 ? (
+                                        {loadingTerminalList ? (
+                                            <tr>
+                                                <td colSpan={9} className="terminal-chart-empty" style={{ padding: 16, textAlign: 'left' }}>
+                                                    {t('market.listLoading', 'Liste yükleniyor…')}
+                                                </td>
+                                            </tr>
+                                        ) : pickerDisplayedInstruments.length === 0 ? (
                                             <tr>
                                                 <td
                                                     colSpan={9}
                                                     className="terminal-chart-empty"
                                                     style={{ padding: 16, textAlign: 'left' }}
                                                 >
-                                                    {pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST'
-                                                        ? bistLatestError
-                                                            ? String(
-                                                                  bistLatestError instanceof Error
-                                                                      ? bistLatestError.message
-                                                                      : t('stocks.bistListError', 'BIST verisi alınamadı.')
-                                                              )
-                                                            : loadingBistLatest
-                                                              ? t('stocks.bistListLoading', 'BIST listesi yükleniyor…')
-                                                              : t(
+                                                    {terminalListError
+                                                        ? String(
+                                                              terminalListError instanceof Error
+                                                                  ? terminalListError.message
+                                                                  : t('market.listError', 'Liste alınamadı.'),
+                                                          )
+                                                        : searchTerm.trim().length > 0
+                                                          ? t('market.listEmpty', 'Bu arama için sonuç yok.')
+                                                          : marketListQuickFilter !== 'ALL'
+                                                            ? t('market.quickFilterEmpty', 'Bu filtre için sonuç yok.')
+                                                            : pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST'
+                                                              ? t(
                                                                     'stocks.bistListEmpty',
-                                                                    'BIST için gösterilecek sembol bulunamadı (fiyat verisi yok).'
+                                                                    'BIST için gösterilecek sembol bulunamadı (fiyat verisi yok).',
                                                                 )
-                                                        : pickerFilteredInstruments.length > 0
-                                                          ? t('market.quickFilterEmpty', 'Bu filtre için sonuç yok.')
-                                                          : t('market.listEmpty', 'Bu arama için sonuç yok.')}
+                                                              : t('market.listEmptyCategory', 'Bu kategoride gösterilecek varlık yok.')}
                                                 </td>
                                             </tr>
                                         ) : (
-                                            <>
-                                        {listVirtual.topSpacer > 0 ? (
-                                            <tr style={{ height: listVirtual.topSpacer }}>
-                                                <td colSpan={9} />
-                                            </tr>
-                                        ) : null}
-                                        {listVirtual.rows.map((row) => {
+                                            pickerDisplayedInstruments.map((row) => {
                                             const sk = rowToStarredApiKey(row.category, row.symbol);
                                             const starFilled = sk
                                                 ? isStarredResolved(starredAssets, sk.marketType, sk.symbol)
@@ -4739,21 +4402,723 @@ export function Market() {
                                                 </td>
                                             </tr>
                                             );
-                                        })}
-                                        {listVirtual.bottomSpacer > 0 ? (
-                                            <tr style={{ height: listVirtual.bottomSpacer }}>
-                                                <td colSpan={9} />
-                                            </tr>
-                                        ) : null}
-                                            </>
+                                        })
                                         )}
                                     </tbody>
                                 </table>
                             </div>
+                            {marketListTotalElements > 0 ? (
+                                <div className="terminal-market-list-pagination" aria-live="polite">
+                                    <span className="terminal-market-list-pagination__count">
+                                        {t('market.listCountPage', '{from}–{to} / {total}')
+                                            .replace('{from}', String(marketListPage * MARKET_LIST_PAGE_SIZE + 1))
+                                            .replace(
+                                                '{to}',
+                                                String(
+                                                    Math.min(
+                                                        marketListTotalElements,
+                                                        (marketListPage + 1) * MARKET_LIST_PAGE_SIZE,
+                                                    ),
+                                                ),
+                                            )
+                                            .replace('{total}', String(marketListTotalElements))}
+                                    </span>
+                                    {marketListTotalPages > 1 ? (
+                                        <div className="terminal-market-list-pagination__nav">
+                                            <button
+                                                type="button"
+                                                className="terminal-market-list-page-btn"
+                                                disabled={marketListPage <= 0 || loadingTerminalList}
+                                                onClick={() => setMarketListPage((p) => Math.max(0, p - 1))}
+                                            >
+                                                {t('market.listPrev', 'Önceki')}
+                                            </button>
+                                            <span className="terminal-market-list-pagination__sep">
+                                                {marketListPage + 1} / {marketListTotalPages}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                className="terminal-market-list-page-btn"
+                                                disabled={
+                                                    marketListPage >= marketListTotalPages - 1 || loadingTerminalList
+                                                }
+                                                onClick={() =>
+                                                    setMarketListPage((p) => Math.min(marketListTotalPages - 1, p + 1))
+                                                }
+                                            >
+                                                {t('market.listNext', 'Sonraki')}
+                                            </button>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            ) : null}
+                            </div>
+            </div>
+        );
+    }
+
+    function renderMarketListPanel(): ReactElement {
+        return (
+                        <div
+                            ref={leftMarketPanelRef}
+                            className={`terminal-card terminal-left-panel ${
+                                pickerCategory === 'FUTURES' || pickerCategory === 'BOND'
+                                    ? 'terminal-left-panel--page-flow'
+                                    : ''
+                            } ${isSpotHeatmapRail ? 'terminal-left-panel--docked is-compact' : 'terminal-left-panel--undocked-slot'}`}
+                        >
+                            <div
+                                className={`terminal-left-panel__inner${
+                                    instrumentListOpen ? ' terminal-left-panel__inner--popover-sheet' : ''
+                                }`}
+                                style={instrumentListSheetStyle}
+                            >
+                            <div style={{ marginBottom: 6 }}>
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: 8,
+                                        minWidth: 0,
+                                    }}
+                                >
+                                    <div style={{ fontWeight: 700, minWidth: 0 }}>{t('market.marketList', 'Piyasa Listesi')}</div>
+                                    <button
+                                        type="button"
+                                        className="terminal-market-list-expand-btn"
+                                        onClick={() => {
+                                            setInstrumentListOpen(false);
+                                            setMarketListExpanded(true);
+                                        }}
+                                        aria-label={t('market.expandMarketListAria', 'Piyasa listesini büyük görünümde aç')}
+                                        title={t('market.expandMarketList', 'Büyük liste')}
+                                    >
+                                        <Maximize2 size={18} strokeWidth={2.2} aria-hidden />
+                                    </button>
+                                </div>
+                                {renderMarketListSubtitleKicker()}
+                            </div>
+                            {renderMarketListTableSection()}
                             </div>
                         </div>
+        );
+    }
 
+    function renderLeftSpotColumn(): ReactElement {
+        return (
+            <div
+                className={`terminal-left-column${
+                    macroCompareEnabled ? '' : ' terminal-left-column--no-compare'
+                }`}
+            >
+                <div className="terminal-left-column__card terminal-left-column__card--list">
+                    {renderMarketListPanel()}
+                </div>
+                {macroCompareEnabled ? (
+                    <div className="terminal-left-column__card terminal-left-column__card--compare">
+                        <MarketPurchasingPowerSummaryLive
+                            crosshairHandlerRef={ppCrosshairHandlerRef}
+                            boundsRef={ppAnchorBoundsRef}
+                            chartAnchorDate={ppChartAnchor}
+                            enabled={macroCompareEnabled}
+                            range={trendChartRange}
+                            candles={candles}
+                            assetInTry={macroAssetInTry}
+                            symbol={selectedSymbol}
+                            displayName={selectedInstrumentVm?.displayName}
+                            tokens={chartTokens}
+                        />
+                    </div>
+                ) : null}
+                <div className="terminal-left-column__card terminal-left-column__card--macro">
+                    <MarketMacroInfoCard tokens={chartTokens} queriesEnabled={macroSidebarQueriesEnabled} />
+                </div>
+            </div>
+        );
+    }
+
+    function renderInstrumentHero(): ReactElement {
+        const showHeroFxQuoteToggle =
+            hero != null &&
+            activeCategory !== 'FUTURES' &&
+            activeCategory !== 'BOND' &&
+            (activeCategory === 'CRYPTO' ||
+                (activeCategory === 'EQUITY' && equitySubmarket !== 'BIST') ||
+                activeCategory === 'FUNDS');
+
+        const heroHorizonsEl =
+            selectedInstrumentVm != null ? (
+                <div
+                    className="terminal-hero-horizons"
+                    aria-label={t(
+                        'market.heroHorizonStripAria',
+                        'Seçili enstrüman için yaklaşık dönemsel fiyat değişimi',
+                    )}
+                >
+                    {(
+                        [
+                            ['pctDay', t('market.horizonDay', 'Gün')] as const,
+                            ['pctWeek', t('market.horizonWeek', 'Hafta')] as const,
+                            ['pctMonth', t('market.horizonMonth', 'Ay')] as const,
+                            ['pctYear', t('market.horizonYear', 'Yıl')] as const,
+                        ] as const
+                    ).map(([k, lab]) => {
+                        const v = selectedInstrumentVm[k];
+                        return (
+                            <div key={k} className="terminal-hero-horizons__cell" title={lab}>
+                                <span className="terminal-hero-horizons__lab">{lab}</span>
+                                <span className={horizonPctClassName(v)}>{formatHorizonPct(v)}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : null;
+
+        return (
+            <div
+                ref={terminalHeroRef}
+                className={`terminal-hero ${activeCategory === 'FUTURES' ? 'terminal-hero--viop' : ''}${
+                    isSpotHeatmapRail ? ' terminal-hero--spot-compact' : ''
+                }`}
+            >
+                {hero && activeCategory === 'FUTURES' ? (
+                    <>
+                        <div className="terminal-hero-viop__selector-wrap">
+                            <button
+                                type="button"
+                                className={`terminal-hero-selector terminal-hero-selector--viop ${
+                                    instrumentListOpen ? 'is-open' : ''
+                                }`}
+                                onClick={handleInstrumentSelectorClick}
+                                aria-expanded={!isSpotHeatmapRail && instrumentListOpen}
+                                aria-haspopup="dialog"
+                                title={t('market.instrumentPickerHint', 'Piyasa listesini aç / kapat')}
+                            >
+                            <div className="terminal-hero-viop__left">
+                            <div className="terminal-hero-viop__eyebrow">{t('market.selectedInstrument', 'Seçili Enstrüman')}</div>
+                            <div className="terminal-hero-viop__code" title={hero.symbol}>
+                                {hero.symbol}
+                            </div>
+                            <div className="terminal-hero-viop__name">
+                                {(() => {
+                                    const snap = viopSnapshotBySymbol[normalizeSymbolKey(hero.symbol)];
+                                    const n = getInstrumentDisplayName({
+                                        symbol: hero.symbol,
+                                        displayName: hero.displayName,
+                                        name: snap?.contractName,
+                                    });
+                                    return n !== hero.symbol ? n : parseViopContractLabel(hero.symbol);
+                                })()}
+                            </div>
+                            <div className="terminal-hero-viop__badges">
+                                {(() => {
+                                    const cat = viopCategoryFor(hero.symbol);
+                                    if (!cat) return null;
+                                    return (
+                                        <span className={viopCatBadgeClass(cat)} title={viopAssetClassTitle(cat)}>
+                                            {VIOP_CATEGORY_CHIP[cat].label}
+                                        </span>
+                                    );
+                                })()}
+                                <span className="instrument-highlight-chip" style={{ borderColor: 'var(--terminal-border)', color: 'var(--terminal-text)' }}>
+                                    {viopAssetClassTitle(viopCategoryFor(hero.symbol))}
+                                </span>
+                                {(() => {
+                                    const snap = viopSnapshotBySymbol[normalizeSymbolKey(hero.symbol)];
+                                    const hint = viopDataQualityHint(snap);
+                                    return hint ? <span className="viop-stale-pill">{hint}</span> : null;
+                                })()}
+                            </div>
+                            <div className="terminal-hero-viop__src">
+                                {t('market.source', 'Kaynak')}: {futuresHeaderMetrics?.sourceLabel ?? '—'}
+                                {futuresHeaderMetrics?.delayMinutes != null && futuresHeaderMetrics.delayMinutes > 0
+                                    ? ` · ${t('market.delayedData', 'Gecikmeli veri')}: ${futuresHeaderMetrics.delayMinutes} dk`
+                                    : viopDelayMinutesDisplay != null && viopDelayMinutesDisplay > 0
+                                      ? ` · ${viopDelayMinutesDisplay} dk`
+                                      : ''}
+                            </div>
+                            <ChevronDown className="terminal-hero-selector__chevron" size={18} aria-hidden />
+                        </div>
+                            </button>
+                            {heroHorizonsEl}
+                        </div>
+                        <div className="terminal-hero-viop__mid">
+                            <div className="terminal-hero-price" title={heroScaled?.title}>
+                                {heroScaled ? (
+                                    <>
+                                        <span style={{ opacity: 0.85 }}>{heroScaled.glyph}</span>{' '}
+                                        {heroScaled.amount.toLocaleString('tr-TR', {
+                                            maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                        })}
+                                    </>
+                                ) : (
+                                    '—'
+                                )}
+                            </div>
                             <div
+                                className={`terminal-hero-change ${
+                                    Math.abs(hero.changePercent) < 0.005 ? 'is-flat' : hero.trend === 'UP' ? 'up' : 'down'
+                                }`}
+                            >
+                                {Math.abs(hero.changePercent) < 0.005 ? <>0,00% →</> : (
+                                    <>
+                                        {hero.changePercent >= 0 ? '+' : ''}
+                                        {hero.changePercent.toFixed(2)}% {hero.trend === 'UP' ? '↑' : '↓'}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                        <div className="terminal-hero-viop__metrics">
+                            <dl className="terminal-hero-viop-metric-grid">
+                                <dt>{t('market.bidAsk', 'Alış / Satış')}</dt>
+                                <dd>
+                                    {fmtViopBidAskLine(
+                                        futuresHeaderMetrics?.bid ?? null,
+                                        futuresHeaderMetrics?.ask ?? null,
+                                        viopPriceDecimals(hero.symbol)
+                                    )}
+                                </dd>
+                                <dt>{t('market.open', 'Açılış')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.open != null && Number.isFinite(futuresHeaderMetrics.open)
+                                        ? futuresHeaderMetrics.open.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.dayHighLow', 'Gün Yük / Düş')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.high != null && Number.isFinite(futuresHeaderMetrics.high)
+                                        ? futuresHeaderMetrics.high.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}{' '}
+                                    /{' '}
+                                    {futuresHeaderMetrics?.low != null && Number.isFinite(futuresHeaderMetrics.low)
+                                        ? futuresHeaderMetrics.low.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.volumeQty', 'Hacim / Adet')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.volume != null
+                                        ? futuresHeaderMetrics.volume.toLocaleString('tr-TR')
+                                        : '—'}{' '}
+                                    /{' '}
+                                    {futuresHeaderMetrics?.quantity != null
+                                        ? futuresHeaderMetrics.quantity.toLocaleString('tr-TR')
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.settlement', 'Uzlaşma')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.settlement != null && Number.isFinite(futuresHeaderMetrics.settlement)
+                                        ? futuresHeaderMetrics.settlement.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.preSettlement', 'Ön uzlaşma')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.preSettlement != null && Number.isFinite(futuresHeaderMetrics.preSettlement)
+                                        ? futuresHeaderMetrics.preSettlement.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.initialMargin', 'Teminat')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.initialMargin != null && Number.isFinite(futuresHeaderMetrics.initialMargin)
+                                        ? futuresHeaderMetrics.initialMargin.toLocaleString('tr-TR')
+                                        : '—'}
+                                </dd>
+                                <dt>{t('market.limitUpDown', 'Tavan / Taban')}</dt>
+                                <dd>
+                                    {futuresHeaderMetrics?.limitUp != null && Number.isFinite(futuresHeaderMetrics.limitUp)
+                                        ? futuresHeaderMetrics.limitUp.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}{' '}
+                                    /{' '}
+                                    {futuresHeaderMetrics?.limitDown != null && Number.isFinite(futuresHeaderMetrics.limitDown)
+                                        ? futuresHeaderMetrics.limitDown.toLocaleString('tr-TR', {
+                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                          })
+                                        : '—'}
+                                </dd>
+                            </dl>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="terminal-hero-selector-row">
+                            <button
+                                type="button"
+                                className={`terminal-hero-selector terminal-hero-selector--with-inline-quote ${
+                                    instrumentListOpen ? 'is-open' : ''
+                                }`}
+                                onClick={handleInstrumentSelectorClick}
+                                aria-expanded={!isSpotHeatmapRail && instrumentListOpen}
+                                aria-haspopup="dialog"
+                                title={t('market.instrumentPickerHint', 'Piyasa listesini aç / kapat')}
+                            >
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: isSpotHeatmapRail ? 8 : 12,
+                                    minWidth: 0,
+                                    flex: '1 1 auto',
+                                }}
+                            >
+                            {/* AssetLogo en basta -- onceden hero'da hic gorsel yoktu, sadece "Secili Enstrüman" yazisi
+                             * ve sembol kodu vardi; kullanici "secili enstrumanin basinda adi gorunmuyor" geri bildirimi
+                             * verdi. VIOP/Bond kontrat kodlarini logo CDN'e gondermek 404 doguruyor (assetBranding
+                             * helper'i bunu yakalayip null donuyor), AssetLogo da fallback ikona dusuyor. */}
+                            {hero && activeCategory === 'EQUITY' && equitySubmarket === 'BIST' ? (
+                                <span
+                                    className="bist-symbol-badge"
+                                    style={{
+                                        ...bistSymbolBadgeStyle(hero.symbol),
+                                        width: isSpotHeatmapRail ? 28 : 36,
+                                        height: isSpotHeatmapRail ? 28 : 36,
+                                        fontSize: isSpotHeatmapRail ? 10 : 11,
+                                    }}
+                                    title={hero.symbol}
+                                    aria-hidden
+                                >
+                                    {hero.symbol.slice(0, 2)}
+                                </span>
+                            ) : (
+                                <AssetLogo
+                                    src={
+                                        hero && (activeCategory === 'EQUITY' || activeCategory === 'CRYPTO' || activeCategory === 'FX' || activeCategory === 'METALS' || activeCategory === 'FUNDS')
+                                            ? getDynamicLogoUrl(hero.symbol, marketKindForCategory(activeCategory))
+                                            : null
+                                    }
+                                    alt={hero ? `${hero.symbol} logo` : 'logo'}
+                                    fallbackIcon={TrendingUp}
+                                    fallbackColor={tokens.textMuted}
+                                    size={isSpotHeatmapRail ? 28 : 36}
+                                />
+                            )}
+                            <div style={{ minWidth: 0 }}>
+                                <div
+                                    style={{
+                                        fontSize: isSpotHeatmapRail ? 10 : 12,
+                                        color: tokens.textMuted,
+                                        marginBottom: 2,
+                                    }}
+                                >
+                                    {t('market.selectedInstrument', 'Seçili Enstrüman')}
+                                </div>
+                                <div
+                                    style={{
+                                        fontSize: isSpotHeatmapRail ? 16 : 22,
+                                        fontWeight: 700,
+                                        lineHeight: 1.15,
+                                    }}
+                                >
+                                    {hero
+                                        ? activeCategory === 'FUTURES'
+                                            ? parseViopContractLabel(hero.symbol)
+                                            : activeCategory === 'BOND'
+                                            ? debtNameMap[hero.symbol] ?? hero.symbol
+                                            : activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
+                                            ? hero.displayName
+                                            : activeCategory === 'METALS'
+                                            ? hero.displayName
+                                            : formatAssetLabel(hero.symbol, marketKindForCategory(activeCategory))
+                                        : '—'}
+                                </div>
+                                {activeCategory === 'BOND' && hero ? (
+                                    <div
+                                        style={{
+                                            fontFamily: 'ui-monospace, monospace',
+                                            fontSize: 13,
+                                            fontWeight: 600,
+                                            color: tokens.text,
+                                            marginTop: 4,
+                                            letterSpacing: 0.02,
+                                        }}
+                                        title={t('market.bondHeroIsinTitle', 'Devlet tahvili ISIN kodu')}
+                                    >
+                                        ISIN: {hero.symbol}
+                                    </div>
+                                ) : (
+                                    <div
+                                        style={{
+                                            fontSize: isSpotHeatmapRail ? 11 : 12,
+                                            color: tokens.textMuted,
+                                        }}
+                                    >
+                                        {hero?.symbol ?? ''}
+                                    </div>
+                                )}
+                            </div>
+                            </div>
+                            <div className="terminal-hero-selector__quote">
+                                <div
+                                    className="terminal-hero-selector__price"
+                                    title={
+                                        activeCategory === 'BOND'
+                                            ? t('market.bondHeroMarketPriceTip', 'Piyasa fiyatı (TRY). Bu değer tahvil faizi (yield) değildir.')
+                                            : heroScaled?.title
+                                    }
+                                >
+                                    {heroScaled ? (
+                                        <>
+                                            <span style={{ opacity: 0.8 }}>{heroScaled.glyph}</span>{' '}
+                                            {heroScaled.amount.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}
+                                            {heroScaled.suffix ?? ''}
+                                        </>
+                                    ) : (
+                                        '—'
+                                    )}
+                                </div>
+                                <div
+                                    className={`terminal-hero-selector__pct ${
+                                        !hero || Math.abs(hero.changePercent) < 0.005
+                                            ? 'is-flat'
+                                            : hero.trend === 'UP'
+                                              ? 'is-up'
+                                              : 'is-down'
+                                    }`}
+                                    title={
+                                        activeCategory === 'BOND'
+                                            ? t(
+                                                  'market.bondHeroDailyPriceChgTip',
+                                                  'Günlük fiyat değişimi (%). Tahvil faizi veya garanti getiri değildir.',
+                                              )
+                                            : undefined
+                                    }
+                                    style={activeCategory === 'BOND' ? { display: 'flex', alignItems: 'center', gap: 6 } : undefined}
+                                >
+                                    {hero ? (
+                                        Math.abs(hero.changePercent) < 0.005 ? (
+                                            <>0,00%</>
+                                        ) : (
+                                            <>
+                                                {hero.changePercent >= 0 ? '+' : ''}
+                                                {hero.changePercent.toFixed(2)}% {hero.trend === 'UP' ? '↑' : '↓'}
+                                            </>
+                                        )
+                                    ) : (
+                                        '—'
+                                    )}
+                                    {activeCategory === 'BOND' ? (
+                                        <span
+                                            title={t(
+                                                'market.bondHeroNotYieldTip',
+                                                'Bu değer faiz oranı (yield) değildir; gösterilenler piyasa fiyatı ve fiyat performansıdır.',
+                                            )}
+                                            style={{ display: 'inline-flex', color: tokens.textMuted, cursor: 'help' }}
+                                            aria-label={t('market.bondHeroNotYieldAria', 'Fiyat ile yield ayrımı bilgisi')}
+                                        >
+                                            <Info size={15} strokeWidth={2.2} aria-hidden />
+                                        </span>
+                                    ) : null}
+                                </div>
+                            </div>
+                            <ChevronDown
+                                className="terminal-hero-selector__chevron"
+                                size={isSpotHeatmapRail ? 18 : 20}
+                                aria-hidden
+                            />
+                        </button>
+                            {heroHorizonsEl}
+                            <div className="terminal-hero-selector-row__trailing">
+                                {showHeroFxQuoteToggle ? (
+                                    <MarketCategoryScrollTabs
+                                        className="terminal-category-scroll-shell--hero-fx-quote"
+                                        categories={fxQuoteScrollTabs}
+                                        value={showUsdInTry ? 'TRY' : 'USD'}
+                                        onChange={(id) => setShowUsdInTry(id === 'TRY')}
+                                        ariaLabel={t(
+                                            'market.fxQuoteToggleAria',
+                                            'Liste fiyat birimi: ABD doları veya Türk lirası',
+                                        )}
+                                    />
+                                ) : null}
+                            </div>
+                        </div>
+                        <div
+                            className="terminal-hero-hl-snippet"
+                            style={{ textAlign: 'right', fontSize: 12, color: tokens.textMuted }}
+                        >
+                            <div title={heroScaled?.title}>
+                                H:{' '}
+                                <span style={{ opacity: 0.8 }}>{heroScaled?.glyph ?? ''}</span>
+                                {heroScaled ? ' ' : ''}
+                                {heroScaled || hero
+                                    ? (heroScaled?.high ?? hero?.high ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })
+                                    : '—'}
+                            </div>
+                            <div title={heroScaled?.title}>
+                                L:{' '}
+                                <span style={{ opacity: 0.8 }}>{heroScaled?.glyph ?? ''}</span>
+                                {heroScaled ? ' ' : ''}
+                                {heroScaled || hero
+                                    ? (heroScaled?.low ?? hero?.low ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })
+                                    : '—'}
+                            </div>
+                            {activeCategory === 'FUTURES' && futuresHeaderMetrics ? (
+                                <>
+                                    <div>
+                                        Δ:{' '}
+                                        {futuresHeaderMetrics.changeAmount != null && Number.isFinite(futuresHeaderMetrics.changeAmount)
+                                            ? futuresHeaderMetrics.changeAmount.toLocaleString('tr-TR', { maximumFractionDigits: 2 })
+                                            : '—'}
+                                        {futuresHeaderMetrics.changePercent != null && Number.isFinite(futuresHeaderMetrics.changePercent)
+                                            ? ` (${futuresHeaderMetrics.changePercent >= 0 ? '+' : ''}${futuresHeaderMetrics.changePercent.toLocaleString('tr-TR', {
+                                                  maximumFractionDigits: 2,
+                                              })}%)`
+                                            : ''}
+                                    </div>
+                                    <div>
+                                        A/S:{' '}
+                                        {futuresHeaderMetrics.bid != null ? futuresHeaderMetrics.bid.toLocaleString('tr-TR') : '—'} /{' '}
+                                        {futuresHeaderMetrics.ask != null ? futuresHeaderMetrics.ask.toLocaleString('tr-TR') : '—'}
+                                    </div>
+                                    <div>
+                                        Açılış / G / D:{' '}
+                                        {futuresHeaderMetrics.open != null ? futuresHeaderMetrics.open.toLocaleString('tr-TR') : '—'} ·{' '}
+                                        {futuresHeaderMetrics.high != null ? futuresHeaderMetrics.high.toLocaleString('tr-TR') : '—'} ·{' '}
+                                        {futuresHeaderMetrics.low != null ? futuresHeaderMetrics.low.toLocaleString('tr-TR') : '—'}
+                                    </div>
+                                    <div>
+                                        Hacim / Adet:{' '}
+                                        {futuresHeaderMetrics.volume != null
+                                            ? futuresHeaderMetrics.volume.toLocaleString('tr-TR')
+                                            : '—'}{' '}
+                                        /{' '}
+                                        {futuresHeaderMetrics.quantity != null
+                                            ? futuresHeaderMetrics.quantity.toLocaleString('tr-TR')
+                                            : '—'}
+                                    </div>
+                                    <div>
+                                        Uzlaşma / Ön uzlaşma:{' '}
+                                        {futuresHeaderMetrics.settlement != null
+                                            ? futuresHeaderMetrics.settlement.toLocaleString('tr-TR')
+                                            : '—'}{' '}
+                                        /{' '}
+                                        {futuresHeaderMetrics.preSettlement != null
+                                            ? futuresHeaderMetrics.preSettlement.toLocaleString('tr-TR')
+                                            : '—'}
+                                    </div>
+                                    <div>
+                                        Teminat / Tavan–Taban:{' '}
+                                        {futuresHeaderMetrics.initialMargin != null
+                                            ? futuresHeaderMetrics.initialMargin.toLocaleString('tr-TR')
+                                            : '—'}{' '}
+                                        /{' '}
+                                        {futuresHeaderMetrics.limitUp != null ? futuresHeaderMetrics.limitUp.toLocaleString('tr-TR') : '—'} –{' '}
+                                        {futuresHeaderMetrics.limitDown != null
+                                            ? futuresHeaderMetrics.limitDown.toLocaleString('tr-TR')
+                                            : '—'}
+                                    </div>
+                                    <div style={{ fontSize: 11, opacity: 0.85 }}>
+                                        {futuresHeaderMetrics.sourceLabel}
+                                        {futuresHeaderMetrics.delayMinutes != null
+                                            ? ` · ${futuresHeaderMetrics.delayMinutes} dk gecikme`
+                                            : ''}
+                                    </div>
+                                </>
+                            ) : null}
+                        </div>
+                    </>
+                )}
+            </div>
+        );
+    }
+
+    function renderMarketListExpandOverlay(): ReactElement | null {
+        if (!marketListExpanded) return null;
+        return createPortal(
+            <div
+                className="terminal-market-list-expand-overlay"
+                onClick={() => setMarketListExpanded(false)}
+                role="presentation"
+            >
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="terminal-market-list-expand-title"
+                    className="terminal-market-list-expand-dialog terminal-card"
+                    style={terminalVars}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="terminal-left-panel__inner terminal-left-panel__inner--expand-modal">
+                        <div style={{ marginBottom: 6 }}>
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: 8,
+                                    minWidth: 0,
+                                }}
+                            >
+                                <div id="terminal-market-list-expand-title" style={{ fontWeight: 700, minWidth: 0 }}>
+                                    {t('market.marketList', 'Piyasa Listesi')}
+                                </div>
+                                <button
+                                    type="button"
+                                    className="terminal-market-list-expand-btn"
+                                    onClick={() => setMarketListExpanded(false)}
+                                    aria-label={t('market.expandMarketListClose', 'Kapat')}
+                                    title={t('market.expandMarketListClose', 'Kapat')}
+                                >
+                                    <X size={18} strokeWidth={2.2} aria-hidden />
+                                </button>
+                            </div>
+                            {renderMarketListSubtitleKicker()}
+                        </div>
+                        {renderMarketListTableSection()}
+                    </div>
+                </div>
+            </div>,
+            document.body
+        );
+    }
+
+    if (errMsg) {
+        return <div className="terminal-page">{t('market.pageError', 'Piyasa terminali hatası')}: {errMsg}</div>;
+    }
+
+    return (
+        <div className="terminal-page" style={terminalVars}>
+            {renderMarketListExpandOverlay()}
+            {!isSpotHeatmapRail ? (
+                <div className="terminal-spot-hero-rail--passthrough">{renderInstrumentHero()}</div>
+            ) : null}
+
+
+            {instrumentListOpen && !isSpotHeatmapRail ? (
+                <button
+                    type="button"
+                    className="terminal-market-list-backdrop"
+                    aria-label={t('market.closeMarketListPopover', 'Listeyi kapat')}
+                    onClick={() => setInstrumentListOpen(false)}
+                />
+            ) : null}
+
+            {showDashboardBlockingSpinner ? (
+                <div className="terminal-card">{t('market.loading', 'Piyasa terminali yükleniyor...')}</div>
+            ) : (
+                <>
+                    <div
+                        className={`terminal-grid ${activeCategory === 'FUTURES' ? 'terminal-grid--viop' : ''} ${
+                            activeCategory === 'FUTURES' || activeCategory === 'BOND' ? 'terminal-grid--page-flow' : ''
+                        } ${isSpotHeatmapRail ? '' : 'terminal-grid--list-undocked'}${
+                            isSpotHeatmapRail ? ' terminal-grid--heatmap-rail terminal-spot-unified' : ''
+                        }`}
+                    >
+                        {isSpotHeatmapRail ? renderLeftSpotColumn() : renderMarketListPanel()}
+                        {isSpotHeatmapRail ? renderInstrumentHero() : null}
+
+                        <div
                                 ref={centerStackRef}
                                 className={`terminal-center-stack${
                                     activeCategory === 'FUTURES' || activeCategory === 'BOND' ? ' terminal-center-stack--fill' : ''
@@ -4768,47 +5133,30 @@ export function Market() {
                                 {activeCategory === 'FUTURES' ? (
                                     <>
                                         <div className="viop-toolbar-row">
-                                            <div className="viop-toolbar-row__left">
-                                                <div className="terminal-btn-row">
-                                                    {TERMINAL_CHART_RANGE_SEQUENCE.map((r) => (
-                                                        <button
-                                                            key={r}
-                                                            type="button"
-                                                            className={`terminal-btn ${range === r ? 'active' : ''}`}
-                                                            onClick={() => setRange(r)}
-                                                        >
-                                                            {chartRangeUiShortLabel(r)}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                            <div className="viop-toolbar-row__mid">
-                                                <div className="terminal-btn-row">
-                                                    <button
-                                                        type="button"
-                                                        className={`terminal-btn ${viopChartMode === 'LINE' ? 'active' : ''}`}
-                                                        onClick={() => setViopChartMode('LINE')}
-                                                    >
-                                                        {t('market.viopAnalysis', 'VİOP Analiz')}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className={`terminal-btn ${viopChartMode === 'CANDLE' ? 'active' : ''}`}
-                                                        onClick={() => setViopChartMode('CANDLE')}
-                                                    >
-                                                        {t('market.detailedCandle', 'Detaylı Mum')}
-                                                    </button>
-                                                </div>
+                                            <div className="terminal-controls__chart-toolbar terminal-controls__chart-toolbar--viop">
+                                                <MarketCategoryScrollTabs
+                                                    className="terminal-category-scroll-shell--chart-range"
+                                                    categories={chartRangeScrollTabs}
+                                                    value={range}
+                                                    onChange={setRange}
+                                                    ariaLabel={t('market.chartRangeAria', 'Grafik zaman aralığı')}
+                                                />
+                                                <MarketCategoryScrollTabs
+                                                    className="terminal-category-scroll-shell--chart-mode"
+                                                    categories={viopChartModeTabs}
+                                                    value={viopChartMode}
+                                                    onChange={setViopChartMode}
+                                                    ariaLabel={t('market.chartDisplayModeAria', 'Grafik görünümü')}
+                                                />
                                             </div>
                                             <div className="viop-toolbar-row__right">
-                                                <div className="terminal-btn-row">
-                                                    <button type="button" className={`terminal-btn ${showMa ? 'active' : ''}`} onClick={() => setShowMa((v) => !v)}>
-                                                        MA
-                                                    </button>
-                                                    <button type="button" className={`terminal-btn ${showRsi ? 'active' : ''}`} onClick={() => setShowRsi((v) => !v)}>
-                                                        RSI
-                                                    </button>
-                                                </div>
+                                                <ChartIndicatorToggles
+                                                    showMa={showMa}
+                                                    showRsi={showRsi}
+                                                    onToggleMa={() => setShowMa((v) => !v)}
+                                                    onToggleRsi={() => setShowRsi((v) => !v)}
+                                                    rsiAvailable={false}
+                                                />
                                             </div>
                                         </div>
                                         <div className="viop-chart-status" role="status">
@@ -4840,73 +5188,44 @@ export function Market() {
                                     </>
                                 ) : (
                                     <>
-                                        <div className="terminal-btn-row">
-                                            {activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
-                                                ? TERMINAL_CHART_RANGE_SEQUENCE.map((r) => (
-                                                      <button
-                                                          key={r}
-                                                          type="button"
-                                                          className={`terminal-btn ${bistRange === r ? 'active' : ''}`}
-                                                          onClick={() => setBistRange(r)}
-                                                      >
-                                                          {chartRangeUiShortLabel(r)}
-                                                      </button>
-                                                  ))
-                                                : TERMINAL_CHART_RANGE_SEQUENCE.map((r) => (
-                                                      <button
-                                                          key={r}
-                                                          type="button"
-                                                          className={`terminal-btn ${range === r ? 'active' : ''}`}
-                                                          onClick={() => setRange(r)}
-                                                      >
-                                                          {chartRangeUiShortLabel(r)}
-                                                      </button>
-                                                  ))}
+                                        <div className="terminal-controls__chart-toolbar">
+                                            <MarketCategoryScrollTabs
+                                                className="terminal-category-scroll-shell--chart-range"
+                                                categories={chartRangeScrollTabs}
+                                                value={activeCategory === 'EQUITY' && equitySubmarket === 'BIST' ? bistRange : range}
+                                                onChange={
+                                                    activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
+                                                        ? setBistRange
+                                                        : setRange
+                                                }
+                                                ariaLabel={t('market.chartRangeAria', 'Grafik zaman aralığı')}
+                                            />
+                                            {activeCategory === 'BOND' ? (
+                                                <MarketCategoryScrollTabs
+                                                    className="terminal-category-scroll-shell--chart-mode"
+                                                    categories={bondChartModeTabs}
+                                                    value={bondChartMode}
+                                                    onChange={setBondChartMode}
+                                                    ariaLabel={t('market.chartDisplayModeAria', 'Grafik görünümü')}
+                                                />
+                                            ) : null}
+                                            {activeCategory !== 'BOND' ? (
+                                                <MarketCategoryScrollTabs
+                                                    className="terminal-category-scroll-shell--chart-mode"
+                                                    categories={spotChartModeTabs}
+                                                    value={spotChartMode}
+                                                    onChange={setSpotChartMode}
+                                                    ariaLabel={t('market.chartDisplayModeAria', 'Grafik görünümü')}
+                                                />
+                                            ) : null}
                                         </div>
-                                        {activeCategory === 'BOND' ? (
-                                            <div className="terminal-btn-row">
-                                                <button
-                                                    type="button"
-                                                    className={`terminal-btn ${bondChartMode === 'DUAL' ? 'active' : ''}`}
-                                                    onClick={() => setBondChartMode('DUAL')}
-                                                >
-                                                    {t('market.bondAnalysis', 'Tahvil Analiz')}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={`terminal-btn ${bondChartMode === 'CANDLE' ? 'active' : ''}`}
-                                                    onClick={() => setBondChartMode('CANDLE')}
-                                                >
-                                                    {t('market.detailedCandle', 'Detaylı Mum')}
-                                                </button>
-                                            </div>
-                                        ) : null}
-                                        {activeCategory !== 'BOND' ? (
-                                            <div className="terminal-btn-row">
-                                                <button
-                                                    type="button"
-                                                    className={`terminal-btn ${spotChartMode === 'ANALYSIS' ? 'active' : ''}`}
-                                                    onClick={() => setSpotChartMode('ANALYSIS')}
-                                                >
-                                                    {t('market.marketAnalysis', 'Piyasa Analiz')}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={`terminal-btn ${spotChartMode === 'CANDLE' ? 'active' : ''}`}
-                                                    onClick={() => setSpotChartMode('CANDLE')}
-                                                >
-                                                    {t('market.detailedCandle', 'Detaylı Mum')}
-                                                </button>
-                                            </div>
-                                        ) : null}
-                                        <div className="terminal-btn-row">
-                                            <button type="button" className={`terminal-btn ${showMa ? 'active' : ''}`} onClick={() => setShowMa((v) => !v)}>
-                                                MA
-                                            </button>
-                                            <button type="button" className={`terminal-btn ${showRsi ? 'active' : ''}`} onClick={() => setShowRsi((v) => !v)}>
-                                                RSI
-                                            </button>
-                                        </div>
+                                        <ChartIndicatorToggles
+                                            showMa={showMa}
+                                            showRsi={showRsi}
+                                            onToggleMa={() => setShowMa((v) => !v)}
+                                            onToggleRsi={() => setShowRsi((v) => !v)}
+                                            rsiAvailable={chartIndicatorRsiAvailable}
+                                        />
                                     </>
                                 )}
                             </div>
@@ -4941,6 +5260,8 @@ export function Market() {
                                     ma7={ma7}
                                     ma21={ma21}
                                     showMa={showMa}
+                                    showRsi={showRsi}
+                                    rsi14={rsi14}
                                     loading={
                                         activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
                                             ? loadingBistCandles
@@ -4950,6 +5271,7 @@ export function Market() {
                                     timeframeLabel={chartTfLabel}
                                     chartTimePreferIstanbulBusinessDay={!terminalHourlyRange}
                                     tokens={chartTokens}
+                                    onCrosshairDate={macroCompareEnabled ? onAnalysisCrosshairDate : undefined}
                                 />
                             ) : (
                                 <MarketTerminalChart
@@ -4985,6 +5307,9 @@ export function Market() {
                          * Tahvil (BOND) gizli — ayrı batch yolu yok.
                          */}
                         {!isSpotHeatmapRail ? renderComparisonCard('terminal-center-comparison') : null}
+                        {macroCompareEnabled ? (
+                            <MarketPurchasingPowerCompareChart data={purchasingPowerChartData} tokens={chartTokens} />
+                        ) : null}
                         </div>
 
                         <div

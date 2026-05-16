@@ -278,10 +278,14 @@
 }
 
 .terminal-left-panel.is-compact {
-    /* Eski “dashboard” modu: yalnızca is-compact kullanan ekranlar için; VİOP/tahvil artık terminal-grid--page-flow. */
-    height: min(68vh, 720px);
-    max-height: min(68vh, 720px);
     min-height: 0;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+.terminal-left-column .terminal-left-panel.is-compact {
     overflow: hidden;
 }
 
@@ -300,8 +304,127 @@
     border-radius: 10px;
 }
 
-.terminal-left-panel.is-compact .terminal-table-wrap {
-    max-height: 100%;
+.terminal-left-panel.is-compact .terminal-left-panel__inner {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.terminal-left-column .terminal-left-panel.is-compact .terminal-left-panel__inner {
+    flex: none;
+    height: auto;
+    overflow: visible;
+}
+
+.terminal-market-list-scroll-host {
+    position: relative;
+    flex: none;
+    height: auto;
+    display: block;
+    min-width: 0;
+    overflow: visible;
+}
+
+.terminal-market-list-scroll-host .terminal-table-wrap {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: visible;
+}
+
+.terminal-market-list-scroll-host.is-scrollable::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 28px;
+    height: 28px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--terminal-bg-card, rgba(15, 23, 42, 0.92)));
+    border-radius: 0 0 10px 10px;
+}
+
+.terminal-market-list-scroll-meta {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px 2px;
+    font-size: 10px;
+    color: var(--terminal-text-muted, #94a3b8);
+    border-top: 1px solid var(--terminal-border);
+}
+
+.terminal-market-list-scroll-hint {
+    opacity: 0.85;
+    white-space: nowrap;
+}
+
+.terminal-market-list-pagination {
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px 4px;
+    font-size: 10px;
+    color: var(--terminal-text-muted, #94a3b8);
+    border-top: 1px solid var(--terminal-border);
+}
+
+.terminal-market-list-pagination__nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.terminal-market-list-pagination__sep {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.9;
+}
+
+.terminal-market-list-page-btn {
+    appearance: none;
+    border: 1px solid var(--terminal-border);
+    background: rgba(15, 23, 42, 0.35);
+    color: var(--terminal-text, #e2e8f0);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.terminal-market-list-page-btn:hover:not(:disabled) {
+    border-color: rgba(148, 163, 184, 0.55);
+    background: rgba(30, 41, 59, 0.65);
+}
+
+.terminal-market-list-page-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.terminal-table-wrap {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+
+.terminal-table-wrap::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+
+.terminal-table-wrap::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.4);
+    border-radius: 6px;
+}
+
+.terminal-table-wrap::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.65);
 }
 
 .terminal-data-table {
@@ -329,7 +452,7 @@
 }
 
 .terminal-data-table tbody tr {
-    height: 52px;
+    height: 50px;
     cursor: pointer;
     transition: background-color 0.16s ease;
 }
@@ -907,6 +1030,7 @@
 }
 
 .terminal-chart-header {
+    position: relative;
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-start;
@@ -914,6 +1038,12 @@
     gap: 10px 12px;
     row-gap: 8px;
     min-height: 0;
+    padding-right: min(42%, 300px);
+}
+
+.terminal-chart-header--compact {
+    padding-right: 0;
+    margin-bottom: 4px;
 }
 
 .terminal-chart-title {
@@ -943,6 +1073,22 @@
 .terminal-chart-header > .terminal-ohlc {
     flex: 1 1 100%;
     min-width: 0;
+}
+
+.terminal-chart-header > .terminal-ohlc--overlay {
+    position: absolute;
+    right: 0;
+    top: 0;
+    flex: none;
+    min-width: 0;
+    min-height: 1.35rem;
+    max-width: min(100%, 280px);
+    text-align: right;
+    justify-content: flex-end;
+}
+
+.terminal-ohlc__hint {
+    display: inline-block;
 }
 
 .terminal-chart-badge {
@@ -1023,10 +1169,69 @@
     margin-bottom: 8px;
 }
 
+/* Zaman aralığı + çizgi/mum modu aynı yatay satırda (MA/RSI sağda) */
+.terminal-controls__chart-toolbar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.terminal-controls__chart-toolbar .terminal-category-scroll-shell--chart-range {
+    /* min-width: 0 flex içinde zaman şeridini 0 genişliğe çökertebiliyordu — kaybolma */
+    flex: 1 1 220px;
+    min-width: 11.5rem;
+    max-width: 100%;
+}
+
+.terminal-controls__chart-toolbar .terminal-category-scroll-shell--chart-mode {
+    flex: 0 0 auto;
+    flex-shrink: 0;
+}
+
+.terminal-controls__chart-toolbar--viop {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .terminal-btn-row {
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
+}
+
+.terminal-btn-row--indicators {
+    position: relative;
+    z-index: 3;
+    flex-shrink: 0;
+}
+
+.terminal-btn--indicator {
+    min-width: 2.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.terminal-btn--indicator[aria-pressed='true'] {
+    border-color: color-mix(in srgb, var(--terminal-accent, #38bdf8) 65%, var(--terminal-border));
+    background: color-mix(in srgb, var(--terminal-accent, #38bdf8) 22%, var(--terminal-btn-bg));
+    color: var(--terminal-text);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--terminal-accent, #38bdf8) 35%, transparent);
+}
+
+.terminal-btn--indicator[aria-pressed='false'] {
+    background: color-mix(in srgb, var(--terminal-btn-bg) 70%, transparent);
+    color: var(--terminal-muted);
+    opacity: 0.88;
+}
+
+.terminal-btn--indicator[aria-pressed='false']:hover {
+    opacity: 1;
+    color: var(--terminal-text);
+    border-color: color-mix(in srgb, var(--terminal-accent, #38bdf8) 40%, var(--terminal-border));
 }
 
 .terminal-category-row {
@@ -1039,6 +1244,174 @@
     justify-content: flex-start;
     margin-top: 2px;
     margin-bottom: 8px;
+}
+
+/* Piyasa listesi: yatay kaydırmalı kategori çubuğu + kayan seçim vurgusu */
+.terminal-category-scroll-shell {
+    margin-top: 2px;
+    margin-bottom: 8px;
+    width: 100%;
+    min-width: 0;
+}
+
+/* Hızlı filtre (Tümü / Yükselenler …): üstteki alt pazar satırına yapışık */
+.terminal-category-scroll-shell--quick-filters {
+    margin-top: 0;
+}
+
+.terminal-fx-quote-tab__glyph {
+    font-size: 0.95rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    letter-spacing: 0.02em;
+}
+
+/* Grafik üstü zaman aralığı (1G…2Y): tek satır, sıkı, araç çubuğunda ekstra dikey pay yok */
+.terminal-category-scroll-shell--chart-range {
+    margin-top: 0;
+    margin-bottom: 0;
+    flex: 1 1 220px;
+    /* Flex üst konteynerde sıfıra sıkışmayı engelle — 1G…2Y sekmeleri görünür kalsın */
+    min-width: 11.5rem;
+    max-width: 100%;
+}
+
+.terminal-category-scroll-shell--chart-range .terminal-category-scroll-track {
+    gap: 0;
+    padding: 2px 0 4px;
+}
+
+.terminal-category-scroll-shell--chart-range .terminal-category-scroll-glider {
+    top: 2px;
+    bottom: 4px;
+}
+
+.terminal-category-scroll-shell--chart-range .terminal-category-scroll-tab {
+    padding: 3px 5px;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+/* Spot / tahvil: çizgi grafik vs mum — ikon sekmeleri, kaydırmalı vurgu */
+.terminal-category-scroll-shell--chart-mode {
+    margin-top: 0;
+    margin-bottom: 0;
+    flex: 0 0 auto;
+    flex-shrink: 0;
+}
+
+.terminal-category-scroll-shell--chart-mode .terminal-category-scroll-track {
+    gap: 0;
+    padding: 2px 0 4px;
+}
+
+.terminal-category-scroll-shell--chart-mode .terminal-category-scroll-glider {
+    top: 2px;
+    bottom: 4px;
+}
+
+.terminal-category-scroll-tab--icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    padding: 5px 8px;
+    line-height: 0;
+    font-size: 0;
+}
+
+.terminal-category-scroll-tab--icon svg {
+    display: block;
+    flex-shrink: 0;
+}
+
+.terminal-category-scroll-shell--chart-mode .terminal-category-scroll-tab--icon {
+    padding: 6px 9px;
+    min-width: 40px;
+}
+
+.terminal-category-scroll-track {
+    position: relative;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 3px 1px 5px;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--terminal-muted) 55%, transparent) transparent;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+}
+
+.terminal-category-scroll-track::-webkit-scrollbar {
+    height: 5px;
+}
+
+.terminal-category-scroll-track::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--terminal-muted) 50%, transparent);
+}
+
+.terminal-category-scroll-glider {
+    position: absolute;
+    top: 3px;
+    bottom: 5px;
+    left: 0;
+    width: 0;
+    border-radius: 999px;
+    background: var(--terminal-btn-active-bg);
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--terminal-accent, #38bdf8) 38%, transparent),
+        0 1px 12px color-mix(in srgb, var(--terminal-accent, #38bdf8) 22%, transparent);
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition:
+        left 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+        width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.12s ease;
+}
+
+.terminal-category-scroll-glider.is-visible {
+    opacity: 1;
+}
+
+.terminal-category-scroll-tab {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    margin: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--terminal-text-muted);
+    border-radius: 999px;
+    padding: 4px 7px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        color 0.2s ease,
+        border-color 0.2s ease;
+    scroll-snap-align: start;
+    white-space: nowrap;
+    line-height: 1.2;
+    font-family: inherit;
+}
+
+.terminal-category-scroll-tab:hover {
+    color: var(--terminal-text);
+}
+
+.terminal-category-scroll-tab:focus-visible {
+    outline: 2px solid var(--terminal-accent, #38bdf8);
+    outline-offset: 2px;
+}
+
+.terminal-category-scroll-tab.is-active {
+    color: var(--terminal-btn-active-text);
 }
 
 .terminal-btn {
@@ -1420,6 +1793,393 @@
     overflow: visible;
 }
 
+/* Hisse / kripto / FX / altın / fonlar: sol listede sabit kart (grafik ile üst hizada). */
+.terminal-left-panel--docked {
+    min-height: 0;
+}
+
+.terminal-hero--spot-compact {
+    padding: 10px 16px;
+    margin-bottom: 12px;
+}
+
+.terminal-spot-hero-rail--passthrough {
+    display: contents;
+}
+
+/* Spot: tek terminal-grid — sol liste grid-row 1/-1 ile yukarı (hero ile aynı üst çizgi) uzar */
+.terminal-grid.terminal-spot-unified {
+    grid-template-rows: auto 1fr;
+    align-items: start;
+}
+
+/* Sol sütun: kartlar içerik kadar uzar; grid hücresine sıkıştırılmaz */
+.terminal-spot-unified .terminal-left-column {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-self: start;
+    min-width: 0;
+    max-width: 100%;
+    max-height: none;
+    overflow: visible;
+    padding: 0 4px 8px 0;
+    box-sizing: border-box;
+}
+
+.terminal-left-column__card {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+}
+
+.terminal-left-column__card--list {
+    display: block;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+.terminal-left-column__card--list > .terminal-left-panel.is-compact {
+    width: 100%;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    margin: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.terminal-left-column__card--compare,
+.terminal-left-column__card--macro {
+    height: auto;
+    overflow: visible;
+}
+
+.terminal-left-column__card--compare > .terminal-pp-summary-card,
+.terminal-left-column__card--macro > .terminal-macro-info-card {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+}
+
+.terminal-left-column .terminal-left-panel__inner {
+    height: auto;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.terminal-left-column .terminal-market-list-body {
+    flex: none;
+    height: auto;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.terminal-left-column .terminal-market-list-scroll-host {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.terminal-left-column .terminal-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: none;
+    box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+}
+
+.terminal-left-column .terminal-data-table--picker-horizons {
+    min-width: 560px;
+    width: max-content;
+    max-width: none;
+}
+
+.terminal-left-column .terminal-market-list-scroll-meta {
+    min-width: 0;
+}
+
+.terminal-left-column .terminal-macro-info-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.terminal-left-column .terminal-pp-summary-grid dd,
+.terminal-left-column .terminal-pp-summary-grid dt {
+    overflow-wrap: anywhere;
+}
+
+.terminal-spot-unified .terminal-card.terminal-left-panel {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-self: stretch;
+    min-height: 0;
+    margin-top: 0;
+}
+
+/* Sol sütun sarmalayıcı varken tek kart grid yerleşimini kullanma */
+.terminal-spot-unified .terminal-left-column .terminal-card.terminal-left-panel {
+    grid-column: auto;
+    grid-row: auto;
+    align-self: auto;
+    min-height: auto;
+    height: auto;
+}
+
+.terminal-spot-unified .terminal-hero {
+    grid-column: 2 / -1;
+    grid-row: 1;
+    margin-bottom: 10px;
+}
+
+.terminal-spot-unified .terminal-center-stack {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+    min-height: 0;
+}
+
+.terminal-spot-unified {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(280px, 0.9fr);
+}
+
+.terminal-left-panel__inner {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.terminal-market-list-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    gap: 8px;
+    overflow: hidden;
+}
+
+/* Eski kural: doğrudan inner altındaki table-wrap — artık scroll-host içinde */
+.terminal-left-panel--docked .terminal-left-panel__inner > .terminal-table-wrap {
+    flex: 1 1 auto;
+    min-height: 200px;
+}
+
+.terminal-pp-summary-card {
+    padding: 12px 14px;
+    flex-shrink: 0;
+    overflow: visible;
+}
+
+.terminal-left-column .terminal-pp-controls__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.terminal-left-column .terminal-pp-controls__field input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.terminal-macro-info-card,
+.terminal-macro-chart-card {
+    flex-shrink: 0;
+    margin-bottom: 0;
+    padding: 12px 14px;
+}
+
+.terminal-macro-card__title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin: 0 0 8px;
+}
+
+.terminal-macro-card__muted,
+.terminal-macro-card__footnote {
+    font-size: 0.72rem;
+    line-height: 1.45;
+    margin: 0;
+}
+
+.terminal-macro-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 14px;
+    margin: 0;
+}
+
+.terminal-macro-info-grid dt {
+    font-size: 0.68rem;
+    margin: 0 0 2px;
+}
+
+.terminal-macro-info-grid dd {
+    font-size: 0.95rem;
+    font-weight: 650;
+    margin: 0;
+}
+
+.terminal-macro-info-grid__wide {
+    grid-column: 1 / -1;
+}
+
+.terminal-macro-rates-chart-wrap {
+    width: 100%;
+    min-height: 220px;
+}
+
+.terminal-pp-summary-card {
+    min-width: 0;
+    margin-top: 4px;
+}
+
+.terminal-pp-summary-anchor {
+    font-size: 0.72rem;
+    line-height: 1.4;
+    margin: 0;
+}
+
+.terminal-pp-compare-chart {
+    flex-shrink: 0;
+}
+
+.terminal-pp-summary-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px 14px;
+    margin: 0;
+}
+
+.terminal-pp-summary-grid > div {
+    min-width: 0;
+}
+
+.terminal-pp-summary-grid dt {
+    font-size: 0.68rem;
+    line-height: 1.35;
+    margin: 0 0 2px;
+}
+
+.terminal-pp-summary-grid dd {
+    font-size: 0.92rem;
+    font-weight: 650;
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.terminal-pp-summary-grid__wide {
+    grid-column: 1 / -1;
+    padding-top: 8px;
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.terminal-pp-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    margin-bottom: 12px;
+    align-items: flex-end;
+}
+
+.terminal-pp-controls__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.75rem;
+}
+
+.terminal-pp-controls__field input {
+    min-width: 140px;
+}
+
+.terminal-spot-unified .terminal-right-panel {
+    grid-column: 3;
+    grid-row: 2;
+    min-width: 0;
+    min-height: 0;
+}
+
+@media (max-width: 1300px) {
+    .terminal-spot-unified {
+        grid-template-rows: auto auto auto;
+    }
+
+    .terminal-spot-unified .terminal-left-column,
+    .terminal-spot-unified .terminal-card.terminal-left-panel {
+        grid-column: 1;
+        grid-row: 1;
+        align-self: start;
+    }
+
+    .terminal-spot-unified .terminal-hero {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .terminal-spot-unified .terminal-center-stack {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    .terminal-spot-unified .terminal-right-panel {
+        grid-column: 1 / -1;
+        grid-row: 3;
+    }
+}
+
+@media (max-width: 980px) {
+    .terminal-spot-unified {
+        grid-template-rows: auto auto auto auto;
+    }
+
+    .terminal-spot-unified .terminal-hero {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .terminal-spot-unified .terminal-left-column,
+    .terminal-spot-unified .terminal-card.terminal-left-panel {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    .terminal-spot-unified .terminal-left-column {
+        max-height: none;
+        overflow: visible;
+    }
+
+    .terminal-spot-unified .terminal-center-stack {
+        grid-row: 3;
+    }
+
+    .terminal-spot-unified .terminal-right-panel {
+        grid-row: 4;
+    }
+}
+
+.terminal-hero--spot-compact .terminal-hero-selector--with-inline-quote {
+    flex: 0 1 min(400px, 58vw);
+    max-width: min(420px, 58vw);
+}
+
+.terminal-hero--spot-compact .terminal-hero-hl-snippet {
+    display: none;
+}
+
 .terminal-market-list-backdrop {
     position: fixed;
     inset: 0;
@@ -1429,6 +2189,79 @@
     margin: 0;
     cursor: pointer;
     background: rgba(2, 6, 23, 0.28);
+}
+
+/* Piyasa listesi: büyük görünüm — bulanık arka plan */
+.terminal-market-list-expand-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 280;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(12px, 2.5vh);
+    box-sizing: border-box;
+    background: rgba(2, 6, 23, 0.38);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.terminal-market-list-expand-dialog {
+    width: min(1220px, calc(100vw - 24px));
+    max-height: min(92vh, 960px);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    border-radius: 16px;
+    border: 1px solid var(--terminal-border);
+    box-shadow:
+        0 28px 90px rgba(0, 0, 0, 0.42),
+        0 0 0 1px color-mix(in srgb, var(--terminal-border) 40%, transparent);
+}
+
+.terminal-left-panel__inner--expand-modal {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 14px 16px 12px;
+    max-height: 100%;
+}
+
+.terminal-left-panel__inner--expand-modal .terminal-table-wrap {
+    flex: 1 1 auto;
+    min-height: 120px;
+}
+
+.terminal-market-list-expand-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 34px;
+    margin: 0;
+    padding: 0;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--terminal-border) 85%, var(--terminal-accent, #38bdf8) 15%);
+    background: color-mix(in srgb, var(--terminal-btn-bg) 90%, var(--terminal-accent, #38bdf8) 4%);
+    color: var(--terminal-text, #e2e8f0);
+    cursor: pointer;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease,
+        transform 0.12s ease;
+}
+
+.terminal-market-list-expand-btn:hover {
+    background: var(--terminal-hover-bg);
+    border-color: color-mix(in srgb, var(--terminal-accent, #38bdf8) 35%, var(--terminal-border));
+}
+
+.terminal-market-list-expand-btn:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--terminal-accent, #38bdf8) 55%, transparent);
+    outline-offset: 2px;
 }
 
 .terminal-hero-selector {
@@ -1538,6 +2371,102 @@
     max-width: min(500px, 54vw);
 }
 
+.terminal-hero-selector-row__trailing {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+/* Hero orta alan: Gün / Hafta / Ay / Yıl yaklaşık % değişim */
+.terminal-hero-horizons {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(6px, 1.5vw, 16px);
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 4px;
+}
+
+.terminal-hero-viop__selector-wrap .terminal-hero-horizons {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    padding-top: 2px;
+}
+
+.terminal-hero-horizons__cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    min-width: 0;
+}
+
+.terminal-hero-horizons__lab {
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--terminal-muted, var(--terminal-text-muted));
+    line-height: 1.05;
+    white-space: nowrap;
+}
+
+.terminal-hero-horizons .terminal-horizon-pct {
+    font-size: clamp(11px, 1.05vw, 13px);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+.terminal-hero--spot-compact .terminal-hero-horizons {
+    gap: 6px;
+}
+
+.terminal-hero--spot-compact .terminal-hero-horizons__lab {
+    font-size: 9px;
+}
+
+.terminal-hero--spot-compact .terminal-hero-horizons .terminal-horizon-pct {
+    font-size: 11px;
+}
+
+/* Karşılaştırma kartı: grafik üstü chip şeridi */
+.terminal-comparison-card__chip-row {
+    margin: 0 0 10px;
+}
+
+.terminal-comparison-card__chip-row .terminal-hero-compare-strip {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+}
+
+/* Seçili enstrüman şeridi: sağ uçta $ / ₺ kaydırmalı */
+.terminal-category-scroll-shell--hero-fx-quote {
+    margin-top: 0;
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+.terminal-category-scroll-shell--hero-fx-quote .terminal-category-scroll-track {
+    gap: 0;
+    padding: 2px 0 3px;
+}
+
+.terminal-category-scroll-shell--hero-fx-quote .terminal-category-scroll-glider {
+    top: 2px;
+    bottom: 3px;
+}
+
+.terminal-category-scroll-shell--hero-fx-quote .terminal-category-scroll-tab--icon {
+    min-width: 34px;
+    padding: 4px 9px;
+}
+
 .terminal-hero-viop__selector-wrap {
     display: flex;
     flex-direction: column;
@@ -1609,8 +2538,14 @@
     min-height: 0;
 }
 
-.terminal-left-panel__inner > *:not(.terminal-table-wrap) {
+/* Liste gövdesi küçülebilmeli; alt kartlar sabit kalsın */
+.terminal-left-panel__inner > *:not(.terminal-table-wrap):not(.terminal-market-list-body) {
     flex-shrink: 0;
+}
+
+.terminal-left-panel__inner .terminal-market-list-body {
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .terminal-left-panel__inner .terminal-table-wrap {
@@ -1620,6 +2555,21 @@
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+}
+
+/* Spot sol sütun: dikeyde uzar; yatay taşma tablo sarmalayıcısında kalır */
+.terminal-left-column .terminal-left-panel__inner .terminal-market-list-body {
+    flex: none;
+    overflow: hidden;
+}
+
+.terminal-left-column .terminal-left-panel__inner .terminal-table-wrap,
+.terminal-left-column .terminal-market-list-scroll-host .terminal-table-wrap {
+    flex: none;
+    max-height: none;
+    max-width: 100%;
+    overflow-y: visible;
+    overflow-x: auto;
 }
 
 .terminal-list-quick-filters {
@@ -1634,7 +2584,8 @@
 .terminal-data-table--picker-horizons {
     table-layout: fixed;
     width: 100%;
-    min-width: 0;
+    /* Dar sol şeritte yüzde sütunları ezilmesin — yatay kaydır, üst üste binme olmasın */
+    min-width: 720px;
     max-width: 100%;
     font-variant-numeric: tabular-nums;
 }
@@ -1646,7 +2597,7 @@
 }
 
 /* Piyasa seçici popover: daha sıkı dikey boşluk */
-.terminal-left-panel__inner--popover-sheet .terminal-category-row--sidebar {
+.terminal-left-panel__inner--popover-sheet .terminal-category-scroll-shell {
     margin-top: 0;
     margin-bottom: 6px;
 }
@@ -1656,13 +2607,19 @@
     font-size: 10px;
 }
 
-.terminal-left-panel__inner--popover-sheet .terminal-btn-row.terminal-category-row--sidebar {
-    gap: 4px;
+.terminal-left-panel__inner--popover-sheet .terminal-category-scroll-track {
+    gap: 1px;
+    padding: 2px 0 4px;
 }
 
-.terminal-left-panel__inner--popover-sheet .terminal-category-row--sidebar .terminal-btn {
-    padding: 4px 8px;
-    font-size: 11px;
+.terminal-left-panel__inner--popover-sheet .terminal-category-scroll-glider {
+    top: 2px;
+    bottom: 4px;
+}
+
+.terminal-left-panel__inner--popover-sheet .terminal-category-scroll-tab {
+    padding: 3px 6px;
+    font-size: 10px;
 }
 
 .terminal-left-panel__inner--popover-sheet .terminal-list-quick-filters {
@@ -1685,10 +2642,10 @@
     padding: 4px 10px;
 }
 
-/* Sanal kaydırmalı satır yüksekliği MARKET_LIST_ROW_HEIGHT ile aynı (fiyat + günlük % iki satır) */
+/* Sanal kaydırma: MARKET_LIST_ROW_HEIGHT (50px) ile senkron */
 .terminal-data-table--picker-horizons tbody tr {
-    height: 56px;
-    min-height: 56px;
+    height: 50px;
+    min-height: 50px;
 }
 
 /* Eski 5 sütunluk % / trend genişlikleri bu tabloda yanlış kolonlara uygulanmasın */
@@ -1750,7 +2707,7 @@
 .terminal-data-table--picker-horizons th:nth-child(4),
 .terminal-data-table--picker-horizons td:nth-child(4) {
     width: 11.5%;
-    min-width: 64px;
+    min-width: 72px;
     max-width: none;
     padding-left: 2px;
     padding-right: 2px;
@@ -1777,7 +2734,7 @@
 .terminal-data-table--picker-horizons th:nth-child(8),
 .terminal-data-table--picker-horizons td:nth-child(8) {
     width: 9.875%;
-    min-width: 40px;
+    min-width: 48px;
     max-width: none;
     padding-left: 2px;
     padding-right: 2px;

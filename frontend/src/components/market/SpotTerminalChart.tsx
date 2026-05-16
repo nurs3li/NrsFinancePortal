@@ -1,6 +1,6 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { createChart } from 'lightweight-charts';
-import type { Time } from 'lightweight-charts';
+import type { LogicalRange, Time } from 'lightweight-charts';
 import { apiDatetimeToChartTime } from '../../lib/chartApiTime';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
@@ -15,12 +15,13 @@ type CandlePoint = {
 
 type Props = {
     title: string;
-    /** İkincil açıklama (ör. BIST günlük veri notu) */
     subtitle?: string;
     candles: CandlePoint[];
     ma7: { time: string; value: number }[];
     ma21: { time: string; value: number }[];
     showMa: boolean;
+    showRsi?: boolean;
+    rsi14?: { time: string; value: number }[];
     loading: boolean;
     trendLabel?: 'UP' | 'DOWN';
     timeframeLabel?: string;
@@ -31,6 +32,7 @@ type Props = {
         text: string;
         textMuted: string;
     };
+    onCrosshairDate?: (dateYmd: string) => void;
 };
 
 function chartTimeKey(value: Time): string {
@@ -45,20 +47,34 @@ function SpotTerminalChartImpl({
     ma7,
     ma21,
     showMa,
+    showRsi = false,
+    rsi14 = [],
     loading,
-    trendLabel,
+    trendLabel: _trendLabel,
     timeframeLabel,
     chartTimePreferIstanbulBusinessDay,
     tokens,
+    onCrosshairDate,
 }: Props) {
     const chartRef = useRef<HTMLDivElement>(null);
-    const [hover, setHover] = useState<{ close: number } | null>(null);
+    const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null);
+    const closeAreaRef = useRef<ReturnType<ReturnType<typeof createChart>['addAreaSeries']> | null>(null);
+    const closeLineRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+    const ma7SeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+    const ma21SeriesRef = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
+    const logicalRangeRef = useRef<LogicalRange | null>(null);
+    const hasInitialFitRef = useRef(false);
+    const rangeRef = useRef(parseTerminalChartRange(timeframeLabel));
+    const barCountRef = useRef(0);
+    const candleByTimeRef = useRef<Map<string, CandlePoint>>(new Map());
+
     const chartHeight = 520;
     const tokensRef = useRef(tokens);
     tokensRef.current = tokens;
-    const crosshairRafRef = useRef<number | null>(null);
-    const pendingHoverRef = useRef<{ key: string; close: number } | null>(null);
-    const lastCommittedHoverKeyRef = useRef<string>('');
+    const onCrosshairDateRef = useRef(onCrosshairDate);
+    onCrosshairDateRef.current = onCrosshairDate;
+    const lastCrosshairDateRef = useRef('');
+
     const toChartTime = useMemo(
         () => (s: string) =>
             apiDatetimeToChartTime(s, {
@@ -66,17 +82,8 @@ function SpotTerminalChartImpl({
             }),
         [chartTimePreferIstanbulBusinessDay],
     );
-    useEffect(
-        () => () => {
-            if (crosshairRafRef.current != null) {
-                cancelAnimationFrame(crosshairRafRef.current);
-                crosshairRafRef.current = null;
-            }
-        },
-        [],
-    );
 
-    const sorted = useMemo(() => {
+    const sortedCandles = useMemo(() => {
         const byTime = new Map<string, CandlePoint>();
         [...candles]
             .filter((c) => Number.isFinite(c.close) && c.close > 0)
@@ -87,13 +94,10 @@ function SpotTerminalChartImpl({
 
     useEffect(() => {
         const el = chartRef.current;
-        if (!el || loading || sorted.length < 2) return;
-
-        const chartRange = parseTerminalChartRange(timeframeLabel);
-        const widthPx = Math.max(320, el.clientWidth);
-        const tsLay = computeTerminalTimeScaleLayout(widthPx, sorted.length, chartRange);
+        if (!el || chartApiRef.current) return;
 
         const t = tokensRef.current;
+        const widthPx = Math.max(320, el.clientWidth);
         const chart = createChart(el, {
             width: widthPx,
             height: chartHeight,
@@ -110,12 +114,21 @@ function SpotTerminalChartImpl({
                 borderColor: t.border,
                 timeVisible: true,
                 secondsVisible: false,
-                ...tsLay,
+                lockVisibleTimeRangeOnResize: true,
+                rightOffset: 0,
+                fixLeftEdge: true,
+                fixRightEdge: true,
+                shiftVisibleRangeOnNewBar: false,
             },
-            crosshair: { mode: 1 },
+            crosshair: {
+                mode: 1,
+                vertLine: { labelVisible: false },
+                horzLine: { labelVisible: false },
+            },
         });
+        chartApiRef.current = chart;
 
-        const closeArea = chart.addAreaSeries({
+        closeAreaRef.current = chart.addAreaSeries({
             lineColor: '#38bdf8',
             topColor: 'rgba(56,189,248,0.45)',
             bottomColor: 'rgba(56,189,248,0.12)',
@@ -123,7 +136,7 @@ function SpotTerminalChartImpl({
             priceLineVisible: false,
             lastValueVisible: true,
         });
-        const closeLine = chart.addLineSeries({
+        closeLineRef.current = chart.addLineSeries({
             color: '#0ea5e9',
             lineWidth: 2,
             pointMarkersVisible: true,
@@ -132,104 +145,197 @@ function SpotTerminalChartImpl({
             priceLineVisible: false,
             lastValueVisible: false,
         });
-        const closeData = sorted.map((p) => ({ time: toChartTime(p.time), value: p.close }));
-        closeArea.setData(closeData);
-        closeLine.setData(closeData);
-
-        if (showMa) {
-            const ma7Series = chart.addLineSeries({
-                color: '#22c55e',
-                lineWidth: 2,
-                priceLineVisible: false,
-                lastValueVisible: false,
-            });
-            ma7Series.setData(ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })));
-            const ma21Series = chart.addLineSeries({
-                color: '#f59e0b',
-                lineWidth: 2,
-                priceLineVisible: false,
-                lastValueVisible: false,
-            });
-            ma21Series.setData(ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })));
-        }
-
-        chart.subscribeCrosshairMove((param) => {
-            let next: { key: string; close: number } | null = null;
-            if (param?.time) {
-                const timeKey = chartTimeKey(param.time);
-                const row = sorted.find((p) => chartTimeKey(toChartTime(p.time)) === timeKey);
-                if (row) {
-                    next = { key: `${timeKey}|${row.close}`, close: row.close };
-                }
-            }
-            pendingHoverRef.current = next;
-            if (crosshairRafRef.current != null) return;
-            crosshairRafRef.current = requestAnimationFrame(() => {
-                crosshairRafRef.current = null;
-                const p = pendingHoverRef.current;
-                const nextKey = p ? p.key : '';
-                if (nextKey === lastCommittedHoverKeyRef.current) return;
-                lastCommittedHoverKeyRef.current = nextKey;
-                setHover(p ? { close: p.close } : null);
-            });
+        ma7SeriesRef.current = chart.addLineSeries({
+            color: '#22c55e',
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        });
+        ma21SeriesRef.current = chart.addLineSeries({
+            color: '#f59e0b',
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: false,
         });
 
-        const fit = () => requestAnimationFrame(() => chart.timeScale().fitContent());
-        fit();
+        chart.subscribeCrosshairMove((param) => {
+            if (param?.time) {
+                const timeKey = chartTimeKey(param.time);
+                const row = candleByTimeRef.current.get(timeKey);
+                if (row) {
+                    const ymd = String(row.time).slice(0, 10);
+                    if (ymd && ymd !== lastCrosshairDateRef.current) {
+                        lastCrosshairDateRef.current = ymd;
+                        onCrosshairDateRef.current?.(ymd);
+                    }
+                }
+            } else if (lastCrosshairDateRef.current) {
+                lastCrosshairDateRef.current = '';
+                onCrosshairDateRef.current?.('');
+            }
+        });
+
+        chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+            if (range) logicalRangeRef.current = range;
+        });
 
         const onResize = () => {
             const w = Math.max(320, el.clientWidth);
-            const lay = computeTerminalTimeScaleLayout(w, sorted.length, chartRange);
+            const lay = computeTerminalTimeScaleLayout(w, Math.max(2, barCountRef.current), rangeRef.current);
             chart.applyOptions({
                 width: w,
                 timeScale: {
                     borderColor: tokensRef.current.border,
                     timeVisible: true,
                     secondsVisible: false,
+                    lockVisibleTimeRangeOnResize: true,
                     ...lay,
+                    rightOffset: 0,
+                    fixLeftEdge: true,
+                    fixRightEdge: true,
+                    shiftVisibleRangeOnNewBar: false,
                 },
             });
-            fit();
+            if (logicalRangeRef.current) {
+                chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
+            }
         };
         window.addEventListener('resize', onResize);
+
         return () => {
             window.removeEventListener('resize', onResize);
             chart.remove();
+            chartApiRef.current = null;
+            closeAreaRef.current = null;
+            closeLineRef.current = null;
+            ma7SeriesRef.current = null;
+            ma21SeriesRef.current = null;
+            hasInitialFitRef.current = false;
         };
-    }, [loading, sorted, ma7, ma21, showMa, timeframeLabel, toChartTime, tokens.bgCard, tokens.border, tokens.text, tokens.textMuted]);
+    }, []);
 
-    if (loading) return <div className="terminal-chart-empty">Grafik yükleniyor...</div>;
-    if (!sorted.length) return <div className="terminal-chart-empty">Analiz grafiği için veri bulunamadı.</div>;
-    if (sorted.length < 2) return <div className="terminal-chart-empty">Analiz grafiği için en az 2 veri noktası gerekli.</div>;
+    useEffect(() => {
+        const chart = chartApiRef.current;
+        if (!chart) return;
+        chart.applyOptions({
+            layout: { background: { color: tokens.bgCard }, textColor: tokens.text },
+            rightPriceScale: { borderColor: tokens.border },
+            timeScale: { borderColor: tokens.border },
+        });
+    }, [tokens.bgCard, tokens.border, tokens.text]);
+
+    useEffect(() => {
+        const chart = chartApiRef.current;
+        const closeArea = closeAreaRef.current;
+        const closeLine = closeLineRef.current;
+        if (!chart || !closeArea || !closeLine || loading || sortedCandles.length < 2) return;
+
+        const chartRange = parseTerminalChartRange(timeframeLabel);
+        const rangeChanged = rangeRef.current !== chartRange;
+        rangeRef.current = chartRange;
+        barCountRef.current = sortedCandles.length;
+
+        const byTime = new Map<string, CandlePoint>();
+        const closeData = sortedCandles.map((p) => {
+            const t = toChartTime(p.time);
+            const key = chartTimeKey(t);
+            byTime.set(key, p);
+            return { time: t, value: p.close };
+        });
+        candleByTimeRef.current = byTime;
+
+        closeArea.setData(closeData);
+        closeLine.setData(closeData);
+        const ma7Series = ma7SeriesRef.current;
+        const ma21Series = ma21SeriesRef.current;
+        if (ma7Series) {
+            ma7Series.applyOptions({ visible: showMa });
+            ma7Series.setData(showMa ? ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+        }
+        if (ma21Series) {
+            ma21Series.applyOptions({ visible: showMa });
+            ma21Series.setData(showMa ? ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+        }
+
+        const widthPx = Math.max(320, chartRef.current?.clientWidth ?? 320);
+        const tsLay = computeTerminalTimeScaleLayout(widthPx, sortedCandles.length, chartRange);
+        chart.applyOptions({
+            width: widthPx,
+            timeScale: {
+                borderColor: tokensRef.current.border,
+                timeVisible: true,
+                secondsVisible: false,
+                lockVisibleTimeRangeOnResize: true,
+                ...tsLay,
+                rightOffset: 0,
+                fixLeftEdge: true,
+                fixRightEdge: true,
+                shiftVisibleRangeOnNewBar: false,
+            },
+        });
+
+        if (!hasInitialFitRef.current || rangeChanged) {
+            requestAnimationFrame(() => {
+                chart.timeScale().fitContent();
+                logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
+                hasInitialFitRef.current = true;
+            });
+            return;
+        }
+        if (logicalRangeRef.current) {
+            chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
+        }
+    }, [loading, sortedCandles, ma7, ma21, showMa, timeframeLabel, toChartTime]);
+
+    const showChart = !loading && sortedCandles.length >= 2;
+    const emptyMessage = loading
+        ? 'Grafik yükleniyor...'
+        : !sortedCandles.length
+          ? 'Analiz grafiği için veri bulunamadı.'
+          : sortedCandles.length < 2
+            ? 'Analiz grafiği için en az 2 veri noktası gerekli.'
+            : null;
 
     return (
         <div className="terminal-chart-wrap">
-            <div className="terminal-chart-header">
+            <div className="terminal-chart-header terminal-chart-header--compact">
                 <div className="terminal-chart-title">{title}</div>
                 {subtitle ? <div className="terminal-chart-subtitle">{subtitle}</div> : null}
-                <div className="terminal-chart-badges">
-                    {timeframeLabel ? <span className="terminal-chart-badge">Zaman: {timeframeLabel}</span> : null}
-                    {trendLabel ? (
-                        <span className={`terminal-chart-badge ${trendLabel === 'UP' ? 'up' : 'down'}`}>Trend: {trendLabel}</span>
-                    ) : null}
-                </div>
-                {hover ? (
-                    <div className="terminal-ohlc">
-                        <span>Fiyat {hover.close.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</span>
-                    </div>
-                ) : (
-                    <div className="terminal-ohlc muted">Fiyat için imleci grafik üzerine getir</div>
-                )}
             </div>
-            <div ref={chartRef} style={{ width: '100%', height: chartHeight }} />
+            {emptyMessage ? <div className="terminal-chart-empty">{emptyMessage}</div> : null}
+            <div
+                ref={chartRef}
+                style={{ width: '100%', height: chartHeight, display: showChart ? 'block' : 'none' }}
+            />
+            {showRsi && showChart ? (
+                <div className="terminal-rsi">
+                    <div className="terminal-rsi-head">RSI (14)</div>
+                    {rsi14.length ? (
+                        <div className="terminal-rsi-row">
+                            {rsi14.slice(-48).map((p) => (
+                                <div
+                                    key={`${p.time}-${p.value}`}
+                                    className="terminal-rsi-bar"
+                                    style={{
+                                        height: `${Math.max(2, Math.min(100, p.value))}%`,
+                                        background:
+                                            p.value > 70
+                                                ? 'rgba(239,68,68,.75)'
+                                                : p.value < 30
+                                                  ? 'rgba(34,197,94,.75)'
+                                                  : 'rgba(56,189,248,.75)',
+                                    }}
+                                    title={`${new Date(p.time).toLocaleString('tr-TR')} · RSI ${p.value.toFixed(2)}`}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="terminal-chart-empty">RSI verisi yok</div>
+                    )}
+                </div>
+            ) : null}
         </div>
     );
 }
 
-/*
- * React.memo: Parent (Market.tsx) state guncellemelerinde "Piyasa Analiz" alanindaki chart
- * istemsiz re-render'lardan korunur. Prop'lar parent'ta useMemo'lu oldugundan referans-stabil
- * ve memo "esit referans" karsilastirmasi titremeyi engeller.
- */
 export const SpotTerminalChart = memo(SpotTerminalChartImpl);
-

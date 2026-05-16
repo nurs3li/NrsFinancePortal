@@ -4,6 +4,7 @@ import type {
     ManualPortfolioAnalysis,
     ManualPortfolioClosePayload,
     ManualPortfolioCreatePayload,
+    ManualPortfolioTimeseriesPoint,
     ManualPortfolioView,
     ManualResolvedPrice,
     ManualSummary,
@@ -41,6 +42,91 @@ export async function getManualPositions(): Promise<ManualPortfolioView[]> {
 export async function getManualSummary(): Promise<ManualSummary> {
     const res = await financeClient.get('/api/portfolio/manual/summary/me');
     return unwrapFinanceSuccess<ManualSummary>(res);
+}
+
+export async function getManualTimeseries(fromIsoDate: string, toIsoDate: string): Promise<ManualPortfolioTimeseriesPoint[]> {
+    const res = await financeClient.get('/api/portfolio/manual/timeseries/me', {
+        params: { from: fromIsoDate, to: toIsoDate },
+    });
+    return unwrapFinanceSuccess<ManualPortfolioTimeseriesPoint[]>(res);
+}
+
+export async function getManualTimeseriesSegment(
+    fromIsoDate: string,
+    toIsoDate: string,
+    mode: 'TYPE' | 'SYMBOL',
+    key: string,
+): Promise<ManualPortfolioTimeseriesPoint[]> {
+    const res = await financeClient.get('/api/portfolio/manual/timeseries/me/segment', {
+        params: { from: fromIsoDate, to: toIsoDate, mode, key },
+    });
+    return unwrapFinanceSuccess<ManualPortfolioTimeseriesPoint[]>(res);
+}
+
+export async function getManualSoldHoldHypotheticalTimeseries(
+    fromIsoDate: string,
+    toIsoDate: string,
+): Promise<ManualPortfolioTimeseriesPoint[]> {
+    const res = await financeClient.get('/api/portfolio/manual/timeseries/me/sold-hold-hypothetical', {
+        params: { from: fromIsoDate, to: toIsoDate },
+    });
+    return unwrapFinanceSuccess<ManualPortfolioTimeseriesPoint[]>(res);
+}
+
+export async function getManualSoldHoldHypotheticalSegment(
+    fromIsoDate: string,
+    toIsoDate: string,
+    mode: 'TYPE' | 'SYMBOL',
+    key: string,
+): Promise<ManualPortfolioTimeseriesPoint[]> {
+    const res = await financeClient.get('/api/portfolio/manual/timeseries/me/sold-hold-hypothetical/segment', {
+        params: { from: fromIsoDate, to: toIsoDate, mode, key },
+    });
+    return unwrapFinanceSuccess<ManualPortfolioTimeseriesPoint[]>(res);
+}
+
+export async function getManualSoldLifecyclePnlTimeseries(
+    fromIsoDate: string,
+    toIsoDate: string,
+): Promise<ManualPortfolioTimeseriesPoint[]> {
+    const res = await financeClient.get('/api/portfolio/manual/timeseries/me/sold-lifecycle-pnl', {
+        params: { from: fromIsoDate, to: toIsoDate },
+    });
+    return unwrapFinanceSuccess<ManualPortfolioTimeseriesPoint[]>(res);
+}
+
+export async function getManualSoldLifecyclePnlSegment(
+    fromIsoDate: string,
+    toIsoDate: string,
+    mode: 'TYPE' | 'SYMBOL',
+    key: string,
+): Promise<ManualPortfolioTimeseriesPoint[]> {
+    const res = await financeClient.get('/api/portfolio/manual/timeseries/me/sold-lifecycle-pnl/segment', {
+        params: { from: fromIsoDate, to: toIsoDate, mode, key },
+    });
+    return unwrapFinanceSuccess<ManualPortfolioTimeseriesPoint[]>(res);
+}
+
+export async function getManualOpenUnrealizedPnlTimeseries(
+    fromIsoDate: string,
+    toIsoDate: string,
+): Promise<ManualPortfolioTimeseriesPoint[]> {
+    const res = await financeClient.get('/api/portfolio/manual/timeseries/me/open-unrealized-pnl', {
+        params: { from: fromIsoDate, to: toIsoDate },
+    });
+    return unwrapFinanceSuccess<ManualPortfolioTimeseriesPoint[]>(res);
+}
+
+export async function getManualOpenUnrealizedPnlSegment(
+    fromIsoDate: string,
+    toIsoDate: string,
+    mode: 'TYPE' | 'SYMBOL',
+    key: string,
+): Promise<ManualPortfolioTimeseriesPoint[]> {
+    const res = await financeClient.get('/api/portfolio/manual/timeseries/me/open-unrealized-pnl/segment', {
+        params: { from: fromIsoDate, to: toIsoDate, mode, key },
+    });
+    return unwrapFinanceSuccess<ManualPortfolioTimeseriesPoint[]>(res);
 }
 
 export async function resolveManualPrice(type: string, symbol: string, date: string): Promise<ManualResolvedPrice> {
