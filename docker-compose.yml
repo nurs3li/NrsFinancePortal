@@ -318,7 +318,9 @@ services:
         max-file: "3"
 
   finance-service:
-    build: ./finance-service
+    build:
+      context: .
+      dockerfile: finance-service/Dockerfile
     container_name: nrs-finance
     ports:
       - "8085:8080"
@@ -448,14 +450,15 @@ services:
         max-size: "10m"
         max-file: "3"
   # Vite geliştirme sunucusu (HMR, kaynak klasör bind mount). Üretim nginx imajı compose’ta yok; dağıtım için frontend/Dockerfile kullanılır.
-  # Host 5174 → konteyner 5173 (5173 host’ta meşgul olabildiği için).
-  # Tarayıcı: http://localhost:5174 — API çağrıları tarayıcıdan gider; VITE_* host’tan erişilebilir olmalı (örn. localhost:8085).
+  # Host 3000 → konteyner 5173: tarayıcı `http://localhost:3000` ile Keycloak redirect_uri (genelde 3000) ile aynı kök olur.
+  # 3000 başka süreçte kullanılıyorsa (eski nginx nrs-frontend vb.) önce durdur veya bu mapping’i çakışmayacak porta çek.
+  # API çağrıları tarayıcıdan gider; VITE_* host’tan erişilebilir olmalı (örn. localhost:8085).
   frontend-dev:
     image: node:22-alpine
     working_dir: /app
     container_name: nrs-frontend-dev
     ports:
-      - "5174:5173"
+      - "3000:5173"
     environment:
       CHOKIDAR_USEPOLLING: "true"
       npm_config_update_notifier: "false"
