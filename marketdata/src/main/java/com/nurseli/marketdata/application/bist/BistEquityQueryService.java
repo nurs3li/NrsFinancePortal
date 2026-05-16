@@ -5,6 +5,7 @@ import com.nurseli.marketdata.api.dto.BistEquityCandleResponse;
 import com.nurseli.marketdata.api.dto.BistEquityHistoryResponse;
 import com.nurseli.marketdata.api.dto.BistEquityLatestResponse;
 import com.nurseli.marketdata.api.dto.BistSymbolResponse;
+import com.nurseli.marketdata.api.dto.PagedResponse;
 import com.nurseli.marketdata.config.BistProperties;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.infrastructure.bist.BistDataQuality;
@@ -84,6 +85,99 @@ public class BistEquityQueryService {
             out = buildLatestFromDb();
         }
         return out;
+    }
+
+    /**
+     * Terminal piyasa listesi: filtre/sıralama sonrası sayfalı sonuç (varsayılan 5 satır).
+     */
+    public PagedResponse<BistEquityLatestResponse> getLatestPage(
+            int page,
+            int size,
+            String sort,
+            String dir,
+            String filter,
+            String search) {
+        List<BistEquityLatestResponse> rows = getLatest().stream()
+                .filter(r -> hasPositivePrice(r))
+                .toList();
+        String q = search != null ? search.trim().toLowerCase(Locale.ROOT) : "";
+        if (!q.isEmpty()) {
+            rows = rows.stream()
+                    .filter(r -> matchesSearch(r, q))
+                    .toList();
+        }
+        String f = filter != null ? filter.trim().toUpperCase(Locale.ROOT) : "ALL";
+        rows = switch (f) {
+            case "UP" -> rows.stream().filter(r -> pct(r) > 0.02).toList();
+            case "DOWN" -> rows.stream().filter(r -> pct(r) < -0.02).toList();
+            case "VOL" -> rows.stream()
+                    .sorted(Comparator.comparing(BistEquityQueryService::volume, Comparator.reverseOrder()))
+                    .toList();
+            default -> rows;
+        };
+        Comparator<BistEquityLatestResponse> cmp = comparatorForSort(sort, dir);
+        if (!"VOL".equals(f)) {
+            rows = rows.stream().sorted(cmp).toList();
+        }
+        int safeSize = Math.max(1, Math.min(size, 50));
+        int safePage = Math.max(0, page);
+        long total = rows.size();
+        int from = Math.min((int) total, safePage * safeSize);
+        int to = Math.min((int) total, from + safeSize);
+        List<BistEquityLatestResponse> slice = from >= to ? List.of() : rows.subList(from, to);
+        return PagedResponse.of(slice, safePage, safeSize, total);
+    }
+
+    private static boolean hasPositivePrice(BistEquityLatestResponse r) {
+        if (r == null) {
+            return false;
+        }
+        BigDecimal a = r.adjustedClose();
+        if (a != null && a.signum() > 0) {
+            return true;
+        }
+        BigDecimal raw = r.rawClose();
+        return raw != null && raw.signum() > 0;
+    }
+
+    private static boolean matchesSearch(BistEquityLatestResponse r, String q) {
+        String sym = r.symbol() != null ? r.symbol().toLowerCase(Locale.ROOT) : "";
+        String name = r.displayName() != null ? r.displayName().toLowerCase(Locale.ROOT) : "";
+        String sector = r.sector() != null ? r.sector().toLowerCase(Locale.ROOT) : "";
+        return sym.contains(q) || name.contains(q) || sector.contains(q);
+    }
+
+    private static double pct(BistEquityLatestResponse r) {
+        BigDecimal p = r.changePercent();
+        return p != null ? p.doubleValue() : 0.0;
+    }
+
+    private static double volume(BistEquityLatestResponse r) {
+        BigDecimal v = r.volume();
+        return v != null ? v.doubleValue() : 0.0;
+    }
+
+    private static Comparator<BistEquityLatestResponse> comparatorForSort(String sort, String dir) {
+        boolean asc = "asc".equalsIgnoreCase(dir);
+        String key = sort != null ? sort.trim().toLowerCase(Locale.ROOT) : "changepct";
+        Comparator<BistEquityLatestResponse> base =
+                switch (key) {
+                    case "price" -> Comparator.comparing(BistEquityQueryService::price, Comparator.naturalOrder());
+                    case "volume", "vol" -> Comparator.comparing(BistEquityQueryService::volume, Comparator.naturalOrder());
+                    case "symbol" -> Comparator.comparing(
+                            r -> r.symbol() != null ? r.symbol() : "", String.CASE_INSENSITIVE_ORDER);
+                    default -> Comparator.comparing(r -> Math.abs(pct(r)), Comparator.naturalOrder());
+                };
+        return asc ? base : base.reversed();
+    }
+
+    private static double price(BistEquityLatestResponse r) {
+        BigDecimal a = r.adjustedClose();
+        if (a != null && a.signum() > 0) {
+            return a.doubleValue();
+        }
+        BigDecimal raw = r.rawClose();
+        return raw != null && raw.signum() > 0 ? raw.doubleValue() : 0.0;
     }
 
     private List<BistEquityLatestResponse> buildLatestFromDb() {

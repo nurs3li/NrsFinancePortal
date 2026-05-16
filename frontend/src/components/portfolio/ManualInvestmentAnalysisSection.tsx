@@ -25,8 +25,40 @@ import {
 } from '../../services/manualPortfolioApi';
 import type { ManualAssetType, ManualPortfolioAnalysis, ManualPortfolioView } from '../../types/manualPortfolio';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { cryptoMeta, etfMeta, fxMeta, instrumentMeta } from '../../utils/instrumentMeta';
+import { PRECIOUS_METAL_DISPLAY_META, PRECIOUS_METAL_SYMBOLS } from '../../constants/preciousMetalsUsd';
 
 const ASSET_TYPE_ORDER: ManualAssetType[] = ['STOCK', 'CRYPTO', 'FX', 'METAL', 'FUND'];
+
+type ManualSymbolOption = { value: string; label: string };
+
+function manualPortfolioSymbolOptionsForType(type: ManualAssetType): ManualSymbolOption[] {
+    switch (type) {
+        case 'STOCK':
+            return Object.keys(instrumentMeta)
+                .sort()
+                .map((k) => ({ value: k, label: `${k} — ${instrumentMeta[k]!.name}` }));
+        case 'CRYPTO':
+            return Object.keys(cryptoMeta)
+                .sort()
+                .map((k) => ({ value: k, label: `${k} — ${cryptoMeta[k]!.name}` }));
+        case 'FX':
+            return Object.keys(fxMeta)
+                .sort()
+                .map((k) => ({ value: k, label: `${k} — ${fxMeta[k]!.baseName} / ${fxMeta[k]!.quoteName}` }));
+        case 'METAL':
+            return [...PRECIOUS_METAL_SYMBOLS].map((k) => {
+                const m = PRECIOUS_METAL_DISPLAY_META[k];
+                return { value: k, label: m ? `${k} — ${m.displayName}` : k };
+            });
+        case 'FUND':
+            return Object.keys(etfMeta)
+                .sort()
+                .map((k) => ({ value: k, label: `${k} — ${etfMeta[k]!.name}` }));
+        default:
+            return [];
+    }
+}
 
 function n(v: unknown): number | null {
     if (v == null) return null;
@@ -76,6 +108,8 @@ function priceSourceLabel(t: (k: string, d: string) => string, src: string | nul
 export type ManualInvestmentAnalysisSectionHandle = {
     openCreate: () => void;
     openEdit: (id: number) => void;
+    openAnalysis: (id: number) => void;
+    openSellEntry: () => void;
 };
 
 type Props = {
@@ -89,6 +123,8 @@ type Props = {
     };
     locale: string;
     onPortfolioMutated: () => void;
+    /** full: liste + formlar; modalsOnly: yalnızca modal ve analiz çekmecesi. */
+    surface?: 'full' | 'modalsOnly';
 };
 
 type StatusFilter = 'ALL' | 'OPEN' | 'SOLD';
@@ -97,7 +133,7 @@ type TypeFilter = 'ALL' | ManualAssetType;
 const TABLE_PAGE = 8;
 
 export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalysisSectionHandle, Props>(function ManualInvestmentAnalysisSectionInner(
-    { tokens, locale, onPortfolioMutated },
+    { tokens, locale, onPortfolioMutated, surface = 'full' },
     ref,
 ) {
     const { t } = useLanguage();
@@ -193,7 +229,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         setEditId(id);
         setPositionStatus(statusOf(row) === 'SOLD' ? 'SOLD' : 'OPEN');
         setFType((String(row.type).toUpperCase() as ManualAssetType) || 'CRYPTO');
-        setFSymbol(String(row.symbol ?? ''));
+        setFSymbol(String(row.symbol ?? '').trim().toUpperCase());
         setFQty(String(n(row.quantity) ?? ''));
         setFBuyDate(String(row.buyDate ?? '').slice(0, 10));
         setFBuyFee(String(n(row.buyFee) ?? 0));
@@ -209,11 +245,6 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         setFormBanner(null);
         setFormOpen(true);
     }, [positions]);
-
-    useImperativeHandle(ref, () => ({
-        openCreate: openFormCreate,
-        openEdit: openFormEdit,
-    }));
 
     const filteredRows = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -244,6 +275,21 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     useEffect(() => {
         setTablePage(0);
     }, [statusFilter, typeFilter, search]);
+
+    const baseSymbolOptions = useMemo(() => manualPortfolioSymbolOptionsForType(fType), [fType]);
+    const symbolSelectOptions = useMemo(() => {
+        const sym = fSymbol.trim().toUpperCase();
+        if (!sym || baseSymbolOptions.some((o) => o.value === sym)) {
+            return baseSymbolOptions;
+        }
+        return [
+            {
+                value: sym,
+                label: `${sym} — ${t('manualInvest.symbolLegacy', 'Mevcut kayıt / listede yok')}`,
+            },
+            ...baseSymbolOptions,
+        ];
+    }, [baseSymbolOptions, fSymbol, t]);
 
     const createMut = useMutation({
         mutationFn: createManualPosition,
@@ -499,6 +545,21 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         setAnalysisOpen(true);
     };
 
+    useImperativeHandle(
+        ref,
+        () => ({
+            openCreate: openFormCreate,
+            openEdit: openFormEdit,
+            openAnalysis,
+            openSellEntry: () => {
+                const first = positions.find((p) => statusOf(p) === 'OPEN');
+                if (first) openClose(first.id);
+                else alert(t('portfolio.sellNoOpen', 'Satış girişi için açık pozisyon bulunmuyor.'));
+            },
+        }),
+        [openFormCreate, openFormEdit, positions, t],
+    );
+
     const cardSurface: CSSProperties = {
         background: tokens.bgCard,
         border: `1px solid ${tokens.border}`,
@@ -512,6 +573,8 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     const [chartMetric, setChartMetric] = useState<'value' | 'price'>('value');
 
     return (
+        <>
+        {surface === 'full' ? (
         <section className="mia-root portfolio-fade-in portfolio-fade-in--delay-1" style={{ marginTop: 18 }}>
             <div className="mia-header" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between' }}>
                 <div>
@@ -729,6 +792,8 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                     )}
                 </div>
             )}
+        </section>
+        ) : null}
 
             {formOpen ? (
                 <div className="mia-modal-backdrop" role="presentation" onMouseDown={() => setFormOpen(false)}>
@@ -747,7 +812,14 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                         <form onSubmit={submitForm} className="mia-form">
                             <label className="pf-field-label">
                                 {t('portfolio.assetType', 'Varlık türü')}
-                                <select className="pf-input" value={fType} onChange={(e) => setFType(e.target.value as ManualAssetType)}>
+                                <select
+                                    className="pf-input"
+                                    value={fType}
+                                    onChange={(e) => {
+                                        setFType(e.target.value as ManualAssetType);
+                                        setFSymbol('');
+                                    }}
+                                >
                                     {ASSET_TYPE_ORDER.map((at) => (
                                         <option key={at} value={at}>
                                             {at}
@@ -757,13 +829,18 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                             </label>
                             <label className="pf-field-label">
                                 {t('portfolio.symbol', 'Sembol')}
-                                <input
+                                <select
                                     className="pf-input"
                                     value={fSymbol}
                                     onChange={(e) => setFSymbol(e.target.value)}
-                                    onBlur={() => setFSymbol((s) => s.trim().toUpperCase())}
-                                    placeholder="BTCUSDT, USDTRY, …"
-                                />
+                                >
+                                    <option value="">{t('manualInvest.pickSymbol', 'Sembol seçin')}</option>
+                                    {symbolSelectOptions.map((o) => (
+                                        <option key={o.value} value={o.value}>
+                                            {o.label}
+                                        </option>
+                                    ))}
+                                </select>
                             </label>
                             <label className="pf-field-label">
                                 {t('portfolio.quantity', 'Miktar')}
@@ -942,10 +1019,63 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                                 <AnalysisBody data={analysisQuery.data} tokens={tokens} locale={locale} t={t} chartMetric={chartMetric} setChartMetric={setChartMetric} />
                             ) : null}
                         </div>
+                        {analysisQuery.data ? (
+                            <div
+                                className="mia-drawer-footer"
+                                style={{
+                                    padding: '12px 14px',
+                                    borderTop: `1px solid ${tokens.border}`,
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: 8,
+                                }}
+                            >
+                                <button
+                                    type="button"
+                                    className="mia-btn-sm"
+                                    onClick={() => {
+                                        const id = analysisId;
+                                        if (id == null) return;
+                                        setAnalysisOpen(false);
+                                        openFormEdit(id);
+                                    }}
+                                >
+                                    {t('common.update', 'Düzenle')}
+                                </button>
+                                {statusOf(analysisQuery.data.position) === 'OPEN' ? (
+                                    <button
+                                        type="button"
+                                        className="mia-btn-sm"
+                                        onClick={() => {
+                                            const id = analysisId;
+                                            if (id == null) return;
+                                            setAnalysisOpen(false);
+                                            openClose(id);
+                                        }}
+                                    >
+                                        {t('portfolio.drawerSell', 'Satış gir')}
+                                    </button>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    className="mia-btn-sm mia-btn-sm--danger"
+                                    onClick={() => {
+                                        const id = analysisId;
+                                        if (id == null) return;
+                                        if (window.confirm(t('portfolio.confirmDelete', 'Bu manuel pozisyonu silmek istediğinize emin misiniz?'))) {
+                                            deleteMut.mutate(id);
+                                            setAnalysisOpen(false);
+                                        }
+                                    }}
+                                >
+                                    {t('portfolio.delete', 'Sil')}
+                                </button>
+                            </div>
+                        ) : null}
                     </aside>
                 </div>
             ) : null}
-        </section>
+        </>
     );
 });
 

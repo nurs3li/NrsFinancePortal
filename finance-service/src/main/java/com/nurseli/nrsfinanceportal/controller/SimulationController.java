@@ -3,6 +3,7 @@ package com.nurseli.nrsfinanceportal.controller;
 import com.nurseli.nrsfinanceportal.common.dto.SimulationResponseDto;
 import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
+import com.nurseli.nrsfinanceportal.domain.asset.SimulationDisplayCurrency;
 import com.nurseli.nrsfinanceportal.service.SimulationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -26,10 +27,18 @@ public class SimulationController {
             @RequestParam String symbol,
             @RequestParam BigDecimal amount,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(required = false) BigDecimal buyPrice
+            @RequestParam(required = false) BigDecimal buyPrice,
+            @RequestParam(defaultValue = "TRY") String currency
     ) {
         return ApiResponse.success(
-                simulationService.simulate(type, symbol, amount, date, buyPrice)
+                simulationService.simulate(
+                        type,
+                        symbol,
+                        amount,
+                        date,
+                        buyPrice,
+                        SimulationDisplayCurrency.parse(currency)
+                )
         );
     }
 }

@@ -16,7 +16,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -59,7 +58,6 @@ class DashboardEnvelopeContractTest {
         when(currentUserResolver.getOrCreateCurrentUser()).thenReturn(current);
 
         DashboardSummaryResponse response = new DashboardSummaryResponse(
-                new DashboardSummaryResponse.WhaleSummary("NONE", 0, Instant.now()),
                 new DashboardSummaryResponse.PortfolioSummary(
                         BigDecimal.ONE,
                         Map.of(),

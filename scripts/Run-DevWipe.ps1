@@ -1,25 +1,19 @@
 <#
 .SYNOPSIS
-  Clears dev user activity: finance DB portfolios/trades/notifications + metrics OpenSearch indices.
+  Clears dev user activity in the finance Postgres database (portfolios, notifications, etc.).
   Does NOT modify market-data DB (historical prices).
 
 .PARAMETER SkipPostgres
-  Skip SQL wipe (only OpenSearch metrics).
-
-.PARAMETER SkipOpenSearch
-  Skip OpenSearch metrics wipe (only Postgres).
+  When set, the script performs no database changes (no-op).
 
 .PARAMETER PostgresContainer
   Default: nrs-postgres
 
-.PARAMETER OpenSearchUrl
-  Default: http://localhost:9200 (host port from docker-compose)
+# NOTE: OpenSearch metrics indices were removed; use OpenSearch UI/API directly if you need to delete legacy indices.
 #>
 param(
     [switch]$SkipPostgres,
-    [switch]$SkipOpenSearch,
-    [string]$PostgresContainer = "nrs-postgres",
-    [string]$OpenSearchUrl = "http://localhost:9200"
+    [string]$PostgresContainer = "nrs-postgres"
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,31 +37,8 @@ if (-not $SkipPostgres) {
     Write-Host "Wiping Postgres database '$pgDb' on container '$PostgresContainer'..."
     Get-Content -Raw $sqlPath | docker exec -i $PostgresContainer psql -U $pgUser -d $pgDb -v ON_ERROR_STOP=1
     Write-Host "Postgres wipe completed."
-}
-
-if (-not $SkipOpenSearch) {
-    $indexes = @(
-        "metrics-trades",
-        "metrics-whales",
-        "metrics-suspicious",
-        "investor-behavior-events"
-    )
-    $body = '{"query":{"match_all":{}}}'
-    foreach ($idx in $indexes) {
-        $uri = "$OpenSearchUrl/$idx/_delete_by_query?conflicts=proceed"
-        Write-Host "OpenSearch delete_by_query: $idx"
-        try {
-            Invoke-RestMethod -Method Post -Uri $uri -ContentType "application/json" -Body $body | Out-Null
-        } catch {
-            $code = $_.Exception.Response.StatusCode.value__
-            if ($code -eq 404) {
-                Write-Host "  (index missing, skipped)"
-            } else {
-                throw
-            }
-        }
-    }
-    Write-Host "OpenSearch metrics wipe completed."
+} else {
+    Write-Host "SkipPostgres: no database wipe."
 }
 
 Write-Host "Done. Market-data / price history was not touched."

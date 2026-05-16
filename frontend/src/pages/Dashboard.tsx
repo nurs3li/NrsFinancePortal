@@ -39,7 +39,6 @@ import { formatAssetLabel, getDynamicLogoUrl, type MarketType } from '../lib/ass
 import { AssetLogo } from '../components/AssetLogo';
 import './Dashboard.css';
 
-type WhaleSummary = { level?: string; impactScore?: number; triggeredAt?: string };
 type PortfolioCategoryBreakdown = {
     assetType: string;
     valueTry?: number;
@@ -56,7 +55,6 @@ type PortfolioSummary = {
     categories?: PortfolioCategoryBreakdown[];
 };
 type SummaryResponse = {
-    whale?: WhaleSummary;
     portfolio?: PortfolioSummary;
     /** Öncelikli toplam TRY; backend dashboard özeti */
     totalPortfolioValueTry?: number;
@@ -807,10 +805,8 @@ export function Dashboard() {
         []
     );
 
-    const controlDate = summary?.whale?.triggeredAt
-        ? new Date(summary.whale.triggeredAt).toLocaleDateString('tr-TR')
-        : '12.01.2026';
     const totalPortfolioTry = Number(summary?.totalPortfolioValueTry ?? summary?.portfolio?.totalValueTry ?? 0);
+
     const distributionSlices = useMemo(() => {
         const distribution = summary?.portfolio?.distribution ?? {};
         const rows = Object.entries(distribution)
@@ -1039,12 +1035,6 @@ export function Dashboard() {
                 />
                 <DashboardKpiCard label={t('dashboard.totalCostTry', 'Toplam maliyet (TRY)')} value={formatMoney(displayCost)} />
                 <DashboardKpiCard label={t('dashboard.totalPnlTry', 'Toplam kar (PNL)')} value={formatMoney(displayPnlValue)} />
-                <DashboardKpiCard
-                    label={t('dashboard.whaleLevel', 'Balina seviyesi')}
-                    value={summary.whale?.level ?? '—'}
-                    valueClassName="kpi-value-small"
-                    sub={<>Kontrol Tarihi: {controlDate}</>}
-                />
             </div>
 
             <div className="dashboard-card dashboard-chart-card">

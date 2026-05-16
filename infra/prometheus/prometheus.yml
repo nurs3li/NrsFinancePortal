@@ -18,20 +18,10 @@ scrape_configs:
     static_configs:
       - targets: ["market-data-service:8083"]
 
-  - job_name: "whale-analytics-service"
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ["whale-analytics-service:8082"]
-
   - job_name: "log-consumer-service"
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["log-consumer-service:8087"]
-
-  - job_name: "metrics-service"
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ["metrics-service:8088"]
 
   # OTEL collector'ın Prometheus exporter'ı
   - job_name: "otel-collector"

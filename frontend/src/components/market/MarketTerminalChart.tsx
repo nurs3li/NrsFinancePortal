@@ -303,8 +303,16 @@ function MarketTerminalChartImpl({
                 time: toChartTime(m.time),
             }))
         );
-        ma7SeriesRef.current?.setData(showMa ? ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
-        ma21SeriesRef.current?.setData(showMa ? ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+        const ma7Series = ma7SeriesRef.current;
+        const ma21Series = ma21SeriesRef.current;
+        if (ma7Series) {
+            ma7Series.applyOptions({ visible: showMa });
+            ma7Series.setData(showMa ? ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+        }
+        if (ma21Series) {
+            ma21Series.applyOptions({ visible: showMa });
+            ma21Series.setData(showMa ? ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+        }
 
         chart.applyOptions({
             // display:none -> block gecisinde container genisligi degisiyor; tekrar uygula.

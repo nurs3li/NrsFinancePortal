@@ -2,302 +2,76 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { registerSimulationPdfFont, SIMULATION_PDF_FONT_FAMILY } from '../utils/simulationPdfFont';
-import {
-    Area,
-    CartesianGrid,
-    ComposedChart,
-    Legend,
-    ResponsiveContainer,
-    Tooltip,
-    XAxis,
-    YAxis,
-} from 'recharts';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
-import { Trash2 } from 'lucide-react';
 import './TerminalPages.css';
+import './MarketTerminal.css';
 import './Simulation.css';
 import { fetchSimulationSymbolsByType } from '../services/marketDataService';
 import { useLanguage } from '../i18n/LanguageContext';
-import type { EquityMarketMetadata } from '../components/market/marketTypes';
 import type { AssetType } from '../constants/OrderConstants';
 import { getBistLatest, bistLatestPrice } from '../services/bistEquityApi';
+import { SimulationHeader } from '../components/simulation/SimulationHeader';
+import { SimulationCreateCard } from '../components/simulation/SimulationCreateCard';
+import { SimulationSummaryCard } from '../components/simulation/SimulationSummaryCard';
+import { SimulationPerformanceChart } from '../components/simulation/SimulationPerformanceChart';
+import { SimulationResultsList } from '../components/simulation/SimulationResultsList';
+import { SimulationResultDetailDrawer } from '../components/simulation/SimulationResultDetailDrawer';
+import { SimulationHistoryCard } from '../components/simulation/SimulationHistoryCard';
+import { SIMULATION_USD_DENOMINATED } from '../components/simulation/constants';
+import {
+    appendSimulationHistory,
+    cloneHistoryItemsForSession,
+    loadSimulationHistory,
+    removeSimulationHistoryEntry,
+} from '../components/simulation/simulationHistoryStorage';
+import { formatSimMoney, resolveSessionDisplayCurrency, simCurrencySymbol } from '../components/simulation/simCurrency';
+import { defaultSimulationBuyDate } from '../components/simulation/simDates';
+import {
+    buildSimulationExportRow,
+    computeSummaryStats,
+    livePriceInDisplayCurrency,
+    liveTryFromOverview,
+    mergeLiveIntoSeries,
+    unwrapData,
+    usdTryFromOverview,
+    type OverviewLite,
+} from '../components/simulation/utils';
+import type {
+    BuyPriceMode,
+    ChartMetricMode,
+    CompareDraftItem,
+    SimDisplayCurrency,
+    SimulationHistoryEntry,
+    SimulationResponse,
+    SimulationResultItem,
+    SortMode,
+} from '../components/simulation/types';
 
-type SimulationPerformancePoint = {
-    date: string;
-    priceTry: number;
-    cumulativeReturnPct: number;
-};
-
-type SimulationResponse = {
-    type: string;
-    symbol: string;
-    buyDate: string | null;
-    inputAmountTry: number;
-    historicalPriceTry: number;
-    currentPriceTry: number;
-    unitsBought: number;
-    currentValueTry: number;
-    pnlTry: number;
-    pnlPct: number;
-    buyPriceSource: 'SYSTEM_HISTORY' | 'USER_INPUT' | string;
-    historicalPriceDate: string | null;
-    qualityFlag?: 'EXACT' | 'PREVIOUS_DAY' | 'FALLBACK' | 'MISSING' | string;
-    performanceSeries: SimulationPerformancePoint[];
-    message: string;
-    approximationNoticeCode?: string | null;
-};
-
-type SimulationResultItem = {
-    id: string;
-    assetName: string;
-    assetType: AssetType;
-    initialAmount: number;
-    buyPrice: number;
-    buyDate: string;
-    currentPrice: number;
-    pnl: number;
-    pnlPct: number;
-    currentValue: number;
-    buyPriceSource: string;
-    historicalPriceDate: string;
-    qualityFlag: string;
-    series: SimulationPerformancePoint[];
-    visible: boolean;
-    message: string;
-    approximationNoticeCode?: string | null;
-};
-
-/** finance-service SimulationService.NOTICE_USD_DENOMINATED ile aynı */
-const SIMULATION_USD_DENOMINATED = 'SIMULATION_USD_DENOMINATED';
-
-type SortMode = 'LATEST' | 'PNL_DESC' | 'PNL_ASC' | 'PNL_PCT_DESC' | 'PNL_PCT_ASC' | 'NAME_ASC';
-type BuyPriceMode = 'SYSTEM' | 'MANUAL';
-
-function unwrapData<T>(res: any): T {
-    return (res?.data?.data ?? res?.data) as T;
-}
-
-/** Premium çizgi paleti: altın, elektrik mavisi, neon yeşil, mor (4+ seri döngü) */
-const CHART_PALETTE = ['#FFD700', '#00D4FF', '#39FF14', '#BC13FE'] as const;
-
-function assetTypeOptionIcon(t: AssetType): string {
-    switch (t) {
-        case 'CRYPTO':
-            return '₿';
-        case 'FX':
-            return '💱';
-        case 'METAL':
-            return '◆';
-        case 'FUND':
-            return '▣';
-        case 'STOCK':
-            return '📈';
-        case 'BIST':
-            return '🏛';
-        default:
-            return '•';
-    }
-}
-
-function useAnimatedNumber(target: number) {
-    const [display, setDisplay] = useState(0);
-    const displayRef = useRef(0);
-
-    useEffect(() => {
-        const from = displayRef.current;
-        let raf = 0;
-        const t0 = performance.now();
-        const dur = 680;
-        const step = (now: number) => {
-            const p = Math.min(1, (now - t0) / dur);
-            const eased = 1 - (1 - p) ** 3;
-            const next = from + (target - from) * eased;
-            displayRef.current = next;
-            setDisplay(next);
-            if (p < 1) raf = requestAnimationFrame(step);
-        };
-        raf = requestAnimationFrame(step);
-        return () => cancelAnimationFrame(raf);
-    }, [target]);
-
-    return display;
-}
-
-type SimTooltipPayload = { name?: string; value?: number; color?: string };
-
-function SimPerformanceTooltip({
-    active,
-    label,
-    payload,
-}: {
-    active?: boolean;
-    label?: string;
-    payload?: SimTooltipPayload[];
-}) {
-    if (!active || !payload?.length) return null;
-    return (
-        <div className="sim-chart-tooltip">
-            <div className="sim-chart-tooltip-title">{label}</div>
-            {payload.map((e: SimTooltipPayload, i: number) => (
-                <div key={i} className="sim-chart-tooltip-row">
-                    <span style={{ color: e.color }}>{e.name}</span>
-                    <span>
-                        {e.value == null
-                            ? '—'
-                            : `${Number(e.value).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%`}
-                    </span>
-                </div>
-            ))}
-        </div>
-    );
-}
-
-function SimAnimatedTry({ value, bold }: { value: number; bold?: boolean }) {
-    const v = useAnimatedNumber(value);
-    return (
-        <span className="tp-mono" style={{ fontWeight: bold ? 700 : 500 }}>
-            ₺{v.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}
-        </span>
-    );
-}
-
-function SimAnimatedPnl({ pnl, pnlPct }: { pnl: number; pnlPct: number }) {
-    const ap = useAnimatedNumber(pnl);
-    const ac = useAnimatedNumber(pnlPct);
-    const pos = pnl >= 0;
-    return (
-        <span className={`tp-mono sim-pnl-cell ${pos ? 'sim-pnl-pos' : 'sim-pnl-neg'}`}>
-            {pos ? '+' : ''}₺{ap.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} (
-            {ac.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%)
-        </span>
-    );
-}
-
-function sourceLabel(source: string): string {
-    const s = String(source ?? '').toUpperCase();
-    if (s === 'SYSTEM_HISTORY') return 'Sistem Gecmis Fiyati';
-    if (s === 'SYSTEM_LATEST_FALLBACK') return 'Sistem Son Fiyat Fallback';
-    if (s === 'USER_INPUT') return 'Kullanici Manuel Fiyati';
-    return source || 'Sistem';
-}
-
-function qualityLabel(quality: string): string {
-    const q = String(quality ?? '').toUpperCase();
-    if (q === 'EXACT') return 'EXACT (Secilen gun)';
-    if (q === 'PREVIOUS_DAY') return 'PREVIOUS_DAY (Onceki uygun gun)';
-    if (q === 'FALLBACK') return 'FALLBACK (En erken/mevcut nokta)';
-    return quality || 'BILINMIYOR';
-}
-
-function formatExportDecimal(n: number, decimals: number): string {
-    const f = 10 ** decimals;
-    const v = Math.round(n * f) / f;
-    return String(v);
-}
-
-/** CSV/PDF satırı: API/DB alan adları veya ham enum yerine kullanıcı dilinde etiketler */
-function buildSimulationExportRow(
-    r: SimulationResultItem,
-    fmt: {
-        assetType: (a: AssetType) => string;
-        quality: (q: string) => string;
-        source: (s: string) => string;
-    }
-): string[] {
-    return [
-        fmt.assetType(r.assetType),
-        r.assetName,
-        r.buyDate,
-        formatExportDecimal(r.initialAmount, 2),
-        formatExportDecimal(r.buyPrice, 4),
-        formatExportDecimal(r.currentPrice, 4),
-        formatExportDecimal(r.currentValue, 2),
-        formatExportDecimal(r.pnl, 2),
-        formatExportDecimal(r.pnlPct, 2),
-        fmt.source(r.buyPriceSource),
-        r.historicalPriceDate,
-        fmt.quality(r.qualityFlag),
-    ];
-}
-
-const SIMULATION_STORAGE_KEY = 'nrs-finance-portal-simulation-list-v1';
-
-type OverviewPriceRow = { buyPrice?: number; sellPrice?: number } & EquityMarketMetadata;
-
-type OverviewLite = {
-    doviz?: Record<string, OverviewPriceRow>;
-    metals?: Record<string, OverviewPriceRow>;
-    crypto?: Record<string, OverviewPriceRow>;
-    funds?: Record<string, OverviewPriceRow>;
-    stocks?: Record<string, OverviewPriceRow>;
-};
-
-function midFromRow(row?: OverviewPriceRow | null): number | null {
-    if (!row) return null;
-    const b = Number(row.buyPrice ?? 0);
-    const s = Number(row.sellPrice ?? 0);
-    if (b > 0 && s > 0) return (b + s) / 2;
-    if (b > 0) return b;
-    if (s > 0) return s;
-    return null;
-}
-
-/** Market overview ile SimulationService.getPriceTry mantığına yakın TRY birim fiyat */
-function liveTryFromOverview(o: OverviewLite | null | undefined, assetType: AssetType, symbol: string): number | null {
-    if (!o) return null;
-    const sym = String(symbol ?? '').toUpperCase();
-    const usdTry = midFromRow(o.doviz?.['USDTRY']);
-    const usdMul = (usd: number | null) => {
-        if (usd == null || usd <= 0) return null;
-        if (!usdTry || usdTry <= 0) return null;
-        return usd * usdTry;
-    };
-    switch (assetType) {
-        case 'FX':
-            return midFromRow(o.doviz?.[sym]);
-        case 'METAL':
-            return midFromRow(o.metals?.[sym]);
-        case 'CRYPTO':
-            return usdMul(midFromRow(o.crypto?.[sym]));
-        case 'FUND':
-            return usdMul(midFromRow(o.funds?.[sym]));
-        case 'STOCK':
-            return usdMul(midFromRow(o.stocks?.[sym]));
-        case 'BIST':
-            return null;
-        default:
-            return null;
-    }
-}
-
-function mergeLiveIntoSeries(
-    series: SimulationPerformancePoint[],
-    buyPricePerUnit: number,
-    liveTry: number
-): SimulationPerformancePoint[] {
-    if (buyPricePerUnit <= 0 || liveTry <= 0) return series;
-    const today = new Date().toISOString().slice(0, 10);
-    const cumulativeReturnPct = ((liveTry - buyPricePerUnit) / buyPricePerUnit) * 100;
-    const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
-    const last = sorted[sorted.length - 1];
-    if (last?.date === today) {
-        sorted[sorted.length - 1] = { date: today, priceTry: liveTry, cumulativeReturnPct };
-        return sorted;
-    }
-    sorted.push({ date: today, priceTry: liveTry, cumulativeReturnPct });
-    return sorted;
+function parseDisplayCurrency(raw?: string | null): SimDisplayCurrency {
+    return String(raw ?? '').toUpperCase() === 'USD' ? 'USD' : 'TRY';
 }
 
 export function Simulation() {
     const { tokens } = useTheme();
     const { t, lang } = useLanguage();
+    const locale = lang === 'en' ? 'en-US' : 'tr-TR';
+
     const [type, setType] = useState<AssetType>('CRYPTO');
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [amount, setAmount] = useState('5000');
-    const [buyDate, setBuyDate] = useState(new Date().toISOString().slice(0, 10));
+    const [amountCurrency, setAmountCurrency] = useState<SimDisplayCurrency>('TRY');
+    const [buyDate, setBuyDate] = useState(defaultSimulationBuyDate);
     const [buyPriceMode, setBuyPriceMode] = useState<BuyPriceMode>('SYSTEM');
     const [manualBuyPrice, setManualBuyPrice] = useState('');
+    const [scenarioLabel, setScenarioLabel] = useState('');
+
+    const [compareDrafts, setCompareDrafts] = useState<CompareDraftItem[]>([]);
+    const [compareType, setCompareType] = useState<AssetType>('STOCK');
+    const [compareSymbol, setCompareSymbol] = useState('');
+    const [compareSymbolOptions, setCompareSymbolOptions] = useState<string[]>([]);
+    const [compareOptionsLoading, setCompareOptionsLoading] = useState(false);
+    const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
     const [symbolOptions, setSymbolOptions] = useState<string[]>([]);
     const [overviewLoading, setOverviewLoading] = useState(true);
@@ -305,37 +79,34 @@ export function Simulation() {
     const [error, setError] = useState<string | null>(null);
     const [simulationResults, setSimulationResults] = useState<SimulationResultItem[]>([]);
     const [sortMode, setSortMode] = useState<SortMode>('LATEST');
-    const [listHydrated, setListHydrated] = useState(false);
+    const [chartMetricMode, setChartMetricMode] = useState<ChartMetricMode>('RETURN_PCT');
+    const [onlyVisibleLegend, setOnlyVisibleLegend] = useState(true);
+    const [detailId, setDetailId] = useState<string | null>(null);
+    const [manualPricePrompt, setManualPricePrompt] = useState(false);
+    const [historyEntries, setHistoryEntries] = useState<SimulationHistoryEntry[]>([]);
+    const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+    const [usdTrySpot, setUsdTrySpot] = useState<number | null>(null);
     const simulationResultsRef = useRef<SimulationResultItem[]>([]);
+    const manualPriceInputRef = useRef<HTMLInputElement | null>(null);
+    const chartAnchorRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
         simulationResultsRef.current = simulationResults;
     }, [simulationResults]);
 
     useEffect(() => {
-        try {
-            const raw = localStorage.getItem(SIMULATION_STORAGE_KEY);
-            if (raw) {
-                const parsed = JSON.parse(raw) as SimulationResultItem[];
-                if (Array.isArray(parsed)) setSimulationResults(parsed);
-            }
-        } catch {
-            /* ignore */
-        }
-        setListHydrated(true);
+        setHistoryEntries(loadSimulationHistory());
     }, []);
 
     useEffect(() => {
-        if (!listHydrated) return;
-        try {
-            localStorage.setItem(SIMULATION_STORAGE_KEY, JSON.stringify(simulationResults));
-        } catch {
-            /* ignore */
-        }
-    }, [simulationResults, listHydrated]);
+        financeClient
+            .get('/api/market/overview')
+            .then((res) => setUsdTrySpot(usdTryFromOverview(unwrapData<OverviewLite>(res))))
+            .catch(() => undefined);
+    }, []);
 
     useEffect(() => {
-        if (!listHydrated || simulationResults.length === 0) return;
+        if (simulationResults.length === 0) return;
 
         const tick = async () => {
             try {
@@ -352,43 +123,41 @@ export function Simulation() {
                                     const p = bistLatestPrice(row);
                                     return [sym, p] as const;
                                 })
-                                .filter(([, p]) => p > 0)
+                                .filter(([, p]) => p > 0),
                         );
                     } catch {
                         /* BIST canlı fiyat yoksa önceki değerler korunur */
                     }
                 }
+                const usdTry = usdTryFromOverview(overview);
+                setUsdTrySpot(usdTry);
                 setSimulationResults((prev) =>
                     prev.map((r) => {
-                        const live =
+                        const liveTry =
                             r.assetType === 'BIST'
                                 ? bistLive[r.assetName.toUpperCase()] ?? null
                                 : liveTryFromOverview(overview, r.assetType, r.assetName);
+                        const live = livePriceInDisplayCurrency(liveTry, r.displayCurrency, usdTry);
                         if (live == null || live <= 0 || r.buyPrice <= 0) return r;
                         const units = r.initialAmount / r.buyPrice;
                         const currentValue = units * live;
                         const pnl = currentValue - r.initialAmount;
                         const pnlPct = r.initialAmount > 0 ? (pnl / r.initialAmount) * 100 : 0;
                         const series = mergeLiveIntoSeries(r.series, r.buyPrice, live);
-                        return {
-                            ...r,
-                            currentPrice: live,
-                            currentValue,
-                            pnl,
-                            pnlPct,
-                            series,
-                        };
-                    })
+                        return { ...r, currentPrice: live, currentValue, pnl, pnlPct, series };
+                    }),
                 );
             } catch {
-                /* overview isteği başarısız — önceki seri korunur */
+                /* overview isteği başarısız */
             }
         };
 
         const id = window.setInterval(tick, 45_000);
         void tick();
         return () => window.clearInterval(id);
-    }, [listHydrated, simulationResults.length]);
+    }, [simulationResults.length]);
+
+    const isManualPriceRequiredMessage = (msg: string) => msg.includes('MANUAL_PRICE_REQUIRED');
 
     useEffect(() => {
         setOverviewLoading(true);
@@ -406,18 +175,34 @@ export function Simulation() {
         }
     }, [symbolOptions, symbol]);
 
-    const calculateSimulationFromService = async (): Promise<SimulationResultItem> => {
+    useEffect(() => {
+        setCompareOptionsLoading(true);
+        fetchSimulationSymbolsByType(compareType)
+            .then((rows) => setCompareSymbolOptions(rows))
+            .catch(() => setCompareSymbolOptions([]))
+            .finally(() => setCompareOptionsLoading(false));
+    }, [compareType]);
+
+    useEffect(() => {
+        if (compareSymbolOptions.length > 0 && !compareSymbolOptions.includes(compareSymbol)) {
+            setCompareSymbol(compareSymbolOptions[0]);
+        } else if (compareSymbolOptions.length === 0) {
+            setCompareSymbol('');
+        }
+    }, [compareSymbolOptions, compareSymbol]);
+
+    const calculateForAsset = async (assetType: AssetType, assetSymbol: string): Promise<SimulationResultItem> => {
         const parsedAmount = Number(amount);
         if (!parsedAmount || parsedAmount <= 0) {
             throw new Error(t('wallet.amountPositive', 'Tutar sıfırdan büyük olmalı.'));
         }
-        if (!symbol.trim()) {
+        const sym = assetSymbol.trim().toUpperCase();
+        if (!sym) {
             throw new Error(t('simulation.selectSymbol', 'Lütfen bir sembol seçin.'));
         }
         if (!buyDate) {
             throw new Error(t('simulation.enterBuyDate', 'Lütfen alım tarihi girin.'));
         }
-
         const parsedManualBuyPrice = Number(manualBuyPrice);
         if (buyPriceMode === 'MANUAL' && (!parsedManualBuyPrice || parsedManualBuyPrice <= 0)) {
             throw new Error(t('simulation.manualPricePositive', 'Manuel alış fiyatı sıfırdan büyük olmalı.'));
@@ -425,18 +210,23 @@ export function Simulation() {
 
         const res = await financeClient.get('/api/simulation', {
             params: {
-                type,
-                symbol: symbol.trim().toUpperCase(),
+                type: assetType,
+                symbol: sym,
                 amount: parsedAmount,
                 date: buyDate,
                 buyPrice: buyPriceMode === 'MANUAL' ? parsedManualBuyPrice : undefined,
+                currency: amountCurrency,
             },
         });
         const dto = unwrapData<SimulationResponse>(res);
+        const displayCurrency = parseDisplayCurrency(dto.displayCurrency);
+        const label = scenarioLabel.trim();
         return {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             assetName: dto.symbol,
             assetType: dto.type as AssetType,
+            displayCurrency,
+            unitsBought: Number(dto.unitsBought ?? 0),
             initialAmount: Number(dto.inputAmountTry ?? 0),
             buyPrice: Number(dto.historicalPriceTry ?? 0),
             buyDate: dto.buyDate ?? buyDate,
@@ -455,70 +245,173 @@ export function Simulation() {
             visible: true,
             message: dto.message ?? '',
             approximationNoticeCode: dto.approximationNoticeCode ?? null,
+            scenarioLabel: label || undefined,
         };
     };
 
     const addSimulationResult = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
+        setManualPricePrompt(false);
+        const targets: { assetType: AssetType; symbol: string }[] = [{ assetType: type, symbol }];
+        for (const d of compareDrafts) {
+            targets.push({ assetType: d.assetType, symbol: d.symbol });
+        }
+        const unique: { assetType: AssetType; symbol: string }[] = [];
+        const seen = new Set<string>();
+        for (const item of targets) {
+            const key = `${item.assetType}:${item.symbol.trim().toUpperCase()}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            unique.push({ assetType: item.assetType, symbol: item.symbol.trim().toUpperCase() });
+        }
+
         try {
             setLoading(true);
-            const next = await calculateSimulationFromService();
-            setSimulationResults((prev) => [next, ...prev]);
-        } catch (err: any) {
-            const msg =
-                err?.response?.data?.errors?.error ??
-                err?.response?.data?.message ??
-                err?.message ??
-                t('simulation.error', 'Simülasyon hatası');
-            setError(msg);
+            const added: SimulationResultItem[] = [];
+            const errors: string[] = [];
+            for (const item of unique) {
+                try {
+                    const row = await calculateForAsset(item.assetType, item.symbol);
+                    added.push(row);
+                } catch (err: unknown) {
+                    const ex = err as {
+                        response?: { data?: { errors?: { error?: string }; message?: string } };
+                        message?: string;
+                    };
+                    const msg =
+                        ex?.response?.data?.errors?.error ??
+                        ex?.response?.data?.message ??
+                        ex?.message ??
+                        t('simulation.error', 'Simülasyon hatası');
+                    if (isManualPriceRequiredMessage(msg)) {
+                        setBuyPriceMode('MANUAL');
+                        setManualPricePrompt(true);
+                        window.setTimeout(() => manualPriceInputRef.current?.focus(), 0);
+                    }
+                    errors.push(
+                        `${item.symbol}: ${isManualPriceRequiredMessage(msg) ? t('simulation.manualPriceRequired', 'Seçilen tarih için sistem fiyatı yok. Lütfen o güne ait alış fiyatını (TRY/birim) girin ve tekrar deneyin.') : msg}`,
+                    );
+                }
+            }
+            if (added.length > 0) {
+                const keyOf = (r: { assetType: AssetType; assetName: string }) =>
+                    `${r.assetType}:${r.assetName.toUpperCase()}`;
+                const replacedKeys = new Set(added.map(keyOf));
+                setSimulationResults((prev) => {
+                    const kept = prev.filter((r) => !replacedKeys.has(keyOf(r)));
+                    return [...added, ...kept];
+                });
+                setCompareDrafts([]);
+                setActiveHistoryId(null);
+            }
+            if (errors.length > 0) {
+                setError(errors.join(' · '));
+            }
         } finally {
             setLoading(false);
         }
     };
 
-    const visibleResults = useMemo(
-        () => simulationResults.filter((r) => r.visible),
-        [simulationResults]
+    const addCompareDraft = () => {
+        const sym = compareSymbol.trim().toUpperCase();
+        if (!sym) return;
+        const key = `${compareType}:${sym}`;
+        if (`${type}:${symbol.toUpperCase()}` === key) return;
+        if (compareDrafts.some((d) => `${d.assetType}:${d.symbol}` === key)) return;
+        setCompareDrafts((prev) => [
+            ...prev,
+            { id: `cmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, assetType: compareType, symbol: sym },
+        ]);
+    };
+
+    const removeCompareDraft = (id: string) => {
+        setCompareDrafts((prev) => prev.filter((x) => x.id !== id));
+    };
+
+    const saveSimulationToHistory = useCallback(() => {
+        if (simulationResults.length === 0) return;
+        const entry: SimulationHistoryEntry = {
+            id: `hist-${Date.now()}`,
+            savedAt: new Date().toISOString(),
+            label:
+                scenarioLabel.trim() ||
+                t('simulation.historyDefaultLabel', 'Simülasyon {date}').replace(
+                    '{date}',
+                    new Date().toLocaleString(locale),
+                ),
+            amountCurrency: resolveSessionDisplayCurrency(simulationResults, amountCurrency),
+            items: JSON.parse(JSON.stringify(simulationResults)) as SimulationResultItem[],
+        };
+        try {
+            const list = appendSimulationHistory(entry);
+            setHistoryEntries(list);
+            setSaveFeedback(t('simulation.saveSuccess', 'Simülasyon geçmişe kaydedildi.'));
+            window.setTimeout(() => setSaveFeedback(null), 4000);
+        } catch {
+            setSaveFeedback(t('simulation.saveFailed', 'Kayıt başarısız.'));
+        }
+    }, [simulationResults, scenarioLabel, locale, t, amountCurrency]);
+
+    const viewHistoryEntry = useCallback(
+        (entry: SimulationHistoryEntry) => {
+            if (activeHistoryId === entry.id) {
+                setSimulationResults([]);
+                setActiveHistoryId(null);
+                return;
+            }
+
+            const cloned = cloneHistoryItemsForSession(entry.items);
+            setSimulationResults(cloned);
+            const first = entry.items[0];
+            if (first) {
+                setAmount(String(first.initialAmount));
+                setBuyDate(first.buyDate);
+                setType(first.assetType);
+                setSymbol(first.assetName);
+            }
+            setAmountCurrency(entry.amountCurrency ?? first?.displayCurrency ?? 'TRY');
+            setScenarioLabel(entry.label);
+            setActiveHistoryId(entry.id);
+            setError(null);
+            window.requestAnimationFrame(() => {
+                chartAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        },
+        [activeHistoryId],
     );
+
+    const deleteHistoryEntry = useCallback((id: string) => {
+        setHistoryEntries(removeSimulationHistoryEntry(id));
+        setActiveHistoryId((prev) => {
+            if (prev === id) {
+                setSimulationResults([]);
+                return null;
+            }
+            return prev;
+        });
+    }, []);
+
+    const visibleResults = useMemo(() => simulationResults.filter((r) => r.visible), [simulationResults]);
 
     const showUsdHistoricalNotice = useMemo(
         () => visibleResults.some((r) => r.approximationNoticeCode === SIMULATION_USD_DENOMINATED),
         [visibleResults],
     );
 
-    /** Ortak zaman ekseninde her serinin son bilinen kümülatif %-ini taşıyarak çizgilerin kopmamasını sağla */
-    const chartData = useMemo(() => {
-        if (!visibleResults.length) return [];
+    const summaryStats = useMemo(() => computeSummaryStats(simulationResults), [simulationResults]);
+    const sessionDisplayCurrency = useMemo(
+        () => resolveSessionDisplayCurrency(simulationResults, amountCurrency),
+        [simulationResults, amountCurrency],
+    );
 
-        const seriesKeys = visibleResults.map(
-            (res) => `${res.assetType}-${res.assetName}-${res.id.slice(-4)}`,
-        );
-        const dateSet = new Set<string>();
-        visibleResults.forEach((res) => {
-            res.series.forEach((p) => dateSet.add(p.date));
-        });
-        const sortedDates = [...dateSet].sort((a, b) => a.localeCompare(b));
-
-        const lastPct: Record<string, number> = {};
-        const rows: Array<Record<string, number | string>> = [];
-
-        for (const date of sortedDates) {
-            const row: Record<string, number | string> = { date };
-            visibleResults.forEach((res, i) => {
-                const key = seriesKeys[i];
-                const pt = res.series.find((p) => p.date === date);
-                if (pt != null) {
-                    lastPct[key] = pt.cumulativeReturnPct;
-                }
-                if (key in lastPct) {
-                    row[key] = lastPct[key];
-                }
-            });
-            rows.push(row);
+    const handleAmountCurrencyChange = (next: SimDisplayCurrency) => {
+        if (next !== amountCurrency && simulationResults.length > 0) {
+            setSimulationResults([]);
+            setActiveHistoryId(null);
         }
-        return rows;
-    }, [visibleResults]);
+        setAmountCurrency(next);
+    };
 
     const displayedResults = useMemo(() => {
         const arr = [...simulationResults];
@@ -532,34 +425,43 @@ export function Simulation() {
             case 'PNL_PCT_ASC':
                 return arr.sort((a, b) => a.pnlPct - b.pnlPct);
             case 'NAME_ASC':
-                return arr.sort((a, b) => a.assetName.localeCompare(b.assetName, 'tr-TR'));
+                return arr.sort((a, b) => a.assetName.localeCompare(b.assetName, locale));
             case 'LATEST':
             default:
                 return arr;
         }
-    }, [simulationResults, sortMode]);
+    }, [simulationResults, sortMode, locale]);
+
+    const detailItem = useMemo(
+        () => (detailId ? simulationResults.find((r) => r.id === detailId) ?? null : null),
+        [detailId, simulationResults],
+    );
 
     const setAllVisible = (visible: boolean) => {
         setSimulationResults((prev) => prev.map((x) => ({ ...x, visible })));
     };
 
-    const exportHeaders = useMemo(
-        () => [
+    const toggleVisible = (id: string) => {
+        setSimulationResults((prev) => prev.map((x) => (x.id === id ? { ...x, visible: !x.visible } : x)));
+    };
+
+    const exportHeaders = useMemo(() => {
+        const sym = simCurrencySymbol(sessionDisplayCurrency);
+        return [
             t('simulation.exportColAssetType', 'Varlık türü'),
             t('simulation.exportColSymbol', 'Sembol'),
             t('simulation.exportColBuyDate', 'Alım tarihi'),
-            t('simulation.exportColInitialTry', 'Başlangıç tutarı (TRY)'),
-            t('simulation.exportColBuyUnitTry', 'Alış fiyatı (TRY / birim)'),
-            t('simulation.exportColCurrentUnitTry', 'Güncel fiyat (TRY / birim)'),
-            t('simulation.exportColValueTry', 'Güncel değer (TRY)'),
-            t('simulation.exportColPnlTry', 'Kâr/zarar (TRY)'),
+            t('simulation.exportColInitialTry', 'Başlangıç tutarı ({sym})').replace('{sym}', sym),
+            t('simulation.exportColBuyUnitTry', 'Alış fiyatı ({sym} / birim)').replace('{sym}', sym),
+            t('simulation.exportColCurrentUnitTry', 'Güncel fiyat ({sym} / birim)').replace('{sym}', sym),
+            t('simulation.exportColValueTry', 'Güncel değer ({sym})').replace('{sym}', sym),
+            t('simulation.exportColPnlTry', 'Kâr/zarar ({sym})').replace('{sym}', sym),
             t('simulation.exportColPnlPct', 'Getiri (%)'),
             t('simulation.exportColPriceSource', 'Fiyat kaynağı'),
             t('simulation.exportColRefDate', 'Referans tarihi'),
             t('simulation.exportColQuality', 'Veri kalitesi'),
-        ],
-        [t]
-    );
+        ];
+    }, [t, sessionDisplayCurrency]);
 
     const exportCellFormatters = useMemo(
         () => ({
@@ -591,21 +493,18 @@ export function Simulation() {
             source(s: string) {
                 const u = String(s ?? '').toUpperCase();
                 if (u === 'SYSTEM_HISTORY') return t('simulation.exportSourceHistory', 'Sistem geçmiş fiyatı');
-                if (u === 'SYSTEM_LATEST_FALLBACK')
-                    return t('simulation.exportSourceLatestFallback', 'Sistem son fiyat (yedek)');
+                if (u === 'SYSTEM_LATEST_FALLBACK') return t('simulation.exportSourceLatestFallback', 'Sistem son fiyat (yedek)');
                 if (u === 'USER_INPUT') return t('simulation.exportSourceManual', 'Kullanıcı girişi');
                 return s ? t('simulation.exportSourceOther', s) : t('simulation.exportSourceUnknown', 'Bilinmiyor');
             },
         }),
-        [t]
+        [t],
     );
 
     const exportCsv = useCallback(() => {
         if (displayedResults.length === 0) return;
         const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
-        const lines = displayedResults.map((r) =>
-            buildSimulationExportRow(r, exportCellFormatters).map(esc).join(',')
-        );
+        const lines = displayedResults.map((r) => buildSimulationExportRow(r, exportCellFormatters).map(esc).join(','));
         const csv = '\uFEFF' + [exportHeaders.join(','), ...lines].join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -622,12 +521,7 @@ export function Simulation() {
         try {
             await registerSimulationPdfFont(doc);
         } catch {
-            window.alert(
-                t(
-                    'simulation.exportPdfFontError',
-                    'PDF için Türkçe font yüklenemedi. fonts/NotoSans-Regular.ttf dosyasının public klasöründe olduğundan emin olun.'
-                )
-            );
+            window.alert(t('simulation.exportPdfFontError', 'PDF için Türkçe font yüklenemedi.'));
             return;
         }
         const title = t('simulation.exportPdfTitle', 'NRS Finance Portal — Simülasyon özeti');
@@ -640,9 +534,32 @@ export function Simulation() {
         doc.setFontSize(8);
         doc.setTextColor(60, 60, 60);
         doc.text(`${genLabel}: ${new Date().toLocaleString(localeStr)}`, 14, 17);
+
+        let startY = 22;
+        const stats = computeSummaryStats(displayedResults);
+        if (stats.best || stats.worst) {
+            doc.setFontSize(9);
+            const lines: string[] = [];
+            if (stats.best) {
+                lines.push(
+                    `${t('simulation.bestScenario', 'En iyi senaryo')}: ${stats.best.assetName} (+${formatSimMoney(localeStr, stats.best.pnl, sessionDisplayCurrency)}, ${stats.best.pnlPct.toFixed(2)}%)`,
+                );
+            }
+            if (stats.worst) {
+                lines.push(
+                    `${t('simulation.worstScenario', 'En kötü senaryo')}: ${stats.worst.assetName} (${formatSimMoney(localeStr, stats.worst.pnl, sessionDisplayCurrency)}, ${stats.worst.pnlPct.toFixed(2)}%)`,
+                );
+            }
+            lines.push(
+                `${t('simulation.avgReturn', 'Ortalama getiri')}: ${stats.avgReturnPct.toFixed(2)}% · ${t('simulation.simCount', '{n} simülasyon').replace('{n}', String(stats.count))}`,
+            );
+            lines.forEach((line, i) => doc.text(line, 14, startY + i * 5));
+            startY += lines.length * 5 + 4;
+        }
+
         const body = displayedResults.map((r) => buildSimulationExportRow(r, exportCellFormatters));
         autoTable(doc, {
-            startY: 22,
+            startY,
             head: [exportHeaders],
             body,
             styles: {
@@ -665,19 +582,11 @@ export function Simulation() {
         doc.setFont(SIMULATION_PDF_FONT_FAMILY, 'normal');
         doc.setFontSize(7);
         doc.setTextColor(90, 90, 90);
-        doc.text(
-            t(
-                'simulation.exportPdfFooter',
-                'Internal IDs are not exported. Personal use only.'
-            ),
-            14,
-            footY,
-            { maxWidth: 275 }
-        );
+        doc.text(t('simulation.exportPdfFooter', 'Kişisel kullanım içindir. Yatırım tavsiyesi değildir.'), 14, footY, {
+            maxWidth: 275,
+        });
         doc.save(`simulation-ozet-${new Date().toISOString().slice(0, 19).replaceAll(':', '-')}.pdf`);
-    }, [displayedResults, exportHeaders, exportCellFormatters, lang, t]);
-
-    const fmtMoney = (v: number) => `₺${Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}`;
+    }, [displayedResults, exportHeaders, exportCellFormatters, lang, t, sessionDisplayCurrency]);
 
     return (
         <div
@@ -686,375 +595,142 @@ export function Simulation() {
                     padding: 24,
                     background: tokens.bg,
                     minHeight: '100%',
-                    '--tp-bg': '#0a192f',
+                    '--tp-bg': tokens.bg,
                     '--tp-card': tokens.bgCard,
                     '--tp-border': tokens.border,
                     '--tp-text': tokens.text,
                     '--tp-muted': tokens.textMuted,
-                    '--tp-success': '#22c55e',
-                    '--tp-danger': '#ef4444',
                 } as React.CSSProperties
             }
             className="terminal-pages-root sim-page"
         >
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 6 }}>{t('simulation.title', 'Portföy Analiz Aracı')}</h1>
-            <p className="sim-lead" style={{ fontSize: '0.875rem', marginBottom: 16 }}>
-                Çoklu simülasyon ekle, varlıkları karşılaştır, kümülatif getiri eğrilerini aynı grafikte takip et.
-            </p>
-            <div className="card-premium" style={{ marginBottom: 12, fontSize: '0.8125rem', padding: 14, color: 'rgba(255,255,255,0.72)' }}>
-                {t(
-                    'simulation.tryBasisInfo',
-                    'Simülasyon hesapları TRY bazındadır. Hisse ve kripto için geçmiş USD fiyatlar, ilgili güne kadarki USDTRY günlük serisi ile çevrilir; güncel birim fiyat ise canlı USDTRY (spot) ile TRY’ye alınır.',
-                )}
-            </div>
-            {showUsdHistoricalNotice ? (
-                <div
-                    className="card-premium"
-                    style={{
-                        marginBottom: 12,
-                        fontSize: '0.8125rem',
-                        padding: 12,
-                        borderLeft: '3px solid rgba(56,189,248,0.85)',
-                        color: tokens.textMuted,
+            <SimulationHeader showUsdNotice={showUsdHistoricalNotice} mutedColor={tokens.textMuted} />
+
+            <div className="sim-top-grid">
+                <SimulationCreateCard
+                    textColor={tokens.text}
+                    mutedColor={tokens.textMuted}
+                    scenarioLabel={scenarioLabel}
+                    onScenarioLabelChange={setScenarioLabel}
+                    type={type}
+                    onTypeChange={setType}
+                    symbol={symbol}
+                    onSymbolChange={setSymbol}
+                    amount={amount}
+                    onAmountChange={setAmount}
+                    amountCurrency={amountCurrency}
+                    onAmountCurrencyChange={handleAmountCurrencyChange}
+                    buyDate={buyDate}
+                    onBuyDateChange={setBuyDate}
+                    buyPriceMode={buyPriceMode}
+                    onBuyPriceModeChange={setBuyPriceMode}
+                    manualBuyPrice={manualBuyPrice}
+                    onManualBuyPriceChange={(v) => {
+                        setManualBuyPrice(v);
+                        if (v.trim()) setManualPricePrompt(false);
                     }}
-                >
-                    {t(
-                        'simulation.approximationNotice',
-                        'Sonuçlar yaklaşıktır: ABD hisse, kripto ve fon geçmiş performans serisi tarihsel USDTRY ile; bugünkü değer ve birim fiyat güncel kur ile hesaplanmıştır. BIST hisseleri TRY kotasyonludur. Kesin yatırım tavsiyesi değildir.',
-                    )}
+                    manualPricePrompt={manualPricePrompt}
+                    manualPriceInputRef={manualPriceInputRef}
+                    symbolOptions={symbolOptions}
+                    overviewLoading={overviewLoading}
+                    compareType={compareType}
+                    onCompareTypeChange={setCompareType}
+                    compareSymbol={compareSymbol}
+                    onCompareSymbolChange={setCompareSymbol}
+                    compareSymbolOptions={compareSymbolOptions}
+                    compareOptionsLoading={compareOptionsLoading}
+                    compareDrafts={compareDrafts}
+                    onAddCompare={addCompareDraft}
+                    onRemoveCompare={removeCompareDraft}
+                    loading={loading}
+                    onSubmit={addSimulationResult}
+                />
+                <div className="sim-top-stack">
+                    <SimulationSummaryCard
+                        stats={summaryStats}
+                        displayCurrency={sessionDisplayCurrency}
+                        hasResults={simulationResults.length > 0}
+                        mutedColor={tokens.textMuted}
+                        onExportCsv={exportCsv}
+                        onExportPdf={() => void exportPdf()}
+                        onSaveSimulation={saveSimulationToHistory}
+                        exportDisabled={displayedResults.length === 0}
+                        saveFeedback={saveFeedback}
+                    />
+                    <SimulationResultsList
+                        results={displayedResults}
+                        displayCurrency={sessionDisplayCurrency}
+                        usdTryRate={usdTrySpot}
+                        sortMode={sortMode}
+                        onSortModeChange={setSortMode}
+                        onToggleVisible={toggleVisible}
+                        onDelete={(id) => setSimulationResults((prev) => prev.filter((x) => x.id !== id))}
+                        onShowDetail={setDetailId}
+                        onShowAll={() => setAllVisible(true)}
+                        onHideAll={() => setAllVisible(false)}
+                        borderColor={tokens.border}
+                        tableBorder={tokens.tableBorder}
+                        textColor={tokens.text}
+                        mutedColor={tokens.textMuted}
+                        bgCard={tokens.bgCard}
+                    />
+                </div>
+            </div>
+
+            {error ? (
+                <div className="card-premium sim-error-banner" role="alert">
+                    <strong>{t('simulation.error', 'Simülasyon hatası')}:</strong> {error}
+                    <p className="sim-lead sim-error-banner__hint">
+                        {manualPricePrompt
+                            ? t(
+                                  'simulation.manualPriceRequiredHint',
+                                  '“Manuel fiyat gir” seçeneğini kullanın, alım günü birim fiyatını yazıp tekrar simüle edin.',
+                              )
+                            : t(
+                                  'simulation.priceNotFoundHint',
+                                  'Seçilen tarih için fiyat bulunamadı. Önceki işlem günü otomatik denenir; yine de yoksa manuel fiyat girmeniz gerekir.',
+                              )}
+                    </p>
                 </div>
             ) : null}
 
-            <div
-                className="card-premium card-premium--static tp-card"
-                style={{
-                    marginBottom: 16,
-                    position: 'sticky',
-                    top: 12,
-                    zIndex: 3,
-                    padding: 16,
-                }}
-            >
-                <form
-                    onSubmit={addSimulationResult}
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
-                        gap: 12,
-                        alignItems: 'end',
-                    }}
-                >
-                    <label style={{ fontSize: '0.875rem', color: tokens.text }}>
-                        {t('simulation.assetType', 'Varlık Türü')}
-                        <select
-                            value={type}
-                            onChange={(e) => setType(e.target.value as AssetType)}
-                            className="sim-premium-select"
-                            style={{ marginTop: 6 }}
-                        >
-                            <option value="CRYPTO">{assetTypeOptionIcon('CRYPTO')} CRYPTO</option>
-                            <option value="FX">{assetTypeOptionIcon('FX')} FX</option>
-                            <option value="METAL">{assetTypeOptionIcon('METAL')} METAL</option>
-                            <option value="FUND">{assetTypeOptionIcon('FUND')} FUND</option>
-                            <option value="STOCK">{assetTypeOptionIcon('STOCK')} STOCK</option>
-                            <option value="BIST">{assetTypeOptionIcon('BIST')} BIST</option>
-                        </select>
-                    </label>
+            <div ref={chartAnchorRef} className="sim-chart-history-stack">
+                <SimulationPerformanceChart
+                    visibleResults={visibleResults}
+                    allResults={simulationResults}
+                    displayCurrency={sessionDisplayCurrency}
+                    usdTryRate={usdTrySpot}
+                    metricMode={chartMetricMode}
+                    onMetricModeChange={setChartMetricMode}
+                    onlyVisibleOnChart={onlyVisibleLegend}
+                    onOnlyVisibleChange={setOnlyVisibleLegend}
+                    borderColor={tokens.border}
+                    textMuted={tokens.textMuted}
+                    textColor={tokens.text}
+                    onToggleVisible={toggleVisible}
+                />
 
-                    <label style={{ fontSize: '0.875rem', color: tokens.text }}>
-                        Sembol
-                        {overviewLoading ? (
-                            <div className="sim-premium-input" style={{ marginTop: 6, color: tokens.textMuted }}>
-                                {t('common.loading', 'Yükleniyor...')}
-                            </div>
-                        ) : symbolOptions.length > 0 ? (
-                            <select
-                                value={symbol}
-                                onChange={(e) => setSymbol(e.target.value)}
-                                className="sim-premium-select"
-                                style={{ marginTop: 6 }}
-                            >
-                                {symbolOptions.map((s) => (
-                                    <option key={s} value={s}>
-                                        {assetTypeOptionIcon(type)} {s}
-                                    </option>
-                                ))}
-                            </select>
-                        ) : (
-                            <div className="sim-premium-input" style={{ marginTop: 6, color: tokens.textMuted }}>
-                                {t('simulation.noSymbolForType', 'Bu varlık türü için kayıtlı sembol yok.')}
-                            </div>
-                        )}
-                    </label>
-
-                    <label style={{ fontSize: '0.875rem', color: tokens.text }}>
-                        {t('simulation.initialAmountTry', 'Başlangıç Tutarı (TRY)')}
-                        <input
-                            type="number"
-                            step="0.01"
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
-                            className="sim-premium-input"
-                            style={{ marginTop: 6 }}
-                        />
-                    </label>
-
-                    <label style={{ fontSize: '0.875rem', color: tokens.text }}>
-                        {t('simulation.buyDate', 'Alım Tarihi')}
-                        <input
-                            type="date"
-                            value={buyDate}
-                            onChange={(e) => setBuyDate(e.target.value)}
-                            className="sim-premium-input"
-                            style={{ marginTop: 6 }}
-                        />
-                    </label>
-
-                    <label style={{ fontSize: '0.875rem', color: tokens.text }}>
-                        Alış Fiyat Kaynağı
-                        <select
-                            value={buyPriceMode}
-                            onChange={(e) => setBuyPriceMode(e.target.value as BuyPriceMode)}
-                            className="sim-premium-select"
-                            style={{ marginTop: 6 }}
-                        >
-                            <option value="SYSTEM">⚙ Sistem Geçmiş Fiyatı</option>
-                            <option value="MANUAL">✎ Kullanıcı Manuel Fiyatı</option>
-                        </select>
-                    </label>
-
-                    {buyPriceMode === 'MANUAL' ? (
-                        <label style={{ fontSize: '0.875rem', color: tokens.text }}>
-                            Manuel Alış Fiyatı (TRY / birim)
-                            <input
-                                type="number"
-                                step="0.00000001"
-                                value={manualBuyPrice}
-                                onChange={(e) => setManualBuyPrice(e.target.value)}
-                                className="sim-premium-input"
-                                style={{ marginTop: 6 }}
-                                placeholder="Örn: 1250.75"
-                            />
-                        </label>
-                    ) : null}
-
-                    <button type="submit" disabled={loading} className="sim-submit-btn">
-                        {loading ? t('simulation.adding', 'Ekleniyor...') : t('simulation.simulateAndAdd', 'Simüle Et ve Listeye Ekle')}
-                    </button>
-                </form>
+                <SimulationHistoryCard
+                    entries={historyEntries}
+                    activeId={activeHistoryId}
+                    onView={viewHistoryEntry}
+                    onDelete={deleteHistoryEntry}
+                    mutedColor={tokens.textMuted}
+                    textColor={tokens.text}
+                    borderColor={tokens.border}
+                    tableBorder={tokens.tableBorder}
+                />
             </div>
 
-            {error && (
-                <div
-                    className="card-premium"
-                    style={{
-                        marginBottom: 16,
-                        padding: 14,
-                        borderColor: 'rgba(239, 68, 68, 0.45)',
-                        color: '#fecaca',
-                    }}
-                >
-                    Hata: {error}
-                </div>
-            )}
-
-            <div className="card-premium tp-card" style={{ marginBottom: 16, padding: 16 }}>
-                <h2 style={{ marginTop: 0, marginBottom: 10, fontSize: '1rem' }}>{t('simulation.performanceChart', 'Karşılaştırmalı Performans Grafiği')}</h2>
-                <div className="sim-lead" style={{ fontSize: '0.8125rem', marginBottom: 12 }}>
-                    Kümülatif getiri (%) — premium palet ve alan dolgusu
-                </div>
-                {visibleResults.length === 0 || chartData.length === 0 ? (
-                    <p className="sim-lead" style={{ margin: 0 }}>
-                        Grafikte göstermek için en az bir simülasyon ekleyip görünür yap.
-                    </p>
-                ) : (
-                    <div className="sim-chart-surface" style={{ width: '100%', height: 380 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 8 }}>
-                                <defs>
-                                    {visibleResults.map((res, i) => {
-                                        const c = CHART_PALETTE[i % CHART_PALETTE.length];
-                                        const gid = `simFill-${res.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
-                                        return (
-                                            <linearGradient key={res.id} id={gid} x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="0%" stopColor={c} stopOpacity={0.35} />
-                                                <stop offset="100%" stopColor={c} stopOpacity={0} />
-                                            </linearGradient>
-                                        );
-                                    })}
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke={tokens.border} opacity={0.35} />
-                                <XAxis dataKey="date" tick={{ fill: tokens.textMuted, fontSize: 11 }} stroke={tokens.border} />
-                                <YAxis
-                                    tick={{ fill: tokens.textMuted, fontSize: 11 }}
-                                    stroke={tokens.border}
-                                    tickFormatter={(v) => `${Number(v).toFixed(1)}%`}
-                                />
-                                <Tooltip content={<SimPerformanceTooltip />} />
-                                <Legend
-                                    wrapperStyle={{ color: tokens.text, fontSize: 12 }}
-                                    formatter={(value) => <span style={{ color: tokens.text }}>{value}</span>}
-                                />
-                                {visibleResults.map((res, i) => {
-                                    const key = `${res.assetType}-${res.assetName}-${res.id.slice(-4)}`;
-                                    const color = CHART_PALETTE[i % CHART_PALETTE.length];
-                                    const gid = `simFill-${res.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
-                                    return (
-                                        <Area
-                                            key={res.id}
-                                            type="monotone"
-                                            dataKey={key}
-                                            name={`${res.assetName} (${res.assetType})`}
-                                            stroke={color}
-                                            strokeWidth={3}
-                                            fill={`url(#${gid})`}
-                                            fillOpacity={1}
-                                            connectNulls
-                                            dot={false}
-                                            activeDot={{ r: 5, strokeWidth: 2, stroke: color, fill: '#0a0f1a' }}
-                                            isAnimationActive={false}
-                                        />
-                                    );
-                                })}
-                            </ComposedChart>
-                        </ResponsiveContainer>
-                    </div>
-                )}
-            </div>
-
-            <div className="card-premium tp-card" style={{ padding: 16 }}>
-                <div
-                    style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 8,
-                        flexWrap: 'wrap',
-                        marginBottom: 12,
-                    }}
-                >
-                    <h2 style={{ margin: 0, fontSize: '1rem' }}>{t('simulation.list', 'Simülasyon Listesi')}</h2>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <select
-                            value={sortMode}
-                            onChange={(e) => setSortMode(e.target.value as SortMode)}
-                            className="sim-premium-select"
-                            style={{ width: 220, padding: '8px 10px', fontSize: '0.8125rem' }}
-                        >
-                            <option value="LATEST">Sıralama: En Yeni</option>
-                            <option value="PNL_DESC">Sıralama: En Yüksek Getiri (₺)</option>
-                            <option value="PNL_ASC">Sıralama: En Kötü Getiri (₺)</option>
-                            <option value="PNL_PCT_DESC">Sıralama: En Yüksek Getiri (%)</option>
-                            <option value="PNL_PCT_ASC">Sıralama: En Kötü Getiri (%)</option>
-                            <option value="NAME_ASC">Sıralama: Sembol (A-Z)</option>
-                        </select>
-                        <button type="button" onClick={() => setAllVisible(true)} className="sim-toolbar-btn">
-                            Tümünü Göster
-                        </button>
-                        <button type="button" onClick={() => setAllVisible(false)} className="sim-toolbar-btn">
-                            Tümünü Gizle
-                        </button>
-                        <button type="button" onClick={exportCsv} className="sim-toolbar-btn sim-csv-btn">
-                            {t('simulation.exportCsv', 'CSV indir')}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => void exportPdf()}
-                            className="sim-toolbar-btn sim-csv-btn"
-                        >
-                            {t('simulation.exportPdf', 'PDF indir')}
-                        </button>
-                    </div>
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                    <table className="tp-table sim-table">
-                        <thead>
-                            <tr>
-                                <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Görünür</th>
-                                <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Varlık</th>
-                                <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Başlangıç</th>
-                                <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }} title="TRY / birim">
-                                    Alış (birim)
-                                </th>
-                                <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }} title="Güncel birim TRY fiyatı">
-                                    Güncel (birim)
-                                </th>
-                                <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }} title="Başlangıç tutarı + PNL">
-                                    Şu an toplam (TRY)
-                                </th>
-                                <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>PNL</th>
-                                <th style={{ textAlign: 'left', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>Kaynak/Tarih/Kalite</th>
-                                <th style={{ textAlign: 'right', padding: 8, borderBottom: `2px solid ${tokens.border}` }}>İşlem</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {displayedResults.length === 0 ? (
-                                <tr>
-                                    <td colSpan={9} style={{ padding: 10, color: tokens.textMuted, textAlign: 'center' }}>
-                                        Henüz simülasyon yok.
-                                    </td>
-                                </tr>
-                            ) : (
-                                displayedResults.map((r) => (
-                                    <tr key={r.id} className="tp-table-row-hover sim-table-row">
-                                        <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                            <button
-                                                type="button"
-                                                onClick={() => setSimulationResults((prev) => prev.map((x) => x.id === r.id ? { ...x, visible: !x.visible } : x))}
-                                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: tokens.text, fontSize: '1rem' }}
-                                                title={r.visible ? 'Grafikten gizle' : 'Grafikte göster'}
-                                            >
-                                                {r.visible ? '👁' : '🙈'}
-                                            </button>
-                                        </td>
-                                        <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                            <div>{r.assetName}</div>
-                                            <div style={{ color: tokens.textMuted, fontSize: '0.75rem' }}>{r.assetType} • {new Date(r.buyDate).toLocaleDateString('tr-TR')}</div>
-                                        </td>
-                                        <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.initialAmount)}</td>
-                                        <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.buyPrice)}</td>
-                                        <td className="tp-mono" style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>{fmtMoney(r.currentPrice)}</td>
-                                        <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                            <SimAnimatedTry value={r.currentValue} bold />
-                                        </td>
-                                        <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                            <SimAnimatedPnl pnl={r.pnl} pnlPct={r.pnlPct} />
-                                        </td>
-                                        <td style={{ padding: 8, borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                            <div style={{ fontSize: '0.8rem', color: tokens.text }}>{sourceLabel(r.buyPriceSource)}</div>
-                                            <div className="sim-lead" style={{ fontSize: '0.75rem' }}>
-                                                {new Date(r.historicalPriceDate).toLocaleDateString('tr-TR')}
-                                            </div>
-                                            <span
-                                                className={
-                                                    r.qualityFlag === 'EXACT'
-                                                        ? 'quality-pill quality-pill-exact'
-                                                        : r.qualityFlag === 'PREVIOUS_DAY'
-                                                        ? 'quality-pill quality-pill-prev'
-                                                        : 'quality-pill quality-pill-fallback'
-                                                }
-                                            >
-                                                {qualityLabel(r.qualityFlag)}
-                                            </span>
-                                        </td>
-                                        <td style={{ padding: 8, textAlign: 'right', borderBottom: `1px solid ${tokens.tableBorder}` }}>
-                                            <button
-                                                type="button"
-                                                onClick={() => setSimulationResults((prev) => prev.filter((x) => x.id !== r.id))}
-                                                className="tp-icon-btn tp-icon-btn-danger"
-                                                style={{ borderRadius: 6, border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: '#ef4444', padding: '4px 8px', cursor: 'pointer' }}
-                                                title="Sil"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <SimulationResultDetailDrawer
+                item={detailItem}
+                displayCurrency={detailItem?.displayCurrency ?? sessionDisplayCurrency}
+                onClose={() => setDetailId(null)}
+                textColor={tokens.text}
+                mutedColor={tokens.textMuted}
+                borderColor={tokens.border}
+                bgCard={tokens.bgCard}
+            />
         </div>
     );
 }

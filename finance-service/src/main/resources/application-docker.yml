@@ -69,12 +69,6 @@ market-data:
   backfill-response-timeout-ms: 300000
 
 app:
-  kafka:
-    listeners-enabled: ${APP_KAFKA_LISTENERS_ENABLED:true}
-    topics:
-      investment-position-created: ${KAFKA_TOPIC_INVESTMENT_POSITION_CREATED:finance.investment.position.created}
-      investment-position-updated: ${KAFKA_TOPIC_INVESTMENT_POSITION_UPDATED:finance.investment.position.updated}
-      investment-position-closed: ${KAFKA_TOPIC_INVESTMENT_POSITION_CLOSED:finance.investment.position.closed}
   notification:
     base-url: ${NOTIFICATION_SERVICE_URL:http://nrs-notification:8089}
   rate-limit:

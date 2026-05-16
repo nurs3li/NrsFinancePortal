@@ -1,3 +1,10 @@
+/** GET /api/portfolio/manual/timeseries/me */
+export type ManualPortfolioTimeseriesPoint = {
+    date: string;
+    openCostBasisTry: number;
+    marketValueTry: number | null;
+};
+
 export type ManualPositionStatus = 'OPEN' | 'SOLD';
 
 export type ManualPriceSource =

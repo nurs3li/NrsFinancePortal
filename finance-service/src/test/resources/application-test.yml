@@ -25,7 +25,3 @@ spring:
 
 market-data:
   base-url: http://localhost:65535
-
-app:
-  kafka:
-    listeners-enabled: false
