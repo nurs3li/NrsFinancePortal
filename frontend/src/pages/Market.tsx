@@ -39,6 +39,7 @@ import { BondTerminalChart } from '../components/market/BondTerminalChart';
 import { ViopTerminalChart } from '../components/market/ViopTerminalChart';
 import { SpotTerminalChart } from '../components/market/SpotTerminalChart';
 import { FxEffectiveRatesComparisonSection } from '../components/market/FxEffectiveRatesComparisonSection';
+import { FxEffectiveRatesModal } from '../components/market/FxEffectiveRatesModal';
 import { MarketCategoryScrollTabs } from '../components/market/MarketCategoryScrollTabs';
 import { ChartIndicatorToggles } from '../components/market/ChartIndicatorToggles';
 import { MarketCompareLwChart } from '../components/market/MarketCompareLwChart';
@@ -48,7 +49,6 @@ import { MarketPurchasingPowerCompareChart } from '../components/market/MarketPu
 import { usePurchasingPowerData } from '../hooks/usePurchasingPowerData';
 import { fetchMarketTerminalList, MARKET_LIST_PAGE_SIZE } from '../services/marketTerminalListApi';
 import { terminalListItemToVm } from '../utils/marketTerminalListVm';
-import { useThrottledCallback } from '../lib/useThrottledCallback';
 import { istanbulTodayYmd } from '../components/simulation/simDates';
 import { clampPpAnchorYmd, firstYmdFromCandles, lastYmdFromCandles } from '../utils/marketPurchasingPower';
 import {
@@ -58,11 +58,18 @@ import {
     GitCompare,
     Info,
     Maximize2,
+    Bell,
     Star,
     TrendingUp,
     X,
 } from 'lucide-react';
+import { PriceAlertModal } from '../components/priceAlert/PriceAlertModal';
+import { marketCategoryToPriceAlertAsset } from '../utils/priceAlertAsset';
+import type { PriceAlertAssetType } from '../types/priceAlert';
 import { extractMaturityDate, formatBondDisplayName, getRemainingDays } from '../utils/bondFormatter';
+import { bondIsinDisplay, bondIsinLabel, bondListSubtitle, formatBondCouponRate } from '../utils/marketBondUi';
+import { bondTypeFromInstrument } from '../components/viopBond/viopBondMarket';
+import { bondTypeLabel } from '../components/viopBond/bondPositionLabels';
 import { debtHasStructuredYieldData, pickStructuredYieldDecimal } from '../utils/bondYieldSemantics';
 import { cryptoMeta, etfMeta, fxMeta, getBondMeta, instrumentMeta } from '../utils/instrumentMeta';
 import { isViopWhitelisted, viopCategoryFor, type ViopCategory } from '../constants/ViopWhitelist';
@@ -132,6 +139,7 @@ type InstrumentVm = MarketInstrument & {
     maturityDate?: string;
     daysToMaturity?: number;
     couponRate?: number;
+    couponFrequencyLabel?: string;
     yieldToMaturity?: number;
     contractMonth?: string;
     expiryDate?: string;
@@ -200,6 +208,9 @@ type DebtSnapshot = {
     bondDataCategory?: string;
     dirtyPriceUnit?: string;
     yieldFieldRepresentsYtm?: boolean;
+    couponFrequencyPerYear?: number | null;
+    couponFrequencyLabel?: string | null;
+    couponFrequencySource?: string | null;
 };
 type ViopContract = {
     contractCode: string;
@@ -269,12 +280,19 @@ type ViopHistoryApi = {
     dataQuality?: string;
     points: ViopHistoryPointApi[];
 };
-type DebtInstrument = { isin: string; name: string; issuer: string; maturityDate: string };
+type DebtInstrument = {
+    isin: string;
+    name: string;
+    issuer: string;
+    maturityDate: string;
+    couponFrequencyPerYear?: number | null;
+    couponFrequencyLabel?: string | null;
+    couponFrequencySource?: string | null;
+};
 type MarketCategory = 'EQUITY' | 'CRYPTO' | 'FX' | 'METALS' | 'FUNDS' | 'FUTURES' | 'BOND';
 type CompareRow = { time: string; values: Record<string, number> };
 type LiveTick = { category: MarketCategory; symbol: string; price: number; changePercent: number; volume: number };
 type LivePayload = { ts: string; ticks: LiveTick[] };
-type DebtHistoryByIsin = Record<string, DebtSnapshot[]>;
 
 /**
  * Chart penceresi -> backend gun parametresi.
@@ -556,6 +574,15 @@ function historyRowsToSyntheticCandles(rows: MarketHistoryPoint[]): CandlePoint[
     });
 }
 
+/** Grafik serisi gerçekten değişmediyse gereksiz parent re-render / fitContent tetiklenmesin. */
+function chartPriceSeriesSignature(points: { time: string; price?: number; close?: number }[]): string {
+    if (!points.length) return 'empty';
+    const first = points[0]!;
+    const last = points[points.length - 1]!;
+    const lastVal = Number(last.price ?? last.close ?? 0);
+    return `${points.length}|${first.time}|${last.time}|${lastVal.toFixed(6)}`;
+}
+
 function movingAverage(candles: { time: string; close: number }[], window: number): { time: string; value: number }[] {
     if (!candles.length || window <= 1) {
         return candles.map((c) => ({ time: c.time, value: c.close }));
@@ -726,6 +753,39 @@ function normalizeSymbolKey(symbol: string): string {
         .toUpperCase();
 }
 
+/** VİOP liste (`AKBNK0726`) ile kontrat kodu (`F_AKBNK0726`) eşlemesi. */
+function viopSymbolKeysEquivalent(a: string, b: string): boolean {
+    const ka = normalizeSymbolKey(a);
+    const kb = normalizeSymbolKey(b);
+    if (!ka || !kb) return false;
+    if (ka === kb) return true;
+    const strip = (s: string) => (s.startsWith('F_') ? s.slice(2) : s);
+    return strip(ka) === strip(kb);
+}
+
+function resolveViopContractSymbol(
+    symbol: string,
+    contractBySymbol: Record<string, ViopContract>,
+): string {
+    const k = normalizeSymbolKey(symbol);
+    if (!k) return '';
+    const hit = contractBySymbol[k];
+    return hit ? normalizeSymbolKey(hit.contractCode) : k;
+}
+
+function findInstrumentVmBySymbol(
+    vms: { symbol: string; category: MarketCategory }[],
+    symbol: string,
+    category: MarketCategory,
+): (typeof vms)[number] | undefined {
+    if (!symbol) return undefined;
+    return vms.find((x) => {
+        if (x.category !== category) return false;
+        if (category === 'FUTURES') return viopSymbolKeysEquivalent(x.symbol, symbol);
+        return normalizeSymbolKey(x.symbol) === normalizeSymbolKey(symbol);
+    });
+}
+
 function formatEuropeIstanbulDateOnly(date: Date): string {
     return date.toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
 }
@@ -782,15 +842,6 @@ function snapshotToLegacyViopSnapshot(s: ViopContractSnapshotApi): ViopSnapshot 
         listPctChange14d: s.changePercent != null ? Number(s.changePercent) : null,
         sparklineCloses: null,
     };
-}
-
-async function mapPool<T, R>(items: T[], batchSize: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-    const out: R[] = [];
-    for (let i = 0; i < items.length; i += batchSize) {
-        const batch = items.slice(i, i + batchSize);
-        out.push(...(await Promise.all(batch.map(fn))));
-    }
-    return out;
 }
 
 /** Raporlanan baz veya (fiyat − teorik spot); API sadece spot doldurup bazı 0 bırakabiliyor */
@@ -1132,45 +1183,6 @@ function effectiveChangePercent(
     return row.changePercent;
 }
 
-function finiteOrNull(v: unknown): number | null {
-    if (v == null) return null;
-    const n = typeof v === 'number' ? v : Number(v);
-    return Number.isFinite(n) ? n : null;
-}
-
-function pickerSortValue(row: InstrumentVm, key: PickerListSortKey): number | null {
-    if (key === 'price') return Number.isFinite(row.price) ? row.price : null;
-    if (key === 'pctDay') return finiteOrNull(row.pctDay);
-    if (key === 'pctWeek') return finiteOrNull(row.pctWeek);
-    if (key === 'pctMonth') return finiteOrNull(row.pctMonth);
-    return finiteOrNull(row.pctYear);
-}
-
-function comparePickerBySortKey(
-    a: InstrumentVm,
-    b: InstrumentVm,
-    key: PickerListSortKey,
-    dir: 'asc' | 'desc',
-): number {
-    const sign = dir === 'asc' ? 1 : -1;
-    const va = pickerSortValue(a, key);
-    const vb = pickerSortValue(b, key);
-    if (va == null && vb == null) return a.symbol.localeCompare(b.symbol);
-    if (va == null) return 1;
-    if (vb == null) return -1;
-    const d = sign * (va - vb);
-    if (d !== 0) return d;
-    return a.symbol.localeCompare(b.symbol);
-}
-
-function applyPickerTableSort(
-    rows: InstrumentVm[],
-    sort: { key: PickerListSortKey; dir: 'asc' | 'desc' } | null,
-): InstrumentVm[] {
-    if (!sort) return rows;
-    return [...rows].sort((a, b) => comparePickerBySortKey(a, b, sort.key, sort.dir));
-}
-
 /** Treemap `assetClass` → sol tablo / trend chip ile aynı `MarketCategory`. */
 function heatmapAssetClassToCategory(assetClass: string): MarketCategory {
     switch (assetClass) {
@@ -1241,13 +1253,6 @@ function formatDateTr(value: string | Date | null | undefined): string {
     return d.toLocaleDateString('tr-TR');
 }
 
-function bondRemainingTone(days: number): { bg: string; color: string } {
-    if (!Number.isFinite(days)) return { bg: 'rgba(148,163,184,.18)', color: '#94a3b8' };
-    if (days < 90) return { bg: 'rgba(239,68,68,.18)', color: '#ef4444' };
-    if (days <= 365) return { bg: 'rgba(249,115,22,.18)', color: '#f97316' };
-    return { bg: 'rgba(34,197,94,.18)', color: '#22c55e' };
-}
-
 function unwrapData<T>(res: AxiosResponse<T>): T {
     const body = res.data as unknown;
     if (body && typeof body === 'object' && 'data' in (body as object)) {
@@ -1284,7 +1289,7 @@ function isStarredResolved(data: StarredAssetsApiResponse | undefined, mt: strin
 
 export function Market() {
     const { theme, tokens } = useTheme();
-    const { t } = useLanguage();
+    const { t, lang } = useLanguage();
     const navigate = useNavigate();
     const [activeCategory, setActiveCategory] = useState<MarketCategory>('EQUITY');
     const [showUsdInTry, setShowUsdInTry] = useState(false);
@@ -1294,13 +1299,17 @@ export function Market() {
     const [liveOverrides, setLiveOverrides] = useState<Record<string, LiveTick>>({});
     const [range, setRange] = useState<ChartRangeId>('1M');
     const [equitySubmarket, setEquitySubmarket] = useState<EquitySubmarket>('US');
-    /** Hisse / kripto / FX / metaller / fonlar: sol piyasa listesi sürekli kartta; VİOP–tahvilde liste popover’da kalır. */
-    const isSpotHeatmapRail =
+    /** Hisse / kripto / FX / metaller / fonlar (ısı haritası + makro kartlar). */
+    const isSpotMarketCategory =
         activeCategory === 'EQUITY' ||
         activeCategory === 'CRYPTO' ||
         activeCategory === 'FX' ||
         activeCategory === 'METALS' ||
         activeCategory === 'FUNDS';
+    /** Tüm spot benzeri kategoriler + VİOP/tahvil: sol sütunlu terminal grid (ısı haritası hariç). */
+    const isSpotTerminalLayout =
+        isSpotMarketCategory || activeCategory === 'FUTURES' || activeCategory === 'BOND';
+    const showMarketHeatmap = isSpotMarketCategory;
     /** Açılır piyasa listesinde gezilen kategori / alt pazar; grafik `activeCategory` ile ayrılır — chip’e basınca hero değişmez. */
     const [pickerCategory, setPickerCategory] = useState<MarketCategory>('EQUITY');
     const [pickerEquitySubmarket, setPickerEquitySubmarket] = useState<EquitySubmarket>('US');
@@ -1319,10 +1328,11 @@ export function Market() {
     const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down'>>({});
     const prevPricesRef = useRef<Record<string, number>>({});
     const prevTerminalCategoryRef = useRef<MarketCategory>(activeCategory);
+
     const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
     const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
     const [loadingCompare, setLoadingCompare] = useState(false);
-    /** Piyasa listesi: spot’ta sol kartta sabit; VİOP/tahvilde enstrüman seçicide açılır panel. */
+    /** Piyasa listesi: spot terminal düzeninde sol kartta sabit; diğer düzenlerde popover. */
     const [instrumentListOpen, setInstrumentListOpen] = useState(false);
     const terminalHeroRef = useRef<HTMLDivElement | null>(null);
     const leftMarketPanelRef = useRef<HTMLDivElement | null>(null);
@@ -1340,6 +1350,12 @@ export function Market() {
         null,
     );
     const [marketListPage, setMarketListPage] = useState(0);
+    const [priceAlertTarget, setPriceAlertTarget] = useState<{
+        assetType: PriceAlertAssetType;
+        symbol: string;
+        displayName?: string;
+    } | null>(null);
+    const [effectiveRatesOpen, setEffectiveRatesOpen] = useState(false);
 
     const togglePickerListSort = useCallback((key: PickerListSortKey) => {
         setPickerTableSort((prev) => {
@@ -1414,7 +1430,7 @@ export function Market() {
     );
 
     const handleInstrumentSelectorClick = useCallback(() => {
-        if (isSpotHeatmapRail) {
+        if (isSpotTerminalLayout) {
             setPickerCategory(activeCategory);
             setPickerEquitySubmarket(equitySubmarket);
             leftMarketPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1427,7 +1443,7 @@ export function Market() {
             }
             return !wasOpen;
         });
-    }, [activeCategory, equitySubmarket, isSpotHeatmapRail]);
+    }, [activeCategory, equitySubmarket, isSpotTerminalLayout]);
 
     useEffect(() => {
         setInstrumentListOpen(false);
@@ -1468,13 +1484,12 @@ export function Market() {
     /** Grafik BIST veya piyasa listesinde Türk Hisseleri — spot sol kartta liste sürekli açık. */
     const needBistTerminalData = activeCategory === 'EQUITY' && equitySubmarket === 'BIST';
 
-    /** Tahvil listesi: ana sayfa Tahvil’de veya seçicide Tahvil sekmesindeyken yükle. */
-    const needDebtTerminalData =
-        activeCategory === 'BOND' || (instrumentListOpen && pickerCategory === 'BOND');
+    /** VİOP: grafik VİOP modunda; snapshot yalnızca seçili + liste sayfası. */
+    const needViopTerminalData = activeCategory === 'FUTURES';
 
-    /** VİOP: yalnızca VİOP sekmesi veya seçicide VİOP açıkken — equity açılışında 12 snapshot isteği yok. */
-    const needViopTerminalData =
-        activeCategory === 'FUTURES' || (instrumentListOpen && pickerCategory === 'FUTURES');
+    /** Tahvil: yalnızca grafik tahvil modunda (liste `/terminal/list` ile gelir). */
+    const needDebtTerminalData = activeCategory === 'BOND';
+    const needDebtCatalog = needDebtTerminalData;
 
     const pickerMatchesChart =
         pickerCategory === activeCategory &&
@@ -1500,12 +1515,14 @@ export function Market() {
     const {
         data: bistLatest = [],
         isLoading: loadingBistLatest,
-        error: bistLatestError,
+        error: _bistLatestError,
     } = useQuery({
         queryKey: ['market', 'bist', 'latest', 'terminal'],
         queryFn: ({ signal }) => getBistLatest(signal),
         enabled: needBistTerminalData,
+        staleTime: 30_000,
         refetchInterval: needBistTerminalData ? 60_000 : false,
+        refetchOnWindowFocus: needBistTerminalData,
     });
 
     const terminalListSortKey = pickerTableSort?.key ?? null;
@@ -1543,7 +1560,7 @@ export function Market() {
                 signal,
             ),
         placeholderData: (prev) => prev,
-        staleTime: 8_000,
+        staleTime: pickerCategory === 'BOND' || pickerCategory === 'FUTURES' ? 30_000 : 8_000,
     });
 
     /** Dashboard beklenmeden ilk satırdan sembol seç — grafik istekleri hemen başlasın. */
@@ -1625,8 +1642,9 @@ export function Market() {
         enabled: activeCategory === 'EQUITY' && equitySubmarket === 'BIST' && Boolean(selectedSymbol),
         queryFn: ({ signal }) =>
             getBistCandles(selectedSymbol, bistMainHistoryRange.from, bistMainHistoryRange.to, signal),
-        staleTime: 120_000,
-        refetchInterval: 120_000,
+        staleTime: 60_000,
+        refetchInterval: 90_000,
+        refetchOnWindowFocus: true,
     });
 
     const bistTreemapTiles = useMemo((): TreemapTile[] => {
@@ -1682,7 +1700,7 @@ export function Market() {
 
     const usdTryRateQueryEnabled =
         showUsdInTry &&
-        isSpotHeatmapRail &&
+        isSpotMarketCategory &&
         ((activeCategory === 'EQUITY' && equitySubmarket !== 'BIST') ||
             activeCategory === 'CRYPTO' ||
             activeCategory === 'FUNDS' ||
@@ -1703,13 +1721,6 @@ export function Market() {
     const sideRailRafRef = useRef<number | null>(null);
     const lastSideRailPxRef = useRef<number | null>(null);
     useLayoutEffect(() => {
-        // BOND / FUTURES: sol-sağ rail yüksekliği zaten clamp ile sabit; merkez stack ResizeObserver
-        // `setSideRailPx` ile tüm Market'i gereksiz re-render edip VIOP/tahvil grafik ve scroll'da titreme yaratıyordu.
-        if (activeCategory === 'BOND' || activeCategory === 'FUTURES') {
-            setSideRailPx(null);
-            lastSideRailPxRef.current = null;
-            return;
-        }
         if (loadingDashboard && !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST')) {
             setSideRailPx(null);
             lastSideRailPxRef.current = null;
@@ -1758,7 +1769,7 @@ export function Market() {
         return () => mq.removeEventListener('change', apply);
     }, []);
 
-    const enableSideRailSync = threeColRailSync && activeCategory !== 'BOND' && activeCategory !== 'FUTURES';
+    const enableSideRailSync = threeColRailSync;
     const sideRailBoxStyle: CSSProperties | undefined =
         enableSideRailSync && sideRailPx != null && sideRailPx > 0
             ? {
@@ -1769,8 +1780,7 @@ export function Market() {
                   boxSizing: 'border-box',
               }
             : undefined;
-    const rightPanelStyle: CSSProperties | undefined =
-        activeCategory === 'FUTURES' || activeCategory === 'BOND' ? undefined : sideRailBoxStyle;
+    const rightPanelStyle: CSSProperties | undefined = sideRailBoxStyle;
 
     // VIOP: kontrat listesi + kontrat başına snapshot (`/api/market/viop/contracts/{code}/snapshot`).
     const { data: viopContracts = [] } = useQuery({
@@ -1784,30 +1794,41 @@ export function Market() {
         refetchOnReconnect: false,
         staleTime: Infinity,
     });
+    const viopSnapshotSymbols = useMemo(() => {
+        if (!needViopTerminalData) return [] as string[];
+        const keys = new Set<string>();
+        const add = (raw?: string) => {
+            const k = normalizeSymbolKey(raw ?? '');
+            if (k && isViopWhitelisted(k)) keys.add(k);
+        };
+        add(selectedSymbol);
+        if (pickerCategory === 'FUTURES') {
+            (terminalListPageData?.items ?? []).forEach((r) => add(r.symbol));
+        }
+        return [...keys];
+    }, [needViopTerminalData, selectedSymbol, pickerCategory, terminalListPageData]);
+
     const viopSnapshotQueries = useQueries({
-        queries: viopContracts.map((c) => {
-            const sym = normalizeSymbolKey(c.contractCode);
-            return {
-                queryKey: ['market', 'viop', 'snapshot', sym],
-                queryFn: ({ signal }) =>
-                    marketClient
-                        .get<ViopContractSnapshotApi>(
-                            `/api/market/viop/contracts/${encodeURIComponent(sym)}/snapshot`,
-                            {
-                            signal,
-                        })
-                        .then((r) => r.data),
-                enabled: needViopTerminalData && Boolean(sym) && isViopWhitelisted(sym),
-                staleTime: 20_000,
-                refetchInterval: activeCategory === 'FUTURES' ? 30_000 : false,
-                refetchOnWindowFocus: activeCategory === 'FUTURES',
-            };
-        }),
+        queries: viopSnapshotSymbols.map((sym) => ({
+            queryKey: ['market', 'viop', 'snapshot', sym],
+            queryFn: ({ signal }: { signal: AbortSignal }) =>
+                marketClient
+                    .get<ViopContractSnapshotApi>(`/api/market/viop/contracts/${encodeURIComponent(sym)}/snapshot`, {
+                        signal,
+                    })
+                    .then((r) => r.data),
+            enabled: needViopTerminalData && Boolean(sym),
+            staleTime: 45_000,
+            refetchInterval:
+                activeCategory === 'FUTURES' && sym === normalizeSymbolKey(selectedSymbol) ? 60_000 : false,
+            refetchOnWindowFocus:
+                activeCategory === 'FUTURES' && sym === normalizeSymbolKey(selectedSymbol),
+        })),
     });
     const viopSnapshotBySymbol = useMemo(() => {
         const m: Record<string, ViopContractSnapshotApi> = {};
         viopSnapshotQueries.forEach((q, i) => {
-            const sym = normalizeSymbolKey(viopContracts[i]?.contractCode);
+            const sym = normalizeSymbolKey(viopSnapshotSymbols[i]);
             const row = q.data;
             if (sym && row) {
                 m[sym] = row;
@@ -1816,12 +1837,15 @@ export function Market() {
             }
         });
         return m;
-    }, [viopSnapshotQueries, viopContracts]);
+    }, [viopSnapshotQueries, viopSnapshotSymbols]);
     const viopContractBySymbol = useMemo(() => {
         const m: Record<string, ViopContract> = {};
         viopContracts.forEach((c) => {
             const k = normalizeSymbolKey(c.contractCode);
-            if (k) m[k] = c;
+            if (!k) return;
+            m[k] = c;
+            const alt = k.startsWith('F_') ? k.slice(2) : `F_${k}`;
+            m[alt] = c;
         });
         return m;
     }, [viopContracts]);
@@ -1831,51 +1855,16 @@ export function Market() {
         queryFn: ({ signal }) =>
             marketClient.get<DebtSnapshot[]>('/api/market/debt/latest', { signal }).then((r) => r.data),
         enabled: needDebtTerminalData,
-        refetchInterval: needDebtTerminalData ? 15_000 : false,
+        refetchInterval: needDebtTerminalData ? 60_000 : false,
     });
     const { data: debtCatalog = [] } = useQuery({
         queryKey: ['market', 'debt', 'catalog', 'terminal'],
         queryFn: ({ signal }) =>
             marketClient.get<DebtInstrument[]>('/api/market/debt/catalog', { signal }).then((r) => r.data),
-        enabled: needDebtTerminalData,
-        refetchInterval: needDebtTerminalData ? 60_000 : false,
+        enabled: needDebtCatalog,
+        staleTime: 120_000,
+        refetchInterval: needDebtCatalog ? 120_000 : false,
     });
-    const debtHistoryIsinsCsv = useMemo(() => {
-        if (!needDebtTerminalData) return '';
-        const keys = new Set<string>();
-        const add = (raw?: string) => {
-            const k = normalizeSymbolKey(raw ?? '');
-            if (k) keys.add(k);
-        };
-        add(selectedSymbol);
-        if (pickerCategory === 'BOND') {
-            (terminalListPageData?.items ?? []).forEach((r) => add(r.symbol));
-        }
-        if (keys.size === 0 && debtCatalog.length > 0) {
-            add(debtCatalog[0]?.isin);
-        }
-        return [...keys].sort().join(',');
-    }, [needDebtTerminalData, selectedSymbol, pickerCategory, terminalListPageData, debtCatalog]);
-
-    const { data: debtHistoryByIsin = {} } = useQuery({
-        queryKey: ['market', 'debt', 'history-by-isin', 'terminal', dataRangeForChart, debtHistoryIsinsCsv],
-        enabled: needDebtTerminalData && debtHistoryIsinsCsv.length > 0,
-        queryFn: async ({ signal }) => {
-            const uniq = debtHistoryIsinsCsv.split(',').map((s) => s.trim()).filter(Boolean);
-            const entries = await mapPool(uniq, 4, async (isin) => {
-                const rows = await marketClient
-                    .get<DebtSnapshot[]>('/api/market/debt/history', {
-                        params: { isin, days: Math.max(180, RANGE_TO_DAYS[dataRangeForChart]) },
-                        signal,
-                    })
-                    .then((r) => r.data);
-                return [isin, rows] as const;
-            });
-            return Object.fromEntries(entries) as DebtHistoryByIsin;
-        },
-        refetchInterval: needDebtTerminalData ? 60_000 : false,
-    });
-
 
     const fxSpreadMap = useMemo(() => {
         const out: Record<string, number> = {};
@@ -1932,9 +1921,23 @@ export function Market() {
     const buildInstruments = useCallback(
         (cat: MarketCategory, eqSub: EquitySubmarket): MarketInstrument[] => {
         if (cat === 'FUTURES') {
+            if (pickerMatchesChart && (terminalListPageData?.items?.length ?? 0) > 0) {
+                return terminalListPageData!.items
+                    .filter((row) => row.category === 'FUTURES')
+                    .map((row) => ({
+                        symbol: normalizeSymbolKey(row.symbol),
+                        category: 'FUTURES' as const,
+                        displayName: row.displayName ?? undefined,
+                        price: row.price,
+                        changePercent: row.changePercent,
+                        dailyChangePercent: row.dailyChangePercent ?? row.changePercent,
+                        trend: row.trend,
+                        volume: row.volume ?? null,
+                    }));
+            }
             const out: MarketInstrument[] = [];
-            for (const c of viopContracts) {
-                const symbol = normalizeSymbolKey(c.contractCode);
+            for (const sym of viopSnapshotSymbols) {
+                const symbol = normalizeSymbolKey(sym);
                 const snap = viopSnapshotBySymbol[symbol];
                 const priceN = Number(snap?.last ?? 0);
                 if (!(priceN > 0) || !snap) continue;
@@ -1964,6 +1967,20 @@ export function Market() {
             return out.sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
         }
         if (cat === 'BOND') {
+            if (pickerMatchesChart && (terminalListPageData?.items?.length ?? 0) > 0) {
+                return terminalListPageData!.items
+                    .filter((row) => row.category === 'BOND')
+                    .map((row) => ({
+                        symbol: normalizeSymbolKey(row.symbol),
+                        category: 'BOND' as const,
+                        displayName: row.displayName ?? row.symbol,
+                        price: row.price,
+                        changePercent: row.changePercent,
+                        dailyChangePercent: row.dailyChangePercent ?? row.changePercent,
+                        trend: row.trend,
+                        volume: row.volume ?? null,
+                    }));
+            }
             const merged = new Map<string, DebtSnapshot>();
             debtLatest.forEach((d) => {
                 const key = normalizeSymbolKey(d?.isin);
@@ -1980,29 +1997,14 @@ export function Market() {
             return [...merged.values()]
                 .map((d) => {
                     const symbol = normalizeSymbolKey(d.isin);
-                    const history = [...(debtHistoryByIsin[symbol] ?? [])].sort(
-                        (a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime()
-                    );
-                    const validHistoryPrices = history
-                        .map((row) => Number(row?.dirtyPrice))
-                        .filter((price) => Number.isFinite(price) && price > 0);
-                    const currentFromLatest = Number(d.dirtyPrice ?? Number.NaN);
-                    const current =
-                        Number.isFinite(currentFromLatest) && currentFromLatest > 0
-                            ? currentFromLatest
-                            : (validHistoryPrices.at(-1) ?? 0);
-                    const prev = validHistoryPrices.length > 1 ? validHistoryPrices[validHistoryPrices.length - 2] : 0;
-                    const changePercent =
-                        prev > 0 && current > 0
-                            ? ((current - prev) / prev) * 100
-                            : Number(d.changePercent ?? 0) || 0;
+                    const current = Number(d.dirtyPrice ?? 0);
                     return {
                         symbol,
                         category: 'BOND' as const,
                         price: current,
-                        changePercent,
-                        trend: changePercent >= 0 ? ('UP' as const) : ('DOWN' as const),
-                        metrics: { yield: Number(d.yieldPct ?? 0) },
+                        changePercent: 0,
+                        trend: 'UP' as const,
+                        metrics: undefined,
                         volume: d.synthetic || current <= 0 ? null : current * 100,
                     };
                 })
@@ -2193,12 +2195,12 @@ export function Market() {
         },
         [
             dashboard,
-            viopContracts,
             viopSnapshotBySymbol,
             viopContractBySymbol,
-            dataRangeForChart,
+            viopSnapshotSymbols,
+            terminalListPageData,
+            pickerMatchesChart,
             debtLatest,
-            debtHistoryByIsin,
             fxSpreadMap,
             bistLatest,
         ]
@@ -2210,15 +2212,25 @@ export function Market() {
     );
     useEffect(() => {
         if (activeCategory === 'FUTURES' || activeCategory === 'BOND') {
+            const stillExists = instruments.some((i) =>
+                activeCategory === 'FUTURES'
+                    ? viopSymbolKeysEquivalent(i.symbol, selectedSymbol)
+                    : normalizeSymbolKey(i.symbol) === normalizeSymbolKey(selectedSymbol),
+            );
+            if (pickerMatchesChart && bootstrapSymbolFromList) {
+                if (!selectedSymbol || !stillExists) {
+                    setSelectedSymbol(bootstrapSymbolFromList);
+                }
+                return;
+            }
             if (!instruments.length) return;
-            const stillExists = instruments.some((i) => i.symbol === selectedSymbol);
             if (!selectedSymbol || !stillExists) setSelectedSymbol(instruments[0].symbol);
             return;
         }
         if (!instruments.length) return;
         const stillExists = instruments.some((i) => i.symbol === selectedSymbol);
         if (!selectedSymbol || !stillExists) setSelectedSymbol(instruments[0].symbol);
-    }, [instruments, selectedSymbol, activeCategory]);
+    }, [instruments, selectedSymbol, activeCategory, pickerMatchesChart, bootstrapSymbolFromList]);
 
     useEffect(() => {
         setCompareSymbols([]);
@@ -2247,7 +2259,9 @@ export function Market() {
     useEffect(() => {
         if (activeCategory !== 'FUTURES') return;
         setCompareSymbols((prev) => {
-            const valid = prev.filter((s) => instruments.some((i) => i.symbol === s));
+            const valid = prev.filter((s) =>
+                instruments.some((i) => viopSymbolKeysEquivalent(i.symbol, s)),
+            );
             if (valid.length === prev.length && valid.every((s, i) => s === prev[i])) return prev;
             return valid;
         });
@@ -2294,6 +2308,9 @@ export function Market() {
         activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
             ? bistMainChartDays
             : RANGE_TO_DAYS[dataRangeForChart];
+    /** Tahvil grafiği: DB’de tarih filtreli sorgu; 2Y için üst sınır performans. */
+    const bondHistoryDays =
+        activeCategory === 'BOND' ? Math.min(RANGE_TO_DAYS[dataRangeForChart], 400) : days;
     const marketType =
         activeCategory === 'EQUITY'
             ? 'EQUITY'
@@ -2445,15 +2462,14 @@ export function Market() {
                 return batch;
             }
         },
-        // Günlük ingest sonrası grafik güncellensin: aynı sekmede kalınca da periyodik tazele.
+        // Günlük ingest / stale-tail onarımı sonrası grafik güncellensin (BIST ayrı sorgu kullanır).
         refetchInterval:
             Boolean(selectedSymbol && marketType) && !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST')
-                ? terminalHourlyRange
-                    ? 90_000
-                    : 300_000
+                ? 90_000
                 : false,
-        refetchOnWindowFocus: false,
-        staleTime: 300_000,
+        refetchOnWindowFocus:
+            Boolean(selectedSymbol && marketType) && !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST'),
+        staleTime: 90_000,
         placeholderData: (prev) => prev,
     });
 
@@ -2477,17 +2493,19 @@ export function Market() {
         staleTime: 45_000,
     });
     const { data: debtHistory = [], isLoading: loadingDebtHistory } = useQuery({
-        queryKey: ['market', 'debt-history', selectedSymbol, days],
+        queryKey: ['market', 'debt-history', selectedSymbol, bondHistoryDays],
         enabled: activeCategory === 'BOND' && Boolean(selectedSymbol),
         queryFn: ({ signal }) =>
             marketClient
                 .get<DebtSnapshot[]>('/api/market/debt/history', {
-                    params: { isin: selectedSymbol, days },
+                    params: { isin: selectedSymbol, days: bondHistoryDays },
                     signal,
                 })
                 .then((r) => r.data),
-        refetchInterval: activeCategory === 'BOND' && Boolean(selectedSymbol) ? 15_000 : false,
+        refetchInterval: activeCategory === 'BOND' && Boolean(selectedSymbol) ? 60_000 : false,
         refetchOnWindowFocus: activeCategory === 'BOND' && Boolean(selectedSymbol),
+        staleTime: 90_000,
+        placeholderData: (prev) => prev,
     });
 
     const candles = useMemo(() => {
@@ -2581,14 +2599,22 @@ export function Market() {
     const bondDualPoints = useMemo(() => {
         if (activeCategory !== 'BOND') return [];
         const sorted = [...debtHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
-        return sorted
+        const mapped = sorted
             .map((x) => ({
                 time: x.asOf ?? new Date().toISOString(),
                 price: Number(x.dirtyPrice ?? 0),
-                yieldPct: Number(x.yieldPct ?? 0),
+                yieldPct: 0,
                 volume: Number(x.dirtyPrice ?? 0) > 0 ? Number(x.dirtyPrice ?? 0) * 100 : 0,
             }))
             .filter((x) => Number.isFinite(x.price) && x.price > 0);
+        const maxChartPoints = 360;
+        if (mapped.length <= maxChartPoints) return mapped;
+        const step = Math.ceil(mapped.length / maxChartPoints);
+        const out = [];
+        for (let i = 0; i < mapped.length; i += step) out.push(mapped[i]);
+        const last = mapped[mapped.length - 1];
+        if (out[out.length - 1] !== last) out.push(last);
+        return out;
     }, [activeCategory, debtHistory]);
     const viopLinePoints = useMemo(() => {
         if (activeCategory !== 'FUTURES') return [];
@@ -2614,6 +2640,43 @@ export function Market() {
                 openInterest: 0,
             }));
     }, [activeCategory, viopHistoryApi]);
+
+    const bondChartSeriesSig = useMemo(
+        () => (activeCategory === 'BOND' ? chartPriceSeriesSignature(bondDualPoints) : ''),
+        [activeCategory, bondDualPoints],
+    );
+    const viopChartSeriesSig = useMemo(
+        () => (activeCategory === 'FUTURES' ? chartPriceSeriesSignature(viopLinePoints) : ''),
+        [activeCategory, viopLinePoints],
+    );
+    const bondChartMa7 = useMemo(() => {
+        if (activeCategory !== 'BOND' || !bondDualPoints.length) return [];
+        return movingAverage(
+            bondDualPoints.map((p) => ({ time: p.time, close: p.price })),
+            7,
+        );
+    }, [activeCategory, bondChartSeriesSig, bondDualPoints]);
+    const bondChartMa21 = useMemo(() => {
+        if (activeCategory !== 'BOND' || !bondDualPoints.length) return [];
+        return movingAverage(
+            bondDualPoints.map((p) => ({ time: p.time, close: p.price })),
+            21,
+        );
+    }, [activeCategory, bondChartSeriesSig, bondDualPoints]);
+    const viopChartMa7 = useMemo(() => {
+        if (activeCategory !== 'FUTURES' || !viopLinePoints.length) return [];
+        return movingAverage(
+            viopLinePoints.map((p) => ({ time: p.time, close: p.price })),
+            7,
+        );
+    }, [activeCategory, viopChartSeriesSig, viopLinePoints]);
+    const viopChartMa21 = useMemo(() => {
+        if (activeCategory !== 'FUTURES' || !viopLinePoints.length) return [];
+        return movingAverage(
+            viopLinePoints.map((p) => ({ time: p.time, close: p.price })),
+            21,
+        );
+    }, [activeCategory, viopChartSeriesSig, viopLinePoints]);
 
     const ma7 = useMemo(() => {
         if (indicatorData?.ma?.['7']?.length) {
@@ -2671,17 +2734,26 @@ export function Market() {
                 const remainingDays =
                     latestDebt?.daysToMaturity ??
                     (Number.isFinite(remainingFromIsin) ? remainingFromIsin : undefined);
-                // Trend sparkline'ini debtHistoryByIsin uzerinden gercek dirtyPrice serisinden
-                // turetiyoruz. Eskiden bos array veriliyordu, normalizeTrendSparkline yalnizca
-                // livePrice/liveChange'den 2 nokta uretip dumduz diagonal cizgi gosteriyordu.
-                // Tablo render'i zaten `row.sparkline.slice(-sparkDays)` ile son N gunu kesiyor
-                // (`SPARK_DAYS_BY_CATEGORY[BOND] = 7`), o yuzden burada tum gecmisi siralayip
-                // veriyoruz; gerekirse fallback olarak livePrice/liveChange normalize'i devreye girer.
-                const sparkFromHistory = [...(debtHistoryByIsin[symbolKey] ?? [])]
-                    .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime())
-                    .map((row) => Number(row?.dirtyPrice))
+                const sparkFromList = ((ins as InstrumentVm).sparkline ?? [])
+                    .map((p) => Number(p))
                     .filter((p) => Number.isFinite(p) && p > 0);
-                const hzBond = horizonPctsFromSparkCloses(sparkFromHistory, finiteHorizonPct(liveChange), 'BOND');
+                const sparkFromHistory =
+                    symbolKey === normalizeSymbolKey(selectedSymbol)
+                        ? [...debtHistory]
+                              .sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime())
+                              .map((row) => Number(row?.dirtyPrice))
+                              .filter((p) => Number.isFinite(p) && p > 0)
+                        : [];
+                const sparkBase = sparkFromHistory.length >= 2 ? sparkFromHistory : sparkFromList;
+                const hzFromSpark = horizonPctsFromSparkCloses(sparkBase, finiteHorizonPct(liveChange), 'BOND');
+                const vmIns = ins as InstrumentVm;
+                const hzBond: InstrumentHorizonPcts = {
+                    pctDay: finiteHorizonPct(vmIns.pctDay) ?? hzFromSpark.pctDay,
+                    pctWeek: finiteHorizonPct(vmIns.pctWeek) ?? hzFromSpark.pctWeek,
+                    pctMonth: finiteHorizonPct(vmIns.pctMonth) ?? hzFromSpark.pctMonth,
+                    pctYear: finiteHorizonPct(vmIns.pctYear) ?? hzFromSpark.pctYear,
+                };
+                const sparkPoints = Math.min(Math.max(sparkBase.length, 2), 90);
                 return {
                     ...ins,
                     price: livePrice,
@@ -2689,10 +2761,17 @@ export function Market() {
                     volume: liveVolume,
                     type: 'BOND',
                     displayName: formatBondDisplayName(symbolKey),
-                    sparkline: normalizeTrendSparkline(sparkFromHistory, livePrice, liveChange),
+                    sparkline: normalizeTrendSparkline(sparkBase, livePrice, liveChange, sparkPoints),
                     maturityDate: fromApi ?? (fromIsin ? fromIsin.toISOString() : undefined),
                     daysToMaturity: remainingDays,
-                    couponRate: Number(latestDebt?.couponRate ?? 0),
+                    couponRate:
+                        latestDebt?.couponRate != null && Number.isFinite(Number(latestDebt.couponRate))
+                            ? Number(latestDebt.couponRate)
+                            : undefined,
+                    couponFrequencyLabel:
+                        latestDebt?.couponFrequencyLabel?.trim() ||
+                        debtMeta?.couponFrequencyLabel?.trim() ||
+                        undefined,
                     yieldToMaturity: pickStructuredYieldDecimal(latestDebt),
                     longShort: 'NÖTR',
                     ...hzBond,
@@ -2829,7 +2908,8 @@ export function Market() {
             dashboard,
             debtMetaMap,
             debtLatestMap,
-            debtHistoryByIsin,
+            debtHistory,
+            selectedSymbol,
             viopLatestMap,
             viopSnapshotBySymbol,
             debtNameMap,
@@ -2872,22 +2952,24 @@ export function Market() {
         }
     }, [pickerCategory, marketListQuickFilter]);
 
-    const pickerDisplayedInstruments = useMemo(
-        () => (terminalListPageData?.items ?? []).map((row) => terminalListItemToVm(row) as InstrumentVm),
-        [terminalListPageData],
-    );
+    const pickerDisplayedInstruments = useMemo(() => {
+        return (terminalListPageData?.items ?? []).map((row) => terminalListItemToVm(row) as InstrumentVm);
+    }, [terminalListPageData]);
     const marketListTotalPages = terminalListPageData?.totalPages ?? 0;
     const marketListTotalElements = terminalListPageData?.totalElements ?? 0;
     const selectedInstrumentVm = useMemo(() => {
-        const fromInstruments =
-            instrumentVms.find((x) => x.symbol === selectedSymbol) ?? instrumentVms[0] ?? null;
-        if (fromInstruments) return fromInstruments;
-        return (
-            pickerDisplayedInstruments.find((x) => x.symbol === selectedSymbol) ??
+        const fromPicker =
+            findInstrumentVmBySymbol(pickerDisplayedInstruments, selectedSymbol, activeCategory) ??
             pickerDisplayedInstruments[0] ??
-            null
-        );
-    }, [instrumentVms, selectedSymbol, pickerDisplayedInstruments]);
+            null;
+        const fromInstruments =
+            findInstrumentVmBySymbol(instrumentVms, selectedSymbol, activeCategory) ??
+            (activeCategory === 'FUTURES' || activeCategory === 'BOND' ? null : instrumentVms[0] ?? null);
+        if (activeCategory === 'FUTURES' || activeCategory === 'BOND') {
+            return (fromPicker ?? fromInstruments) as InstrumentVm | null;
+        }
+        return (fromInstruments ?? fromPicker) as InstrumentVm | null;
+    }, [instrumentVms, selectedSymbol, pickerDisplayedInstruments, activeCategory]);
 
     const chartComparisonAvailable = useMemo(
         () =>
@@ -3003,7 +3085,7 @@ export function Market() {
         // liste/heatmap ayrışırdı (FX canlı 24s vs spark 1G).
         // Tahvil / VİOP: seçilen zaman dilimindeki terminal mumları (candles) ilk→son kapanış
         // — hisse ile aynı grafik-tabanlı mantık; aksi halde canlı liste %’si sabit kalırdı.
-        const current = instrumentVms.find((x) => x.symbol === selectedSymbol) ?? instrumentVms[0];
+        const current = selectedInstrumentVm;
         if (!current) return null;
         const highs = candles.map((c) => c.high);
         const lows = candles.map((c) => c.low);
@@ -3026,7 +3108,7 @@ export function Market() {
             high: highs.length ? Math.max(...highs) : current.price,
             low: lows.length ? Math.min(...lows) : current.price,
         };
-    }, [selectedInstrumentVm, candles, trendChartRange]);
+    }, [selectedInstrumentVm, candles, trendChartRange, activeCategory]);
     const heroScaled = useMemo(() => {
         if (!hero) return null;
         const pd = terminalPriceDisplay(hero, { showUsdInTry, usdTryRate });
@@ -3040,7 +3122,7 @@ export function Market() {
     }, [hero, showUsdInTry, usdTryRate]);
 
     const macroCompareEnabled =
-        isSpotHeatmapRail && Boolean(selectedSymbol) && spotChartMode === 'ANALYSIS';
+        isSpotMarketCategory && Boolean(selectedSymbol) && spotChartMode === 'ANALYSIS';
 
     const macroAssetInTry = useMemo(() => {
         const ins = selectedInstrumentVm ?? hero;
@@ -3198,11 +3280,22 @@ export function Market() {
         if (selectedInstrumentVm.category === 'BOND') {
             const days = selectedInstrumentVm.daysToMaturity ?? getRemainingDays(selectedInstrumentVm.symbol);
             const meta = getBondMeta(Number.isFinite(days) ? days : 365);
+            const sym = selectedInstrumentVm.symbol;
+            const symKey = normalizeSymbolKey(sym);
+            const debtMeta = debtMetaMap[symKey];
+            const typeTr = bondTypeLabel(
+                bondTypeFromInstrument(
+                    sym,
+                    debtMeta?.name ?? debtNameMap[symKey] ?? selectedInstrumentVm.displayName,
+                    debtMeta?.issuer,
+                ),
+                t,
+            );
             return {
                 title: 'Tahvil Bilgisi',
                 rows: [
                     ['İhraççı', meta.issuer],
-                    ['Tür', meta.type],
+                    ['Tür', typeTr],
                     ['Kategori', meta.category],
                     ['Risk', meta.risk],
                 ],
@@ -3210,7 +3303,7 @@ export function Market() {
             };
         }
         return null;
-    }, [selectedInstrumentVm, t]);
+    }, [selectedInstrumentVm, debtNameMap, debtMetaMap, t]);
     const futuresHeaderMetrics = useMemo(() => {
         if (activeCategory !== 'FUTURES' || !selectedSymbol) return null;
         const key = normalizeSymbolKey(selectedSymbol);
@@ -3302,6 +3395,73 @@ export function Market() {
         if (down > up && down >= flat) return t('market.directionDown', 'Aşağı');
         return t('market.directionMixed', 'Karışık');
     }, [activeCategory, instruments, t]);
+
+    const bondTopMovers = useMemo(
+        () => [...instruments].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent)).slice(0, 5),
+        [instruments],
+    );
+    const bondTopYield = useMemo(
+        () =>
+            [...instruments]
+                .map((ins) => ({
+                    symbol: ins.symbol,
+                    yieldPct: Number(ins.metrics?.yield ?? 0),
+                }))
+                .filter((x) => Number.isFinite(x.yieldPct) && x.yieldPct > 0)
+                .sort((a, b) => b.yieldPct - a.yieldPct)
+                .slice(0, 5),
+        [instruments],
+    );
+    const bondBreadthLabel = useMemo(() => {
+        if (activeCategory !== 'BOND' || instruments.length === 0) return null;
+        const up = instruments.filter((i) => i.changePercent > 0.05).length;
+        const down = instruments.filter((i) => i.changePercent < -0.05).length;
+        const flat = instruments.length - up - down;
+        if (up > down && up >= flat) return t('market.directionUp', 'Yukarı');
+        if (down > up && down >= flat) return t('market.directionDown', 'Aşağı');
+        return t('market.directionMixed', 'Karışık');
+    }, [activeCategory, instruments, t]);
+
+    const bondContractSummary = useMemo(() => {
+        if (activeCategory !== 'BOND' || !selectedSymbol) return null;
+        const vm = instrumentVms.find((x) => normalizeSymbolKey(x.symbol) === normalizeSymbolKey(selectedSymbol));
+        const snap = debtLatestMap[normalizeSymbolKey(selectedSymbol)];
+        return {
+            name: vm?.displayName ?? debtNameMap[selectedSymbol] ?? selectedSymbol,
+            maturityDate: snap?.maturityDate ?? vm?.maturityDate ?? null,
+            daysToMaturity: snap?.daysToMaturity ?? vm?.daysToMaturity ?? null,
+            couponRate: snap?.couponRate ?? vm?.couponRate ?? null,
+            dirtyPrice: snap?.dirtyPrice ?? vm?.price ?? null,
+            currency: 'TRY',
+        };
+    }, [activeCategory, selectedSymbol, instrumentVms, debtLatestMap, debtNameMap]);
+
+    const viopContractSummary = useMemo(() => {
+        if (activeCategory !== 'FUTURES' || !selectedSymbol) return null;
+        const key = normalizeSymbolKey(selectedSymbol);
+        const snap = viopSnapshotBySymbol[key];
+        const contract = viopContractBySymbol[key];
+        let daysToExpiry: number | null = null;
+        if (contract?.expiry) {
+            const exp = new Date(`${String(contract.expiry).slice(0, 10)}T12:00:00`);
+            if (!Number.isNaN(exp.getTime())) {
+                daysToExpiry = Math.max(0, Math.ceil((exp.getTime() - Date.now()) / 86_400_000));
+            }
+        }
+        return {
+            underlying: snap?.underlying ?? contract?.underlying ?? '—',
+            maturity:
+                snap?.maturityMonth && snap?.maturityYear
+                    ? `${snap.maturityMonth}/${snap.maturityYear}`
+                    : contract?.expiry
+                      ? String(contract.expiry).slice(0, 7)
+                      : '—',
+            daysToExpiry,
+            settlement: snap?.settlement ?? null,
+            preSettlement: snap?.preSettlement ?? null,
+            initialMargin: snap?.initialMargin ?? null,
+        };
+    }, [activeCategory, selectedSymbol, viopSnapshotBySymbol, viopContractBySymbol]);
 
     const viopDelayMinutesDisplay = useMemo(() => {
         if (activeCategory !== 'FUTURES') return null;
@@ -3639,6 +3799,21 @@ export function Market() {
         }
         return undefined;
     }, [activeCategory, equitySubmarket, t]);
+    const viopTerminalTitle = useMemo(() => {
+        if (activeCategory !== 'FUTURES' || !selectedSymbol) {
+            return t('market.viopAnalysisTitle', 'VIOP Piyasa Analiz');
+        }
+        const label = parseViopContractLabel(selectedSymbol);
+        return label !== selectedSymbol ? `${label} — ${t('market.viopAnalysisTitle', 'VIOP Analiz')}` : selectedSymbol;
+    }, [activeCategory, selectedSymbol, t]);
+    const viopTerminalSubtitle = useMemo(
+        () =>
+            t(
+                'market.viopAnalysisSubtitle',
+                'Vadeli kontrat fiyat serisi. VIOP kaldıraçlı piyasa olduğu için fiyat hareketleri teminat etkisi yaratabilir.',
+            ),
+        [t],
+    );
     const terminalVars = useMemo(
         () =>
             ({
@@ -3700,11 +3875,11 @@ export function Market() {
                 overflow: 'hidden',
             };
         }
-        if (isSpotHeatmapRail) {
+        if (isSpotTerminalLayout) {
             return undefined;
         }
         return { display: 'none' };
-    }, [instrumentListOpen, instrumentListPopoverBox, isSpotHeatmapRail, tokens.border, tokens.bgCard]);
+    }, [instrumentListOpen, instrumentListPopoverBox, isSpotTerminalLayout, tokens.border, tokens.bgCard]);
 
     const renderComparisonCard = (cardClass: string) => {
         if (!canShowComparisonChart(activeCategory, marketType, equitySubmarket) || activeCategory === 'BOND') {
@@ -3717,7 +3892,10 @@ export function Market() {
                     <strong style={{ fontSize: 14 }}>{t('market.comparisonChart', 'Karşılaştırma Grafiği (Baz 100)')}</strong>
                     <div style={{ fontSize: 12, color: '#94a3b8' }}>
                         {activeCategory === 'FUTURES'
-                            ? t('market.compareFromListHintViop', 'Kontrat seçimini piyasa listesinden yapın.')
+                            ? t(
+                                  'market.compareFromListHintViop',
+                                  'Karşılaştırma için piyasa listesindeki karşılaştırma ikonunu kullanın.',
+                              )
                             : t('market.compareFromListHint', 'Karşılaştırma sembollerini piyasa listesindeki sütundan ekleyin veya çıkarın.')}
                     </div>
                 </div>
@@ -3757,10 +3935,15 @@ export function Market() {
                 </div>
                 {!loadingCompare && compareSymbols.length < 2 ? (
                     <div style={{ fontSize: 11, color: tokens.textMuted, marginTop: 8 }}>
-                        {t(
-                            'market.compareNeedTwoFromList',
-                            'En az iki sembol seçildiğinde çizgiler burada görünür. Piyasa listesindeki karşılaştırma sütununu kullanın.'
-                        )}
+                        {activeCategory === 'FUTURES'
+                            ? t(
+                                  'market.compareFromListHintViop',
+                                  'Karşılaştırma için piyasa listesindeki karşılaştırma ikonunu kullanın.',
+                              )
+                            : t(
+                                  'market.compareNeedTwoFromList',
+                                  'En az iki sembol seçildiğinde çizgiler burada görünür. Piyasa listesindeki karşılaştırma sütununu kullanın.',
+                              )}
                     </div>
                 ) : null}
                 {!loadingCompare && compareSymbols.length >= 2 && compareRows.length === 0 ? (
@@ -3786,7 +3969,9 @@ export function Market() {
                         letterSpacing: 0.2,
                     }}
                 >
-                    BIST 30 vadeli ({viopContracts.length} kontrat)
+                    {t('market.viopListKicker', 'VİOP vadeli işlemler')} (
+                    {marketListTotalElements > 0 ? marketListTotalElements : viopContracts.length}{' '}
+                    {t('market.viopContractCount', 'kontrat')})
                 </div>
             );
         }
@@ -3852,13 +4037,31 @@ export function Market() {
                                     </button>
                                 </div>
                             ) : null}
-                            <MarketCategoryScrollTabs
-                                className="terminal-category-scroll-shell--quick-filters"
-                                categories={pickerMarketListQuickChips}
-                                value={marketListQuickFilter}
-                                onChange={setMarketListQuickFilter}
-                                ariaLabel={t('market.quickFiltersAria', 'Hızlı filtre')}
-                            />
+                            <div className="terminal-list-quick-filters">
+                                <div className="terminal-list-quick-filters__chips">
+                                    <MarketCategoryScrollTabs
+                                        className="terminal-category-scroll-shell--quick-filters"
+                                        categories={pickerMarketListQuickChips}
+                                        value={marketListQuickFilter}
+                                        onChange={setMarketListQuickFilter}
+                                        ariaLabel={t('market.quickFiltersAria', 'Hızlı filtre')}
+                                    />
+                                </div>
+                                {pickerCategory === 'FX' ? (
+                                    <button
+                                        type="button"
+                                        className="terminal-btn terminal-fx-effective-rates-btn"
+                                        onClick={() => setEffectiveRatesOpen(true)}
+                                    >
+                                        <span className="terminal-fx-effective-rates-btn__full">
+                                            {t('market.fxEffectiveModal.openBtn', 'TCMB Efektif Kurlar')}
+                                        </span>
+                                        <span className="terminal-fx-effective-rates-btn__short">
+                                            {t('market.fxEffectiveModal.openBtnShort', 'Efektif Kurlar')}
+                                        </span>
+                                    </button>
+                                ) : null}
+                            </div>
                             <input
                                 className="terminal-search"
                                 placeholder={t('market.searchPlaceholder', 'Sembol / enstrüman ara')}
@@ -3910,9 +4113,7 @@ export function Market() {
                                                             : t('market.sortByPrice', 'Fiyata göre sırala')
                                                     }
                                                 >
-                                                    {pickerCategory === 'BOND'
-                                                        ? t('market.bondColMarketPrice', 'Piyasa Fiyatı')
-                                                        : t('market.price', 'Fiyat')}
+                                                    {t('market.price', 'Fiyat')}
                                                     {pickerTableSort?.key === 'price'
                                                         ? pickerTableSort.dir === 'asc'
                                                             ? ' \u2191'
@@ -3942,7 +4143,7 @@ export function Market() {
                                                     onClick={() => togglePickerListSort('pctDay')}
                                                 >
                                                     {pickerCategory === 'BOND'
-                                                        ? t('market.bondColChg1d', '1G Fiyat Değişimi')
+                                                        ? t('market.bondHorizon1g', '1G')
                                                         : t('market.horizonDay', 'Gün')}
                                                     {pickerTableSort?.key === 'pctDay'
                                                         ? pickerTableSort.dir === 'asc'
@@ -3973,7 +4174,7 @@ export function Market() {
                                                     onClick={() => togglePickerListSort('pctWeek')}
                                                 >
                                                     {pickerCategory === 'BOND'
-                                                        ? t('market.bondColChg1w', '1H Fiyat Değişimi')
+                                                        ? t('market.bondHorizon1h', '1H')
                                                         : t('market.horizonWeek', 'Hafta')}
                                                     {pickerTableSort?.key === 'pctWeek'
                                                         ? pickerTableSort.dir === 'asc'
@@ -4004,7 +4205,7 @@ export function Market() {
                                                     onClick={() => togglePickerListSort('pctMonth')}
                                                 >
                                                     {pickerCategory === 'BOND'
-                                                        ? t('market.bondColChg1m', '1A Fiyat Değişimi')
+                                                        ? t('market.bondHorizon1a', '1A')
                                                         : t('market.horizonMonth', 'Ay')}
                                                     {pickerTableSort?.key === 'pctMonth'
                                                         ? pickerTableSort.dir === 'asc'
@@ -4035,7 +4236,7 @@ export function Market() {
                                                     onClick={() => togglePickerListSort('pctYear')}
                                                 >
                                                     {pickerCategory === 'BOND'
-                                                        ? t('market.bondColChg1y', '1Y Fiyat Değişimi')
+                                                        ? t('market.bondHorizon1y', '1Y')
                                                         : t('market.horizonYear', 'Yıl')}
                                                     {pickerTableSort?.key === 'pctYear'
                                                         ? pickerTableSort.dir === 'asc'
@@ -4107,7 +4308,6 @@ export function Market() {
                                             const daysValue = row.category === 'BOND'
                                                 ? (row.daysToMaturity ?? (Number.isFinite(bondDays) ? bondDays : undefined))
                                                 : undefined;
-                                            const bondTone = bondRemainingTone(Number(daysValue));
                                             const bondTooltip =
                                                 row.category === 'BOND'
                                                     ? `ISIN: ${row.symbol}\nVade: ${formatDateTr(row.maturityDate ?? extractMaturityDate(row.symbol))}\nKalan Gün: ${
@@ -4121,7 +4321,10 @@ export function Market() {
                                                 row.marketRegion === 'TR' &&
                                                 String(row.exchange ?? '').toUpperCase() === 'BIST';
                                             const rowMatchesChartSelection =
-                                                selectedSymbol === row.symbol &&
+                                                (row.category === 'FUTURES'
+                                                    ? viopSymbolKeysEquivalent(selectedSymbol, row.symbol)
+                                                    : normalizeSymbolKey(selectedSymbol) ===
+                                                      normalizeSymbolKey(row.symbol)) &&
                                                 activeCategory === row.category &&
                                                 (row.category !== 'EQUITY' ||
                                                     equitySubmarket === (rowIsBistEquity ? 'BIST' : 'US'));
@@ -4140,10 +4343,18 @@ export function Market() {
                                                 }`}
                                                 onClick={() => {
                                                     setActiveCategory(row.category);
+                                                    setPickerCategory(row.category);
                                                     if (row.category === 'EQUITY') {
                                                         setEquitySubmarket(rowIsBistEquity ? 'BIST' : 'US');
                                                     }
-                                                    setSelectedSymbol(row.symbol);
+                                                    const nextSymbol =
+                                                        row.category === 'FUTURES'
+                                                            ? resolveViopContractSymbol(
+                                                                  row.symbol,
+                                                                  viopContractBySymbol,
+                                                              )
+                                                            : row.symbol;
+                                                    setSelectedSymbol(nextSymbol);
                                                     setIsDetailPanelOpen(true);
                                                     setInstrumentListOpen(false);
                                                 }}
@@ -4151,6 +4362,7 @@ export function Market() {
                                             >
                                                 <td className="terminal-picker-star-cell" onClick={(e) => e.stopPropagation()}>
                                                     {sk ? (
+                                                        <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                                                         <button
                                                             type="button"
                                                             className="terminal-star-btn"
@@ -4164,6 +4376,32 @@ export function Market() {
                                                                 color={starFilled ? tokens.accent : tokens.textMuted}
                                                             />
                                                         </button>
+                                                        <button
+                                                            type="button"
+                                                            className="terminal-star-btn"
+                                                            aria-label={t('priceAlert.title', 'Alarm Kur')}
+                                                            title={t('priceAlert.title', 'Alarm Kur')}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const pa = marketCategoryToPriceAlertAsset(
+                                                                    row.category,
+                                                                    row.symbol,
+                                                                    {
+                                                                        marketRegion: row.marketRegion,
+                                                                        exchange: row.exchange,
+                                                                    },
+                                                                );
+                                                                if (pa) {
+                                                                    setPriceAlertTarget({
+                                                                        ...pa,
+                                                                        displayName: row.displayName ?? row.symbol,
+                                                                    });
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Bell size={14} color={tokens.textMuted} />
+                                                        </button>
+                                                        </span>
                                                     ) : (
                                                         <span style={{ color: tokens.textMuted, fontSize: 11 }}>—</span>
                                                     )}
@@ -4284,7 +4522,7 @@ export function Market() {
                                                                 )}
                                                                 <div style={{ fontWeight: 700, minWidth: 0, lineHeight: 1.2, wordBreak: 'break-word' }}>
                                                                     {row.category === 'BOND'
-                                                                        ? row.displayName
+                                                                        ? row.symbol
                                                                         : row.category === 'METALS'
                                                                           ? row.displayName
                                                                           : row.symbol}
@@ -4301,15 +4539,18 @@ export function Market() {
                                                             {row.category === 'BOND' ? (
                                                                 <>
                                                                     <div style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.25, marginTop: 2, wordBreak: 'break-word' }}>
-                                                                        ISIN: {row.symbol}
-                                                                    </div>
-                                                                    <div style={{ marginTop: 4 }}>
-                                                                        <span
-                                                                            className="instrument-highlight-chip"
-                                                                            style={{ background: bondTone.bg, color: bondTone.color }}
-                                                                        >
-                                                                            {daysValue != null ? `Vade: ${daysValue} gün` : `Vade: ${formatDateTr(row.maturityDate)}`}
-                                                                        </span>
+                                                                        {bondListSubtitle(row.symbol, {
+                                                                            displayName:
+                                                                                debtNameMap[normalizeSymbolKey(row.symbol)] ??
+                                                                                row.displayName,
+                                                                            issuer:
+                                                                                debtMetaMap[normalizeSymbolKey(row.symbol)]
+                                                                                    ?.issuer,
+                                                                            maturityDate: row.maturityDate,
+                                                                            daysToMaturity: daysValue ?? row.daysToMaturity,
+                                                                            formatDate: formatDateTr,
+                                                                            t,
+                                                                        })}
                                                                     </div>
                                                                 </>
                                                             ) : (
@@ -4462,10 +4703,8 @@ export function Market() {
                         <div
                             ref={leftMarketPanelRef}
                             className={`terminal-card terminal-left-panel ${
-                                pickerCategory === 'FUTURES' || pickerCategory === 'BOND'
-                                    ? 'terminal-left-panel--page-flow'
-                                    : ''
-                            } ${isSpotHeatmapRail ? 'terminal-left-panel--docked is-compact' : 'terminal-left-panel--undocked-slot'}`}
+                                pickerCategory === 'BOND' ? 'terminal-left-panel--page-flow' : ''
+                            } ${isSpotTerminalLayout ? 'terminal-left-panel--docked is-compact' : 'terminal-left-panel--undocked-slot'}`}
                         >
                             <div
                                 className={`terminal-left-panel__inner${
@@ -4579,7 +4818,9 @@ export function Market() {
             <div
                 ref={terminalHeroRef}
                 className={`terminal-hero ${activeCategory === 'FUTURES' ? 'terminal-hero--viop' : ''}${
-                    isSpotHeatmapRail ? ' terminal-hero--spot-compact' : ''
+                    activeCategory === 'BOND' ? ' terminal-hero--bond' : ''
+                }${
+                    isSpotTerminalLayout && activeCategory !== 'FUTURES' ? ' terminal-hero--spot-compact' : ''
                 }`}
             >
                 {hero && activeCategory === 'FUTURES' ? (
@@ -4591,7 +4832,7 @@ export function Market() {
                                     instrumentListOpen ? 'is-open' : ''
                                 }`}
                                 onClick={handleInstrumentSelectorClick}
-                                aria-expanded={!isSpotHeatmapRail && instrumentListOpen}
+                                aria-expanded={!isSpotTerminalLayout && instrumentListOpen}
                                 aria-haspopup="dialog"
                                 title={t('market.instrumentPickerHint', 'Piyasa listesini aç / kapat')}
                             >
@@ -4759,7 +5000,7 @@ export function Market() {
                                     instrumentListOpen ? 'is-open' : ''
                                 }`}
                                 onClick={handleInstrumentSelectorClick}
-                                aria-expanded={!isSpotHeatmapRail && instrumentListOpen}
+                                aria-expanded={!isSpotTerminalLayout && instrumentListOpen}
                                 aria-haspopup="dialog"
                                 title={t('market.instrumentPickerHint', 'Piyasa listesini aç / kapat')}
                             >
@@ -4767,7 +5008,7 @@ export function Market() {
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: isSpotHeatmapRail ? 8 : 12,
+                                    gap: isSpotTerminalLayout ? 8 : 12,
                                     minWidth: 0,
                                     flex: '1 1 auto',
                                 }}
@@ -4781,9 +5022,9 @@ export function Market() {
                                     className="bist-symbol-badge"
                                     style={{
                                         ...bistSymbolBadgeStyle(hero.symbol),
-                                        width: isSpotHeatmapRail ? 28 : 36,
-                                        height: isSpotHeatmapRail ? 28 : 36,
-                                        fontSize: isSpotHeatmapRail ? 10 : 11,
+                                        width: isSpotTerminalLayout ? 28 : 36,
+                                        height: isSpotTerminalLayout ? 28 : 36,
+                                        fontSize: isSpotTerminalLayout ? 10 : 11,
                                     }}
                                     title={hero.symbol}
                                     aria-hidden
@@ -4800,13 +5041,13 @@ export function Market() {
                                     alt={hero ? `${hero.symbol} logo` : 'logo'}
                                     fallbackIcon={TrendingUp}
                                     fallbackColor={tokens.textMuted}
-                                    size={isSpotHeatmapRail ? 28 : 36}
+                                    size={isSpotTerminalLayout ? 28 : 36}
                                 />
                             )}
                             <div style={{ minWidth: 0 }}>
                                 <div
                                     style={{
-                                        fontSize: isSpotHeatmapRail ? 10 : 12,
+                                        fontSize: isSpotTerminalLayout ? 10 : 12,
                                         color: tokens.textMuted,
                                         marginBottom: 2,
                                     }}
@@ -4815,7 +5056,7 @@ export function Market() {
                                 </div>
                                 <div
                                     style={{
-                                        fontSize: isSpotHeatmapRail ? 16 : 22,
+                                        fontSize: isSpotTerminalLayout ? 16 : 22,
                                         fontWeight: 700,
                                         lineHeight: 1.15,
                                     }}
@@ -4842,14 +5083,14 @@ export function Market() {
                                             marginTop: 4,
                                             letterSpacing: 0.02,
                                         }}
-                                        title={t('market.bondHeroIsinTitle', 'Devlet tahvili ISIN kodu')}
+                                        title={t('market.bondHeroIsinTitle', 'Tahvil ISIN kodu')}
                                     >
-                                        ISIN: {hero.symbol}
+                                        {bondIsinDisplay(hero.symbol, t)}
                                     </div>
                                 ) : (
                                     <div
                                         style={{
-                                            fontSize: isSpotHeatmapRail ? 11 : 12,
+                                            fontSize: isSpotTerminalLayout ? 11 : 12,
                                             color: tokens.textMuted,
                                         }}
                                     >
@@ -4923,7 +5164,7 @@ export function Market() {
                             </div>
                             <ChevronDown
                                 className="terminal-hero-selector__chevron"
-                                size={isSpotHeatmapRail ? 18 : 20}
+                                size={isSpotTerminalLayout ? 18 : 20}
                                 aria-hidden
                             />
                         </button>
@@ -4963,6 +5204,23 @@ export function Market() {
                                     ? (heroScaled?.low ?? hero?.low ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })
                                     : '—'}
                             </div>
+                            {activeCategory === 'BOND' && bondContractSummary ? (
+                                <>
+                                    <div>
+                                        {t('market.maturity', 'Vade')}: {bondContractSummary.maturityDate ?? '—'}
+                                    </div>
+                                    <div>
+                                        {t('market.coupon', 'Kupon Oranı')}:{' '}
+                                        {formatBondCouponRate(
+                                            bondContractSummary.couponRate,
+                                            lang === 'en' ? 'en-US' : 'tr-TR',
+                                        )}
+                                    </div>
+                                    <div>
+                                        {t('market.currency', 'Para birimi')}: {bondContractSummary.currency ?? '—'}
+                                    </div>
+                                </>
+                            ) : null}
                             {activeCategory === 'FUTURES' && futuresHeaderMetrics ? (
                                 <>
                                     <div>
@@ -5090,12 +5348,12 @@ export function Market() {
     return (
         <div className="terminal-page" style={terminalVars}>
             {renderMarketListExpandOverlay()}
-            {!isSpotHeatmapRail ? (
+            {!isSpotTerminalLayout  ? (
                 <div className="terminal-spot-hero-rail--passthrough">{renderInstrumentHero()}</div>
             ) : null}
 
 
-            {instrumentListOpen && !isSpotHeatmapRail ? (
+            {instrumentListOpen && !isSpotTerminalLayout ? (
                 <button
                     type="button"
                     className="terminal-market-list-backdrop"
@@ -5109,131 +5367,72 @@ export function Market() {
             ) : (
                 <>
                     <div
-                        className={`terminal-grid ${activeCategory === 'FUTURES' ? 'terminal-grid--viop' : ''} ${
-                            activeCategory === 'FUTURES' || activeCategory === 'BOND' ? 'terminal-grid--page-flow' : ''
-                        } ${isSpotHeatmapRail ? '' : 'terminal-grid--list-undocked'}${
-                            isSpotHeatmapRail ? ' terminal-grid--heatmap-rail terminal-spot-unified' : ''
+                        className={`terminal-grid${
+                            isSpotTerminalLayout ? ' terminal-grid--heatmap-rail terminal-spot-unified' : ' terminal-grid--list-undocked'
                         }`}
                     >
-                        {isSpotHeatmapRail ? renderLeftSpotColumn() : renderMarketListPanel()}
-                        {isSpotHeatmapRail ? renderInstrumentHero() : null}
+                        {isSpotTerminalLayout ? renderLeftSpotColumn() : renderMarketListPanel()}
+                        {isSpotTerminalLayout ? renderInstrumentHero() : null}
 
                         <div
                                 ref={centerStackRef}
-                                className={`terminal-center-stack${
-                                    activeCategory === 'FUTURES' || activeCategory === 'BOND' ? ' terminal-center-stack--fill' : ''
-                                }`}
+                                className="terminal-center-stack"
                             >
-                        <div
-                            className={`terminal-card terminal-center-panel${
-                                activeCategory === 'FUTURES' || activeCategory === 'BOND' ? ' terminal-center-panel--stretch' : ''
-                            }`}
-                        >
-                            <div className={`terminal-controls ${activeCategory === 'FUTURES' ? 'terminal-controls--viop' : ''}`}>
-                                {activeCategory === 'FUTURES' ? (
-                                    <>
-                                        <div className="viop-toolbar-row">
-                                            <div className="terminal-controls__chart-toolbar terminal-controls__chart-toolbar--viop">
-                                                <MarketCategoryScrollTabs
-                                                    className="terminal-category-scroll-shell--chart-range"
-                                                    categories={chartRangeScrollTabs}
-                                                    value={range}
-                                                    onChange={setRange}
-                                                    ariaLabel={t('market.chartRangeAria', 'Grafik zaman aralığı')}
-                                                />
-                                                <MarketCategoryScrollTabs
-                                                    className="terminal-category-scroll-shell--chart-mode"
-                                                    categories={viopChartModeTabs}
-                                                    value={viopChartMode}
-                                                    onChange={setViopChartMode}
-                                                    ariaLabel={t('market.chartDisplayModeAria', 'Grafik görünümü')}
-                                                />
-                                            </div>
-                                            <div className="viop-toolbar-row__right">
-                                                <ChartIndicatorToggles
-                                                    showMa={showMa}
-                                                    showRsi={showRsi}
-                                                    onToggleMa={() => setShowMa((v) => !v)}
-                                                    onToggleRsi={() => setShowRsi((v) => !v)}
-                                                    rsiAvailable={false}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="viop-chart-status" role="status">
-                                            <span>
-                                                <strong>{t('market.timeframe', 'Zaman')}: </strong>
-                                                {chartRangeUiShortLabel(range)}
-                                            </span>
-                                            <span>
-                                                <strong>{t('market.trend', 'Trend')}: </strong>
-                                                {hero && Math.abs(hero.changePercent) < 0.005
-                                                    ? 'FLAT'
-                                                    : hero?.trend === 'UP'
-                                                      ? 'UP'
-                                                      : 'DOWN'}
-                                            </span>
-                                            <span>
-                                                <strong>{t('market.dataType', 'Veri tipi')}: </strong>
-                                                {viopHistoryApi?.chartType ?? 'PRICE_SERIES'}
-                                            </span>
-                                            <span style={{ flex: '1 1 220px', minWidth: 0 }}>
-                                                {viopChartMode === 'CANDLE'
-                                                    ? t(
-                                                          'market.viopSyntheticCandleHint',
-                                                          'OHLC yerine fiyat serisi kullanılıyor; mumlar fiyat serisinden türetilmiştir.'
-                                                      )
-                                                    : t('market.viopPriceSeriesHint', 'Fiyat serisi bazlı gösterim.')}
-                                            </span>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className="terminal-controls__chart-toolbar">
-                                            <MarketCategoryScrollTabs
-                                                className="terminal-category-scroll-shell--chart-range"
-                                                categories={chartRangeScrollTabs}
-                                                value={activeCategory === 'EQUITY' && equitySubmarket === 'BIST' ? bistRange : range}
-                                                onChange={
-                                                    activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
-                                                        ? setBistRange
-                                                        : setRange
-                                                }
-                                                ariaLabel={t('market.chartRangeAria', 'Grafik zaman aralığı')}
-                                            />
-                                            {activeCategory === 'BOND' ? (
-                                                <MarketCategoryScrollTabs
-                                                    className="terminal-category-scroll-shell--chart-mode"
-                                                    categories={bondChartModeTabs}
-                                                    value={bondChartMode}
-                                                    onChange={setBondChartMode}
-                                                    ariaLabel={t('market.chartDisplayModeAria', 'Grafik görünümü')}
-                                                />
-                                            ) : null}
-                                            {activeCategory !== 'BOND' ? (
-                                                <MarketCategoryScrollTabs
-                                                    className="terminal-category-scroll-shell--chart-mode"
-                                                    categories={spotChartModeTabs}
-                                                    value={spotChartMode}
-                                                    onChange={setSpotChartMode}
-                                                    ariaLabel={t('market.chartDisplayModeAria', 'Grafik görünümü')}
-                                                />
-                                            ) : null}
-                                        </div>
-                                        <ChartIndicatorToggles
-                                            showMa={showMa}
-                                            showRsi={showRsi}
-                                            onToggleMa={() => setShowMa((v) => !v)}
-                                            onToggleRsi={() => setShowRsi((v) => !v)}
-                                            rsiAvailable={chartIndicatorRsiAvailable}
+                        <div className="terminal-card terminal-center-panel">
+                            <div className="terminal-controls">
+                                <div className="terminal-controls__chart-toolbar">
+                                    <MarketCategoryScrollTabs
+                                        className="terminal-category-scroll-shell--chart-range"
+                                        categories={chartRangeScrollTabs}
+                                        value={activeCategory === 'EQUITY' && equitySubmarket === 'BIST' ? bistRange : range}
+                                        onChange={
+                                            activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
+                                                ? setBistRange
+                                                : setRange
+                                        }
+                                        ariaLabel={t('market.chartRangeAria', 'Grafik zaman aralığı')}
+                                    />
+                                    {activeCategory === 'BOND' ? (
+                                        <MarketCategoryScrollTabs
+                                            className="terminal-category-scroll-shell--chart-mode"
+                                            categories={bondChartModeTabs}
+                                            value={bondChartMode}
+                                            onChange={setBondChartMode}
+                                            ariaLabel={t('market.chartDisplayModeAria', 'Grafik görünümü')}
                                         />
-                                    </>
-                                )}
+                                    ) : null}
+                                    {activeCategory === 'FUTURES' ? (
+                                        <MarketCategoryScrollTabs
+                                            className="terminal-category-scroll-shell--chart-mode"
+                                            categories={viopChartModeTabs}
+                                            value={viopChartMode}
+                                            onChange={setViopChartMode}
+                                            ariaLabel={t('market.chartDisplayModeAria', 'Grafik görünümü')}
+                                        />
+                                    ) : null}
+                                    {activeCategory !== 'BOND' && activeCategory !== 'FUTURES' ? (
+                                        <MarketCategoryScrollTabs
+                                            className="terminal-category-scroll-shell--chart-mode"
+                                            categories={spotChartModeTabs}
+                                            value={spotChartMode}
+                                            onChange={setSpotChartMode}
+                                            ariaLabel={t('market.chartDisplayModeAria', 'Grafik görünümü')}
+                                        />
+                                    ) : null}
+                                </div>
+                                <ChartIndicatorToggles
+                                    showMa={showMa}
+                                    showRsi={showRsi}
+                                    onToggleMa={() => setShowMa((v) => !v)}
+                                    onToggleRsi={() => setShowRsi((v) => !v)}
+                                    rsiAvailable={chartIndicatorRsiAvailable}
+                                />
                             </div>
                             {activeCategory === 'BOND' && bondChartMode === 'DUAL' ? (
                                 <BondTerminalChart
                                     points={bondDualPoints}
-                                    ma7={ma7}
-                                    ma21={ma21}
+                                    ma7={bondChartMa7}
+                                    ma21={bondChartMa21}
                                     showMa={showMa}
                                     loading={loadingDebtHistory}
                                     trendLabel={hero?.trend}
@@ -5243,13 +5442,16 @@ export function Market() {
                                 />
                             ) : activeCategory === 'FUTURES' && viopChartMode === 'LINE' ? (
                                 <ViopTerminalChart
+                                    title={viopTerminalTitle}
+                                    subtitle={viopTerminalSubtitle}
                                     points={viopLinePoints}
-                                    ma7={ma7}
-                                    ma21={ma21}
+                                    ma7={viopChartMa7}
+                                    ma21={viopChartMa21}
                                     showMa={showMa}
                                     loading={loadingViopHistory}
                                     trendLabel={hero?.trend}
-                                    timeframeLabel={dataRangeForChart}
+                                    timeframeLabel={chartRangeUiShortLabel(range)}
+                                    dataTypeLabel={viopHistoryApi?.chartType ?? 'PRICE_SERIES'}
                                     tokens={chartTokens}
                                 />
                             ) : activeCategory !== 'FUTURES' && activeCategory !== 'BOND' && spotChartMode === 'ANALYSIS' ? (
@@ -5276,8 +5478,20 @@ export function Market() {
                             ) : (
                                 <MarketTerminalChart
                                     candles={candles}
-                                    ma7={ma7}
-                                    ma21={ma21}
+                                    ma7={
+                                        activeCategory === 'BOND'
+                                            ? bondChartMa7
+                                            : activeCategory === 'FUTURES'
+                                              ? viopChartMa7
+                                              : ma7
+                                    }
+                                    ma21={
+                                        activeCategory === 'BOND'
+                                            ? bondChartMa21
+                                            : activeCategory === 'FUTURES'
+                                              ? viopChartMa21
+                                              : ma21
+                                    }
                                     rsi14={rsi14}
                                     showMa={showMa}
                                     showRsi={showRsi}
@@ -5303,30 +5517,144 @@ export function Market() {
                             ) : null}
                         </div>
                         {/*
-                         * Karşılaştırma: spot + ısı haritası rail’de sağ sütunda (treemap üstü); VİOP ortada kalır.
-                         * Tahvil (BOND) gizli — ayrı batch yolu yok.
+                         * Karşılaştırma: spot + ısı haritası rail ve VİOP/tahvil birleşik grid’de sağ sütunda.
                          */}
-                        {!isSpotHeatmapRail ? renderComparisonCard('terminal-center-comparison') : null}
+                        {!isSpotTerminalLayout ? renderComparisonCard('terminal-center-comparison') : null}
+                        {activeCategory === 'FUTURES' && viopContractSummary ? (
+                            <div className="terminal-bottom-cards">
+                                <div className="terminal-mini-card">
+                                    <h4>{t('market.viopContractSummaryTitle', 'Vade ve kontrat özeti')}</h4>
+                                    <dl className="terminal-viop-summary-dl">
+                                        <div>
+                                            <dt>{t('market.underlying', 'Dayanak varlık')}</dt>
+                                            <dd>{viopContractSummary.underlying}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>{t('market.maturityMonth', 'Vade ayı')}</dt>
+                                            <dd>{viopContractSummary.maturity}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>{t('market.daysToExpiry', 'Vadeye kalan gün')}</dt>
+                                            <dd>
+                                                {viopContractSummary.daysToExpiry != null
+                                                    ? viopContractSummary.daysToExpiry
+                                                    : '—'}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt>{t('market.settlement', 'Uzlaşma')}</dt>
+                                            <dd>
+                                                {viopContractSummary.settlement != null
+                                                    ? viopContractSummary.settlement.toLocaleString('tr-TR', {
+                                                          maximumFractionDigits: 4,
+                                                      })
+                                                    : '—'}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt>{t('market.preSettlement', 'Ön uzlaşma')}</dt>
+                                            <dd>
+                                                {viopContractSummary.preSettlement != null
+                                                    ? viopContractSummary.preSettlement.toLocaleString('tr-TR', {
+                                                          maximumFractionDigits: 4,
+                                                      })
+                                                    : '—'}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt>{t('market.initialMargin', 'Teminat')}</dt>
+                                            <dd>
+                                                {viopContractSummary.initialMargin != null
+                                                    ? viopContractSummary.initialMargin.toLocaleString('tr-TR')
+                                                    : '—'}
+                                            </dd>
+                                        </div>
+                                    </dl>
+                                </div>
+                                <div className="terminal-mini-card">
+                                    <h4>{t('market.viopRiskNoteTitle', 'Risk notu')}</h4>
+                                    <p className="terminal-viop-risk-note">
+                                        {t(
+                                            'market.viopRiskNoteBody',
+                                            'VIOP kaldıraçlı piyasadır. Fiyat hareketleri teminat gereksinimini etkileyebilir. Bu panel fiyat ve piyasa hareketini gösterir; yatırım tavsiyesi değildir.',
+                                        )}
+                                    </p>
+                                </div>
+                            </div>
+                        ) : null}
+                        {activeCategory === 'BOND' && bondContractSummary ? (
+                            <div className="terminal-bottom-cards">
+                                <div className="terminal-mini-card">
+                                    <h4>{t('market.bondMaturitySummaryTitle', 'Vade / kupon özeti')}</h4>
+                                    <dl className="terminal-viop-summary-dl">
+                                        <div>
+                                            <dt>{t('market.maturity', 'Vade')}</dt>
+                                            <dd>{bondContractSummary.maturityDate ?? '—'}</dd>
+                                        </div>
+                                        <div>
+                                            <dt>{t('market.daysToMaturity', 'Vadeye kalan')}</dt>
+                                            <dd>
+                                                {bondContractSummary.daysToMaturity != null
+                                                    ? bondContractSummary.daysToMaturity
+                                                    : '—'}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt>{t('market.coupon', 'Kupon')}</dt>
+                                            <dd>
+                                                {bondContractSummary.couponRate != null &&
+                                                Number.isFinite(Number(bondContractSummary.couponRate))
+                                                    ? `${Number(bondContractSummary.couponRate).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%`
+                                                    : '—'}
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt>{t('market.currency', 'Para birimi')}</dt>
+                                            <dd>{bondContractSummary.currency ?? '—'}</dd>
+                                        </div>
+                                    </dl>
+                                </div>
+                                <div className="terminal-mini-card">
+                                    <h4>{t('market.bondPriceSummaryTitle', 'Piyasa değeri')}</h4>
+                                    <dl className="terminal-viop-summary-dl">
+                                        <div>
+                                            <dt>{t('market.dirtyPrice', 'Kirli fiyat')}</dt>
+                                            <dd>
+                                                {bondContractSummary.dirtyPrice != null &&
+                                                Number.isFinite(Number(bondContractSummary.dirtyPrice))
+                                                    ? Number(bondContractSummary.dirtyPrice).toLocaleString('tr-TR', {
+                                                          maximumFractionDigits: 4,
+                                                      })
+                                                    : '—'}
+                                            </dd>
+                                        </div>
+                                    </dl>
+                                </div>
+                                <div className="terminal-mini-card">
+                                    <h4>{t('market.bondMacroNoteTitle', 'Faiz / enflasyon notu')}</h4>
+                                    <p className="terminal-viop-risk-note">
+                                        {t(
+                                            'market.bondMacroNoteBody',
+                                            'DİBS verilerinde Değer piyasa fiyatını, Kupon Faiz Oranı yıllık kupon oranını gösterir. Seri kodundaki D2/T2 ifadesi yılda 2 kupon ödemesine işaret ettiği için ödeme sıklığı 6 ayda bir olarak yorumlanır. Tahvil getirisi enflasyon ve politika faizi ile birlikte okunmalıdır.',
+                                        )}
+                                    </p>
+                                </div>
+                            </div>
+                        ) : null}
                         {macroCompareEnabled ? (
                             <MarketPurchasingPowerCompareChart data={purchasingPowerChartData} tokens={chartTokens} />
                         ) : null}
                         </div>
 
                         <div
-                            className={`terminal-card terminal-right-panel ${
-                                activeCategory === 'FUTURES' || activeCategory === 'BOND'
-                                    ? 'terminal-right-panel--page-flow'
-                                    : ''
-                            }`}
+                            className="terminal-card terminal-right-panel"
                             style={rightPanelStyle}
                         >
-                            <div style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}>{t('market.marketInsights', 'Piyasa İçgörü')}</div>
+                            <div style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}>
+                                {t('market.marketInsights', 'Piyasa İçgörüleri')}
+                            </div>
                             <div className="terminal-right-panel-scroll">
-                            {activeCategory === 'EQUITY' ||
-                            activeCategory === 'CRYPTO' ||
-                            activeCategory === 'FX' ||
-                            activeCategory === 'METALS' ||
-                            activeCategory === 'FUNDS' ? (
+                            {showMarketHeatmap ? (
                                 <>
                                     {renderComparisonCard('terminal-right-comparison')}
                                     <div className="terminal-right-treemap-slot">
@@ -5342,24 +5670,22 @@ export function Market() {
                                             }}
                                         />
                                     </div>
-                                    <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                    <div style={{ marginTop: 8 }}>
                                         <button type="button" className="terminal-btn" onClick={() => navigate('/market/heatmap')}>
                                             {t('market.detailedHeatmap', 'Detaylı ısı haritası')}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="terminal-btn"
-                                            onClick={() => navigate('/market/heatmap?sector=BIST_EQUITY')}
-                                        >
-                                            {t('market.detailedHeatmapBist', 'Türk hisseleri — detaylı ısı haritası')}
                                         </button>
                                     </div>
                                 </>
                             ) : null}
 
                             {activeCategory === 'FUTURES' ? (
-                                <div className="terminal-mini-list">
-                                    <strong style={{ fontSize: 13 }}>{t('market.futuresTopMovers', 'En hareketli vadeliler')}</strong>
+                                <>
+                                    {renderComparisonCard('terminal-right-comparison')}
+                                    <div className="terminal-mini-card" style={{ marginBottom: 10 }}>
+                                        <h4 style={{ margin: '0 0 8px', fontSize: 13 }}>
+                                            {t('market.futuresTopMovers', 'En çok hareket eden vadeliler')}
+                                        </h4>
+                                        <div className="terminal-mini-list" style={{ margin: 0 }}>
                                     {futuresTopMovers.map((v) => {
                                         const vm = instrumentVms.find((x) => x.symbol === v.symbol);
                                         const sub =
@@ -5394,7 +5720,13 @@ export function Market() {
                                         </div>
                                         );
                                     })}
-                                    <strong style={{ fontSize: 13, marginTop: 6 }}>{t('market.futuresVolumeLeaders', 'En yüksek hacim')}</strong>
+                                        </div>
+                                    </div>
+                                    <div className="terminal-mini-card" style={{ marginBottom: 10 }}>
+                                        <h4 style={{ margin: '0 0 8px', fontSize: 13 }}>
+                                            {t('market.futuresVolumeLeaders', 'En yüksek hacim')}
+                                        </h4>
+                                        <div className="terminal-mini-list" style={{ margin: 0 }}>
                                     {futuresVolumeLeaders.map((v) => {
                                         const vm = instrumentVms.find((x) => x.symbol === v.symbol);
                                         const sub =
@@ -5426,7 +5758,13 @@ export function Market() {
                                         </div>
                                         );
                                     })}
-                                    <strong style={{ fontSize: 13, marginTop: 6 }}>{t('market.futuresTopPositive', 'En pozitif')}</strong>
+                                        </div>
+                                    </div>
+                                    <div className="terminal-mini-card" style={{ marginBottom: 10 }}>
+                                        <h4 style={{ margin: '0 0 8px', fontSize: 13 }}>
+                                            {t('market.futuresTopPositive', 'En pozitif')}
+                                        </h4>
+                                        <div className="terminal-mini-list" style={{ margin: 0 }}>
                                     {futuresTopPositive.map((v) => {
                                         const vm = instrumentVms.find((x) => x.symbol === v.symbol);
                                         const sub =
@@ -5460,7 +5798,11 @@ export function Market() {
                                         </div>
                                         );
                                     })}
-                                    <strong style={{ fontSize: 13, marginTop: 6 }}>{t('market.futuresTopNegative', 'En negatif')}</strong>
+                                        </div>
+                                        <h4 style={{ margin: '12px 0 8px', fontSize: 13 }}>
+                                            {t('market.futuresTopNegative', 'En negatif')}
+                                        </h4>
+                                        <div className="terminal-mini-list" style={{ margin: 0 }}>
                                     {futuresTopNegative.map((v) => {
                                         const vm = instrumentVms.find((x) => x.symbol === v.symbol);
                                         const sub =
@@ -5494,7 +5836,11 @@ export function Market() {
                                         </div>
                                         );
                                     })}
-                                    <div className="terminal-mini-item" style={{ marginTop: 6 }}>
+                                        </div>
+                                    </div>
+                                    <div className="terminal-mini-card">
+                                        <div className="terminal-mini-list" style={{ margin: 0 }}>
+                                    <div className="terminal-mini-item">
                                         <span>{t('market.breadth', 'Genel yön')}</span>
                                         <span>{futuresBreadthLabel ?? '—'}</span>
                                     </div>
@@ -5506,7 +5852,93 @@ export function Market() {
                                                 : '—'}
                                         </span>
                                     </div>
-                                </div>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : null}
+
+                            {activeCategory === 'BOND' ? (
+                                <>
+                                    <div className="terminal-mini-card" style={{ marginBottom: 10 }}>
+                                        <h4 style={{ margin: '0 0 8px', fontSize: 13 }}>
+                                            {t('market.bondTopMovers', 'En çok hareket eden tahviller')}
+                                        </h4>
+                                        <div className="terminal-mini-list" style={{ margin: 0 }}>
+                                            {bondTopMovers.map((v) => {
+                                                const name = debtNameMap[v.symbol] ?? v.symbol;
+                                                const sub = name !== v.symbol ? name : '';
+                                                return (
+                                                    <div key={`bond-mv-${v.symbol}`} className="terminal-mini-item">
+                                                        <span style={{ minWidth: 0, flex: '1 1 120px' }}>
+                                                            <span className="terminal-mini-item__code" title={v.symbol}>
+                                                                {v.symbol}
+                                                            </span>
+                                                            {sub ? (
+                                                                <div
+                                                                    style={{
+                                                                        fontSize: 10,
+                                                                        color: tokens.textMuted,
+                                                                        lineHeight: 1.2,
+                                                                        marginTop: 2,
+                                                                        whiteSpace: 'nowrap',
+                                                                        overflow: 'hidden',
+                                                                        textOverflow: 'ellipsis',
+                                                                    }}
+                                                                    title={sub}
+                                                                >
+                                                                    {sub}
+                                                                </div>
+                                                            ) : null}
+                                                        </span>
+                                                        <span className={v.changePercent >= 0 ? 'terminal-pct-pos' : 'terminal-pct-neg'}>
+                                                            {v.changePercent >= 0 ? '+' : ''}
+                                                            {v.changePercent.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    <div className="terminal-mini-card" style={{ marginBottom: 10 }}>
+                                        <h4 style={{ margin: '0 0 8px', fontSize: 13 }}>
+                                            {t('market.bondTopYield', 'En yüksek getiri')}
+                                        </h4>
+                                        <div className="terminal-mini-list" style={{ margin: 0 }}>
+                                            {bondTopYield.length > 0 ? (
+                                                bondTopYield.map((v) => (
+                                                    <div key={`bond-y-${v.symbol}`} className="terminal-mini-item">
+                                                        <span className="terminal-mini-item__code" title={v.symbol}>
+                                                            {v.symbol}
+                                                        </span>
+                                                        <span className="terminal-pct-pos">
+                                                            {v.yieldPct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
+                                                        </span>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="terminal-mini-item">
+                                                    <span>{t('market.bondYieldUnavailable', 'Yapılandırılmış getiri verisi yok')}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="terminal-mini-card">
+                                        <div className="terminal-mini-list" style={{ margin: 0 }}>
+                                            <div className="terminal-mini-item">
+                                                <span>{t('market.breadth', 'Genel yön')}</span>
+                                                <span>{bondBreadthLabel ?? '—'}</span>
+                                            </div>
+                                            <div className="terminal-mini-item">
+                                                <span>{t('market.dataFrequency', 'Veri frekansı')}</span>
+                                                <span>{t('market.bondDataFrequencyValue', 'Günlük / EVDS')}</span>
+                                            </div>
+                                            <div className="terminal-mini-item">
+                                                <span>{t('market.source', 'Kaynak')}</span>
+                                                <span>{t('market.bondSourceValue', 'TCMB / Borsa İstanbul')}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
                             ) : null}
 
                             {activeCategory === 'FX' ? (
@@ -5583,7 +6015,7 @@ export function Market() {
                                 </div>
                                 <div className="instrument-drawer-subtext">
                                     {selectedInstrumentVm.type === 'BOND'
-                                        ? `ISIN: ${selectedInstrumentVm.symbol}`
+                                        ? bondIsinDisplay(selectedInstrumentVm.symbol, t)
                                         : selectedInstrumentVm.displayName}
                                 </div>
                                 {selectedInstrumentVm.type === 'FUTURES' ? (
@@ -5797,8 +6229,23 @@ export function Market() {
                                     </div>
                                     {selectedInstrumentVm.type === 'BOND' ? (
                                         <>
-                                            <div>ISIN</div>
+                                            <div>{bondIsinLabel(t)}</div>
                                             <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{selectedInstrumentVm.symbol}</div>
+                                            <div>{t('market.bondTypeField', 'Tür')}</div>
+                                            <div>
+                                                {bondTypeLabel(
+                                                    bondTypeFromInstrument(
+                                                        selectedInstrumentVm.symbol,
+                                                        debtMetaMap[normalizeSymbolKey(selectedInstrumentVm.symbol)]
+                                                            ?.name ??
+                                                            debtNameMap[normalizeSymbolKey(selectedInstrumentVm.symbol)] ??
+                                                            selectedInstrumentVm.displayName,
+                                                        debtMetaMap[normalizeSymbolKey(selectedInstrumentVm.symbol)]
+                                                            ?.issuer,
+                                                    ),
+                                                    t,
+                                                )}
+                                            </div>
                                             <div>Vade Tarihi</div>
                                             <div>{formatDateTr(selectedInstrumentVm.maturityDate ?? extractMaturityDate(selectedInstrumentVm.symbol))}</div>
                                             <div>Vadeye Kalan Gün</div>
@@ -5812,29 +6259,38 @@ export function Market() {
                                                     );
                                                 })()}
                                             </div>
-                                            <div>Kupon Oranı</div>
-                                            <div>%{Number(selectedInstrumentVm.couponRate ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</div>
-                                            {selectedInstrumentVm.yieldToMaturity != null &&
-                                            Number.isFinite(Number(selectedInstrumentVm.yieldToMaturity)) ? (
-                                                <>
-                                                    <div>YTM (yield)</div>
-                                                    <div>
-                                                        %{Number(selectedInstrumentVm.yieldToMaturity).toLocaleString('tr-TR', {
-                                                            maximumFractionDigits: 2,
-                                                        })}
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <div>{t('market.bondYieldPendingShort', 'Yield verisi')}</div>
-                                                    <div style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.35 }}>
-                                                        {t(
-                                                            'market.bondYieldPendingDrawer',
-                                                            'Vade-getiri eğrisi için yapılandırılmış yield (ör. YTM) gerekir. Tabloda gördüğünüz % değerleri fiyat performansıdır.',
-                                                        )}
-                                                    </div>
-                                                </>
-                                            )}
+                                            <div
+                                                title={t(
+                                                    'market.bondCouponTip',
+                                                    'Kupon oranı, tahvilin nominal değer üzerinden yaptığı faiz ödemesidir; vadeye kadar getiri değildir.',
+                                                )}
+                                            >
+                                                {t('market.coupon', 'Kupon Oranı')}
+                                            </div>
+                                            <div>
+                                                {formatBondCouponRate(
+                                                    selectedInstrumentVm.couponRate,
+                                                    lang === 'en' ? 'en-US' : 'tr-TR',
+                                                )}
+                                            </div>
+                                            <div
+                                                title={t(
+                                                    'market.bondCouponFreqTip',
+                                                    'Kupon ödeme sıklığı, tahvilin yılda kaç kez faiz ödemesi yaptığını gösterir. Bu değer EVDS seri kodundan çıkarılmış olabilir.',
+                                                )}
+                                            >
+                                                {t('market.bondCouponFreq', 'Kupon Ödeme Sıklığı')}
+                                            </div>
+                                            <div>
+                                                {(() => {
+                                                    const key = normalizeSymbolKey(selectedInstrumentVm.symbol);
+                                                    const label =
+                                                        debtLatestMap[key]?.couponFrequencyLabel ??
+                                                        debtMetaMap[key]?.couponFrequencyLabel ??
+                                                        selectedInstrumentVm.couponFrequencyLabel;
+                                                    return label?.trim() ? label : '—';
+                                                })()}
+                                            </div>
                                         </>
                                     ) : null}
                                 </div>
@@ -5869,6 +6325,26 @@ export function Market() {
                 </aside>
                 </>
             ) : null}
+            {priceAlertTarget ? (
+                <PriceAlertModal
+                    open
+                    onClose={() => setPriceAlertTarget(null)}
+                    assetType={priceAlertTarget.assetType}
+                    symbol={priceAlertTarget.symbol}
+                    displayName={priceAlertTarget.displayName}
+                />
+            ) : null}
+            <FxEffectiveRatesModal
+                open={effectiveRatesOpen}
+                onClose={() => setEffectiveRatesOpen(false)}
+                tokens={{
+                    bg: tokens.bg,
+                    bgCard: tokens.bgCard,
+                    border: tokens.border,
+                    text: tokens.text,
+                    textMuted: tokens.textMuted,
+                }}
+            />
         </div>
     );
 }

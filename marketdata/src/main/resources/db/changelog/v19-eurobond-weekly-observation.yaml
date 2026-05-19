@@ -1,0 +1,75 @@
+databaseChangeLog:
+  - changeSet:
+      id: v19-eurobond-weekly-observation
+      author: nrs-finance
+      changes:
+        - createTable:
+            tableName: eurobond_weekly_observation
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: series_code
+                  type: VARCHAR(48)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: series_key
+                  type: VARCHAR(48)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: label
+                  type: VARCHAR(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: observation_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: value
+                  type: NUMERIC(19, 4)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: frequency
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: unit
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: eurobond_weekly_observation
+            columnNames: series_code, observation_date
+            constraintName: uk_eurobond_weekly_series_date
+        - createIndex:
+            tableName: eurobond_weekly_observation
+            indexName: idx_eurobond_weekly_key_date
+            columns:
+              - column:
+                  name: series_key
+              - column:
+                  name: observation_date

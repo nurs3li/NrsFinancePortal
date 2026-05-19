@@ -111,11 +111,15 @@ export function MarketPurchasingPowerChart({ symbol, range, candles, anchorDate,
         () =>
             buildPurchasingPowerSeries({
                 anchorDate,
-                anchorAmountTry,
-                assetUsdByDate: assetUsd,
+                lotCostTry: anchorAmountTry,
+                assetUnitPriceByDate: assetUsd,
+                assetInTry: false,
                 usdTryByDate: usdTry,
                 cpiIndexByDate: cpi,
-                depositRatePctWeekly: deposit,
+                depositRatePctAnnual: deposit.map((o) => ({
+                    date: o.date,
+                    value: Number.isFinite(o.value) ? o.value * 52 : o.value,
+                })),
             }),
         [anchorDate, anchorAmountTry, assetUsd, usdTry, cpi, deposit],
     );
@@ -155,7 +159,7 @@ export function MarketPurchasingPowerChart({ symbol, range, candles, anchorDate,
                             width={72}
                         />
                         <Tooltip
-                            formatter={(v: number, name: string) => [fmtTry(v), name]}
+                            formatter={(v, name) => [fmtTry(Number(v ?? 0)), String(name ?? '')]}
                             contentStyle={{
                                 background: tokens.bgCard,
                                 border: `1px solid ${tokens.border}`,

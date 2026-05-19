@@ -82,7 +82,22 @@ export function classifyDebtInstrument(name: string | undefined, issuer: string 
     const i = String(issuer ?? '').toUpperCase();
     const s = String(isin ?? '').toUpperCase();
     if (n.includes('EUROBOND') || i.includes('EUROBOND') || s.includes('XS')) return 'BOND_EUROBOND';
-    if (i.includes('HAZINE') || i.includes('TREASURY') || n.includes('HAZINE')) return 'BOND_GOV';
+    if (
+        i.includes('HAZINE') ||
+        i.includes('TREASURY') ||
+        i.includes('CUMHURIYET') ||
+        i.includes('TCMB') ||
+        n.includes('HAZINE') ||
+        n.includes('DEVLET') ||
+        n.includes('GOVERNMENT') ||
+        n.includes('CUMHURIYET')
+    ) {
+        return 'BOND_GOV';
+    }
+    // Yerli devlet tahvil/bono ISIN: TRT…, TRD… veya TR + vade kodu
+    if (s.startsWith('TRT') || s.startsWith('TRD') || /^TR[A-Z0-9]\d{6}/.test(s)) {
+        return 'BOND_GOV';
+    }
     return 'BOND_CORP';
 }
 

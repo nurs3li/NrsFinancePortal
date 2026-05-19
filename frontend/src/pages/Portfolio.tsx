@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from 'react';
 import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { manualPortfolioKeys } from '../queries/manualPortfolioKeys';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
-import { FileText, LineChart as LineChartIcon, Plus, Scale, TrendingDown, TrendingUp } from 'lucide-react';
+import { Bell, FileText, LineChart as LineChartIcon, Plus, Scale, TrendingDown, TrendingUp } from 'lucide-react';
+import { PriceAlertModal } from '../components/priceAlert/PriceAlertModal';
+import { portfolioTypeToPriceAlertAsset } from '../utils/priceAlertAsset';
+import type { PriceAlertAssetType } from '../types/priceAlert';
 import './TerminalPages.css';
 import './Portfolio.css';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -15,11 +18,43 @@ import {
     ManualInvestmentAnalysisSection,
     type ManualInvestmentAnalysisSectionHandle,
 } from '../components/portfolio/ManualInvestmentAnalysisSection';
-import { getManualPositions, getManualSummary, getManualTimeseries, getManualTimeseriesSegment, getManualSoldHoldHypotheticalTimeseries, getManualSoldHoldHypotheticalSegment, getManualSoldLifecyclePnlTimeseries, getManualSoldLifecyclePnlSegment, getManualOpenUnrealizedPnlTimeseries, getManualOpenUnrealizedPnlSegment, readFinanceApiError } from '../services/manualPortfolioApi';
+import {
+    evaluatePortfolioInsightNotifications,
+    getManualPortfolioInsights,
+    getManualPositions,
+    getManualSummary,
+    getManualTimeseries,
+    getManualTimeseriesSegment,
+    getManualSoldHoldHypotheticalTimeseries,
+    getManualSoldHoldHypotheticalSegment,
+    getManualSoldLifecyclePnlTimeseries,
+    getManualSoldLifecyclePnlSegment,
+    getManualOpenUnrealizedPnlTimeseries,
+    getManualOpenUnrealizedPnlSegment,
+    readFinanceApiError,
+} from '../services/manualPortfolioApi';
+import { PfHelpTerm } from '../components/portfolio/PfHelpTerm';
+import { notificationKeys } from '../queries/notificationKeys';
 import type { ManualPortfolioTimeseriesPoint, ManualPortfolioView } from '../types/manualPortfolio';
+import {
+    buildConcentrationRiskLine,
+    buildRadarRiskFacts,
+    buildSoldScenarioSummary,
+    computeFallbackHealthScore,
+    isFiniteNum,
+    resolveHealthScore,
+} from '../utils/portfolioSmartAnalysis';
 type SnapRange = '1M' | '3M' | '6M' | '1Y' | 'ALL';
 
-type ChartSeriesMode = 'value' | 'cost' | 'pnl' | 'returnPct' | 'positionCount' | 'unrealizedPnl' | 'soldHoldHypothetical' | 'soldLifecyclePnl';
+type ChartSeriesMode =
+    | 'value'
+    | 'cost'
+    | 'pnl'
+    | 'returnPct'
+    | 'positionCount'
+    | 'unrealizedPnl'
+    | 'soldHoldHypothetical'
+    | 'soldLifecyclePnl';
 
 type TimeseriesChartMode = 'value' | 'cost' | 'pnl' | 'returnPct';
 
@@ -583,9 +618,16 @@ export function Portfolio() {
     const [distViewMode, setDistViewMode] = useState<DistViewMode>('category');
     const [chartOverlays, setChartOverlays] = useState<ChartOverlaySpec[]>([]);
     const [chartDropActive, setChartDropActive] = useState(false);
+    const [expandedPositionId, setExpandedPositionId] = useState<number | null>(null);
+    const [priceAlertTarget, setPriceAlertTarget] = useState<{
+        assetType: PriceAlertAssetType;
+        symbol: string;
+        displayName?: string;
+    } | null>(null);
 
     const invalidateManualPage = useCallback(async () => {
         await qc.invalidateQueries({ queryKey: manualPortfolioKeys.all });
+        await qc.invalidateQueries({ queryKey: manualPortfolioKeys.insights() });
         await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-segment'] });
         await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-hold'] });
         await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-hold-segment'] });
@@ -608,8 +650,34 @@ export function Portfolio() {
         queryFn: getManualPositions,
     });
 
+    const insightsQuery = useQuery({
+        queryKey: manualPortfolioKeys.insights(),
+        queryFn: getManualPortfolioInsights,
+        enabled: (positionsQuery.data?.length ?? 0) > 0,
+        staleTime: 60_000,
+    });
+
+    const evaluateInsightsMutation = useMutation({
+        mutationFn: evaluatePortfolioInsightNotifications,
+        onSuccess: async (result) => {
+            await qc.invalidateQueries({ queryKey: notificationKeys.all });
+            const n = result?.generatedCount ?? 0;
+            alert(
+                t(
+                    'portfolio.evaluationSent',
+                    'Portföy değerlendirmeniz e-posta ve bildirimlerinize gönderildi. ({count} kayıt)',
+                ).replace('{count}', String(n)),
+            );
+        },
+        onError: (err: unknown) => {
+            alert(readFinanceApiError(err).message || t('portfolio.evaluationFailed', 'Portföy değerlendirmesi gönderilemedi.'));
+        },
+    });
+
     const summary = summaryQuery.data;
     const positions = positionsQuery.data ?? [];
+    const insights = insightsQuery.data;
+    const insightSummary = insights?.summary;
 
     const earliestBuyYmd = useMemo(() => earliestBuyYmdFromPositions(positions), [positions]);
 
@@ -969,7 +1037,11 @@ export function Portfolio() {
             }
             return buildCumulativeSoldPositionCountSeries(positions, chartRangeBounds.start, chartRangeBounds.end, locale);
         }
-        if (chartSeriesMode === 'soldHoldHypothetical' || chartSeriesMode === 'soldLifecyclePnl' || chartSeriesMode === 'unrealizedPnl') {
+        if (
+            chartSeriesMode === 'soldHoldHypothetical' ||
+            chartSeriesMode === 'soldLifecyclePnl' ||
+            chartSeriesMode === 'unrealizedPnl'
+        ) {
             return [];
         }
         return buildChartPointsFromTimeseries(timeseriesQuery.data ?? [], chartSeriesMode, locale);
@@ -980,6 +1052,8 @@ export function Portfolio() {
         chartSeriesMode !== 'unrealizedPnl' &&
         chartSeriesMode !== 'soldHoldHypothetical' &&
         chartSeriesMode !== 'soldLifecyclePnl';
+    const chartShowsMetricToggle =
+        chartSeriesMode === 'value' || chartSeriesMode === 'cost' || chartSeriesMode === 'pnl';
     const chartAllowDistDrag =
         chartUsesTimeseries ||
         chartSeriesMode === 'unrealizedPnl' ||
@@ -992,7 +1066,9 @@ export function Portfolio() {
             ? 'value'
             : chartSeriesMode === 'unrealizedPnl'
               ? 'pnl'
-              : chartSeriesMode;
+              : chartSeriesMode === 'returnPct'
+                ? 'returnPct'
+                : chartSeriesMode;
 
     const chartMergedRows = useMemo(() => {
         if (!chartUsesTimeseries || chartOverlays.length === 0) {
@@ -1153,8 +1229,10 @@ export function Portfolio() {
                 if (!raw) return;
                 const p = JSON.parse(raw) as { mode?: string; key?: string; label?: string; color?: string };
                 if (p.mode !== 'TYPE' && p.mode !== 'SYMBOL') return;
-                if (!p.key?.trim() || !p.label) return;
-                const id = `${p.mode}:${p.key}`;
+                const key = p.key?.trim();
+                const label = p.label?.trim();
+                if (!key || !label) return;
+                const id = `${p.mode}:${key}`;
                 setChartOverlays((prev) => {
                     if (prev.some((x) => x.id === id)) return prev;
                     if (prev.length >= MAX_CHART_OVERLAYS) return prev;
@@ -1163,8 +1241,8 @@ export function Portfolio() {
                         {
                             id,
                             mode: p.mode as 'TYPE' | 'SYMBOL',
-                            key: p.key,
-                            label: p.label,
+                            key,
+                            label,
                             color: p.color && p.color.length > 0 ? p.color : '#64748b',
                         },
                     ];
@@ -1188,6 +1266,33 @@ export function Portfolio() {
     }, [openPositions]);
 
     const soldRows = useMemo(() => positions.filter((p) => statusOf(p) === 'SOLD'), [positions]);
+
+    const fallbackHealthScore = useMemo(
+        () => computeFallbackHealthScore(openPositions, summary, distributionByAsset, distributionOpen),
+        [openPositions, summary, distributionByAsset, distributionOpen],
+    );
+
+    const healthScoreView = useMemo(
+        () => resolveHealthScore(insights, fallbackHealthScore, t),
+        [insights, fallbackHealthScore, t],
+    );
+
+    const openConcentrationLine = useMemo(
+        () =>
+            buildConcentrationRiskLine(
+                concentration.top?.symbol ?? null,
+                concentration.topPct,
+                t,
+            ),
+        [concentration.top, concentration.topPct, t],
+    );
+
+    const soldScenarioSummary = useMemo(() => buildSoldScenarioSummary(soldRows), [soldRows]);
+
+    const radarRiskFacts = useMemo(
+        () => buildRadarRiskFacts(pnlRankRows, distributionOpen, concentration.top?.symbol ?? null, concentration.topPct),
+        [pnlRankRows, distributionOpen, concentration.top, concentration.topPct],
+    );
 
     const soldConcentration = useMemo(() => {
         const total = soldRows.reduce((s, p) => s + Math.max(0, Number(p.holdValueToday ?? 0)), 0);
@@ -1229,6 +1334,20 @@ export function Portfolio() {
             new Intl.NumberFormat(locale, { style: 'currency', currency: 'TRY', maximumFractionDigits: 2 }).format(v),
         [locale],
     );
+
+    const realPnlDisplay = useMemo(() => {
+        if (insightSummary?.realReturnAvailable === true && isFiniteNum(insightSummary.realReturn)) {
+            const pct =
+                isFiniteNum(insightSummary.realReturnPct) && insightSummary.realReturnPct != null
+                    ? ` · ${insightSummary.realReturnPct.toLocaleString(locale, { maximumFractionDigits: 2 })}%`
+                    : '';
+            return { text: `${fmtTry(insightSummary.realReturn)}${pct}`, positive: insightSummary.realReturn >= 0 };
+        }
+        return {
+            text: t('portfolio.realPnlWaitingCpi', 'TÜFE verisi bekleniyor'),
+            positive: null as boolean | null,
+        };
+    }, [insightSummary, locale, t, fmtTry]);
 
     const animCost = useAnimatedNumber(summary?.totalInvested ?? 0);
     const animOpenVal = useAnimatedNumber(summary?.currentOpenValue ?? 0);
@@ -1328,8 +1447,19 @@ export function Portfolio() {
                         <Plus size={16} aria-hidden />
                         {t('portfolio.btnNewPosition', 'Yeni pozisyon ekle')}
                     </button>
-                    <button type="button" className="pf-dash-btn" onClick={() => manualRef.current?.openSellEntry()}>
-                        {t('portfolio.btnSell', 'Satış gir')}
+                    <button
+                        type="button"
+                        className="pf-dash-btn"
+                        disabled={evaluateInsightsMutation.isPending || positions.length === 0}
+                        onClick={() => evaluateInsightsMutation.mutate()}
+                        title={t(
+                            'portfolio.btnEvaluatePortfolioHint',
+                            'Portföy özetinizi e-posta ve uygulama bildirimi olarak alın.',
+                        )}
+                    >
+                        {evaluateInsightsMutation.isPending
+                            ? t('common.loading', 'Yükleniyor…')
+                            : t('portfolio.btnEvaluatePortfolio', 'Portföyümü değerlendir')}
                     </button>
                     <button type="button" className="pf-dash-btn" onClick={() => navigate('/market/macro')}>
                         <Scale size={16} aria-hidden />
@@ -1381,6 +1511,34 @@ export function Portfolio() {
                         {fmtTry(animNominal)}
                     </div>
                 </button>
+                <div
+                    className={`pf-stat-card ${
+                        realPnlDisplay.positive === true ? 'pf-stat-card--pnl-pos' : realPnlDisplay.positive === false ? 'pf-stat-card--pnl-neg' : ''
+                    }`}
+                    aria-label={t('portfolio.kpiRealPnl', 'Reel K/Z')}
+                >
+                    <div className="pf-stat-label">
+                        <PfHelpTerm term="reel-kz">{t('portfolio.kpiRealPnl', 'Reel K/Z')}</PfHelpTerm>
+                    </div>
+                    <div
+                        className="pf-stat-value"
+                        style={{ fontSize: insightSummary?.realReturnAvailable === true ? undefined : '0.92rem' }}
+                    >
+                        {realPnlDisplay.text}
+                    </div>
+                </div>
+                <div
+                    className="pf-stat-card"
+                    aria-label={t('portfolio.kpiHealthScore', 'Portföy sağlık skoru')}
+                    title={healthScoreView.fromBackend ? undefined : t('portfolio.healthScoreFallbackHint', 'Tahmini skor (kural tabanlı)')}
+                >
+                    <div className="pf-stat-label">
+                        <PfHelpTerm term="portfoy-saglik-skoru">{t('portfolio.kpiHealthScore', 'Portföy Sağlık Skoru')}</PfHelpTerm>
+                    </div>
+                    <div className="pf-stat-value" style={{ fontSize: '1.05rem' }}>
+                        {positions.length === 0 ? '—' : `${healthScoreView.score} · ${healthScoreView.labelDefault}`}
+                    </div>
+                </div>
                 <button
                     type="button"
                     className={`pf-stat-card pf-stat-card--kpi-click ${chartSeriesMode === 'returnPct' ? 'pf-stat-card--kpi-active' : ''} ${
@@ -1574,6 +1732,41 @@ export function Portfolio() {
                                     </button>
                                 </div>
                             ) : null}
+                            {chartShowsMetricToggle ? (
+                                <div
+                                    className="pf-range-tabs pf-chart-metric-tabs"
+                                    role="tablist"
+                                    aria-label={t('portfolio.chartMetricAria', 'Grafik gösterimi')}
+                                >
+                                    <button
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={chartSeriesMode === 'value'}
+                                        className={chartSeriesMode === 'value' ? 'pf-range-tabs__btn--on' : ''}
+                                        onClick={selectValueChart}
+                                    >
+                                        {t('portfolio.chartMetricValue', 'Değer')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={chartSeriesMode === 'pnl'}
+                                        className={chartSeriesMode === 'pnl' ? 'pf-range-tabs__btn--on' : ''}
+                                        onClick={selectPnlChart}
+                                    >
+                                        {t('portfolio.chartMetricNominalPnl', 'Nominal K/Z')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={chartSeriesMode === 'cost'}
+                                        className={chartSeriesMode === 'cost' ? 'pf-range-tabs__btn--on' : ''}
+                                        onClick={selectCostChart}
+                                    >
+                                        {t('portfolio.chartMetricCost', 'Maliyet')}
+                                    </button>
+                                </div>
+                            ) : null}
                         </div>
                     </div>
                     {chartAllowDistDrag ? (
@@ -1697,9 +1890,7 @@ export function Portfolio() {
                                     )
                                   : chartSeriesMode === 'positionCount'
                                     ? t('portfolio.snapshotsEmptyPositionCount')
-                                    : chartSeriesMode === 'pnl' ||
-                                        chartSeriesMode === 'returnPct' ||
-                                        chartSeriesMode === 'unrealizedPnl'
+                                    : chartSeriesMode === 'pnl' || chartSeriesMode === 'returnPct'
                                       ? t('portfolio.snapshotsEmptyPnl')
                                       : t(
                                             'portfolio.snapshotsEmpty',
@@ -1985,6 +2176,21 @@ export function Portfolio() {
                                     </strong>
                                 </li>
                             </ul>
+                            {!isSoldDistributionView && chartSeriesMode !== 'unrealizedPnl' && distTotalForPanel > 0 ? (
+                                <p
+                                    className={`pf-concentration-alert${
+                                        concentration.topPct != null && concentration.topPct > 70
+                                            ? ' pf-concentration-alert--critical'
+                                            : concentration.topPct != null && concentration.topPct > 50
+                                              ? ' pf-concentration-alert--warn'
+                                              : ' pf-concentration-alert--ok'
+                                    }`}
+                                >
+                                    <PfHelpTerm term="yogunlasma-riski">
+                                        {insights?.concentrationRisk?.message?.trim() || openConcentrationLine}
+                                    </PfHelpTerm>
+                                </p>
+                            ) : null}
                         </>
                     )}
                 </section>
@@ -2004,6 +2210,39 @@ export function Portfolio() {
                             {t('portfolio.postSellEmpty', 'Satılmış pozisyon yok.')}
                         </p>
                     ) : (
+                        <>
+                            {soldScenarioSummary ? (
+                                <div className="pf-sold-summary-strip" style={{ color: tokens.textMuted }}>
+                                    <span>
+                                        <PfHelpTerm term="gerceklesmis-kz">{t('portfolio.soldSummaryPnl', 'Toplam satış K/Z')}</PfHelpTerm>
+                                        :{' '}
+                                        <strong style={{ color: tokens.text }}>{fmtTry(soldScenarioSummary.totalSellPnl)}</strong>
+                                    </span>
+                                    <span>
+                                        <PfHelpTerm term="kacirilan-firsat">
+                                            {t('portfolio.soldSummaryMissed', 'Toplam kaçırılan fırsat')}
+                                        </PfHelpTerm>
+                                        :{' '}
+                                        <strong style={{ color: tokens.text }}>{fmtTry(soldScenarioSummary.totalMissed)}</strong>
+                                    </span>
+                                    <span>
+                                        {t('portfolio.soldSummaryBest', 'En iyi satış')}:{' '}
+                                        <strong style={{ color: tokens.text }}>
+                                            {soldScenarioSummary.best
+                                                ? `${soldScenarioSummary.best.symbol} (${fmtTry(soldScenarioSummary.best.pnl)})`
+                                                : '—'}
+                                        </strong>
+                                    </span>
+                                    <span>
+                                        {t('portfolio.soldSummaryWorst', 'En kötü satış')}:{' '}
+                                        <strong style={{ color: tokens.text }}>
+                                            {soldScenarioSummary.worst
+                                                ? `${soldScenarioSummary.worst.symbol} (${fmtTry(soldScenarioSummary.worst.pnl)})`
+                                                : '—'}
+                                        </strong>
+                                    </span>
+                                </div>
+                            ) : null}
                         <div className="pf-table-scroll">
                             <table className="pf-table pf-table--post-sell">
                                 <thead>
@@ -2038,6 +2277,7 @@ export function Portfolio() {
                                 </tbody>
                             </table>
                         </div>
+                        </>
                     )}
                 </section>
 
@@ -2062,6 +2302,44 @@ export function Portfolio() {
                             {t('portfolio.radarEmpty', 'Kar veya zarar gösterilecek açık pozisyon yok.')}
                         </div>
                     ) : (
+                        <>
+                        <div className="pf-radar-risk" style={{ color: tokens.textMuted }}>
+                            <div className="pf-radar-risk-title">{t('portfolio.radarRiskTitle', 'Risk tespiti')}</div>
+                            <div className="pf-radar-risk-grid">
+                                <span>
+                                    {t('portfolio.radarRiskTopWeight', 'En büyük ağırlık')}:{' '}
+                                    <strong style={{ color: tokens.text }}>
+                                        {radarRiskFacts.topWeightSymbol && radarRiskFacts.topWeightPct != null
+                                            ? `${radarRiskFacts.topWeightSymbol} · ${formatAllocationSharePct(radarRiskFacts.topWeightPct, locale, t)}`
+                                            : '—'}
+                                    </strong>
+                                </span>
+                                <span>
+                                    {t('portfolio.radarRiskBiggestLoss', 'En büyük zarar')}:{' '}
+                                    <strong style={{ color: tokens.text }}>
+                                        {radarRiskFacts.biggestLoss
+                                            ? `${radarRiskFacts.biggestLoss.label} (${fmtTry(radarRiskFacts.biggestLoss.pnlTry)})`
+                                            : '—'}
+                                    </strong>
+                                </span>
+                                <span>
+                                    {t('portfolio.radarRiskStrongest', 'En güçlü katkı')}:{' '}
+                                    <strong style={{ color: tokens.text }}>
+                                        {radarRiskFacts.strongestContribution
+                                            ? `${radarRiskFacts.strongestContribution.label} (+${fmtTry(radarRiskFacts.strongestContribution.pnlTry)})`
+                                            : '—'}
+                                    </strong>
+                                </span>
+                                <span>
+                                    {t('portfolio.radarRiskCategory', 'En riskli kategori')}:{' '}
+                                    <strong style={{ color: tokens.text }}>
+                                        {radarRiskFacts.riskiestCategory
+                                            ? `${radarRiskFacts.riskiestCategory.label} · ${formatAllocationSharePct(radarRiskFacts.riskiestCategory.weightPct, locale, t)}`
+                                            : '—'}
+                                    </strong>
+                                </span>
+                            </div>
+                        </div>
                         <div className="pf-radar-split">
                             <div>
                                 <div className="pf-radar-col-title" style={{ color: tokens.text }}>
@@ -2096,6 +2374,7 @@ export function Portfolio() {
                                 </ul>
                             </div>
                         </div>
+                        </>
                     )}
                 </section>
             </div>
@@ -2132,8 +2411,16 @@ export function Portfolio() {
                                     const open = statusOf(p) === 'OPEN';
                                     const pnl = open ? p.unrealizedProfit : p.realizedProfit;
                                     const pct = open ? p.unrealizedReturnPct : p.realizedReturnPct;
+                                    const expanded = expandedPositionId === p.id;
+                                    const portfolioInflationEffect =
+                                        insightSummary?.realReturnAvailable &&
+                                        isFiniteNum(insightSummary.nominalReturn) &&
+                                        isFiniteNum(insightSummary.realReturn)
+                                            ? insightSummary.nominalReturn - insightSummary.realReturn
+                                            : null;
                                     return (
-                                        <tr key={p.id}>
+                                        <Fragment key={p.id}>
+                                        <tr>
                                             <td className="pf-num-strong">{p.symbol}</td>
                                             <td>{typeLabel(String(p.type).toUpperCase())}</td>
                                             <td className="pf-num-strong" style={{ textAlign: 'right' }}>
@@ -2166,6 +2453,27 @@ export function Portfolio() {
                                                 </span>
                                             </td>
                                             <td style={{ textAlign: 'right' }}>
+                                                <button
+                                                    type="button"
+                                                    className="pf-icon-inline"
+                                                    onClick={() => setExpandedPositionId(expanded ? null : p.id)}
+                                                >
+                                                    {expanded ? t('portfolio.detailHide', 'Gizle') : t('portfolio.detailShow', 'Detay')}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="pf-icon-inline"
+                                                    title={t('priceAlert.title', 'Alarm Kur')}
+                                                    onClick={() => {
+                                                        const pa = portfolioTypeToPriceAlertAsset(String(p.type), p.symbol);
+                                                        if (pa) {
+                                                            setPriceAlertTarget({ ...pa, displayName: p.symbol });
+                                                        }
+                                                    }}
+                                                >
+                                                    <Bell size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                                                    {t('priceAlert.short', 'Alarm')}
+                                                </button>
                                                 <button type="button" className="pf-icon-inline" onClick={() => manualRef.current?.openEdit(p.id)} title={t('common.update', 'Düzenle')}>
                                                     {t('common.update', 'Düzenle')}
                                                 </button>
@@ -2174,6 +2482,70 @@ export function Portfolio() {
                                                 </button>
                                             </td>
                                         </tr>
+                                        {expanded ? (
+                                            <tr key={`${p.id}-detail`} className="pf-row-detail">
+                                                <td colSpan={12}>
+                                                    <div className="pf-row-detail-grid">
+                                                        <div>
+                                                            <span className="pf-row-detail-label">
+                                                                <PfHelpTerm term="nominal-kz">{t('portfolio.detailNominalPnl', 'Nominal K/Z')}</PfHelpTerm>
+                                                            </span>
+                                                            <span className="pf-row-detail-value">
+                                                                {pnl != null && Number.isFinite(Number(pnl)) ? fmtTry(Number(pnl)) : '—'}
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="pf-row-detail-label">
+                                                                <PfHelpTerm term="reel-kz">{t('portfolio.detailRealPnl', 'Reel K/Z')}</PfHelpTerm>
+                                                            </span>
+                                                            <span className="pf-row-detail-value">
+                                                                {insightSummary?.realReturnAvailable
+                                                                    ? t('portfolio.detailRealPortfolioLevel', 'Portföy özeti KPI’da')
+                                                                    : insightSummary?.realReturnUnavailableReason?.trim() ||
+                                                                      t('portfolio.realPnlWaitingCpi', 'TÜFE verisi bekleniyor')}
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="pf-row-detail-label">
+                                                                <PfHelpTerm term="enflasyon-etkisi">
+                                                                    {t('portfolio.detailInflation', 'Enflasyon etkisi')}
+                                                                </PfHelpTerm>
+                                                            </span>
+                                                            <span className="pf-row-detail-value">
+                                                                {portfolioInflationEffect != null
+                                                                    ? fmtTry(portfolioInflationEffect)
+                                                                    : '—'}
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="pf-row-detail-label">
+                                                                {t('portfolio.detailReturnSinceBuy', 'Alıştan bugüne getiri')}
+                                                            </span>
+                                                            <span className="pf-row-detail-value">
+                                                                {pct != null && Number.isFinite(Number(pct))
+                                                                    ? `${Number(pct).toLocaleString(locale, { maximumFractionDigits: 2 })}%`
+                                                                    : '—'}
+                                                            </span>
+                                                        </div>
+                                                        {!open ? (
+                                                            <div>
+                                                                <span className="pf-row-detail-label">
+                                                                    <PfHelpTerm term="kacirilan-firsat">
+                                                                        {t('portfolio.detailPostSellMiss', 'Satış sonrası fırsat farkı')}
+                                                                    </PfHelpTerm>
+                                                                </span>
+                                                                <span className="pf-row-detail-value">
+                                                                    {p.missedProfit != null && Number.isFinite(Number(p.missedProfit))
+                                                                        ? fmtTry(Number(p.missedProfit))
+                                                                        : '—'}
+                                                                </span>
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : null}
+                                        </Fragment>
                                     );
                                 })
                             )}
@@ -2227,6 +2599,15 @@ export function Portfolio() {
                 locale={locale}
                 onPortfolioMutated={invalidateManualPage}
             />
+            {priceAlertTarget ? (
+                <PriceAlertModal
+                    open
+                    onClose={() => setPriceAlertTarget(null)}
+                    assetType={priceAlertTarget.assetType}
+                    symbol={priceAlertTarget.symbol}
+                    displayName={priceAlertTarget.displayName}
+                />
+            ) : null}
         </div>
     );
 }

@@ -16,6 +16,8 @@ import {
     closeManualPosition,
     createManualPosition,
     deleteManualPosition,
+    evaluatePortfolioInsightNotifications,
+    getManualPortfolioInsights,
     getManualPositionAnalysis,
     getManualPositions,
     getManualSummary,
@@ -23,6 +25,7 @@ import {
     resolveManualPrice,
     updateManualPosition,
 } from '../../services/manualPortfolioApi';
+import { notificationKeys } from '../../queries/notificationKeys';
 import type { ManualAssetType, ManualPortfolioAnalysis, ManualPortfolioView } from '../../types/manualPortfolio';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { cryptoMeta, etfMeta, fxMeta, instrumentMeta } from '../../utils/instrumentMeta';
@@ -139,6 +142,11 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     const { t } = useLanguage();
     const qc = useQueryClient();
 
+    const manualAssetTypeLabel = useCallback(
+        (at: ManualAssetType) => t(`portfolio.typeLabel.${at}`, at),
+        [t],
+    );
+
     const positionsQuery = useQuery({
         queryKey: manualPortfolioKeys.positions(),
         queryFn: getManualPositions,
@@ -147,9 +155,29 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         queryKey: manualPortfolioKeys.summary(),
         queryFn: getManualSummary,
     });
+    const insightsQuery = useQuery({
+        queryKey: manualPortfolioKeys.insights(),
+        queryFn: getManualPortfolioInsights,
+        enabled: surface === 'full',
+    });
+    const evaluateAlertsMutation = useMutation({
+        mutationFn: evaluatePortfolioInsightNotifications,
+        onSuccess: async () => {
+            await qc.invalidateQueries({ queryKey: notificationKeys.all });
+        },
+    });
 
     const positions = positionsQuery.data ?? [];
     const summary = summaryQuery.data;
+    const insights = insightsQuery.data;
+    const insightSummary = insights?.summary;
+
+    const riskLevelClass = (level: string | undefined) => {
+        const l = (level ?? '').toUpperCase();
+        if (l === 'HIGH' || l === 'WEAK') return 'mia-neg';
+        if (l === 'MEDIUM') return 'mia-muted';
+        return 'mia-pos';
+    };
 
     const invalidateManual = useCallback(async () => {
         await qc.invalidateQueries({ queryKey: manualPortfolioKeys.all });
@@ -570,6 +598,12 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
 
     const emptyManual = positions.length === 0;
 
+    useEffect(() => {
+        if (surface === 'full' && positions.length > 0) {
+            void qc.invalidateQueries({ queryKey: manualPortfolioKeys.insights() });
+        }
+    }, [positions.length, surface, qc]);
+
     const [chartMetric, setChartMetric] = useState<'value' | 'price'>('value');
 
     return (
@@ -639,6 +673,102 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                 ))}
             </div>
 
+            <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+                <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800 }}>{t('portfolio.insightsTitle', 'Portföy içgörüleri')}</h3>
+                <button
+                    type="button"
+                    className="pf-btn-submit-silver"
+                    style={{ fontSize: '0.78rem', padding: '6px 12px' }}
+                    disabled={evaluateAlertsMutation.isPending || emptyManual}
+                    onClick={() => evaluateAlertsMutation.mutate()}
+                >
+                    {evaluateAlertsMutation.isPending
+                        ? t('common.loading', 'Yükleniyor...')
+                        : t('portfolio.evaluateSmartAlerts', 'Akıllı Uyarıları Değerlendir')}
+                </button>
+            </div>
+
+            {insightsQuery.isLoading && !insights ? (
+                <p className="mia-muted" style={{ marginTop: 8, fontSize: '0.78rem' }}>
+                    {t('common.loading', 'Yükleniyor...')}
+                </p>
+            ) : null}
+
+            <div
+                className="mia-summary-grid mia-insights-grid"
+                style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}
+            >
+                <div style={cardSurface}>
+                    <div style={{ fontSize: '0.72rem', color: tokens.textMuted, marginBottom: 6 }}>
+                        {t('portfolio.kpiNominalPnl', 'Nominal Getiri')}
+                    </div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800 }} className={pnlClass(insightSummary?.nominalReturn)}>
+                        {emptyManual || !insightSummary
+                            ? '—'
+                            : `${formatCurrencyTry(locale, insightSummary.nominalReturn)} · ${formatPercent(locale, insightSummary.nominalReturnPct)}`}
+                    </div>
+                </div>
+                <div style={cardSurface}>
+                    <div style={{ fontSize: '0.72rem', color: tokens.textMuted, marginBottom: 6 }}>
+                        {t('portfolio.estRealLabel', 'Reel Getiri')}
+                    </div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800 }} className={pnlClass(insightSummary?.realReturn)}>
+                        {emptyManual || !insightSummary
+                            ? '—'
+                            : insightSummary.realReturnAvailable
+                              ? `${formatCurrencyTry(locale, insightSummary.realReturn)} · ${formatPercent(locale, insightSummary.realReturnPct)}`
+                              : t(
+                                    'portfolio.realReturnUnavailable',
+                                    'TÜFE verisi bu dönem için çözümlenemediği için reel getiri hesaplanamadı.',
+                                )}
+                    </div>
+                </div>
+                <div style={cardSurface}>
+                    <div style={{ fontSize: '0.72rem', color: tokens.textMuted, marginBottom: 6 }}>
+                        {t('portfolio.healthScoreTitle', 'Portföy Sağlık Skoru')}
+                    </div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800 }}>
+                        {emptyManual || !insights?.healthScore
+                            ? '—'
+                            : `${insights.healthScore.score} · ${insights.healthScore.level}`}
+                    </div>
+                    {insights?.healthScore?.summary ? (
+                        <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: tokens.textMuted, lineHeight: 1.35 }}>
+                            {insights.healthScore.summary}
+                        </p>
+                    ) : null}
+                </div>
+                <div style={cardSurface}>
+                    <div style={{ fontSize: '0.72rem', color: tokens.textMuted, marginBottom: 6 }}>
+                        {t('portfolio.concentrationRiskTitle', 'Konsantrasyon Riski')}
+                    </div>
+                    <div
+                        style={{ fontSize: '0.95rem', fontWeight: 800 }}
+                        className={riskLevelClass(insights?.concentrationRisk?.riskLevel)}
+                    >
+                        {emptyManual || !insights?.concentrationRisk
+                            ? '—'
+                            : `${insights.concentrationRisk.riskLevel}${insights.concentrationRisk.topAssetSymbol ? ` · ${insights.concentrationRisk.topAssetSymbol}` : ''}`}
+                    </div>
+                    {insights?.concentrationRisk?.message ? (
+                        <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: tokens.textMuted, lineHeight: 1.35 }}>
+                            {insights.concentrationRisk.message}
+                        </p>
+                    ) : null}
+                </div>
+            </div>
+
+            {evaluateAlertsMutation.isSuccess ? (
+                <p className="mia-pos" style={{ marginTop: 8, fontSize: '0.78rem' }}>
+                    {t('portfolio.alertsGenerated', 'Uyarılar değerlendirildi')}: {evaluateAlertsMutation.data?.generatedCount ?? 0}
+                </p>
+            ) : null}
+            {evaluateAlertsMutation.isError ? (
+                <p style={{ marginTop: 8, fontSize: '0.78rem', color: tokens.error }}>
+                    {readFinanceApiError(evaluateAlertsMutation.error).message}
+                </p>
+            ) : null}
+
             <div className="mia-toolbar" style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                 {(
                     [
@@ -665,7 +795,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                     <option value="ALL">{t('manualInvest.fTypeAll', 'Tüm türler')}</option>
                     {ASSET_TYPE_ORDER.map((at) => (
                         <option key={at} value={at}>
-                            {at}
+                            {manualAssetTypeLabel(at)}
                         </option>
                     ))}
                 </select>
@@ -723,7 +853,9 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                                     <tr key={p.id} className="mia-row-click" style={{ cursor: 'pointer' }} onClick={() => openAnalysis(p.id)}>
                                         <td>
                                             <span className="pf-num-strong">{p.symbol}</span>
-                                            <span style={{ display: 'block', fontSize: '0.72rem', color: tokens.textMuted }}>{p.type}</span>
+                                            <span style={{ display: 'block', fontSize: '0.72rem', color: tokens.textMuted }}>
+                                                {manualAssetTypeLabel(String(p.type).toUpperCase() as ManualAssetType)}
+                                            </span>
                                         </td>
                                         <td>
                                             <span className={`mia-badge mia-badge--${isOpen ? 'open' : 'sold'}`}>{st}</span>
@@ -822,7 +954,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                                 >
                                     {ASSET_TYPE_ORDER.map((at) => (
                                         <option key={at} value={at}>
-                                            {at}
+                                            {manualAssetTypeLabel(at)}
                                         </option>
                                     ))}
                                 </select>

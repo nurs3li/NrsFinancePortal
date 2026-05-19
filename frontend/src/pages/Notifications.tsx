@@ -11,6 +11,11 @@ import { notificationClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { useLanguage } from '../i18n/LanguageContext';
+import { portfolioInsightNotificationTypeLabel } from '../utils/portfolioInsightNotifications';
+import {
+    isPriceAlertNotificationType,
+    priceAlertNotificationTypeLabel,
+} from '../utils/priceAlertNotifications';
 import './Notifications.css';
 
 type NotificationItem = {
@@ -49,6 +54,12 @@ type NotifCategory = 'APPROVAL' | 'SECURITY' | 'REVIEW' | 'INFO';
 
 function classifyNotification(type: string): NotifCategory {
     const t = (type ?? '').toUpperCase();
+    if (t === 'REAL_RETURN_NEGATIVE' || t === 'PORTFOLIO_CONCENTRATION_RISK') {
+        return 'SECURITY';
+    }
+    if (t === 'REAL_RETURN_POSITIVE') {
+        return 'APPROVAL';
+    }
     if (
         t.includes('APPROVED') ||
         t.includes('APPROVAL') ||
@@ -306,7 +317,11 @@ export function Notifications() {
                                 <div className="notif-item__main">
                                     <div className="notif-item__title">{n.title}</div>
                                     <div className="notif-item__meta">
-                                        <span className="notif-item__type-chip">{n.type}</span>
+                                        <span className="notif-item__type-chip">
+                                            {isPriceAlertNotificationType(n.type)
+                                                ? priceAlertNotificationTypeLabel(n.type, t)
+                                                : portfolioInsightNotificationTypeLabel(n.type, t)}
+                                        </span>
                                         <span className="notif-item__date">
                                             {new Date(occurredAt).toLocaleString(locale)}
                                         </span>

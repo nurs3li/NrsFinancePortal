@@ -1313,7 +1313,60 @@ function MacroDerivedKpiGrid({
     );
 }
 
-function MacroSkeletonCard({ label, tokens }: { label: string; tokens: Theme }) {
+function MacroTcmbWeightedFundingCard({
+    tokens,
+    t,
+    locale,
+    panel,
+    panelLoading,
+}: {
+    tokens: Theme;
+    t: (key: string, defaultValue: string) => string;
+    locale: string;
+    panel: InterestInflationMacroPanelResponse | null | undefined;
+    panelLoading: boolean;
+}) {
+    const awaiting = t('market.macro.panel.awaitingData', 'Veri bekleniyor');
+    const label = t('market.bondMacroTcmbWeightedFunding', 'TCMB Ortalama Fonlama Maliyeti');
+
+    if (panelLoading) {
+        return (
+            <div
+                style={{
+                    border: `1px solid ${tokens.border}`,
+                    borderRadius: 8,
+                    padding: 10,
+                    background: tokens.bgCard,
+                    minHeight: 72,
+                }}
+            >
+                <div
+                    style={{
+                        fontSize: 11,
+                        color: tokens.textMuted,
+                        marginBottom: 8,
+                        lineHeight: 1.35,
+                        wordBreak: 'break-word',
+                        minHeight: '2.6em',
+                    }}
+                >
+                    {label}
+                </div>
+                <div
+                    style={{
+                        height: 10,
+                        borderRadius: 4,
+                        background: 'rgba(148,163,184,0.22)',
+                        width: '72%',
+                    }}
+                />
+            </div>
+        );
+    }
+
+    const obs = lastObservation(selectMacroSeries(panel?.series, 'TCMB_WEIGHTED_AVG_FUNDING_COST_TR'));
+    const hasVal = obs != null && Number.isFinite(Number(obs.value));
+
     return (
         <div
             style={{
@@ -1336,14 +1389,12 @@ function MacroSkeletonCard({ label, tokens }: { label: string; tokens: Theme }) 
             >
                 {label}
             </div>
-            <div
-                style={{
-                    height: 10,
-                    borderRadius: 4,
-                    background: 'rgba(148,163,184,0.22)',
-                    width: '72%',
-                }}
-            />
+            <div style={{ fontSize: 14, fontWeight: 700, color: tokens.text }}>
+                {hasVal ? formatPercent2(Number(obs.value), locale) : awaiting}
+            </div>
+            <div style={{ fontSize: 9, color: tokens.textMuted, marginTop: 4, lineHeight: 1.35 }}>
+                {hasVal && obs.date ? formatLocaleDate(obs.date, locale) : '—'}
+            </div>
         </div>
     );
 }
@@ -1449,9 +1500,12 @@ export function BondMacroIntelligencePanel({ tokens }: Props) {
                     </p>
                 ) : null}
                 <div style={{ marginTop: 10 }}>
-                    <MacroSkeletonCard
-                        label={t('market.bondMacroTcmbWeightedFunding', 'TCMB Ortalama Fonlama Maliyeti')}
+                    <MacroTcmbWeightedFundingCard
                         tokens={tokens}
+                        t={t}
+                        locale={locale}
+                        panel={panelError ? undefined : panel}
+                        panelLoading={panelLoading}
                     />
                 </div>
                 <MacroInflationEvdsBlock

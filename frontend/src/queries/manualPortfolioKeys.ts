@@ -4,4 +4,5 @@ export const manualPortfolioKeys = {
     summary: () => [...manualPortfolioKeys.all, 'summary'] as const,
     analysis: (id: number) => [...manualPortfolioKeys.all, 'analysis', id] as const,
     timeseries: (rangeKey: string) => [...manualPortfolioKeys.all, 'timeseries', rangeKey] as const,
+    insights: () => [...manualPortfolioKeys.all, 'insights'] as const,
 };

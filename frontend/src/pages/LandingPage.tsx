@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Activity, BarChart3, Boxes, LineChart, Lock, Shield, Wallet, Waves } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { financeClient } from '../api/client';
 import { NrsBrandLockup } from '../components/NrsBrandLockup';
+import { LandingHeroCarousel } from '../components/landing/LandingHeroCarousel';
+import { LandingFeaturesFlip } from '../components/landing/LandingFeaturesFlip';
+import { LandingSystemArchitecture } from '../components/landing/LandingSystemArchitecture';
 import './LandingPage.css';
 
 function decodeOAuthHint(raw: string | null): string | null {
@@ -203,9 +205,7 @@ export function LandingPage() {
                     </a>
                     <nav className="landing-nav" aria-label="Main">
                         <a href="#features">{t('landing.navFeatures', 'Özellikler')}</a>
-                        <a href="#security">{t('landing.navSecurity', 'Güvenlik')}</a>
-                        <a href="#corporate">{t('landing.navCorporate', 'Kurumsal')}</a>
-                        <a href="#docs">{t('landing.navDocs', 'Dokümantasyon')}</a>
+                        <a href="#architecture">{t('landing.navArchitecture', 'Altyapı')}</a>
                     </nav>
                     <div className="landing-header-actions">
                         <div className="landing-lang-wrap">
@@ -239,129 +239,28 @@ export function LandingPage() {
 
                 <section className="landing-hero">
                     <div>
-                        <h1>{t('landing.heroTitle', 'Finansal komuta merkezinize hoş geldiniz.')}</h1>
+                        <h1>{t('landing.heroTitle', 'Yatırımlarınızı Veri ve Analizle Yönetin.')}</h1>
                         <p>
                             {t(
                                 'landing.heroBody',
-                                'Piyasa analizinden balina takibine, portföy simülasyonundan kurumsal operasyonlara kadar her şey tek platformda. Keycloak tabanlı kurumsal güvenlik ile.'
+                                'Canlı piyasa takibinden enflasyona göre arındırılmış reel getiri analizine, simülasyonlardan akıllı alarmlara kadar tüm finansal süreçleriniz tek bir portalda.',
                             )}
                         </p>
                         <div className="landing-hero-ctas">
                             <button type="button" className="landing-btn-primary" onClick={() => openPanel('signin')}>
-                                {t('landing.ctaExplore', 'Portalı keşfet')}
+                                {t('landing.ctaExplore', 'Portalı Keşfet')}
                             </button>
                             <button type="button" className="landing-btn-ghost" onClick={() => openPanel('register')}>
-                                {t('landing.ctaRegister', 'Kayıt ol (OTP korumalı)')}
+                                {t('landing.ctaRegister', 'Güvenli Kayıt Ol')}
                             </button>
                         </div>
                     </div>
-                    <div className="landing-mock-wrap">
-                        <div className="landing-mock">
-                            <div className="landing-mock-inner">
-                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                                    {t('landing.mockCaption', 'Simülasyon · Balina zaman çizelgesi')}
-                                </div>
-                                <div className="landing-mock-row">
-                                    <div className="landing-mock-bar" style={{ height: '45%' }} />
-                                    <div className="landing-mock-bar down" style={{ height: '70%' }} />
-                                    <div className="landing-mock-bar" style={{ height: '55%' }} />
-                                    <div className="landing-mock-bar" style={{ height: '35%' }} />
-                                    <div className="landing-mock-bar down" style={{ height: '62%' }} />
-                                </div>
-                                <div className="landing-mock-chart-line" />
-                            </div>
-                        </div>
-                    </div>
+                    <LandingHeroCarousel />
                 </section>
 
-                <section id="features" className="landing-features">
-                    <h2 className="landing-section-title landing-reveal">{t('landing.featuresTitle', 'Özellikler')}</h2>
-                    <div className="landing-feature-grid">
-                        <div className="landing-reveal">
-                            <h3>{t('landing.catMarket', 'Piyasa zekâsı')}</h3>
-                            <div className="landing-card">
-                                <Waves className="landing-card-icon" strokeWidth={1.25} />
-                                <h4>{t('landing.f1Title', 'Balina takibi ve birleşik zaman çizelgesi')}</h4>
-                                <p>{t('landing.f1Body', 'Büyük oyuncuların ayak izlerini takip edin; olaylar tek çizelgede birleşir.')}</p>
-                            </div>
-                            <div className="landing-card">
-                                <BarChart3 className="landing-card-icon" strokeWidth={1.25} />
-                                <h4>{t('landing.f2Title', 'Piyasa ısı haritası ve analiz')}</h4>
-                                <p>{t('landing.f2Body', 'Kripto, hisse ve türevleri tek palette okuyun; hızlı karşılaştırma yapın.')}</p>
-                            </div>
-                        </div>
-                        <div className="landing-reveal">
-                            <h3>{t('landing.catPortfolio', 'Portföy ve işlem')}</h3>
-                            <div className="landing-card">
-                                <LineChart className="landing-card-icon" strokeWidth={1.25} />
-                                <h4>{t('landing.f3Title', 'Senaryo ve portföy simülatörü')}</h4>
-                                <p>{t('landing.f3Body', '“Ya piyasa %10 düşerse?” senaryolarına hızlı yanıt alın.')}</p>
-                            </div>
-                            <div className="landing-card">
-                                <Wallet className="landing-card-icon" strokeWidth={1.25} />
-                                <h4>{t('landing.f4Title', 'Akıllı cüzdan ve fon yönetimi')}</h4>
-                                <p>{t('landing.f4Body', 'Kurumsal fon talepleri, referans ve dekont akışıyla güvenli yönetim.')}</p>
-                            </div>
-                        </div>
-                        <div className="landing-reveal">
-                            <h3>{t('landing.catSecurity', 'Kurumsal güvenlik')}</h3>
-                            <div className="landing-card">
-                                <Lock className="landing-card-icon" strokeWidth={1.25} />
-                                <h4>{t('landing.f5Title', 'Keycloak kimlik')}</h4>
-                                <p>{t('landing.f5Body', 'OTP, RBAC ve oturum yönetimi ile kurumsal düzeyde koruma.')}</p>
-                            </div>
-                            <div className="landing-card">
-                                <Activity className="landing-card-icon" strokeWidth={1.25} />
-                                <h4>{t('landing.f6Title', 'Denetim ve audit log')}</h4>
-                                <p>{t('landing.f6Body', 'Operasyonel hareketler izlenebilir; şeffaflık ve uyum için kayıt altında.')}</p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
+                <LandingFeaturesFlip />
 
-                <section id="corporate" className="landing-reveal">
-                    <h2 className="landing-section-title">{t('landing.corporateTitle', 'Kurumsal')}</h2>
-                    <p style={{ color: '#94a3b8', fontSize: '0.9rem', maxWidth: '42rem', lineHeight: 1.6 }}>
-                        {t(
-                            'landing.corporateBody',
-                            'NRS Finans Portalı, mikroservis mimarisi ile ölçeklenebilir operasyonlar sunar. Risk, uyumluluk ve operasyon ekipleri için ortak bir komuta düzlemi hedefler.'
-                        )}
-                    </p>
-                </section>
-
-                <section id="docs" className="landing-reveal" style={{ marginTop: '2rem' }}>
-                    <h2 className="landing-section-title">{t('landing.docsTitle', 'Dokümantasyon')}</h2>
-                    <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-                        {t('landing.docsBody', 'Teknik dokümantasyon ve kurulum adımları proje deposundaki docs/ klasöründe yer alır.')}
-                    </p>
-                </section>
-
-                <section id="security" className="landing-security landing-reveal">
-                    <h2 className="landing-section-title">{t('landing.securityTitle', 'Kurumsal düzeyde güvenlik ve altyapı')}</h2>
-                    <div className="landing-security-grid">
-                        <div className="landing-security-item">
-                            <Boxes strokeWidth={1.15} />
-                            <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem' }}>{t('landing.sec1Title', 'Mikroservis mimarisi')}</h4>
-                            <p style={{ margin: 0, fontSize: '0.82rem', color: '#94a3b8' }}>
-                                {t('landing.sec1Body', 'Servisler ayrıştırılmıştır; piyasa verisi, finans çekirdeği ve bildirimler bağımsız ölçeklenir.')}
-                            </p>
-                        </div>
-                        <div className="landing-security-item">
-                            <Shield strokeWidth={1.15} />
-                            <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem' }}>{t('landing.sec2Title', 'API güvenliği')}</h4>
-                            <p style={{ margin: 0, fontSize: '0.82rem', color: '#94a3b8' }}>
-                                {t('landing.sec2Body', 'JWT ve rol tabanlı yetkilendirme; hassas uçlar koruma altında.')}
-                            </p>
-                        </div>
-                        <div className="landing-security-item">
-                            <Lock strokeWidth={1.15} />
-                            <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem' }}>{t('landing.sec3Title', 'Uyum ve OTP')}</h4>
-                            <p style={{ margin: 0, fontSize: '0.82rem', color: '#94a3b8' }}>
-                                {t('landing.sec3Body', 'Keycloak OTP ve oturum politikaları ile kurumsal uyum hedeflenir.')}
-                            </p>
-                        </div>
-                    </div>
-                </section>
+                <LandingSystemArchitecture />
 
                 <footer className="landing-footer">
                     <span>© {new Date().getFullYear()} NRS Finans Portalı</span>

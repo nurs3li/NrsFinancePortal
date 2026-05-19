@@ -56,7 +56,7 @@ function MarketPurchasingPowerCompareChartImpl({ data, tokens }: Props) {
                             width={72}
                         />
                         <Tooltip
-                            formatter={(v: number, name: string) => [fmtTryStable(v), name]}
+                            formatter={(v, name) => [fmtTryStable(Number(v ?? 0)), String(name ?? '')]}
                             contentStyle={{
                                 background: tokens.bgCard,
                                 border: `1px solid ${tokens.border}`,

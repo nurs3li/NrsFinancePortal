@@ -1,0 +1,416 @@
+.landing-hero-carousel {
+    perspective: 1200px;
+    width: 100%;
+    min-width: 0;
+}
+
+.landing-hero-carousel__frame {
+    transform: rotateY(-5deg) rotateX(2deg);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 1rem 1.15rem 0.9rem;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    position: relative;
+    overflow: hidden;
+    min-height: 400px;
+}
+
+.landing-hero-carousel__frame::before {
+    content: '';
+    position: absolute;
+    inset: -40%;
+    background: conic-gradient(from 180deg at 50% 50%, transparent, rgba(148, 163, 184, 0.08), transparent);
+    animation: landing-mock-glow 12s linear infinite;
+    pointer-events: none;
+}
+
+.landing-hero-carousel__viewport {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    min-height: 360px;
+}
+
+.landing-hero-carousel__track {
+    display: flex;
+    width: 100%;
+    transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+}
+
+.landing-hero-carousel__slide {
+    flex: 0 0 100%;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.landing-hero-carousel__dots {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 0.65rem;
+    padding-bottom: 0.15rem;
+}
+
+.landing-hero-carousel__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    background: rgba(148, 163, 184, 0.35);
+    transition: width 0.25s ease, background 0.25s ease;
+}
+
+.landing-hero-carousel__dot.is-active {
+    width: 22px;
+    background: rgba(59, 130, 246, 0.85);
+}
+
+.landing-hero-carousel__dot:focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.6);
+    outline-offset: 2px;
+}
+
+/* Shared slide chrome */
+.hero-slide-head {
+    margin-bottom: 0.65rem;
+}
+
+.hero-slide-title {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+}
+
+.hero-slide-sub {
+    margin: 0.2rem 0 0;
+    font-size: 0.68rem;
+    color: #94a3b8;
+    line-height: 1.35;
+}
+
+.hero-slide-body {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.hero-slide-split {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 0.55rem;
+    align-items: stretch;
+}
+
+@media (max-width: 520px) {
+    .hero-slide-split {
+        grid-template-columns: 1fr;
+    }
+}
+
+.hero-panel {
+    border-radius: 10px;
+    border: 1px solid rgba(59, 130, 246, 0.18);
+    background: rgba(15, 23, 42, 0.45);
+    padding: 0.45rem 0.5rem;
+}
+
+.hero-mini-label {
+    font-size: 0.58rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 0.35rem;
+}
+
+/* Slide 1 — terminal rows */
+.hero-terminal-row {
+    display: grid;
+    grid-template-columns: 52px 1fr 48px 56px;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.28rem 0.4rem;
+    border-radius: 8px;
+    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid rgba(71, 85, 105, 0.35);
+    font-size: 0.62rem;
+}
+
+.hero-terminal-row .sym {
+    font-weight: 700;
+    color: #cbd5e1;
+}
+
+.hero-terminal-row .chg.up {
+    color: #4ade80;
+    font-weight: 600;
+    text-align: right;
+}
+
+.hero-terminal-row .chg.down {
+    color: #f87171;
+    font-weight: 600;
+    text-align: right;
+}
+
+.hero-spark {
+    width: 100%;
+    height: 18px;
+    display: block;
+}
+
+.hero-ind-grid {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.hero-ind-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.62rem;
+    padding: 0.25rem 0.35rem;
+    border-radius: 6px;
+    background: rgba(30, 41, 59, 0.5);
+}
+
+.hero-ind-item span:first-child {
+    color: #94a3b8;
+}
+
+.hero-ind-item span:last-child {
+    color: #e2e8f0;
+    font-weight: 600;
+}
+
+/* Slide 2 — heatmap */
+.hero-heatmap {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.3rem;
+}
+
+.hero-heat-tile {
+    border-radius: 6px;
+    padding: 0.28rem 0.32rem;
+    font-size: 0.58rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.hero-heat-tile.up {
+    background: rgba(34, 197, 94, 0.22);
+    color: #86efac;
+    border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.hero-heat-tile.down {
+    background: rgba(239, 68, 68, 0.18);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.hero-macro-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.28rem;
+}
+
+.hero-macro-card {
+    font-size: 0.58rem;
+    padding: 0.28rem 0.35rem;
+    border-radius: 6px;
+    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid rgba(71, 85, 105, 0.4);
+}
+
+.hero-macro-card strong {
+    display: block;
+    color: #94a3b8;
+    font-weight: 500;
+    margin-bottom: 0.1rem;
+}
+
+.hero-macro-card span {
+    color: #e2e8f0;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Slide 3 & 4 — charts */
+.hero-chart-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.hero-metric-stack {
+    display: grid;
+    gap: 0.28rem;
+}
+
+.hero-metric-card {
+    font-size: 0.58rem;
+    padding: 0.3rem 0.38rem;
+    border-radius: 7px;
+    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid rgba(71, 85, 105, 0.38);
+}
+
+.hero-metric-card strong {
+    display: block;
+    color: #94a3b8;
+    font-weight: 500;
+    margin-bottom: 0.12rem;
+}
+
+.hero-metric-card span {
+    color: #e2e8f0;
+    font-weight: 700;
+}
+
+.hero-metric-card span.pos {
+    color: #4ade80;
+}
+
+.hero-metric-card span.neg {
+    color: #f87171;
+}
+
+.hero-badge {
+    display: inline-block;
+    margin-top: 0.35rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.58rem;
+    font-weight: 600;
+    background: rgba(234, 179, 8, 0.15);
+    color: #fde047;
+    border: 1px solid rgba(234, 179, 8, 0.35);
+}
+
+/* Slide 5 — time machine */
+.hero-chip-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.4rem;
+}
+
+.hero-chip {
+    font-size: 0.58rem;
+    padding: 0.22rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(51, 65, 85, 0.65);
+    color: #cbd5e1;
+    border: 1px solid rgba(100, 116, 139, 0.45);
+}
+
+.hero-bar-compare {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.25rem;
+    margin-top: 0.35rem;
+}
+
+.hero-bar-col {
+    text-align: center;
+    font-size: 0.52rem;
+    color: #94a3b8;
+}
+
+.hero-bar-col .bar {
+    height: 36px;
+    margin: 0.2rem auto 0.15rem;
+    width: 70%;
+    max-width: 28px;
+    border-radius: 4px 4px 0 0;
+    background: linear-gradient(to top, rgba(59, 130, 246, 0.5), rgba(59, 130, 246, 0.15));
+}
+
+.hero-bar-col.gold .bar {
+    background: linear-gradient(to top, rgba(234, 179, 8, 0.55), rgba(234, 179, 8, 0.12));
+}
+
+.hero-bar-col.muted .bar {
+    height: 8px;
+    margin-top: 1.1rem;
+    background: rgba(100, 116, 139, 0.45);
+}
+
+/* Slide 6 — alerts */
+.hero-alert-card {
+    font-size: 0.58rem;
+    padding: 0.32rem 0.4rem;
+    border-radius: 8px;
+    background: rgba(30, 41, 59, 0.55);
+    border-left: 3px solid rgba(59, 130, 246, 0.5);
+    margin-bottom: 0.28rem;
+}
+
+.hero-alert-card.warn {
+    border-left-color: #eab308;
+}
+
+.hero-alert-card.risk {
+    border-left-color: #f87171;
+}
+
+.hero-alert-card strong {
+    display: block;
+    color: #e2e8f0;
+    margin-bottom: 0.1rem;
+}
+
+.hero-alert-card span {
+    color: #94a3b8;
+    line-height: 1.3;
+}
+
+.hero-channel-strip {
+    display: flex;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+}
+
+.hero-channel-chip {
+    font-size: 0.55rem;
+    padding: 0.18rem 0.4rem;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, 0.12);
+    color: #86efac;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.hero-conc-bar {
+    display: flex;
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 0.35rem;
+}
+
+.hero-conc-bar span {
+    display: block;
+    height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .landing-hero-carousel__track {
+        transition: none;
+    }
+    .landing-hero-carousel__frame::before {
+        animation: none;
+    }
+}

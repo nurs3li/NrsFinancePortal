@@ -126,3 +126,50 @@ export type ManualPortfolioClosePayload = {
     sellPriceOverride?: boolean;
     sellFee?: number | null;
 };
+
+export type PortfolioInsightsSummary = {
+    openCurrentValue: number;
+    closedRealizedValue: number;
+    totalEvaluatedValue: number;
+    totalInvestedAmount: number;
+    nominalReturn: number;
+    nominalReturnPct: number | null;
+    inflationAdjustedCost: number | null;
+    realReturn: number | null;
+    realReturnPct: number | null;
+    realReturnAvailable: boolean;
+    realReturnUnavailableReason: string | null;
+};
+
+export type PortfolioConcentrationRisk = {
+    topAssetSymbol: string | null;
+    topAssetWeightPct: number | null;
+    top3WeightPct: number | null;
+    riskLevel: string;
+    message: string;
+};
+
+export type PortfolioHealthScore = {
+    score: number;
+    level: string;
+    summary: string;
+    factors: string[];
+};
+
+export type PortfolioInsightItem = {
+    type: string;
+    uiSeverity: string;
+    message: string;
+};
+
+export type ManualPortfolioInsights = {
+    summary: PortfolioInsightsSummary;
+    healthScore: PortfolioHealthScore;
+    concentrationRisk: PortfolioConcentrationRisk;
+    insights: PortfolioInsightItem[];
+};
+
+export type PortfolioInsightNotificationEvaluateResult = {
+    generatedCount: number;
+    generatedTypes: string[];
+};

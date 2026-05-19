@@ -17,7 +17,7 @@ import { MarketHeatmap } from './pages/MarketHeatmap';
 import { Portfolio } from './pages/Portfolio';
 import { Transactions } from './pages/Transactions';
 import { Simulation } from './pages/Simulation';
-import { AdminDashboard } from './pages/AdminDashboard';
+import { ViopBondAnalysis } from './pages/ViopBondAnalysis';
 import { AdminUsersAndAccounts } from './pages/AdminUsersAndAccounts';
 import { Notifications } from './pages/Notifications';
 import { AdminAudit } from './pages/AdminAudit';
@@ -97,6 +97,14 @@ function App() {
                                     }
                                 />
                                 <Route
+                                    path="/viop-bond-analysis"
+                                    element={
+                                        <ProtectedRoute>
+                                            <ViopBondAnalysis />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
                                     path="/trade"
                                     element={
                                         <ProtectedRoute>
@@ -128,14 +136,7 @@ function App() {
                                         </ProtectedRoute>
                                     }
                                 />
-                                <Route
-                                    path="/admin"
-                                    element={
-                                        <RoleProtectedRoute allowedRoles={['ADMIN']}>
-                                            <AdminDashboard />
-                                        </RoleProtectedRoute>
-                                    }
-                                />
+                                <Route path="/admin" element={<Navigate to="/admin/users" replace />} />
                                 <Route
                                     path="/notifications"
                                     element={
@@ -158,7 +159,7 @@ function App() {
                                 />
                                 <Route
                                     path="/admin/settings"
-                                    element={<Navigate to="/admin" replace />}
+                                    element={<Navigate to="/admin/users" replace />}
                                 />
                                 <Route
                                     path="/admin/audit"

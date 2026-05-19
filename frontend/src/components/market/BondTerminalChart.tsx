@@ -57,8 +57,6 @@ function BondTerminalChartImpl({
     const ma21Ref = useRef<ReturnType<ReturnType<typeof createChart>['addLineSeries']> | null>(null);
     const volumeRef = useRef<ReturnType<ReturnType<typeof createChart>['addHistogramSeries']> | null>(null);
     const hasInitialFitRef = useRef(false);
-    /** Seri uzunluğu / uç zamanları değişince yeniden fitContent (ilk 2 noktada fit alınıp tam hafta gelince zoom takılı kalmasın). */
-    const lastFitSeriesKeyRef = useRef<string>('');
     const logicalRangeRef = useRef<LogicalRange | null>(null);
     const dataByKeyRef = useRef<Record<string, BondPoint>>({});
     const barCountRef = useRef(0);
@@ -106,7 +104,11 @@ function BondTerminalChartImpl({
                 borderColor: t.border,
                 timeVisible: true,
                 secondsVisible: false,
+                lockVisibleTimeRangeOnResize: true,
                 ...computeTerminalTimeScaleLayout(widthPx, Math.max(2, barCountRef.current), rangeRef.current),
+                rightOffset: 0,
+                fixLeftEdge: true,
+                fixRightEdge: true,
                 shiftVisibleRangeOnNewBar: false,
             },
             crosshair: { mode: 1 },
@@ -219,12 +221,17 @@ function BondTerminalChartImpl({
                     borderColor: tokensRef.current.border,
                     timeVisible: true,
                     secondsVisible: false,
+                    lockVisibleTimeRangeOnResize: true,
                     ...lay,
+                    rightOffset: 0,
+                    fixLeftEdge: true,
+                    fixRightEdge: true,
                     shiftVisibleRangeOnNewBar: false,
                 },
             });
-            chart.timeScale().fitContent();
-            logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
+            if (logicalRangeRef.current) {
+                chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
+            }
         };
         window.addEventListener('resize', onResize);
         return () => {
@@ -238,7 +245,6 @@ function BondTerminalChartImpl({
             ma21Ref.current = null;
             volumeRef.current = null;
             hasInitialFitRef.current = false;
-            lastFitSeriesKeyRef.current = '';
         };
     }, []);
 
@@ -263,15 +269,6 @@ function BondTerminalChartImpl({
         const rangeChanged = rangeRef.current !== chartRange;
         rangeRef.current = chartRange;
         barCountRef.current = sorted.length;
-
-        const seriesFitKey =
-            sorted.length > 0
-                ? `${sorted.length}|${String(sorted[0]!.time)}|${String(sorted[sorted.length - 1]!.time)}`
-                : '';
-        const seriesChanged = lastFitSeriesKeyRef.current !== seriesFitKey;
-        if (seriesChanged) {
-            lastFitSeriesKeyRef.current = seriesFitKey;
-        }
 
         const byKey: Record<string, BondPoint> = {};
         sorted.forEach((p) => {
@@ -322,17 +319,25 @@ function BondTerminalChartImpl({
                 borderColor: tokensRef.current.border,
                 timeVisible: true,
                 secondsVisible: false,
+                lockVisibleTimeRangeOnResize: true,
                 ...tsLay,
+                rightOffset: 0,
+                fixLeftEdge: true,
+                fixRightEdge: true,
                 shiftVisibleRangeOnNewBar: false,
             },
         });
 
-        if (!hasInitialFitRef.current || rangeChanged || seriesChanged) {
+        if (!hasInitialFitRef.current || rangeChanged) {
             requestAnimationFrame(() => {
                 chart.timeScale().fitContent();
                 logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
                 hasInitialFitRef.current = true;
             });
+            return;
+        }
+        if (logicalRangeRef.current) {
+            chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
         }
     }, [loading, sorted, ma7, ma21, showMa, timeframeLabel, showYieldSeries]);
 

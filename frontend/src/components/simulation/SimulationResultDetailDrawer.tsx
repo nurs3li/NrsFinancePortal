@@ -29,7 +29,8 @@ export function SimulationResultDetailDrawer({
     if (!item) return null;
 
     const currency = item?.displayCurrency ?? displayCurrency;
-    const fmt = (n: number) => formatSimMoney(locale, n, currency);
+    const fmt = (n: number, fractionDigits = 2) =>
+        formatSimMoney(locale, n, currency, { maximumFractionDigits: fractionDigits });
 
     return (
         <div className="sim-drawer-backdrop" role="presentation" onClick={onClose}>

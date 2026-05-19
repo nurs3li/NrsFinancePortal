@@ -15,7 +15,7 @@ type SimulationLegendChipsProps = {
 export function SimulationLegendChips({
     items,
     locale,
-    displayCurrency,
+    displayCurrency: _displayCurrency,
     usdTryRate,
     onToggleVisible,
 }: SimulationLegendChipsProps) {

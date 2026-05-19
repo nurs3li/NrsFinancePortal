@@ -110,7 +110,7 @@ export function SimulationPerformanceChart({
     onOnlyVisibleChange,
     borderColor,
     textMuted,
-    textColor,
+    textColor: _textColor,
     onToggleVisible,
 }: SimulationPerformanceChartProps) {
     const { t, lang } = useLanguage();

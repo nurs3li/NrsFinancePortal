@@ -7,7 +7,7 @@ function destinationForUser(role: UserRole | null, fromPathname: string | undefi
     if (fromPathname && fromPathname !== '/' && fromPathname !== '/dashboard') {
         return fromPathname;
     }
-    if (role === 'ADMIN') return '/admin';
+    if (role === 'ADMIN') return '/market';
     if (role === 'USER') return '/dashboard';
     return '/dashboard';
 }

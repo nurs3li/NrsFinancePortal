@@ -1,5 +1,5 @@
 import type { AssetType } from '../../constants/OrderConstants';
-import type { SimDisplayCurrency, SimulationResultItem } from './types';
+import type { SimulationResultItem } from './types';
 
 export type NativeQuoteCurrency = 'TRY' | 'USD' | 'GBP' | 'EUR';
 
