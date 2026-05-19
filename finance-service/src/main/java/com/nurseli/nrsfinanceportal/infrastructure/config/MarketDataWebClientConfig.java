@@ -28,21 +28,4 @@ public class MarketDataWebClientConfig {
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .build();
     }
-
-    /** Uzun süren BIST / İş Yatırım maden internal backfill çağrıları için ayrı zaman aşımı. */
-    @Bean(name = "marketDataBackfillWebClient")
-    public WebClient marketDataBackfillWebClient(
-            @Value("${market-data.base-url}") String baseUrl,
-            @Value("${market-data.connect-timeout-ms:5000}") int connectTimeoutMs,
-            @Value("${market-data.backfill-response-timeout-ms:300000}") int backfillResponseTimeoutMs
-    ) {
-        HttpClient httpClient = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
-                .responseTimeout(Duration.ofMillis(backfillResponseTimeoutMs));
-
-        return WebClient.builder()
-                .baseUrl(baseUrl)
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .build();
-    }
 }

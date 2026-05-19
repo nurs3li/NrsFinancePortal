@@ -28,6 +28,8 @@ public class MarketTerminalListService {
 
     private static final int MAX_PAGE_SIZE = 50;
     private static final int HISTORY_DAYS = 400;
+    /** Liste spark / horizon — tam yıl için ~252 gün ideal; 90 gün terminal gecikmesini düşürür. */
+    private static final int BOND_HISTORY_DAYS = 90;
     private static final List<String> PRECIOUS_METAL_SYMBOLS =
             List.of("XAU_TRY", "XAU_USD_OZ", "XAG_USD_OZ", "XPT_USD_OZ", "XPD_USD_OZ");
 
@@ -127,6 +129,8 @@ public class MarketTerminalListService {
                     null,
                     null,
                     null,
+                    null,
+                    null,
                     null));
         }
         return toPageResponse(items, paged.page(), paged.size(), paged.totalElements());
@@ -186,6 +190,8 @@ public class MarketTerminalListService {
                 null,
                 null,
                 null,
+                null,
+                null,
                 trim(r.contractMonth()),
                 bdObj(r.basis()),
                 bdObj(r.marginRequirement()));
@@ -209,51 +215,129 @@ public class MarketTerminalListService {
                 .stream()
                 .filter(r -> bd(r.dirtyPrice()) > 0)
                 .toList();
-        List<MarketDataClient.DebtLatestRow> filtered = merged.stream()
-                .filter(r -> {
-                    String sym = norm(r.isin()).toLowerCase(Locale.ROOT);
-                    if (!search.isEmpty() && !sym.contains(search)) return false;
-                    return true;
+
+        List<BondLightCandidate> lights = merged.stream()
+                .map(r -> {
+                    String sym = norm(r.isin());
+                    if (!search.isEmpty() && !sym.toLowerCase(Locale.ROOT).contains(search)) {
+                        return null;
+                    }
+                    double px = bd(r.dirtyPrice());
+                    return new BondLightCandidate(r, sym, px);
                 })
+                .filter(Objects::nonNull)
                 .toList();
-        Comparator<MarketDataClient.DebtLatestRow> cmp =
-                Comparator.comparing((MarketDataClient.DebtLatestRow r) -> bd(r.dirtyPrice())).reversed();
-        if ("asc".equalsIgnoreCase(dir) && "price".equalsIgnoreCase(sort)) {
-            cmp = Comparator.comparing((MarketDataClient.DebtLatestRow r) -> bd(r.dirtyPrice()));
-        }
+
+        List<BondLightCandidate> filtered = applyGenericFilter(
+                lights,
+                filter,
+                search,
+                BondLightCandidate::symbol,
+                BondLightCandidate::symbol,
+                c -> new FilterCtx(c.price(), 0.0, c.volume()));
+
+        Comparator<BondLightCandidate> cmp = bondLightComparator(sort, dir);
         filtered = filtered.stream().sorted(cmp).toList();
-        return sliceAndMap(filtered, page, size, r -> {
-            double px = bd(r.dirtyPrice());
-            return new MarketTerminalListItemDto(
-                    norm(r.isin()),
-                    "BOND",
-                    null,
-                    norm(r.isin()),
-                    norm(r.isin()),
-                    px,
-                    0.0,
-                    0.0,
-                    "UP",
-                    px > 0 ? px * 100 : null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    List.of(px),
-                    null,
-                    null,
-                    null,
-                    null,
-                    trim(r.maturityDate()),
-                    r.daysToMaturity(),
-                    bdObj(r.couponRate()),
-                    bdObj(r.yieldPct()),
-                    null,
-                    null,
-                    null);
-        });
+
+        long total = filtered.size();
+        int from = Math.min((int) total, page * size);
+        int to = Math.min((int) total, from + size);
+        List<BondLightCandidate> pageRows = from >= to ? List.of() : filtered.subList(from, to);
+
+        List<MarketTerminalListItemDto> items = pageRows.parallelStream()
+                .map(this::enrichBondCandidate)
+                .toList();
+        return toPageResponse(items, page, size, total);
+    }
+
+    private MarketTerminalListItemDto enrichBondCandidate(BondLightCandidate light) {
+        MarketDataClient.DebtLatestRow r = light.row();
+        String sym = light.symbol();
+        double px = light.price();
+        List<Double> spark = debtCloses(marketDataClient.getDebtHistory(sym, BOND_HISTORY_DAYS));
+        if (spark.isEmpty() && px > 0) {
+            spark = List.of(px);
+        }
+        double pct = pctFromSpark(spark, 0);
+        Horizon hz = horizonsFromCloses(spark, pct);
+        return new MarketTerminalListItemDto(
+                sym,
+                "BOND",
+                null,
+                sym,
+                sym,
+                px,
+                pct,
+                pct,
+                pct >= 0 ? "UP" : "DOWN",
+                px > 0 ? px * 100 : null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                spark,
+                hz.pctDay(),
+                hz.pctWeek(),
+                hz.pctMonth(),
+                hz.pctYear(),
+                trim(r.maturityDate()),
+                r.daysToMaturity(),
+                bdObj(r.couponRate()),
+                null,
+                r.couponFrequencyPerYear(),
+                trim(r.couponFrequencyLabel()),
+                null,
+                null,
+                null);
+    }
+
+    private static List<Double> debtCloses(List<MarketDataClient.DebtHistoryRow> hist) {
+        if (hist == null || hist.isEmpty()) {
+            return List.of();
+        }
+        return hist.stream()
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(
+                        MarketDataClient.DebtHistoryRow::asOf,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(MarketDataClient.DebtHistoryRow::dirtyPrice)
+                .map(MarketTerminalListService::bdObj)
+                .filter(v -> v != null && v > 0)
+                .toList();
+    }
+
+    private static Comparator<BondCandidate> bondComparator(String sort, String dir) {
+        boolean asc = "asc".equalsIgnoreCase(dir);
+        Comparator<BondCandidate> base =
+                switch (sort != null ? sort.toLowerCase(Locale.ROOT) : "") {
+                    case "price" -> Comparator.comparing(BondCandidate::price);
+                    case "pctday" -> Comparator.comparing(
+                            c -> c.horizon().pctDay() != null ? c.horizon().pctDay() : c.changePercent());
+                    case "pctweek" -> Comparator.comparing(
+                            c -> c.horizon().pctWeek() != null ? c.horizon().pctWeek() : 0.0);
+                    case "pctmonth" -> Comparator.comparing(
+                            c -> c.horizon().pctMonth() != null ? c.horizon().pctMonth() : 0.0);
+                    case "pctyear" -> Comparator.comparing(
+                            c -> c.horizon().pctYear() != null ? c.horizon().pctYear() : 0.0);
+                    case "symbol" -> Comparator.comparing(BondCandidate::symbol, String.CASE_INSENSITIVE_ORDER);
+                    default -> Comparator.comparing(c -> Math.abs(c.changePercent()));
+                };
+        return asc ? base : base.reversed();
+    }
+
+    /** Ön sıralama: horizon % yalnızca sayfa satırlarında hesaplanır. */
+    private static Comparator<BondLightCandidate> bondLightComparator(String sort, String dir) {
+        boolean asc = "asc".equalsIgnoreCase(dir);
+        Comparator<BondLightCandidate> base =
+                switch (sort != null ? sort.toLowerCase(Locale.ROOT) : "") {
+                    case "price" -> Comparator.comparing(BondLightCandidate::price);
+                    case "pctday", "pctweek", "pctmonth", "pctyear" -> Comparator.comparing(BondLightCandidate::price);
+                    case "symbol" -> Comparator.comparing(BondLightCandidate::symbol, String.CASE_INSENSITIVE_ORDER);
+                    default -> Comparator.comparing(BondLightCandidate::symbol, String.CASE_INSENSITIVE_ORDER);
+                };
+        return asc ? base : base.reversed();
     }
 
     private MarketTerminalListPageResponse listSpotCategory(
@@ -343,6 +427,8 @@ public class MarketTerminalListService {
                     null,
                     null,
                     null,
+                    null,
+                    null,
                     null));
         }
         return toPageResponse(items, page, size, total);
@@ -426,6 +512,24 @@ public class MarketTerminalListService {
     }
 
     private record Candidate(String symbol, double price, double changePercent, List<Double> spark, Double volume) {}
+
+    private record BondLightCandidate(MarketDataClient.DebtLatestRow row, String symbol, double price) {
+        Double volume() {
+            return price > 0 ? price * 100 : null;
+        }
+    }
+
+    private record BondCandidate(
+            MarketDataClient.DebtLatestRow row,
+            String symbol,
+            double price,
+            double changePercent,
+            List<Double> spark,
+            Horizon horizon) {
+        Double volume() {
+            return price > 0 ? price * 100 : null;
+        }
+    }
 
     private record FilterCtx(double price, double changePercent, Double volume) {}
 

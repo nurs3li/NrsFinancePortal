@@ -42,8 +42,6 @@ market-data:
   base-url: http://localhost:8083
   connect-timeout-ms: 5000
   response-timeout-ms: 20000
-  internal-backfill-token: ${NRS_INTERNAL_BACKFILL_TOKEN:}
-  backfill-response-timeout-ms: 300000
 
 management:
   endpoints:
@@ -76,6 +74,10 @@ app:
   manual-portfolio:
     price-resolve:
       max-lookback-days: 7
+  price-alerts:
+    enabled: ${APP_PRICE_ALERTS_ENABLED:true}
+    evaluation-cron: ${APP_PRICE_ALERTS_CRON:0 */2 * * * *}
+    max-active-per-user: ${APP_PRICE_ALERTS_MAX_ACTIVE:30}
   # Dekont dosyaları. Boşsa: ${user.home}/.nrs-finance/receipts. Docker: /data/receipts + volume önerilir (tmp silinmez).
   receipt-storage:
     root: ${NRS_RECEIPT_STORAGE_ROOT:}

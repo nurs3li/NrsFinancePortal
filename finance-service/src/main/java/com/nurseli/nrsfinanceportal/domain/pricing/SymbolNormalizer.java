@@ -23,6 +23,7 @@ public class SymbolNormalizer {
             case FUND -> symbol;     // ETF: SPY, QQQ, VOO...
             case STOCK -> symbol == null ? "" : symbol.toUpperCase();
             case BIST -> symbol == null ? "" : symbol.trim().toUpperCase();
+            case VIOP, BOND -> symbol == null ? "" : symbol.trim().toUpperCase();
             default -> symbol;
         };
     }

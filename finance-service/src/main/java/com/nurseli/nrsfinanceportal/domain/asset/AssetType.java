@@ -6,5 +6,7 @@ public enum AssetType {
     STOCK,     // AAPL, TSLA (ABD, USD kotasyon)
     BIST,      // THYAO, ASELS (TRY kotasyon)
     METAL,     // XAU
-    FUND       // ETF: SPY, QQQ (USD kotasyon)
+    FUND,      // ETF: SPY, QQQ (USD kotasyon)
+    VIOP,      // VİOP vadeli kontrat (manuel pozisyon / fiyat alarmı)
+    BOND       // Tahvil / eurobond (manuel pozisyon / fiyat alarmı)
 }

@@ -28,6 +28,8 @@ public record MarketTerminalListItemDto(
         Integer daysToMaturity,
         Double couponRate,
         Double yieldToMaturity,
+        Integer couponFrequencyPerYear,
+        String couponFrequencyLabel,
         String contractMonth,
         Double basis,
         Double marginRequirement) {}
