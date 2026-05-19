@@ -27,4 +27,6 @@ public interface InflationIndexMonthlyRepository extends JpaRepository<Inflation
             InflationIndicatorType indicatorType,
             String seriesCode
     );
+
+    long countByIndicatorTypeAndSeriesCode(InflationIndicatorType indicatorType, String seriesCode);
 }

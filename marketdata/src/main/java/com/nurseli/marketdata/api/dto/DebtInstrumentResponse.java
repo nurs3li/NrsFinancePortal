@@ -4,5 +4,8 @@ public record DebtInstrumentResponse(
         String isin,
         String name,
         String issuer,
-        String maturityDate
+        String maturityDate,
+        Integer couponFrequencyPerYear,
+        String couponFrequencyLabel,
+        String couponFrequencySource
 ) {}

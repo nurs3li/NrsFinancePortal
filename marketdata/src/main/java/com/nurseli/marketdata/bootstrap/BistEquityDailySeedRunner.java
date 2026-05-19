@@ -50,14 +50,33 @@ public class BistEquityDailySeedRunner implements ApplicationRunner {
         String source = BistEquityDailyConstants.HISTORY_SOURCE;
         long existing = marketPriceHistoryRepository.countBySource(source);
         Optional<LocalDateTime> minTsOpt = marketPriceHistoryRepository.findMinTimestampBySource(source);
+        Optional<LocalDateTime> maxTsOpt = marketPriceHistoryRepository.findMaxTimestampBySource(source);
         LocalDate oldest =
                 minTsOpt.map(LocalDateTime::toLocalDate).orElse(null);
+        LocalDate newest =
+                maxTsOpt.map(LocalDateTime::toLocalDate).orElse(null);
         boolean depthInsufficient =
                 minTsOpt.isEmpty() || oldest == null || oldest.isAfter(targetFrom);
+        int staleTailDays = Math.max(1, bistProperties.getStaleTailDays());
+        LocalDate tailCutoff = to.minusDays(staleTailDays);
+        boolean tailStale = newest == null || !newest.isAfter(tailCutoff);
 
-        if (existing > 0 && !depthInsufficient) {
-            log.info("[BIST_DAILY_SEED] skip depth_ok rows={} oldest={} targetFrom={}", existing, oldest, targetFrom);
+        if (existing > 0 && !depthInsufficient && !tailStale) {
+            log.info(
+                    "[BIST_DAILY_SEED] skip depth_ok rows={} oldest={} newest={} targetFrom={}",
+                    existing,
+                    oldest,
+                    newest,
+                    targetFrom);
             return;
+        }
+        if (existing > 0 && tailStale) {
+            log.info(
+                    "[BIST_DAILY_SEED] tail_repair rows={} newest={} tailCutoff={} staleTailDays={}",
+                    existing,
+                    newest,
+                    tailCutoff,
+                    staleTailDays);
         }
         if (existing > 0) {
             log.info(

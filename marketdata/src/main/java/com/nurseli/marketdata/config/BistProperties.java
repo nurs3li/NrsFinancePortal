@@ -29,10 +29,19 @@ public class BistProperties {
     /** Zamanlayıcı: son N günü tekrar çeker (tam yıllık backfill değil). */
     private int schedulerIncrementalLookbackDays = 30;
 
+    /**
+     * DB'deki son gün bu kadar günden eskiyse okuma / seed sırasında HisseTekil ile kuyruk doldurulur
+     * (hafta sonu için 3 gün varsayılan).
+     */
+    private int staleTailDays = 3;
+
     /** Europe/Istanbul — HisseTekil günlük yenileme */
     private String schedulerZone = "Europe/Istanbul";
 
     private String dailyIngestCron = "0 20 7 * * MON-FRI";
+
+    /** Borsa kapanışı sonrası ikinci günlük çekim (İstanbul). */
+    private String dailyIngestCronClose = "0 30 18 * * MON-FRI";
     private String primaryProvider = "IS_YATIRIM";
     private String fallbackProvider = "YAHOO";
     private boolean fallbackToDb = true;

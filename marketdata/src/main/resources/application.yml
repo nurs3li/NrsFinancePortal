@@ -38,6 +38,9 @@ management:
         include: health,info
 
 market:
+  stale-tail:
+    enabled: true
+    days: 3
   fx:
     effective-rates:
       lookback-days: ${FX_EFFECTIVE_LOOKBACK_DAYS:400}
@@ -217,6 +220,15 @@ market:
           dirtyPriceScale: 1
           yieldScale: 1
   inflation:
+    backfill:
+      enabled: ${INFLATION_BACKFILL_ENABLED:false}
+      from: ${INFLATION_BACKFILL_FROM:2003-01-01}
+      startup-enabled: ${INFLATION_BACKFILL_ON_STARTUP:false}
+    cpi:
+      persist-enabled: ${INFLATION_CPI_PERSIST_ENABLED:true}
+      base-year: 2003
+      scheduler-enabled: ${INFLATION_CPI_SCHEDULER_ENABLED:false}
+      scheduler-cron: ${INFLATION_CPI_SCHEDULER_CRON:0 0 7 3 * *}
     ppi:
       persist-enabled: ${INFLATION_PPI_PERSIST_ENABLED:true}
       base-year: 2003
@@ -239,7 +251,7 @@ market:
       timeoutMs: 3000
       latestPath: ${DEBT_PROVIDER_LATEST_PATH:/debt/latest}
   bist:
-    enabled: false
+    enabled: true
     scheduler-enabled: false
     primary-provider: IS_YATIRIM
     fallback-provider: YAHOO
@@ -378,7 +390,7 @@ app:
       scheduler:
         enabled: true
         snapshot-enabled: true
-        history-enabled: false
+        history-enabled: true
         snapshot-fixed-delay-ms: 3600000
         history-fixed-delay-ms: 3600000
         snapshot-initial-delay-ms: 120000
@@ -530,6 +542,24 @@ app:
         latest-refresh:
           enabled: true
           fixed-delay-ms: 3600000
+    eurobonds:
+      evds:
+        enabled: ${MARKET_EUROBONDS_EVDS_ENABLED:true}
+        default-lookback-years: ${MARKET_EUROBONDS_EVDS_DEFAULT_LOOKBACK_YEARS:5}
+        latest-refresh:
+          enabled: ${MARKET_EUROBONDS_EVDS_LATEST_REFRESH_ENABLED:true}
+          fixed-delay-ms: ${MARKET_EUROBONDS_EVDS_LATEST_REFRESH_FIXED_DELAY_MS:86400000}
+        series:
+          book-value: ${EVDS_SERIES_EUROBOND_GOV_BOOK_VALUE_WEEKLY:TP_EBONDYAZDEG_ST}
+          market-value: ${EVDS_SERIES_EUROBOND_GOV_MARKET_VALUE_WEEKLY:TP_EBONDPIYDEG_ST}
+          total: ${EVDS_SERIES_EUROBOND_GOV_TOTAL_WEEKLY:TP_EBONDVADE_C8_ST}
+          original-maturity-short: ${EVDS_SERIES_EUROBOND_GOV_ORIGINAL_MATURITY_SHORT_WEEKLY:TP_EBONDVADE_C1_ST}
+          original-maturity-long: ${EVDS_SERIES_EUROBOND_GOV_ORIGINAL_MATURITY_LONG_WEEKLY:TP_EBONDVADE_C2_ST}
+          remaining-maturity-short: ${EVDS_SERIES_EUROBOND_GOV_REMAINING_MATURITY_SHORT_WEEKLY:TP_EBONDVADE_C3_ST}
+          remaining-maturity-long: ${EVDS_SERIES_EUROBOND_GOV_REMAINING_MATURITY_LONG_WEEKLY:TP_EBONDVADE_C4_ST}
+          currency-usd: ${EVDS_SERIES_EUROBOND_GOV_CURRENCY_USD_WEEKLY:TP_EBONDVADE_C5_ST}
+          currency-eur: ${EVDS_SERIES_EUROBOND_GOV_CURRENCY_EUR_WEEKLY:TP_EBONDVADE_C6_ST}
+          currency-jpy: ${EVDS_SERIES_EUROBOND_GOV_CURRENCY_JPY_WEEKLY:TP_EBONDVADE_C7_ST}
   providers:
     fx:
       canonical: TCMB

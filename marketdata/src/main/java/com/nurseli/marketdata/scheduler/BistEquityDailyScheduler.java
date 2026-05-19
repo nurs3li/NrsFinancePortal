@@ -25,6 +25,15 @@ public class BistEquityDailyScheduler {
 
     @Scheduled(cron = "${market.bist.daily-ingest-cron}", zone = "${market.bist.scheduler-zone}")
     public void incrementalDailyBackfill() {
+        runIncrementalBackfill("morning");
+    }
+
+    @Scheduled(cron = "${market.bist.daily-ingest-cron-close}", zone = "${market.bist.scheduler-zone}")
+    public void closeSessionDailyBackfill() {
+        runIncrementalBackfill("close");
+    }
+
+    private void runIncrementalBackfill(String slot) {
         if (!bistProperties.isEnabled() || !bistProperties.isSchedulerEnabled()) {
             return;
         }
@@ -34,11 +43,11 @@ public class BistEquityDailyScheduler {
         BistBackfillRequest req = new BistBackfillRequest();
         req.setFrom(from);
         req.setTo(to);
-        log.info("[BIST_DAILY_SCHED] incremental from={} to={}", from, to);
+        log.info("[BIST_DAILY_SCHED] incremental slot={} from={} to={}", slot, from, to);
         try {
             bistEquityBackfillService.runBackfill(req);
         } catch (Exception ex) {
-            log.warn("[BIST_DAILY_SCHED] failed reason={}", ex.getMessage());
+            log.warn("[BIST_DAILY_SCHED] failed slot={} reason={}", slot, ex.getMessage());
         }
     }
 }

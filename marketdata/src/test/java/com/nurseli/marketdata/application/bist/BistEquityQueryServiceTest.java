@@ -171,6 +171,50 @@ class BistEquityQueryServiceTest {
     }
 
     @Test
+    void stale_tail_triggers_when_last_day_equals_freshness_cutoff() {
+        bistProperties.setEnabled(true);
+        bistProperties.setStaleTailDays(3);
+        service = new BistEquityQueryService(repository, catalog, bistProperties, ingestService);
+        LocalDate to = LocalDate.now(BistEquityDailyConstants.IST);
+        LocalDate lastDay = to.minusDays(3);
+        LocalDate from = lastDay.minusDays(30);
+        LocalDateTime start = from.atStartOfDay(BistEquityDailyConstants.IST).toLocalDateTime();
+        LocalDateTime endEx = to.plusDays(1).atStartOfDay(BistEquityDailyConstants.IST).toLocalDateTime();
+        MarketPriceHistory stale = mph("MGROS", lastDay, new BigDecimal("700"));
+        when(repository.findTopBySymbolAndSourceOrderByTimestampDesc("MGROS", "IS_YATIRIM"))
+                .thenReturn(Optional.of(stale));
+        when(repository.findBySymbolAndSourceAndTimestampRange(eq("MGROS"), eq("IS_YATIRIM"), eq(start), eq(endEx)))
+                .thenReturn(List.of(stale))
+                .thenReturn(List.of(stale, mph("MGROS", lastDay.plusDays(1), new BigDecimal("710"))));
+
+        service.getHistory("MGROS", from, to);
+
+        verify(ingestService).ingestHistory(eq("MGROS"), eq(lastDay.plusDays(1)), eq(to));
+    }
+
+    @Test
+    void stale_tail_triggers_incremental_ingest_when_last_day_old() {
+        bistProperties.setEnabled(true);
+        bistProperties.setStaleTailDays(3);
+        service = new BistEquityQueryService(repository, catalog, bistProperties, ingestService);
+        LocalDate lastDay = LocalDate.now(BistEquityDailyConstants.IST).minusDays(10);
+        LocalDate from = lastDay.minusDays(30);
+        LocalDate to = LocalDate.now(BistEquityDailyConstants.IST);
+        LocalDateTime start = from.atStartOfDay(BistEquityDailyConstants.IST).toLocalDateTime();
+        LocalDateTime endEx = to.plusDays(1).atStartOfDay(BistEquityDailyConstants.IST).toLocalDateTime();
+        MarketPriceHistory stale = mph("THYAO", lastDay, new BigDecimal("40"));
+        when(repository.findTopBySymbolAndSourceOrderByTimestampDesc("THYAO", "IS_YATIRIM"))
+                .thenReturn(Optional.of(stale));
+        when(repository.findBySymbolAndSourceAndTimestampRange(eq("THYAO"), eq("IS_YATIRIM"), eq(start), eq(endEx)))
+                .thenReturn(List.of(stale))
+                .thenReturn(List.of(stale, mph("THYAO", lastDay.plusDays(1), new BigDecimal("41"))));
+
+        List<BistEquityHistoryResponse> h = service.getHistory("THYAO", from, to);
+        assertEquals(2, h.size());
+        verify(ingestService).ingestHistory(eq("THYAO"), eq(lastDay.plusDays(1)), eq(to));
+    }
+
+    @Test
     void batch_history_unsupported_symbol_returns_empty_series() {
         LocalDate from = LocalDate.of(2025, 7, 1);
         LocalDate to = LocalDate.of(2025, 7, 5);

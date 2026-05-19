@@ -10,7 +10,9 @@ import com.nurseli.marketdata.api.dto.macropanel.NormalizedMacroSeriesDto;
 import com.nurseli.marketdata.api.dto.DebtSnapshotResponse;
 import com.nurseli.marketdata.api.dto.PolicyRateTrResponse;
 import com.nurseli.marketdata.application.deposit.DepositRateCatalog;
+import com.nurseli.marketdata.application.inflation.InflationIndexQueryService;
 import com.nurseli.marketdata.application.inflation.InflationMacroService;
+import com.nurseli.marketdata.domain.inflation.InflationIndicatorType;
 import com.nurseli.marketdata.application.loan.LoanRateCatalog;
 import com.nurseli.marketdata.config.EvdsProperties;
 import com.nurseli.marketdata.config.EvdsSeriesLogicalNames;
@@ -40,6 +42,7 @@ import java.util.Optional;
 public class MacroPanelAggregationService {
 
     public static final String CATEGORY_POLICY_RATE = "POLICY_RATE";
+    public static final String CATEGORY_FUNDING_COST = "FUNDING_COST";
     public static final String CATEGORY_CPI_INDEX = "CPI_INDEX";
     public static final String CATEGORY_PPI_INDEX = "PPI_INDEX";
     public static final String CATEGORY_CREDIT_RATE = "CREDIT_RATE";
@@ -60,6 +63,7 @@ public class MacroPanelAggregationService {
     private final EvdsDebtClient evdsDebtClient;
     private final EvdsMacroIndicatorService evdsMacroIndicatorService;
     private final InflationMacroService inflationMacroService;
+    private final InflationIndexQueryService inflationIndexQueryService;
     private final DebtQueryService debtQueryService;
 
     public InterestInflationMacroPanelResponse build() {
@@ -87,6 +91,7 @@ public class MacroPanelAggregationService {
         appendMonthlyIndexSeries(series, EvdsSeriesLogicalNames.CPI_TR_INDEX, CATEGORY_CPI_INDEX, "TÜFE genel endeks (seviye)", 48);
         appendMonthlyIndexSeries(series, EvdsSeriesLogicalNames.PPI_TR_INDEX, CATEGORY_PPI_INDEX, "Yİ-ÜFE genel endeks (seviye)", 48);
         appendPolicySeries(series);
+        appendFundingCostSeries(series);
         appendCreditSeries(series);
         appendTryDepositSeries(series);
         appendFxDepositSeries(series);
@@ -110,7 +115,7 @@ public class MacroPanelAggregationService {
         String trimmed = code.trim();
         LocalDate end = LocalDate.now();
         LocalDate start = end.minusMonths(lookbackMonths).withDayOfMonth(1);
-        List<NormalizedMacroObservationDto> obs = toObservations(trimmed, start, end);
+        List<NormalizedMacroObservationDto> obs = loadIndexObservations(logicalKey, trimmed, start, end);
         logSeries(trimmed, logicalKey, obs);
         if (!obs.isEmpty()) {
             out.add(new NormalizedMacroSeriesDto(trimmed, label, category, FREQ_MONTHLY, UNIT_INDEX, SOURCE_EVDS, obs, logicalKey));
@@ -138,6 +143,32 @@ public class MacroPanelAggregationService {
                     SOURCE_EVDS,
                     obs,
                     EvdsSeriesLogicalNames.POLICY_RATE_TR
+            ));
+        }
+    }
+
+    private void appendFundingCostSeries(List<NormalizedMacroSeriesDto> out) {
+        String logicalKey = EvdsSeriesLogicalNames.TCMB_WEIGHTED_AVG_FUNDING_COST_TR;
+        String code = evdsProperties.getSeriesCode(logicalKey);
+        if (code == null || code.isBlank()) {
+            log.warn("[MACRO_PANEL] missing evds mapping logicalKey={}", logicalKey);
+            return;
+        }
+        String trimmed = code.trim();
+        LocalDate end = LocalDate.now();
+        LocalDate start = end.minusWeeks(120);
+        List<NormalizedMacroObservationDto> obs = toObservations(trimmed, start, end);
+        logSeries(trimmed, logicalKey, obs);
+        if (!obs.isEmpty()) {
+            out.add(new NormalizedMacroSeriesDto(
+                    trimmed,
+                    "TCMB Ağırlıklı Ortalama Fonlama Maliyeti",
+                    CATEGORY_FUNDING_COST,
+                    FREQ_WEEKLY,
+                    UNIT_PERCENT,
+                    SOURCE_EVDS,
+                    obs,
+                    logicalKey
             ));
         }
     }
@@ -257,6 +288,52 @@ public class MacroPanelAggregationService {
         };
     }
 
+    private List<NormalizedMacroObservationDto> loadIndexObservations(
+            String logicalKey,
+            String evdsSeriesCode,
+            LocalDate fromInclusive,
+            LocalDate toInclusive
+    ) {
+        InflationIndicatorType type = switch (logicalKey) {
+            case EvdsSeriesLogicalNames.CPI_TR_INDEX -> InflationIndicatorType.CPI;
+            case EvdsSeriesLogicalNames.PPI_TR_INDEX -> InflationIndicatorType.PPI;
+            default -> null;
+        };
+        if (type != null) {
+            List<EvdsSeriesPoint> dbPts = inflationIndexQueryService.indexPointsBetween(type, fromInclusive, toInclusive);
+            List<NormalizedMacroObservationDto> evdsObs = toObservations(evdsSeriesCode, fromInclusive, toInclusive);
+            if (!dbPts.isEmpty() && !evdsObs.isEmpty()) {
+                String dbLast = dbPts.getLast().asOf().toLocalDate().toString();
+                String evdsLast = evdsObs.getLast().date();
+                if (evdsLast != null && evdsLast.compareTo(dbLast) > 0) {
+                    return evdsObs;
+                }
+                return toObservationsFromPoints(dbPts);
+            }
+            if (!dbPts.isEmpty()) {
+                return toObservationsFromPoints(dbPts);
+            }
+        }
+        return toObservations(evdsSeriesCode, fromInclusive, toInclusive);
+    }
+
+    private List<NormalizedMacroObservationDto> toObservationsFromPoints(List<EvdsSeriesPoint> pts) {
+        List<NormalizedMacroObservationDto> out = new ArrayList<>();
+        for (EvdsSeriesPoint p : pts) {
+            if (p == null || p.asOf() == null) {
+                continue;
+            }
+            BigDecimal v = p.value();
+            if (v == null) {
+                continue;
+            }
+            LocalDate d = p.asOf().toLocalDate();
+            out.add(new NormalizedMacroObservationDto(d.toString(), v.doubleValue()));
+        }
+        out.sort(Comparator.comparing(NormalizedMacroObservationDto::date));
+        return out;
+    }
+
     private List<NormalizedMacroObservationDto> toObservations(String evdsSeriesCode, LocalDate fromInclusive, LocalDate toInclusive) {
         List<EvdsSeriesPoint> pts = evdsDebtClient.fetchSeriesAscending(evdsSeriesCode, fromInclusive, toInclusive);
         List<NormalizedMacroObservationDto> out = new ArrayList<>();
@@ -370,7 +447,7 @@ public class MacroPanelAggregationService {
         return new MacroPanelBondSummaryDto(
                 r.isin(),
                 r.dirtyPrice() != null ? r.dirtyPrice().doubleValue() : null,
-                r.yieldPct() != null ? r.yieldPct().doubleValue() : null,
+                r.couponRate() != null ? r.couponRate().doubleValue() : null,
                 r.daysToMaturity(),
                 CATEGORY_BOND_PRICE_PERFORMANCE,
                 UNIT_PRICE,

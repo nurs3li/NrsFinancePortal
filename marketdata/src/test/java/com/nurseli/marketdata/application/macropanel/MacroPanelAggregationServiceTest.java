@@ -74,6 +74,9 @@ class MacroPanelAggregationServiceTest {
             if ("POLICY_RATE_TR".equals(k)) {
                 return "TP_POL";
             }
+            if ("TCMB_WEIGHTED_AVG_FUNDING_COST_TR".equals(k)) {
+                return "TP_APIFON4";
+            }
             if (k != null && k.startsWith("LOAN_RATE_")) {
                 return "TP_LOAN_" + k;
             }
@@ -106,5 +109,38 @@ class MacroPanelAggregationServiceTest {
         assertEquals("PERCENT", usd1m.get().unit());
         assertEquals("EVDS", usd1m.get().source());
         assertFalse(usd1m.get().observations().isEmpty());
+    }
+
+    @Test
+    void build_whenEvdsEnabled_addsWeightedFundingCostSeries() {
+        when(evdsProperties.isEnabled()).thenReturn(true);
+        when(debtQueryService.latest()).thenReturn(List.of());
+        when(inflationMacroService.latest()).thenReturn(null);
+        when(evdsMacroIndicatorService.latestPolicyRateTr()).thenReturn(Optional.empty());
+
+        when(evdsProperties.getSeriesCode(anyString())).thenAnswer(inv -> {
+            String k = inv.getArgument(0);
+            if ("TCMB_WEIGHTED_AVG_FUNDING_COST_TR".equals(k)) {
+                return "TP_APIFON4";
+            }
+            return null;
+        });
+
+        EvdsSeriesPoint pt = new EvdsSeriesPoint(LocalDateTime.now().minusWeeks(1), BigDecimal.valueOf(42.5));
+        when(evdsDebtClient.fetchSeriesAscending(anyString(), any(), any())).thenReturn(List.of(pt));
+
+        InterestInflationMacroPanelResponse r = service.build();
+
+        Optional<NormalizedMacroSeriesDto> funding = r.series().stream()
+                .filter(s -> "TCMB_WEIGHTED_AVG_FUNDING_COST_TR".equals(s.logicalKey()))
+                .findFirst();
+        assertTrue(funding.isPresent());
+        assertEquals("TP_APIFON4", funding.get().code());
+        assertEquals("FUNDING_COST", funding.get().category());
+        assertEquals("WEEKLY", funding.get().frequency());
+        assertEquals("PERCENT", funding.get().unit());
+        assertEquals("EVDS", funding.get().source());
+        assertEquals("TCMB Ağırlıklı Ortalama Fonlama Maliyeti", funding.get().label());
+        assertFalse(funding.get().observations().isEmpty());
     }
 }

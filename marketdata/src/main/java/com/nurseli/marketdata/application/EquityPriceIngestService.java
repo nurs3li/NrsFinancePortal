@@ -139,31 +139,43 @@ public class EquityPriceIngestService {
             log.debug("[EQUITY_HISTORY] No symbols configured for incremental ingest");
             return;
         }
-        LocalDate today = LocalDate.now(MARKET_WALL_CLOCK_ZONE);
         for (String symbol : symbols) {
             try {
-                // Son satır market_price_history içinde çoğunlukla 10 dk'da bir gelen FINHUB quote'tur;
-                // grafiğin kaynağı equity_daily_candle olduğu için "son gün" buradan türetilmeli (aksi halde
-                // from = bugün+1 olur ve incremental hiç çalışmaz).
-                int maxDays = Math.max(1, equityProperties.getMaxHistoryDays());
-                LocalDate fromRaw = equityDailyCandleRepository.findTopBySymbolOrderByAsOfDesc(symbol)
-                        .map(c -> c.getAsOf().plusDays(1))
-                        .orElse(today.minusDays(maxDays));
-                int heal = Math.max(0, equityProperties.getIncrementalGapHealDays());
-                LocalDate from = fromRaw.minusDays(heal);
-                LocalDate oldest = today.minusDays(maxDays);
-                if (from.isBefore(oldest)) {
-                    from = oldest;
-                }
-                if (from.isAfter(today)) {
-                    continue;
-                }
-                ingestHistoryForSymbol(symbol, from, today, true);
-                rollupEquityDailyCandlesFromFinhubQuotes(symbol, from, today);
+                ingestIncrementalForSymbol(symbol);
             } catch (Exception ex) {
                 log.warn("[EQUITY_HISTORY] Incremental failed symbol={} reason={}", symbol, ex.getMessage());
             }
         }
+    }
+
+    /**
+     * Tek sembol için günlük mum kuyruğunu günceller (grafik okunurken stale-tail onarımı).
+     */
+    @Transactional
+    @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
+    public void ingestIncrementalForSymbol(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            return;
+        }
+        String sym = symbol.trim().toUpperCase();
+        LocalDate today = LocalDate.now(MARKET_WALL_CLOCK_ZONE);
+        int maxDays = Math.max(1, equityProperties.getMaxHistoryDays());
+        LocalDate fromRaw =
+                equityDailyCandleRepository
+                        .findTopBySymbolOrderByAsOfDesc(sym)
+                        .map(c -> c.getAsOf().plusDays(1))
+                        .orElse(today.minusDays(maxDays));
+        int heal = Math.max(0, equityProperties.getIncrementalGapHealDays());
+        LocalDate from = fromRaw.minusDays(heal);
+        LocalDate oldest = today.minusDays(maxDays);
+        if (from.isBefore(oldest)) {
+            from = oldest;
+        }
+        if (from.isAfter(today)) {
+            return;
+        }
+        ingestHistoryForSymbol(sym, from, today, true);
+        rollupEquityDailyCandlesFromFinhubQuotes(sym, from, today);
     }
 
     /**
