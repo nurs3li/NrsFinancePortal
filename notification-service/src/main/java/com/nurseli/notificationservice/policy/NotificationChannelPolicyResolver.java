@@ -32,7 +32,14 @@ public class NotificationChannelPolicyResolver {
             // Fund request bildirimleri
             Map.entry("FUND_REQUEST_CREATED", DeliveryDecision.IN_APP_AND_EMAIL),
             Map.entry("FUND_REQUEST_APPROVED", DeliveryDecision.IN_APP_AND_EMAIL),
-            Map.entry("FUND_REQUEST_REJECTED", DeliveryDecision.IN_APP_AND_EMAIL)
+            Map.entry("FUND_REQUEST_REJECTED", DeliveryDecision.IN_APP_AND_EMAIL),
+
+            Map.entry("REAL_RETURN_NEGATIVE", DeliveryDecision.IN_APP_ONLY),
+            Map.entry("REAL_RETURN_POSITIVE", DeliveryDecision.IN_APP_ONLY),
+            Map.entry("PORTFOLIO_CONCENTRATION_RISK", DeliveryDecision.IN_APP_ONLY),
+            Map.entry("PORTFOLIO_EVALUATION_REPORT", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("PRICE_ALERT_TRIGGERED", DeliveryDecision.IN_APP_AND_EMAIL),
+            Map.entry("PRICE_ALERT_IN_APP", DeliveryDecision.IN_APP_ONLY)
     );
 
     public DeliveryDecision decide(NotificationRequestedEvent event) {
