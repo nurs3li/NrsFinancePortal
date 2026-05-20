@@ -4,10 +4,13 @@ import com.nurseli.marketdata.api.dto.macropanel.InterestInflationMacroPanelResp
 import com.nurseli.marketdata.api.dto.macropanel.NormalizedMacroSeriesDto;
 import com.nurseli.marketdata.application.DebtQueryService;
 import com.nurseli.marketdata.application.EvdsMacroIndicatorService;
+import com.nurseli.marketdata.application.inflation.InflationIndexQueryService;
 import com.nurseli.marketdata.application.inflation.InflationMacroService;
 import com.nurseli.marketdata.config.EvdsProperties;
+import com.nurseli.marketdata.domain.inflation.InflationIndicatorType;
 import com.nurseli.marketdata.infrastructure.evds.EvdsDebtClient;
 import com.nurseli.marketdata.infrastructure.evds.EvdsSeriesPoint;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -25,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class MacroPanelAggregationServiceTest {
@@ -38,10 +42,19 @@ class MacroPanelAggregationServiceTest {
     @Mock
     private InflationMacroService inflationMacroService;
     @Mock
+    private InflationIndexQueryService inflationIndexQueryService;
+    @Mock
     private DebtQueryService debtQueryService;
 
     @InjectMocks
     private MacroPanelAggregationService service;
+
+    @BeforeEach
+    void stubInflationIndexEmpty() {
+        lenient().when(inflationIndexQueryService.indexPointsBetween(
+                        any(InflationIndicatorType.class), any(), any()))
+                .thenReturn(List.of());
+    }
 
     @Test
     void build_whenEvdsDisabled_returnsEmptySeriesWithoutError() {
