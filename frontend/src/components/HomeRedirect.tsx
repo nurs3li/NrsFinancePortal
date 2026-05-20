@@ -17,7 +17,7 @@ export function HomeRedirect() {
             return;
         }
         if (role === 'ADMIN') {
-            navigate('/admin', { replace: true });
+            navigate('/admin/users', { replace: true });
             return;
         }
         navigate('/dashboard', { replace: true });

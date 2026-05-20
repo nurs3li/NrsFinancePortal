@@ -55,8 +55,18 @@ public class EvdsProperties {
         private String issuer;
         private String maturityDate;
         private String dirtyPriceSeries;
+        /** EVDS kupon faiz oranı serisi (ör. TP_…_ORAN); geriye dönük yaml adı. */
         private String yieldSeries;
         private java.math.BigDecimal dirtyPriceScale = java.math.BigDecimal.ONE;
         private java.math.BigDecimal yieldScale = java.math.BigDecimal.ONE;
+
+        /** EVDS “Kupon Faiz Oranı” seri kodu. */
+        public String couponRateSeries() {
+            return yieldSeries;
+        }
+
+        public java.math.BigDecimal couponRateScale() {
+            return yieldScale;
+        }
     }
 }

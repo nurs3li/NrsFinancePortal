@@ -29,7 +29,7 @@ export function categoryLabel(type: AssetType, t: (k: string, d: string) => stri
         case 'FX':
             return t('category.fx', 'Döviz');
         case 'METAL':
-            return t('category.metals', 'Altın / Metal');
+            return t('category.metals', 'Kıymetli madenler');
         case 'FUND':
             return t('category.funds', 'Fonlar');
         case 'STOCK':

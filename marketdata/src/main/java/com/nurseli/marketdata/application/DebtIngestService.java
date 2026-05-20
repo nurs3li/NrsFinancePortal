@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.application;
 
+import com.nurseli.marketdata.application.debt.DebtCouponFrequencyPersistence;
 import com.nurseli.marketdata.domain.debt.DebtInstrument;
 import com.nurseli.marketdata.domain.debt.DebtSnapshot;
 import com.nurseli.marketdata.infrastructure.debt.DebtMarketClient;
@@ -16,6 +17,7 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -29,29 +31,30 @@ public class DebtIngestService {
     private final DebtSnapshotRepository debtSnapshotRepository;
     private final DebtMarketClient debtMarketClient;
     private final EvdsDebtClient evdsDebtClient;
+    private final DebtCouponFrequencyPersistence debtCouponFrequencyPersistence;
 
     @Transactional
     public void ingestLatest() {
         List<SeedDebt> externalRows = debtMarketClient.fetchLatest().stream()
                 .map(r -> new SeedDebt(
-                        r.isin(),
+                        normIsin(r.isin()),
                         r.name(),
                         r.issuer(),
                         r.maturityDate(),
                         r.dirtyPrice(),
-                        r.yieldPct(),
+                        null,
                         r.source(),
                         r.asOf(),
                         false
                 )).toList();
         List<SeedDebt> evdsRows = evdsDebtClient.fetchLatest().stream()
                 .map(r -> new SeedDebt(
-                        r.isin(),
+                        normIsin(r.isin()),
                         r.name(),
                         r.issuer(),
                         r.maturityDate(),
                         r.dirtyPrice(),
-                        r.yieldPct(),
+                        r.couponRate(),
                         r.source(),
                         r.asOf(),
                         false
@@ -75,11 +78,12 @@ public class DebtIngestService {
                         i.setMaturityDate(s.maturityDate());
                         return debtInstrumentRepository.save(i);
                     });
+            debtCouponFrequencyPersistence.ensurePersistedIfMissing(instrument);
 
             DebtSnapshot snapshot = new DebtSnapshot();
             snapshot.setIsin(instrument.getIsin());
-            snapshot.setDirtyPrice(s.dirtyPrice());
-            snapshot.setYieldPct(s.yieldPct());
+            snapshot.setDirtyPrice(s.dirtyPrice() != null ? s.dirtyPrice() : BigDecimal.ZERO);
+            snapshot.setYieldPct(s.couponRate() != null ? s.couponRate() : BigDecimal.ZERO);
             snapshot.setSource(resolveSource(s));
             snapshot.setAsOf(s.asOf() != null ? s.asOf() : now);
             debtSnapshotRepository.save(snapshot);
@@ -110,8 +114,8 @@ public class DebtIngestService {
             return evdsRows;
         }
         return List.of(
-                new SeedDebt("TRT010531T16", "TR Hazine Bonosu 2031", "Hazine", "2031-05-01", new BigDecimal("94.22"), new BigDecimal("38.40"), "DEBT_MVP", now, true),
-                new SeedDebt("TRT120228T10", "TR Hazine Tahvili 2028", "Hazine", "2028-02-12", new BigDecimal("97.10"), new BigDecimal("34.15"), "DEBT_MVP", now, true)
+                new SeedDebt("TRT010531T16", "TR Hazine Bonosu 2031", "Hazine", "2031-05-01", new BigDecimal("94.22"), null, "DEBT_MVP", now, true),
+                new SeedDebt("TRT120228T10", "TR Hazine Tahvili 2028", "Hazine", "2028-02-12", new BigDecimal("97.10"), null, "DEBT_MVP", now, true)
         );
     }
 
@@ -158,7 +162,7 @@ public class DebtIngestService {
                         r.issuer(),
                         r.maturityDate(),
                         r.dirtyPrice(),
-                        r.yieldPct(),
+                        r.couponRate(),
                         r.source(),
                         r.asOf(),
                         false
@@ -186,6 +190,7 @@ public class DebtIngestService {
                         i.setMaturityDate(first.maturityDate());
                         return debtInstrumentRepository.save(i);
                     });
+            debtCouponFrequencyPersistence.ensurePersistedIfMissing(instrument);
             Set<LocalDateTime> existingDates = debtSnapshotRepository.findByIsinOrderByAsOfAsc(isin).stream()
                     .map(DebtSnapshot::getAsOf)
                     .collect(Collectors.toCollection(HashSet::new));
@@ -197,7 +202,7 @@ public class DebtIngestService {
                 DebtSnapshot snapshot = new DebtSnapshot();
                 snapshot.setIsin(instrument.getIsin());
                 snapshot.setDirtyPrice(s.dirtyPrice());
-                snapshot.setYieldPct(s.yieldPct());
+                snapshot.setYieldPct(s.couponRate() != null ? s.couponRate() : BigDecimal.ZERO);
                 snapshot.setSource(resolveSource(s));
                 snapshot.setAsOf(s.asOf());
                 debtSnapshotRepository.save(snapshot);
@@ -208,13 +213,18 @@ public class DebtIngestService {
         }
     }
 
+    private static String normIsin(String isin) {
+        return isin == null ? "" : isin.trim().toUpperCase(Locale.ROOT);
+    }
+
     private record SeedDebt(
             String isin,
             String name,
             String issuer,
             String maturityDate,
             BigDecimal dirtyPrice,
-            BigDecimal yieldPct,
+            /** EVDS kupon faiz oranı; DB'de yieldPct sütununda saklanır (YTM değil). */
+            BigDecimal couponRate,
             String source,
             LocalDateTime asOf,
             boolean synthetic

@@ -31,6 +31,8 @@ export type MarketTerminalListItem = {
     daysToMaturity?: number | null;
     couponRate?: number | null;
     yieldToMaturity?: number | null;
+    couponFrequencyPerYear?: number | null;
+    couponFrequencyLabel?: string | null;
     contractMonth?: string | null;
     basis?: number | null;
     marginRequirement?: number | null;

@@ -38,11 +38,11 @@ export function SimulationResultsList({
     onShowDetail,
     onShowAll,
     onHideAll,
-    borderColor,
-    tableBorder,
+    borderColor: _borderColor,
+    tableBorder: _tableBorder,
     textColor,
     mutedColor,
-    bgCard,
+    bgCard: _bgCard,
 }: SimulationResultsListProps) {
     const { t, lang } = useLanguage();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';

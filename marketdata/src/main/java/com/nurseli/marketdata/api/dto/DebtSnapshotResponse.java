@@ -21,5 +21,8 @@ public record DebtSnapshotResponse(
         /** Kirli fiyat birimi. */
         String dirtyPriceUnit,
         /** {@code yieldPct} alanı gerçek YTM değilse {@code false} (EVDS ORAN vb.). */
-        Boolean yieldFieldRepresentsYtm
+        Boolean yieldFieldRepresentsYtm,
+        Integer couponFrequencyPerYear,
+        String couponFrequencyLabel,
+        String couponFrequencySource
 ) {}

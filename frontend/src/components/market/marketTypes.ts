@@ -63,3 +63,6 @@ export type MarketDashboard = {
 };
 
 export type TabId = 'doviz' | 'crypto' | 'metals' | 'funds' | 'equity';
+
+/** Piyasa terminali kategori anahtarı (liste API + VM). */
+export type MarketCategory = 'EQUITY' | 'CRYPTO' | 'FX' | 'METALS' | 'FUNDS' | 'FUTURES' | 'BOND';

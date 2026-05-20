@@ -35,3 +35,7 @@ databaseChangeLog:
       file: db/changelog/v16-inflation-index-monthly.yaml
   - include:
       file: db/changelog/v17-loan-rate-weekly.yaml
+  - include:
+      file: db/changelog/v18-debt-coupon-frequency.yaml
+  - include:
+      file: db/changelog/v19-eurobond-weekly-observation.yaml

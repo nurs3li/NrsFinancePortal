@@ -64,7 +64,7 @@ export function Login() {
 
     const destination = (() => {
         if (from && from !== '/' && from !== '/dashboard') return from;
-        if (role === 'ADMIN') return '/admin';
+        if (role === 'ADMIN') return '/market';
         if (role === 'USER') return '/dashboard';
         return '/dashboard';
     })();

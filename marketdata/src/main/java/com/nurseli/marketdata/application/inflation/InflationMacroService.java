@@ -10,12 +10,13 @@ import com.nurseli.marketdata.api.dto.inflation.InflationLatestResponse;
 import com.nurseli.marketdata.application.CpiTrComputation;
 import com.nurseli.marketdata.application.EvdsCpiTrService;
 import com.nurseli.marketdata.config.EvdsProperties;
-import com.nurseli.marketdata.config.EvdsSeriesLogicalNames;
+import com.nurseli.marketdata.config.InflationCpiProperties;
 import com.nurseli.marketdata.config.InflationPpiProperties;
 import com.nurseli.marketdata.domain.inflation.InflationIndicatorType;
 import com.nurseli.marketdata.infrastructure.evds.EvdsDebtClient;
 import com.nurseli.marketdata.infrastructure.evds.EvdsSeriesPoint;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -35,13 +36,16 @@ public class InflationMacroService {
                     + "Grafiklerde yıllık değişim yüzdeleri (YoY) önceliklidir; endeks seviyesi enflasyon oranı değildir.";
 
     private final EvdsProperties evdsProperties;
+    private final InflationCpiProperties inflationCpiProperties;
     private final InflationPpiProperties inflationPpiProperties;
     private final EvdsDebtClient evdsDebtClient;
     private final EvdsCpiTrService evdsCpiTrService;
+    private final InflationIndexQueryService inflationIndexQueryService;
 
+    @Cacheable(cacheNames = "market:macro:inflation", key = "'latest'")
     public InflationLatestResponse latest() {
         InflationIndicatorSnapshotDto cpi = mapCpiSnapshot(evdsCpiTrService.latestCpiTr());
-        InflationIndicatorSnapshotDto ppi = loadPpiSnapshotFromEvds();
+        InflationIndicatorSnapshotDto ppi = loadPpiSnapshot();
         return new InflationLatestResponse(
                 cpi,
                 ppi,
@@ -50,11 +54,13 @@ public class InflationMacroService {
         );
     }
 
+    @Cacheable(cacheNames = "market:macro:inflation", key = "'history-' + #type + '-' + #from + '-' + #to")
     public InflationHistoryResponse history(InflationIndicatorType type, YearMonth from, YearMonth to) {
         List<InflationHistoryRowDto> rows = buildHistoryRows(type, from, to);
         return new InflationHistoryResponse(type.name(), rows);
     }
 
+    @Cacheable(cacheNames = "market:macro:inflation", key = "'compare-' + #from + '-' + #to")
     public InflationCompareResponse compare(YearMonth from, YearMonth to) {
         Map<YearMonth, InflationMonthMetrics> cpi = indexByMonth(
                 metricsInWindow(InflationIndicatorType.CPI, from, to)
@@ -84,7 +90,7 @@ public class InflationMacroService {
                 "EVDS",
                 "MONTHLY",
                 "INDEX",
-                null,
+                inflationCpiProperties.getBaseYear(),
                 "TR",
                 cpi.seriesCode(),
                 cpi.indexMonth(),
@@ -95,35 +101,35 @@ public class InflationMacroService {
         )).orElse(null);
     }
 
-    private InflationIndicatorSnapshotDto loadPpiSnapshotFromEvds() {
-        if (!evdsProperties.isEnabled()) {
-            return null;
+    private InflationIndicatorSnapshotDto loadPpiSnapshot() {
+        Optional<InflationMonthMetrics> db = inflationIndexQueryService.latestMetrics(InflationIndicatorType.PPI);
+        Optional<InflationMonthMetrics> evds = loadPpiMetricsFromEvds();
+        if (db.isPresent() && evds.isPresent() && evds.get().yearMonth().isAfter(db.get().yearMonth())) {
+            return mapMetricsSnapshot(InflationIndicatorType.PPI, evds.get());
         }
-        String series = evdsProperties.getSeriesCode(EvdsSeriesLogicalNames.PPI_TR_INDEX);
-        if (series == null || series.isBlank()) {
-            return null;
+        if (db.isPresent()) {
+            return mapMetricsSnapshot(InflationIndicatorType.PPI, db.get());
         }
-        String trimmed = series.trim();
-        LocalDate end = LocalDate.now();
-        LocalDate start = end.minusMonths(36);
-        List<EvdsSeriesPoint> points = evdsDebtClient.fetchSeriesAscending(trimmed, start, end);
-        Optional<InflationMonthMetrics> last = InflationIndexComputation.latestMetricsOrEmpty(CpiTrComputation.sortAsc(points));
-        if (last.isEmpty()) {
-            return null;
-        }
-        InflationMonthMetrics m = last.get();
+        return evds.map(m -> mapMetricsSnapshot(InflationIndicatorType.PPI, m)).orElse(null);
+    }
+
+    private InflationIndicatorSnapshotDto mapMetricsSnapshot(InflationIndicatorType type, InflationMonthMetrics m) {
+        String seriesCode = inflationIndexQueryService.resolveSeriesCode(type);
+        Integer baseYear = type == InflationIndicatorType.PPI
+                ? inflationPpiProperties.getBaseYear()
+                : inflationCpiProperties.getBaseYear();
         String note = m.annualChangePercent() == null
                 ? "Yıllık kıyas için en az 13 ay endeks verisi gerekir."
                 : null;
         return new InflationIndicatorSnapshotDto(
                 "INFLATION",
-                "PPI",
+                type.name(),
                 "EVDS",
                 "MONTHLY",
                 "INDEX",
-                inflationPpiProperties.getBaseYear(),
+                baseYear,
                 "TR",
-                trimmed,
+                seriesCode,
                 m.monthStart(),
                 m.indexValue(),
                 m.monthlyChangePercent(),
@@ -132,11 +138,28 @@ public class InflationMacroService {
         );
     }
 
+    private Optional<InflationMonthMetrics> loadPpiMetricsFromEvds() {
+        if (!evdsProperties.isEnabled()) {
+            return Optional.empty();
+        }
+        String series = inflationIndexQueryService.resolveSeriesCode(InflationIndicatorType.PPI);
+        if (series == null || series.isBlank()) {
+            return Optional.empty();
+        }
+        String trimmed = series.trim();
+        LocalDate end = LocalDate.now();
+        LocalDate start = end.minusMonths(36);
+        List<EvdsSeriesPoint> points = evdsDebtClient.fetchSeriesAscending(trimmed, start, end);
+        return InflationIndexComputation.latestMetricsOrEmpty(CpiTrComputation.sortAsc(points));
+    }
+
     private List<InflationHistoryRowDto> buildHistoryRows(InflationIndicatorType type, YearMonth from, YearMonth to) {
         List<InflationMonthMetrics> metrics = metricsInWindow(type, from, to);
         List<InflationHistoryRowDto> out = new ArrayList<>();
-        Integer baseYear = type == InflationIndicatorType.PPI ? inflationPpiProperties.getBaseYear() : null;
-        String seriesCode = resolveSeriesCode(type);
+        Integer baseYear = type == InflationIndicatorType.PPI
+                ? inflationPpiProperties.getBaseYear()
+                : inflationCpiProperties.getBaseYear();
+        String seriesCode = inflationIndexQueryService.resolveSeriesCode(type);
         if (seriesCode == null) {
             return out;
         }
@@ -163,10 +186,24 @@ public class InflationMacroService {
     }
 
     private List<InflationMonthMetrics> metricsInWindow(InflationIndicatorType type, YearMonth from, YearMonth to) {
+        List<InflationMonthMetrics> db = inflationIndexQueryService.metricsBetween(type, from, to);
+        List<InflationMonthMetrics> evds = fetchMetricsFromEvds(type, from, to);
+        if (db.isEmpty()) {
+            return evds;
+        }
+        if (evds.isEmpty()) {
+            return db;
+        }
+        YearMonth dbLast = db.getLast().yearMonth();
+        YearMonth evdsLast = evds.getLast().yearMonth();
+        return evdsLast.isAfter(dbLast) ? evds : db;
+    }
+
+    private List<InflationMonthMetrics> fetchMetricsFromEvds(InflationIndicatorType type, YearMonth from, YearMonth to) {
         if (!evdsProperties.isEnabled()) {
             return List.of();
         }
-        String series = resolveSeriesCode(type);
+        String series = inflationIndexQueryService.resolveSeriesCode(type);
         if (series == null || series.isBlank()) {
             return List.of();
         }
@@ -174,13 +211,6 @@ public class InflationMacroService {
         LocalDate fetchEnd = to.atEndOfMonth();
         List<EvdsSeriesPoint> points = evdsDebtClient.fetchSeriesAscending(series.trim(), fetchStart, fetchEnd);
         return InflationIndexComputation.buildSortedMonthlySeries(CpiTrComputation.sortAsc(points));
-    }
-
-    private String resolveSeriesCode(InflationIndicatorType type) {
-        String key = type == InflationIndicatorType.CPI
-                ? EvdsSeriesLogicalNames.CPI_TR_INDEX
-                : EvdsSeriesLogicalNames.PPI_TR_INDEX;
-        return evdsProperties.getSeriesCode(key);
     }
 
     private static Map<YearMonth, InflationMonthMetrics> indexByMonth(List<InflationMonthMetrics> metrics) {

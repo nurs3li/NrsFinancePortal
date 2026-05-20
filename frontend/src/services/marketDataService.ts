@@ -4,6 +4,7 @@ export * from './bistEquityApi';
 import type { LatestPriceRow } from '../components/market/marketTypes';
 import type { AssetClass, AssetType } from '../constants/OrderConstants';
 import { classifyDebtInstrument, classifyViopContract } from '../constants/OrderConstants';
+import { PRECIOUS_METAL_SYMBOLS } from '../constants/preciousMetalsUsd';
 import { getBistLatest } from './bistEquityApi';
 
 type MarketOverview = {
@@ -76,7 +77,7 @@ export async function fetchSimulationSymbolsByType(type: AssetType): Promise<str
                         : '/api/market/equity/latest';
     const res = await marketClient.get<Record<string, unknown>>(endpoint);
     const rows = Object.entries(res.data ?? {});
-    return rows
+    const withPrice = rows
         .filter(([, value]) => {
             if (!value || typeof value !== 'object') return false;
             const row = value as Record<string, unknown>;
@@ -86,8 +87,14 @@ export async function fetchSimulationSymbolsByType(type: AssetType): Promise<str
             return buy > 0 || sell > 0;
         })
         .map(([key]) => String(key ?? '').toUpperCase())
-        .filter(Boolean)
-        .sort((a, b) => a.localeCompare(b, 'tr-TR'));
+        .filter(Boolean);
+
+    if (type === 'METAL') {
+        const priced = new Set(withPrice);
+        return (PRECIOUS_METAL_SYMBOLS as readonly string[]).filter((sym) => priced.has(sym));
+    }
+
+    return withPrice.sort((a, b) => a.localeCompare(b, 'tr-TR'));
 }
 
 /** GET /api/market/macro/policy-rate-tr — aylık TCMB politika faizi (EVDS). */
@@ -167,6 +174,9 @@ export async function fetchFxEffectiveRates(signal?: AbortSignal): Promise<FxEff
         return null;
     }
 }
+
+/** @alias fetchFxEffectiveRates */
+export const getFxEffectiveRates = fetchFxEffectiveRates;
 
 /** GET /api/market/macro/interest-inflation-panel — normalize makro snapshot (EVDS + tahvil özet). */
 export type NormalizedMacroObservation = { date: string; value: number };

@@ -24,7 +24,11 @@ public class NotificationService {
             "ACCOUNT_FROZEN",
             "ACCOUNT_UNFROZEN",
             "REVIEW_TASK_CREATED",
-            "REVIEW_COMPLETED"
+            "REVIEW_COMPLETED",
+            "REAL_RETURN_NEGATIVE",
+            "REAL_RETURN_POSITIVE",
+            "PORTFOLIO_CONCENTRATION_RISK",
+            "PORTFOLIO_EVALUATION_REPORT"
     );
 
     @Transactional

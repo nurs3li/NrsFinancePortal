@@ -8,34 +8,34 @@ export const CHART_PALETTE = ['#FFD700', '#00D4FF', '#39FF14', '#BC13FE'] as con
 export const COMPARE_SUGGESTIONS: Record<string, { type: import('../../constants/OrderConstants').AssetType; symbol: string }[]> = {
     BTCUSDT: [
         { type: 'CRYPTO', symbol: 'ETHUSDT' },
-        { type: 'METAL', symbol: 'GRAM' },
+        { type: 'METAL', symbol: 'XAU_TRY' },
         { type: 'FX', symbol: 'USDTRY' },
         { type: 'STOCK', symbol: 'AAPL' },
     ],
     ETHUSDT: [
         { type: 'CRYPTO', symbol: 'BTCUSDT' },
-        { type: 'METAL', symbol: 'GRAM' },
+        { type: 'METAL', symbol: 'XAU_TRY' },
         { type: 'FX', symbol: 'USDTRY' },
     ],
-    GRAM: [
+    XAU_TRY: [
         { type: 'FX', symbol: 'USDTRY' },
         { type: 'CRYPTO', symbol: 'BTCUSDT' },
         { type: 'STOCK', symbol: 'AAPL' },
     ],
     USDTRY: [
-        { type: 'METAL', symbol: 'GRAM' },
+        { type: 'METAL', symbol: 'XAU_TRY' },
         { type: 'CRYPTO', symbol: 'BTCUSDT' },
         { type: 'STOCK', symbol: 'AAPL' },
     ],
     AAPL: [
         { type: 'STOCK', symbol: 'MSFT' },
         { type: 'CRYPTO', symbol: 'BTCUSDT' },
-        { type: 'METAL', symbol: 'GRAM' },
+        { type: 'METAL', symbol: 'XAU_TRY' },
         { type: 'FX', symbol: 'USDTRY' },
     ],
     DEFAULT: [
         { type: 'CRYPTO', symbol: 'BTCUSDT' },
-        { type: 'METAL', symbol: 'GRAM' },
+        { type: 'METAL', symbol: 'XAU_TRY' },
         { type: 'FX', symbol: 'USDTRY' },
         { type: 'STOCK', symbol: 'AAPL' },
     ],

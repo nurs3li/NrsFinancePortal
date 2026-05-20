@@ -71,6 +71,12 @@ public class BistEquityQueryService {
      * {@code market.bist.enabled=true} ve hiç satır yoksa bir kez varsayılan lookback ile ingest dener.
      */
     public List<BistEquityLatestResponse> getLatest() {
+        if (bistProperties.isEnabled()) {
+            LocalDate to = LocalDate.now(BistEquityDailyConstants.IST);
+            for (BistSymbolMetadata m : bistSymbolCatalog.getAll()) {
+                maybeIngestStaleTail(m.symbol(), to);
+            }
+        }
         List<BistEquityLatestResponse> out = buildLatestFromDb();
         if (out.isEmpty() && bistProperties.isEnabled()) {
             LocalDate to = LocalDate.now(BistEquityDailyConstants.IST);
@@ -241,6 +247,8 @@ public class BistEquityQueryService {
                     } catch (Exception ex) {
                         log.debug("[BIST_DAILY_QUERY] ingest on batch miss failed symbol={} reason={}", s, ex.getMessage());
                     }
+                } else {
+                    maybeIngestStaleTail(s, to);
                 }
             }
         }
@@ -280,9 +288,58 @@ public class BistEquityQueryService {
                     new ArrayList<>(
                             marketPriceHistoryRepository.findBySymbolAndSourceAndTimestampRange(
                                     sym, BistEquityDailyConstants.HISTORY_SOURCE, start, endExclusive));
+        } else if (bistProperties.isEnabled() && maybeIngestStaleTail(sym, to)) {
+            rows =
+                    new ArrayList<>(
+                            marketPriceHistoryRepository.findBySymbolAndSourceAndTimestampRange(
+                                    sym, BistEquityDailyConstants.HISTORY_SOURCE, start, endExclusive));
         }
         rows.sort(Comparator.comparing(MarketPriceHistory::getTimestamp));
         return toHistoryBars(sym, rows);
+    }
+
+    /**
+     * Son kayıt {@code targetTo} için yeterince güncel değilse eksik günleri HisseTekil ile doldurur.
+     *
+     * @return ingest denendiyse {@code true}
+     */
+    private boolean maybeIngestStaleTail(String symbol, LocalDate targetTo) {
+        if (!bistProperties.isEnabled()) {
+            return false;
+        }
+        LocalDate today = LocalDate.now(BistEquityDailyConstants.IST);
+        LocalDate effectiveTo = targetTo != null && !targetTo.isAfter(today) ? targetTo : today;
+        int staleDays = Math.max(1, bistProperties.getStaleTailDays());
+        LocalDate freshnessCutoff = effectiveTo.minusDays(staleDays);
+
+        Optional<MarketPriceHistory> latest =
+                marketPriceHistoryRepository.findTopBySymbolAndSourceOrderByTimestampDesc(
+                        symbol, BistEquityDailyConstants.HISTORY_SOURCE);
+        if (latest.isEmpty()) {
+            return false;
+        }
+        LocalDate lastDay = latest.get().getTimestamp().toLocalDate();
+        // isBefore(cutoff) tek başına yeterli değil: lastDay == cutoff (ör. bugün-3) eski sayılmalı.
+        if (lastDay.isAfter(freshnessCutoff)) {
+            return false;
+        }
+        LocalDate ingestFrom = lastDay.plusDays(1);
+        if (ingestFrom.isAfter(effectiveTo)) {
+            return false;
+        }
+        try {
+            log.info(
+                    "[BIST_DAILY_QUERY] stale-tail ingest symbol={} from={} to={} lastDay={}",
+                    symbol,
+                    ingestFrom,
+                    effectiveTo,
+                    lastDay);
+            bistEquityIngestService.ingestHistory(symbol, ingestFrom, effectiveTo);
+            return true;
+        } catch (Exception ex) {
+            log.warn("[BIST_DAILY_QUERY] stale-tail ingest failed symbol={} reason={}", symbol, ex.getMessage());
+            return false;
+        }
     }
 
     static List<BistEquityHistoryResponse> toHistoryBars(String symbol, List<MarketPriceHistory> asc) {

@@ -109,6 +109,9 @@ public interface MarketPriceHistoryRepository
     @Query("SELECT MIN(m.timestamp) FROM MarketPriceHistory m WHERE m.source = :source")
     Optional<LocalDateTime> findMinTimestampBySource(@Param("source") String source);
 
+    @Query("SELECT MAX(m.timestamp) FROM MarketPriceHistory m WHERE m.source = :source")
+    Optional<LocalDateTime> findMaxTimestampBySource(@Param("source") String source);
+
     @Query(
             """
                     SELECT m FROM MarketPriceHistory m

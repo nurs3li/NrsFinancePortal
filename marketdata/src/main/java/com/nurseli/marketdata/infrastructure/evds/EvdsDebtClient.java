@@ -53,34 +53,35 @@ public class EvdsDebtClient {
             if (instrument == null || instrument.getIsin() == null || instrument.getIsin().isBlank()) {
                 continue;
             }
+            String isin = instrument.getIsin().trim().toUpperCase();
             List<EvdsSeriesPoint> pricePoints = fetchRecentSeriesPoints(instrument.getDirtyPriceSeries(), pointLimit);
-            List<EvdsSeriesPoint> yieldPoints = fetchRecentSeriesPoints(instrument.getYieldSeries(), pointLimit);
-            int rowCount = Math.max(pricePoints.size(), yieldPoints.size());
-            for (int idx = 0; idx < rowCount; idx++) {
-                EvdsSeriesPoint pricePoint = idx < pricePoints.size() ? pricePoints.get(idx) : null;
-                EvdsSeriesPoint yieldPoint = idx < yieldPoints.size() ? yieldPoints.get(idx) : null;
-                if (pricePoint == null && yieldPoint == null) {
-                    continue;
-                }
-                BigDecimal dirtyPrice = pricePoint != null ? pricePoint.value() : null;
-                BigDecimal yieldPct = yieldPoint != null ? yieldPoint.value() : null;
-                BigDecimal normalizedDirtyPrice = normalizeByScale(dirtyPrice, instrument.getDirtyPriceScale());
-                BigDecimal normalizedYieldPct = normalizeByScale(yieldPct, instrument.getYieldScale());
-                LocalDateTime asOf = pricePoint != null
-                        ? pricePoint.asOf()
-                        : (yieldPoint != null ? yieldPoint.asOf() : LocalDateTime.now());
-
-                out.add(new EvdsDebtRow(
-                        instrument.getIsin(),
-                        instrument.getName(),
-                        instrument.getIssuer(),
-                        instrument.getMaturityDate(),
-                        normalizedDirtyPrice,
-                        normalizedYieldPct,
-                        asOf,
-                        "EVDS"
-                ));
+            String couponSeries = instrument.couponRateSeries();
+            List<EvdsSeriesPoint> couponPoints = fetchRecentSeriesPoints(couponSeries, pointLimit);
+            EvdsSeriesPoint pricePoint = pricePoints.isEmpty() ? null : pricePoints.get(0);
+            EvdsSeriesPoint couponPoint = couponPoints.isEmpty() ? null : couponPoints.get(0);
+            if (pricePoint == null && couponPoint == null) {
+                continue;
             }
+            BigDecimal dirtyPrice = pricePoint != null
+                    ? normalizeByScale(pricePoint.value(), instrument.getDirtyPriceScale())
+                    : null;
+            BigDecimal couponRate = couponPoint != null
+                    ? normalizeByScale(couponPoint.value(), instrument.couponRateScale())
+                    : null;
+            LocalDateTime asOf = pricePoint != null
+                    ? pricePoint.asOf()
+                    : (couponPoint != null ? couponPoint.asOf() : LocalDateTime.now());
+
+            out.add(new EvdsDebtRow(
+                    isin,
+                    instrument.getName(),
+                    instrument.getIssuer(),
+                    instrument.getMaturityDate(),
+                    dirtyPrice,
+                    couponRate,
+                    asOf,
+                    "EVDS"
+            ));
         }
         return out;
     }
@@ -273,8 +274,10 @@ public class EvdsDebtClient {
             String name,
             String issuer,
             String maturityDate,
+            /** EVDS “Değer” — kirli fiyat / piyasa değeri. */
             BigDecimal dirtyPrice,
-            BigDecimal yieldPct,
+            /** EVDS “Kupon Faiz Oranı” (_ORAN serisi); YTM değildir. */
+            BigDecimal couponRate,
             LocalDateTime asOf,
             String source
     ) {}

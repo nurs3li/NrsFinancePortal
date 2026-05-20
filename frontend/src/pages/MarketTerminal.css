@@ -80,13 +80,25 @@
     color: var(--terminal-neu, var(--terminal-muted));
 }
 
+.terminal-hero--bond {
+    margin-bottom: 0;
+    padding: 12px 16px;
+}
+
+.terminal-grid--market-unified .terminal-right-panel-scroll {
+    overflow: visible;
+    max-height: none;
+}
+
 .terminal-hero--viop {
     display: grid;
-    grid-template-columns: minmax(200px, 1.1fr) auto minmax(260px, 1fr);
-    align-items: stretch;
-    gap: 16px 20px;
+    grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 0.95fr);
+    align-items: center;
+    gap: 12px 16px;
     flex-wrap: unset;
     justify-content: stretch;
+    padding: 14px 18px;
+    margin-bottom: 0;
 }
 
 .terminal-hero-viop__left {
@@ -105,7 +117,7 @@
 }
 
 .terminal-hero-viop__code {
-    font-size: clamp(1.05rem, 2.1vw, 1.35rem);
+    font-size: clamp(1rem, 1.8vw, 1.2rem);
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
@@ -144,6 +156,7 @@
 }
 
 .terminal-hero-viop__mid .terminal-hero-price {
+    font-size: clamp(1.35rem, 2.5vw, 2rem);
     line-height: 1.05;
 }
 
@@ -238,9 +251,69 @@
     max-width: 100%;
 }
 
-/* VİOP: sol liste + sağ rail biraz daha geniş; orta grafik esnek kalır */
-.terminal-grid--viop {
-    grid-template-columns: minmax(380px, 1.2fr) minmax(0, 2.6fr) minmax(320px, 1.05fr);
+/* VİOP / tahvil: standart üç sütun — sol liste, orta hero+grafik, sağ içgörü */
+.terminal-grid--market-unified,
+.terminal-grid--viop-unified {
+    align-items: stretch;
+}
+
+.terminal-grid--market-unified .terminal-card.terminal-left-panel,
+.terminal-grid--viop-unified .terminal-card.terminal-left-panel {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-self: stretch;
+    min-height: 0;
+    margin-bottom: 0;
+    max-height: none;
+}
+
+.terminal-grid--market-unified .terminal-hero,
+.terminal-grid--viop-unified .terminal-hero {
+    grid-column: 2;
+    grid-row: 1;
+    margin-bottom: 10px;
+}
+
+.terminal-grid--market-unified .terminal-center-stack,
+.terminal-grid--viop-unified .terminal-center-stack {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+    min-height: 0;
+}
+
+.terminal-grid--market-unified .terminal-right-panel,
+.terminal-grid--viop-unified .terminal-right-panel {
+    grid-column: 3;
+    grid-row: 1 / -1;
+    align-self: stretch;
+}
+
+.terminal-viop-summary-dl {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+    margin: 0;
+    font-size: 11px;
+}
+
+.terminal-viop-summary-dl dt {
+    margin: 0;
+    color: var(--terminal-muted);
+    font-weight: 600;
+}
+
+.terminal-viop-summary-dl dd {
+    margin: 0;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.terminal-viop-risk-note {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--terminal-muted);
 }
 
 .terminal-card {
@@ -1673,8 +1746,9 @@
         grid-template-columns: minmax(420px, 1fr) minmax(0, 3fr) minmax(380px, 1fr);
     }
 
-    .terminal-grid--viop {
-        grid-template-columns: minmax(400px, 1.25fr) minmax(0, 2.85fr) minmax(360px, 1.1fr);
+    .terminal-grid--market-unified,
+    .terminal-grid--viop-unified {
+        grid-template-columns: minmax(400px, 1.05fr) minmax(0, 2.9fr) minmax(360px, 1.05fr);
     }
 
     .terminal-grid.terminal-grid--list-undocked.terminal-grid--heatmap-rail {
@@ -2575,9 +2649,88 @@
 .terminal-list-quick-filters {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
     margin-bottom: 8px;
     align-items: center;
+    justify-content: space-between;
+}
+
+.terminal-list-quick-filters__chips {
+    flex: 1 1 180px;
+    min-width: 0;
+}
+
+.terminal-list-quick-filters__chips .terminal-category-scroll-shell--quick-filters {
+    margin-bottom: 0;
+}
+
+.terminal-fx-effective-rates-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-size: 11px;
+    padding: 6px 10px;
+}
+
+.terminal-fx-effective-rates-btn__short {
+    display: none;
+}
+
+@media (max-width: 520px) {
+    .terminal-fx-effective-rates-btn__full {
+        display: none;
+    }
+
+    .terminal-fx-effective-rates-btn__short {
+        display: inline;
+    }
+}
+
+.fx-effective-rates-modal__table-wrap {
+    overflow-x: auto;
+    margin-top: 4px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 8px;
+}
+
+.fx-effective-rates-modal__table {
+    min-width: 880px;
+    font-size: 12px;
+    margin: 0;
+}
+
+.fx-effective-rates-modal__table th,
+.fx-effective-rates-modal__table td {
+    padding: 8px 10px;
+    white-space: nowrap;
+}
+
+.fx-effective-rates-modal__skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.fx-effective-rates-modal__skeleton-row {
+    height: 36px;
+    border-radius: 6px;
+    background: rgba(148, 163, 184, 0.14);
+    animation: fx-effective-rates-pulse 1.2s ease-in-out infinite;
+}
+
+.fx-effective-rates-modal__message {
+    margin: 16px 0;
+    font-size: 13px;
+}
+
+@keyframes fx-effective-rates-pulse {
+    0%,
+    100% {
+        opacity: 0.55;
+    }
+    50% {
+        opacity: 1;
+    }
 }
 
 /* Piyasa listesi: Gün / Hafta / Ay / Yıl % sütunları — genel tablo nth-child kurallarını geçersiz kılar, sıkı oranlar */
@@ -2947,4 +3100,51 @@
     border-color: var(--terminal-accent);
     background: var(--terminal-btn-active-bg);
     color: var(--terminal-btn-active-text);
+}
+
+.eurobond-gov-panel {
+    padding: 4px 2px 16px;
+}
+
+.eurobond-gov-panel__disclaimer {
+    font-size: 12px;
+    line-height: 1.45;
+    margin: 0 0 8px;
+}
+
+.eurobond-gov-panel__meta {
+    font-size: 11px;
+    margin-bottom: 12px;
+}
+
+.eurobond-gov-panel__kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+}
+
+.eurobond-gov-panel__kpi-label {
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+
+.eurobond-gov-panel__kpi-value {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.eurobond-gov-panel__kpi-unit {
+    font-size: 10px;
+    margin-top: 2px;
+}
+
+.eurobond-gov-panel__chart h4 {
+    margin: 0 0 4px;
+    font-size: 13px;
+}
+
+.eurobond-gov-panel__footnote {
+    font-size: 11px;
+    line-height: 1.4;
+    margin-top: 12px;
 }

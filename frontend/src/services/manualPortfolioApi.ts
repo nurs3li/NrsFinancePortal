@@ -4,10 +4,12 @@ import type {
     ManualPortfolioAnalysis,
     ManualPortfolioClosePayload,
     ManualPortfolioCreatePayload,
+    ManualPortfolioInsights,
     ManualPortfolioTimeseriesPoint,
     ManualPortfolioView,
     ManualResolvedPrice,
     ManualSummary,
+    PortfolioInsightNotificationEvaluateResult,
 } from '../types/manualPortfolio';
 
 type ApiEnvelope<T> = {
@@ -158,4 +160,14 @@ export async function deleteManualPosition(id: number): Promise<void> {
 export async function getManualPositionAnalysis(id: number): Promise<ManualPortfolioAnalysis> {
     const res = await financeClient.get(`/api/portfolio/manual/${id}/analysis`);
     return unwrapFinanceSuccess<ManualPortfolioAnalysis>(res);
+}
+
+export async function getManualPortfolioInsights(): Promise<ManualPortfolioInsights> {
+    const res = await financeClient.get('/api/portfolio/manual/insights/me');
+    return unwrapFinanceSuccess<ManualPortfolioInsights>(res);
+}
+
+export async function evaluatePortfolioInsightNotifications(): Promise<PortfolioInsightNotificationEvaluateResult> {
+    const res = await financeClient.post('/api/portfolio/manual/insights/evaluate-notifications/me');
+    return unwrapFinanceSuccess<PortfolioInsightNotificationEvaluateResult>(res);
 }

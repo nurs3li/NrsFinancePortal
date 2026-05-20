@@ -75,6 +75,7 @@ public class MarketPriceQueryService {
     private final MetalPriceIngestService metalPriceIngestService;
     private final MarketMetalsIsyatirimProperties marketMetalsIsyatirimProperties;
     private final PreciousMetalUsdChangeCalculator preciousMetalUsdChangeCalculator;
+    private final MarketStaleTailRepairService marketStaleTailRepairService;
 
     public MarketPriceLatestResponse getLatestOrThrow(String symbol) {
         return repository
@@ -120,7 +121,10 @@ public class MarketPriceQueryService {
     }
 
     public Map<String, MarketPriceLatestResponse> getLatestMetals() {
-        Map<String, MarketPriceLatestResponse> out = new LinkedHashMap<>(getLatestBySource("COINGECKO"));
+        Map<String, MarketPriceLatestResponse> out = new LinkedHashMap<>();
+        repository.findTopBySymbolOrderByTimestampDesc("XAU_TRY")
+                .map(this::mapEntityToLatest)
+                .ifPresent(row -> out.put("XAU_TRY", row));
         for (PreciousMetalUsdCatalog.Entry e : PreciousMetalUsdCatalog.all()) {
             repository.findTopBySymbolAndSourceOrderByTimestampDesc(e.canonicalSymbol(), PreciousMetalUsdCatalog.SOURCE)
                     .map(this::mapEntityToLatest)
@@ -293,7 +297,9 @@ public class MarketPriceQueryService {
         }
         LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
-        List<CandlePointResponse> candles = toEquityCandles(symbol, start.toLocalDate(), end.toLocalDate());
+        LocalDate to = end.toLocalDate();
+        marketStaleTailRepairService.repairBeforeRead(MarketType.EQUITY, symbol, to);
+        List<CandlePointResponse> candles = toEquityCandles(symbol, start.toLocalDate(), to);
         if (!candles.isEmpty()) {
             if (useTickGapFillForLookbackDays(days)) {
                 candles = mergeDailyPreferDailyFillGapsFromTicks(symbol, candles, start.toLocalDate(), end.toLocalDate());
@@ -318,7 +324,9 @@ public class MarketPriceQueryService {
         }
         LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
-        List<CandlePointResponse> candles = toCryptoCandles(symbol, start.toLocalDate(), end.toLocalDate());
+        LocalDate to = end.toLocalDate();
+        marketStaleTailRepairService.repairBeforeRead(MarketType.CRYPTO, symbol, to);
+        List<CandlePointResponse> candles = toCryptoCandles(symbol, start.toLocalDate(), to);
         if (!candles.isEmpty()) {
             if (useTickGapFillForLookbackDays(days)) {
                 candles = mergeDailyPreferDailyFillGapsFromTicks(symbol, candles, start.toLocalDate(), end.toLocalDate());
@@ -360,6 +368,8 @@ public class MarketPriceQueryService {
             end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
             start = end.minusDays(days);
         }
+        LocalDate effectiveTo = from != null ? to : end.toLocalDate();
+        marketStaleTailRepairService.repairBeforeRead(MarketType.METALS, symbol, effectiveTo);
         if ("XAU_TRY".equals(symbol)) {
             int backfillDays = from != null
                     ? (int) Math.min(365L, ChronoUnit.DAYS.between(from, to) + 1)
@@ -399,7 +409,9 @@ public class MarketPriceQueryService {
         }
         LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
-        List<CandlePointResponse> candles = toFxCandles(symbol, start.toLocalDate(), end.toLocalDate());
+        LocalDate to = end.toLocalDate();
+        marketStaleTailRepairService.repairBeforeRead(MarketType.FX, symbol, to);
+        List<CandlePointResponse> candles = toFxCandles(symbol, start.toLocalDate(), to);
         if (!candles.isEmpty()) {
             if (useTickGapFillForLookbackDays(days)) {
                 candles = mergeDailyPreferDailyFillGapsFromTicks(symbol, candles, start.toLocalDate(), end.toLocalDate());
@@ -435,6 +447,7 @@ public class MarketPriceQueryService {
         Map<String, List<CandlePointResponse>> series = new LinkedHashMap<>();
 
         for (String symbol : symbols) {
+            marketStaleTailRepairService.repairBeforeRead(type, symbol, to);
             if (type == MarketType.FX) {
                 if ("hourly".equals(bucket)) {
                     List<CandlePointResponse> hourly = hourlyStripFromPriceHistory(symbol, days);

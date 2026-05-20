@@ -472,7 +472,7 @@ export function Simulation() {
                     case 'FX':
                         return t('category.fx', 'Döviz');
                     case 'METAL':
-                        return t('category.metals', 'Altın');
+                        return t('category.metals', 'Kıymetli madenler');
                     case 'FUND':
                         return t('category.funds', 'Fonlar');
                     case 'STOCK':

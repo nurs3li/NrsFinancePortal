@@ -1,0 +1,234 @@
+databaseChangeLog:
+  - changeSet:
+      id: v27-manual-viop-bond-positions
+      author: nurseli
+      changes:
+        - createTable:
+            tableName: manual_viop_positions
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: symbol
+                  type: VARCHAR(60)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: display_name
+                  type: VARCHAR(160)
+              - column:
+                  name: viop_category
+                  type: VARCHAR(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: underlying_symbol
+                  type: VARCHAR(60)
+              - column:
+                  name: direction
+                  type: VARCHAR(10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: contract_count
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: entry_price
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: entry_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: current_price
+                  type: NUMERIC(19,6)
+              - column:
+                  name: contract_multiplier
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: initial_margin
+                  type: NUMERIC(19,6)
+              - column:
+                  name: expiry_date
+                  type: DATE
+              - column:
+                  name: status
+                  type: VARCHAR(30)
+                  defaultValue: OPEN
+                  constraints:
+                    nullable: false
+              - column:
+                  name: close_price
+                  type: NUMERIC(19,6)
+              - column:
+                  name: close_date
+                  type: DATE
+              - column:
+                  name: note
+                  type: TEXT
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: manual_viop_positions
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_manual_viop_position_user
+
+        - createIndex:
+            tableName: manual_viop_positions
+            indexName: idx_manual_viop_positions_user_status
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: status
+
+        - createIndex:
+            tableName: manual_viop_positions
+            indexName: idx_manual_viop_positions_symbol
+            columns:
+              - column:
+                  name: symbol
+
+        - createTable:
+            tableName: manual_bond_positions
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: symbol
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: display_name
+                  type: VARCHAR(180)
+              - column:
+                  name: bond_type
+                  type: VARCHAR(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: currency
+                  type: VARCHAR(10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: nominal_value
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: buy_price
+                  type: NUMERIC(19,6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: buy_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: current_price
+                  type: NUMERIC(19,6)
+              - column:
+                  name: maturity_date
+                  type: DATE
+              - column:
+                  name: coupon_rate
+                  type: NUMERIC(10,4)
+              - column:
+                  name: coupon_frequency
+                  type: VARCHAR(30)
+              - column:
+                  name: status
+                  type: VARCHAR(30)
+                  defaultValue: OPEN
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sell_price
+                  type: NUMERIC(19,6)
+              - column:
+                  name: sell_date
+                  type: DATE
+              - column:
+                  name: note
+                  type: TEXT
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: manual_bond_positions
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_manual_bond_position_user
+
+        - createIndex:
+            tableName: manual_bond_positions
+            indexName: idx_manual_bond_positions_user_status
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: status
+
+        - createIndex:
+            tableName: manual_bond_positions
+            indexName: idx_manual_bond_positions_symbol
+            columns:
+              - column:
+                  name: symbol
+
+        - createIndex:
+            tableName: manual_bond_positions
+            indexName: idx_manual_bond_positions_maturity
+            columns:
+              - column:
+                  name: maturity_date

@@ -16,4 +16,6 @@ public interface CryptoDailyCandleRepository extends JpaRepository<CryptoDailyCa
     Optional<CryptoDailyCandle> findFirstBySymbolAndAsOfLessThanOrderByAsOfDesc(String symbol, LocalDate asOf);
 
     Optional<CryptoDailyCandle> findBySymbolAndAsOf(String symbol, LocalDate asOf);
+
+    Optional<CryptoDailyCandle> findTopBySymbolOrderByAsOfDesc(String symbol);
 }

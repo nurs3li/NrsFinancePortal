@@ -27,6 +27,8 @@ export type TerminalListInstrumentVm = {
     daysToMaturity?: number;
     couponRate?: number;
     yieldToMaturity?: number | null;
+    couponFrequencyPerYear?: number;
+    couponFrequencyLabel?: string;
     contractMonth?: string;
     basis?: number;
     marginRequirement?: number;
@@ -66,6 +68,7 @@ export function terminalListItemToVm(item: MarketTerminalListItem): TerminalList
     const dailyChangePercent = item.dailyChangePercent ?? changePercent;
 
     if (item.category === 'BOND') {
+        const sparkPoints = Math.min(Math.max(spark.length, 2), 90);
         return {
             symbol,
             category: 'BOND',
@@ -76,15 +79,26 @@ export function terminalListItemToVm(item: MarketTerminalListItem): TerminalList
             trend: item.trend,
             volume: item.volume,
             type: 'BOND',
-            sparkline: normalizeTrendSparkline(spark, price, changePercent),
+            sparkline: normalizeTrendSparkline(spark, price, changePercent, sparkPoints),
             pctDay: item.pctDay,
             pctWeek: item.pctWeek,
             pctMonth: item.pctMonth,
             pctYear: item.pctYear,
             maturityDate: item.maturityDate ?? undefined,
             daysToMaturity: item.daysToMaturity ?? undefined,
-            couponRate: item.couponRate ?? 0,
-            yieldToMaturity: item.yieldToMaturity ?? null,
+            couponRate:
+                item.couponRate != null && Number.isFinite(Number(item.couponRate)) && Number(item.couponRate) > 0
+                    ? Number(item.couponRate)
+                    : undefined,
+            yieldToMaturity:
+                item.yieldToMaturity != null && Number.isFinite(Number(item.yieldToMaturity))
+                    ? Number(item.yieldToMaturity)
+                    : undefined,
+            couponFrequencyPerYear:
+                item.couponFrequencyPerYear != null && Number.isFinite(Number(item.couponFrequencyPerYear))
+                    ? Number(item.couponFrequencyPerYear)
+                    : undefined,
+            couponFrequencyLabel: item.couponFrequencyLabel ?? undefined,
             longShort: 'NÖTR',
         };
     }

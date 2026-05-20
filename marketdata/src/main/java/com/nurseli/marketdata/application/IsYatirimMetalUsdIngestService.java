@@ -111,6 +111,15 @@ public class IsYatirimMetalUsdIngestService {
                 ok);
     }
 
+    @Transactional
+    @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
+    public void refreshLatestForSymbol(PreciousMetalUsdCatalog.Entry entry) {
+        if (entry == null || !properties.isEnabled()) {
+            return;
+        }
+        refreshLatestOne(entry);
+    }
+
     private boolean refreshLatestOne(PreciousMetalUsdCatalog.Entry entry) {
         LocalDate today = LocalDate.now(IST);
         LocalDateTime to = today.atTime(23, 59, 59);

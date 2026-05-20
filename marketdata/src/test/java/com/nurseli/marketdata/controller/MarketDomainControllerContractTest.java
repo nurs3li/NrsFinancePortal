@@ -206,7 +206,8 @@ class MarketDomainControllerContractTest {
     @Test
     void debtEndpointsShouldBeReachable() throws Exception {
         when(debtQueryService.catalog()).thenReturn(List.of(
-                new DebtInstrumentResponse("TRT010531T16", "TR Hazine Bonosu", "Hazine", "2031-05-01")));
+                new DebtInstrumentResponse(
+                        "TRT010531T16", "TR Hazine Bonosu", "Hazine", "2031-05-01", null, null, null)));
         when(debtQueryService.latest()).thenReturn(List.of(
                 new DebtSnapshotResponse(
                         "TRT010531T16",
@@ -222,7 +223,10 @@ class MarketDomainControllerContractTest {
                         false,
                         "BOND_PRICE_PERFORMANCE",
                         "PRICE",
-                        false)));
+                        false,
+                        null,
+                        null,
+                        null)));
         when(debtQueryService.history("TRT010531T16", 7)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/market/debt/catalog"))

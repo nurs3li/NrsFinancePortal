@@ -1,6 +1,6 @@
 package com.nurseli.marketdata.scheduler;
 
-import com.nurseli.marketdata.application.inflation.InflationPpiIngestService;
+import com.nurseli.marketdata.application.inflation.InflationIndexIngestService;
 import com.nurseli.marketdata.config.EvdsProperties;
 import com.nurseli.marketdata.config.InflationPpiProperties;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +19,7 @@ public class InflationPpiSyncScheduler {
 
     private final EvdsProperties evdsProperties;
     private final InflationPpiProperties inflationPpiProperties;
-    private final InflationPpiIngestService inflationPpiIngestService;
+    private final InflationIndexIngestService inflationIndexIngestService;
 
     @Scheduled(cron = "${market.inflation.ppi.scheduler-cron:0 0 7 3 * *}")
     public void syncRollingWindow() {
@@ -28,7 +28,7 @@ public class InflationPpiSyncScheduler {
         }
         LocalDate to = LocalDate.now();
         LocalDate from = to.minusMonths(36).withDayOfMonth(1);
-        var r = inflationPpiIngestService.syncRange(from, to);
+        var r = inflationIndexIngestService.backfill(from, to, false, true);
         log.info("[INFLATION_PPI] scheduled sync: {}", r);
     }
 }

@@ -128,35 +128,58 @@ public class CryptoPriceIngestService {
     @Transactional
     @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
     public void fetchAndSaveIncrementalDailyHistory() {
-        LocalDate today = LocalDate.now();
-        for (Map.Entry<String, String> entry : CryptoSymbolMapping.SYMBOL_TO_ID.entrySet()) {
-            String symbol = entry.getKey();
-            String coinId = entry.getValue();
+        for (String symbol : CryptoSymbolMapping.SYMBOL_TO_ID.keySet()) {
             try {
-                List<CoinGeckoClient.OhlcPoint> points = coinGeckoClient.fetchDailyOhlc(coinId, 7);
-                for (CoinGeckoClient.OhlcPoint p : points) {
-                    if (!p.day().isAfter(today.minusDays(8)) || p.day().isAfter(today)) {
-                        continue;
-                    }
-                    if (cryptoDailyCandleRepository.existsBySymbolAndAsOf(symbol, p.day())) {
-                        continue;
-                    }
-                    CryptoDailyCandle candle = new CryptoDailyCandle();
-                    candle.setSymbol(symbol);
-                    candle.setAsOf(p.day());
-                    candle.setOpenPrice(p.open());
-                    candle.setHighPrice(p.high());
-                    candle.setLowPrice(p.low());
-                    candle.setClosePrice(p.close());
-                    candle.setVolume(p.volume());
-                    candle.setSource("COINGECKO_OHLC");
-                    cryptoDailyCandleRepository.save(candle);
-                }
-                sleepQuietly(800);
+                ingestIncrementalForSymbol(symbol);
             } catch (Exception ex) {
                 log.debug("[CRYPTO_HISTORY] incremental failed symbol={} reason={}", symbol, ex.getMessage());
-                sleepQuietly(800);
             }
+        }
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
+    public void ingestIncrementalForSymbol(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            return;
+        }
+        String sym = symbol.trim().toUpperCase();
+        String coinId = CryptoSymbolMapping.SYMBOL_TO_ID.get(sym);
+        if (coinId == null) {
+            String alt = sym.endsWith("USDT") ? sym : sym + "USDT";
+            coinId = CryptoSymbolMapping.SYMBOL_TO_ID.get(alt);
+            if (coinId != null) {
+                sym = alt;
+            }
+        }
+        if (coinId == null) {
+            return;
+        }
+        LocalDate today = LocalDate.now();
+        try {
+            List<CoinGeckoClient.OhlcPoint> points = coinGeckoClient.fetchDailyOhlc(coinId, 14);
+            for (CoinGeckoClient.OhlcPoint p : points) {
+                if (p.day().isAfter(today)) {
+                    continue;
+                }
+                if (cryptoDailyCandleRepository.existsBySymbolAndAsOf(sym, p.day())) {
+                    continue;
+                }
+                CryptoDailyCandle candle = new CryptoDailyCandle();
+                candle.setSymbol(sym);
+                candle.setAsOf(p.day());
+                candle.setOpenPrice(p.open());
+                candle.setHighPrice(p.high());
+                candle.setLowPrice(p.low());
+                candle.setClosePrice(p.close());
+                candle.setVolume(p.volume());
+                candle.setSource("COINGECKO_OHLC");
+                cryptoDailyCandleRepository.save(candle);
+            }
+            sleepQuietly(800);
+        } catch (Exception ex) {
+            log.debug("[CRYPTO_HISTORY] incremental symbol={} reason={}", sym, ex.getMessage());
+            sleepQuietly(800);
         }
     }
 

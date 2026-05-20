@@ -15,4 +15,6 @@ public interface FxDailyCandleRepository extends JpaRepository<FxDailyCandle, Lo
     Optional<FxDailyCandle> findFirstBySymbolAndAsOfLessThanOrderByAsOfDesc(String symbol, LocalDate asOf);
 
     Optional<FxDailyCandle> findBySymbolAndAsOf(String symbol, LocalDate asOf);
+
+    Optional<FxDailyCandle> findTopBySymbolOrderByAsOfDesc(String symbol);
 }

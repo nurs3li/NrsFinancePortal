@@ -7,6 +7,6 @@ import { Dashboard } from '../pages/Dashboard';
 
 export function DashboardOrRedirect() {
     const { role } = useAuth();
-    if (role === 'ADMIN') return <Navigate to="/admin" replace />;
+    if (role === 'ADMIN') return <Navigate to="/market" replace />;
     return <Dashboard />;
 }

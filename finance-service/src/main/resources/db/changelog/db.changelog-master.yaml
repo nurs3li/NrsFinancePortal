@@ -73,3 +73,9 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v25-manual-position-investment-analysis.yaml
+
+  - include:
+      file: db/changelog/v26-price-alerts.yaml
+
+  - include:
+      file: db/changelog/v27-manual-viop-bond-positions.yaml

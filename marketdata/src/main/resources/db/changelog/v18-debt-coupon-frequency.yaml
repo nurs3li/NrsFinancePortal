@@ -1,0 +1,20 @@
+databaseChangeLog:
+  - changeSet:
+      id: v18-debt-instrument-coupon-frequency
+      author: nrs-finance
+      changes:
+        - addColumn:
+            tableName: debt_instrument
+            columns:
+              - column:
+                  name: coupon_frequency_per_year
+                  type: INT
+              - column:
+                  name: coupon_frequency_label
+                  type: VARCHAR(32)
+              - column:
+                  name: coupon_frequency_source
+                  type: VARCHAR(48)
+              - column:
+                  name: evds_series_reference
+                  type: VARCHAR(96)

@@ -20,6 +20,8 @@ type ThemeSlice = {
 };
 
 type Props = {
+    title?: string;
+    subtitle?: string;
     points: ViopPoint[];
     ma7: { time: string; value: number }[];
     ma21: { time: string; value: number }[];
@@ -27,6 +29,7 @@ type Props = {
     loading: boolean;
     timeframeLabel?: string;
     trendLabel?: 'UP' | 'DOWN';
+    dataTypeLabel?: string;
     tokens: ThemeSlice;
 };
 
@@ -46,7 +49,19 @@ function chartTimeKey(value: Time): string {
     return JSON.stringify(value);
 }
 
-function ViopTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLabel, trendLabel, tokens }: Props) {
+function ViopTerminalChartImpl({
+    title = 'VIOP Piyasa Analiz',
+    subtitle,
+    points,
+    ma7,
+    ma21,
+    showMa,
+    loading,
+    timeframeLabel,
+    trendLabel,
+    dataTypeLabel,
+    tokens,
+}: Props) {
     const chartRef = useRef<HTMLDivElement>(null);
     const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null);
     const priceAreaRef = useRef<ReturnType<ReturnType<typeof createChart>['addAreaSeries']> | null>(null);
@@ -209,7 +224,11 @@ function ViopTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
                     borderColor: tokensRef.current.border,
                     timeVisible: true,
                     secondsVisible: false,
+                    lockVisibleTimeRangeOnResize: true,
                     ...lay,
+                    rightOffset: 0,
+                    fixLeftEdge: true,
+                    fixRightEdge: true,
                     shiftVisibleRangeOnNewBar: false,
                 },
             });
@@ -291,19 +310,26 @@ function ViopTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
                 borderColor: tokensRef.current.border,
                 timeVisible: true,
                 secondsVisible: false,
+                lockVisibleTimeRangeOnResize: true,
                 ...tsLay,
+                rightOffset: 0,
+                fixLeftEdge: true,
+                fixRightEdge: true,
                 shiftVisibleRangeOnNewBar: false,
             },
         });
 
-        // fitContent yalnızca ilk veride veya timeframe değiştiğinde çağrılır; aksi halde her
-        // küçük data refresh'inde view zıplar ve titrer.
+        // fitContent yalnızca ilk veride veya timeframe değiştiğinde; veri yenilemesinde zoom korunur.
         if (!hasInitialFitRef.current || rangeChanged) {
             requestAnimationFrame(() => {
                 chart.timeScale().fitContent();
                 logicalRangeRef.current = chart.timeScale().getVisibleLogicalRange();
                 hasInitialFitRef.current = true;
             });
+            return;
+        }
+        if (logicalRangeRef.current) {
+            chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
         }
     }, [loading, sorted, ma7, ma21, showMa, timeframeLabel]);
 
@@ -322,8 +348,11 @@ function ViopTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
 
     return (
         <div className="terminal-chart-wrap">
-            <div className="terminal-chart-header">
-                <div className="terminal-chart-title">VİOP Analiz (Line/Area)</div>
+            <div className="terminal-chart-header terminal-chart-header--compact">
+                <div>
+                    <div className="terminal-chart-title">{title}</div>
+                    {subtitle ? <div className="terminal-chart-subtitle">{subtitle}</div> : null}
+                </div>
                 <div className="terminal-chart-badges">
                     {timeframeLabel ? <span className="terminal-chart-badge">Zaman: {timeframeLabel}</span> : null}
                     {trendLabel ? (
@@ -331,16 +360,13 @@ function ViopTerminalChartImpl({ points, ma7, ma21, showMa, loading, timeframeLa
                             Trend: {trendLabel}
                         </span>
                     ) : null}
+                    {dataTypeLabel ? <span className="terminal-chart-badge">Veri: {dataTypeLabel}</span> : null}
                 </div>
                 {hover ? (
-                    <div className="terminal-ohlc">
+                    <div className="terminal-ohlc muted" style={{ fontSize: 11, marginTop: 6, width: '100%' }}>
                         <span>Fiyat {hover.price.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</span>
-                        <span>Baz {hover.basis.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</span>
-                        <span>Carry %{hover.annualizedBasisPct.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}</span>
                     </div>
-                ) : (
-                    <div className="terminal-ohlc muted">Fiyat/baz/carry için imleci grafik üzerine getir</div>
-                )}
+                ) : null}
             </div>
             {emptyMessage ? (
                 <div className="terminal-chart-empty">{emptyMessage}</div>

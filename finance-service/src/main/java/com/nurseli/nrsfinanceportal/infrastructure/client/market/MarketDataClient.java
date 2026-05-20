@@ -14,8 +14,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.Duration;
+import java.util.TreeMap;
+import java.util.NavigableMap;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -39,6 +42,24 @@ public class MarketDataClient {
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<List<MarketPriceHistoryDto>>> HISTORY_ENVELOPE =
             new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<List<ViopLatestRow>>> VIOP_LATEST_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<List<DebtLatestRow>>> DEBT_LATEST_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<List<DebtHistoryRow>>> DEBT_HISTORY_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<BistLatestPage>> BIST_PAGE_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<InflationHistoryBody>> CPI_HISTORY_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record InflationHistoryBody(String indicatorType, List<InflationHistoryRow> rows) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record InflationHistoryRow(
+            LocalDate indexMonth,
+            BigDecimal indexValue) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record BistLatestRow(
@@ -96,7 +117,27 @@ public class MarketDataClient {
             String maturityDate,
             Integer daysToMaturity,
             Boolean synthetic,
+            java.time.LocalDateTime asOf,
+            Integer couponFrequencyPerYear,
+            String couponFrequencyLabel,
+            String couponFrequencySource) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record DebtHistoryRow(
+            String isin,
+            BigDecimal dirtyPrice,
+            BigDecimal yieldPct,
             java.time.LocalDateTime asOf) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ViopPriceAtRow(
+            String contractCode,
+            LocalDateTime requestedDate,
+            LocalDateTime matchedPriceTime,
+            BigDecimal price,
+            String matchType,
+            String source,
+            String dataQuality) {}
 
     private final WebClient marketDataWebClient;
 
@@ -272,11 +313,7 @@ public class MarketDataClient {
         return list != null ? list : List.of();
     }
 
-    public BigDecimal getBistLatestMidTry(String symbol) {
-        if (symbol == null || symbol.isBlank()) {
-            return BigDecimal.ZERO;
-        }
-        String want = symbol.trim().toUpperCase();
+    public List<BistLatestRow> getBistLatestRows() {
         try {
             List<BistLatestRow> rows = marketDataWebClient.get()
                     .uri("/api/market/equities/bist/latest")
@@ -285,9 +322,19 @@ public class MarketDataClient {
                     .timeout(REQUEST_TIMEOUT)
                     .onErrorReturn(List.of())
                     .block(REQUEST_TIMEOUT.plusSeconds(2));
-            if (rows == null) {
-                return BigDecimal.ZERO;
-            }
+            return rows != null ? rows : List.of();
+        } catch (RuntimeException ignored) {
+            return List.of();
+        }
+    }
+
+    public BigDecimal getBistLatestMidTry(String symbol) {
+        if (symbol == null || symbol.isBlank()) {
+            return BigDecimal.ZERO;
+        }
+        String want = symbol.trim().toUpperCase();
+        try {
+            List<BistLatestRow> rows = getBistLatestRows();
             for (BistLatestRow r : rows) {
                 if (r == null || r.symbol() == null) {
                     continue;
@@ -375,7 +422,7 @@ public class MarketDataClient {
     public BistLatestPage getBistLatestPage(
             int page, int size, String sort, String dir, String filter, String search) {
         try {
-            BistLatestPage body = marketDataWebClient.get()
+            ApiEnvelope<BistLatestPage> envelope = marketDataWebClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/api/market/equities/bist/latest/page")
                             .queryParam("page", page)
@@ -386,10 +433,11 @@ public class MarketDataClient {
                             .queryParamIfPresent("search", java.util.Optional.ofNullable(search).filter(s -> !s.isBlank()))
                             .build())
                     .retrieve()
-                    .bodyToMono(BistLatestPage.class)
+                    .bodyToMono(BIST_PAGE_ENVELOPE)
                     .timeout(REQUEST_TIMEOUT.plusSeconds(5))
-                    .onErrorReturn(emptyBistPage())
+                    .onErrorReturn(new ApiEnvelope<>(false, null, null, null))
                     .block(REQUEST_TIMEOUT.plusSeconds(6));
+            BistLatestPage body = envelope != null ? envelope.data() : null;
             return body != null ? body : emptyBistPage();
         } catch (RuntimeException ignored) {
             return emptyBistPage();
@@ -401,29 +449,75 @@ public class MarketDataClient {
     }
 
     public List<ViopLatestRow> getViopLatestRows() {
+        return blockListEnvelope("/api/market/viop/latest", VIOP_LATEST_ENVELOPE, REQUEST_TIMEOUT.plusSeconds(10));
+    }
+
+    public List<DebtLatestRow> getDebtLatestRows() {
+        return blockListEnvelope("/api/market/debt/latest", DEBT_LATEST_ENVELOPE, REQUEST_TIMEOUT.plusSeconds(2));
+    }
+
+    /**
+     * VİOP kontratı için belirli takvim günü fiyatı (market-data price-at).
+     */
+    public java.util.Optional<ViopPriceAtRow> getViopPriceAt(String contractCode, LocalDate date) {
+        if (contractCode == null || contractCode.isBlank() || date == null) {
+            return java.util.Optional.empty();
+        }
+        String code = contractCode.trim().toUpperCase();
         try {
-            List<ViopLatestRow> rows = marketDataWebClient.get()
-                    .uri("/api/market/viop/latest")
+            ViopPriceAtRow row = marketDataWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/market/viop/contracts/{code}/price-at")
+                            .queryParam("date", date.toString())
+                            .build(code))
                     .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<List<ViopLatestRow>>() {})
-                    .timeout(REQUEST_TIMEOUT.plusSeconds(8))
-                    .onErrorReturn(List.of())
-                    .block(REQUEST_TIMEOUT.plusSeconds(10));
+                    .bodyToMono(ViopPriceAtRow.class)
+                    .timeout(REQUEST_TIMEOUT.plusSeconds(10))
+                    .onErrorReturn(null)
+                    .block(REQUEST_TIMEOUT.plusSeconds(12));
+            return java.util.Optional.ofNullable(row);
+        } catch (RuntimeException ignored) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    public List<DebtHistoryRow> getDebtHistory(String isin, int days) {
+        if (isin == null || isin.isBlank()) {
+            return List.of();
+        }
+        int safeDays = Math.max(7, Math.min(days, 400));
+        try {
+            ApiEnvelope<List<DebtHistoryRow>> envelope = marketDataWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/market/debt/history")
+                            .queryParam("isin", isin.trim().toUpperCase())
+                            .queryParam("days", safeDays)
+                            .build())
+                    .retrieve()
+                    .bodyToMono(DEBT_HISTORY_ENVELOPE)
+                    .timeout(HISTORY_REQUEST_TIMEOUT)
+                    .onErrorReturn(new ApiEnvelope<>(false, null, null, null))
+                    .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(5));
+            List<DebtHistoryRow> rows = envelope != null ? envelope.data() : null;
             return rows != null ? rows : List.of();
         } catch (RuntimeException ignored) {
             return List.of();
         }
     }
 
-    public List<DebtLatestRow> getDebtLatestRows() {
+    private <T> List<T> blockListEnvelope(
+            String uri,
+            ParameterizedTypeReference<ApiEnvelope<List<T>>> envelopeType,
+            Duration blockTimeout) {
         try {
-            List<DebtLatestRow> rows = marketDataWebClient.get()
-                    .uri("/api/market/debt/latest")
+            ApiEnvelope<List<T>> envelope = marketDataWebClient.get()
+                    .uri(uri)
                     .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<List<DebtLatestRow>>() {})
-                    .timeout(REQUEST_TIMEOUT)
-                    .onErrorReturn(List.of())
-                    .block(REQUEST_TIMEOUT.plusSeconds(2));
+                    .bodyToMono(envelopeType)
+                    .timeout(REQUEST_TIMEOUT.plusSeconds(8))
+                    .onErrorReturn(new ApiEnvelope<>(false, null, null, null))
+                    .block(blockTimeout);
+            List<T> rows = envelope != null ? envelope.data() : null;
             return rows != null ? rows : List.of();
         } catch (RuntimeException ignored) {
             return List.of();
@@ -439,6 +533,44 @@ public class MarketDataClient {
     ) {
         static LatestPricingSnapshot empty() {
             return new LatestPricingSnapshot(Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+        }
+    }
+
+    /**
+     * TÜFE (CPI) aylık endeks geçmişi — tek HTTP; {@code from}–{@code to} aralığı.
+     */
+    public CpiIndexLookup loadCpiIndexLookup(LocalDate from, LocalDate to) {
+        if (from == null || to == null || to.isBefore(from)) {
+            return CpiIndexLookup.empty();
+        }
+        YearMonth ymFrom = YearMonth.from(from);
+        YearMonth ymTo = YearMonth.from(to);
+        try {
+            ApiEnvelope<InflationHistoryBody> envelope = marketDataWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/market/macro/inflation/history")
+                            .queryParam("type", "CPI")
+                            .queryParam("from", ymFrom.toString())
+                            .queryParam("to", ymTo.toString())
+                            .build())
+                    .retrieve()
+                    .bodyToMono(CPI_HISTORY_ENVELOPE)
+                    .timeout(HISTORY_REQUEST_TIMEOUT)
+                    .onErrorReturn(new ApiEnvelope<>(false, null, null, null))
+                    .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(5));
+            InflationHistoryBody body = envelope != null ? envelope.data() : null;
+            List<InflationHistoryRow> rows = body != null && body.rows() != null ? body.rows() : List.of();
+            NavigableMap<LocalDate, BigDecimal> map = new TreeMap<>();
+            for (InflationHistoryRow row : rows) {
+                if (row.indexMonth() == null || row.indexValue() == null || row.indexValue().signum() <= 0) {
+                    continue;
+                }
+                LocalDate monthStart = YearMonth.from(row.indexMonth()).atDay(1);
+                map.put(monthStart, row.indexValue());
+            }
+            return new CpiIndexLookup(map);
+        } catch (RuntimeException ex) {
+            return CpiIndexLookup.empty();
         }
     }
 }

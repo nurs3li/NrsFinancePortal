@@ -1,6 +1,8 @@
 package com.nurseli.nrsfinanceportal.controller;
 
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioAnalysisResponse;
+import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioInsightsResponse;
+import com.nurseli.nrsfinanceportal.common.dto.PortfolioInsightNotificationEvaluateResponse;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioCloseRequest;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioCreateRequest;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioSummaryView;
@@ -12,6 +14,7 @@ import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.service.ManualPortfolioService;
 import com.nurseli.nrsfinanceportal.service.UnifiedPortfolioService;
+import com.nurseli.nrsfinanceportal.service.portfolio.ManualPortfolioInsightsService;
 import com.nurseli.nrsfinanceportal.service.portfolio.ManualPortfolioNominalAnalysisCalculator;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +33,7 @@ public class PortfolioController {
     private final ManualPortfolioService manualPortfolioService;
     private final UnifiedPortfolioService unifiedPortfolioService;
     private final ManualPortfolioNominalAnalysisCalculator nominalAnalysisCalculator;
+    private final ManualPortfolioInsightsService manualPortfolioInsightsService;
 
     @PostMapping("/manual")
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
@@ -178,6 +182,18 @@ public class PortfolioController {
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<ManualPortfolioAnalysisResponse> manualAnalysis(@PathVariable Long id) {
         return ApiResponse.success(manualPortfolioService.analysis(id));
+    }
+
+    @GetMapping("/manual/insights/me")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<ManualPortfolioInsightsResponse> manualInsightsMe() {
+        return ApiResponse.success(manualPortfolioInsightsService.insightsForCurrentUser());
+    }
+
+    @PostMapping("/manual/insights/evaluate-notifications/me")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<PortfolioInsightNotificationEvaluateResponse> evaluatePortfolioInsightNotifications() {
+        return ApiResponse.success(manualPortfolioInsightsService.evaluateNotificationsForCurrentUser());
     }
 
     @GetMapping("/me/unified")

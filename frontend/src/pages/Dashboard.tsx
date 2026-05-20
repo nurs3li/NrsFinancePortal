@@ -13,11 +13,14 @@ import { useNavigate } from 'react-router-dom';
 import type { AxiosResponse } from 'axios';
 import DOMPurify from 'dompurify';
 import { financeClient, marketClient, notificationClient, readFinanceBinaryErrorMessage } from '../api/client';
+import { isPortfolioInsightNotificationType } from '../utils/portfolioInsightNotifications';
 import type { LatestPriceRow, MarketDashboard } from '../components/market/marketTypes';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 import { useDocumentVisibility } from '../hooks/useDocumentVisibility';
 import { notificationKeys } from '../queries/notificationKeys';
+import { manualPortfolioKeys } from '../queries/manualPortfolioKeys';
+import { getManualPortfolioInsights } from '../services/manualPortfolioApi';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -159,6 +162,12 @@ type NotifCategory = 'APPROVAL' | 'SECURITY' | 'REVIEW' | 'INFO';
  */
 function classifyNotification(type: string): NotifCategory {
     const t = (type ?? '').toUpperCase();
+    if (t === 'REAL_RETURN_NEGATIVE' || t === 'PORTFOLIO_CONCENTRATION_RISK') {
+        return 'SECURITY';
+    }
+    if (t === 'REAL_RETURN_POSITIVE') {
+        return 'APPROVAL';
+    }
     if (
         t.includes('APPROVED') ||
         t.includes('APPROVAL') ||
@@ -564,6 +573,22 @@ export function Dashboard() {
         staleTime: 120_000,
         refetchInterval: tabVisible ? 180_000 : false,
     });
+
+    const insightsQuery = useQuery({
+        queryKey: manualPortfolioKeys.insights(),
+        queryFn: getManualPortfolioInsights,
+        staleTime: 60_000,
+        refetchInterval: tabVisible ? 180_000 : false,
+    });
+
+    const insightSummary = insightsQuery.data?.summary;
+
+    const notifCardTitle = useMemo(() => {
+        const hasInsight = recentNotifications.some((n) => isPortfolioInsightNotificationType(n.type));
+        return hasInsight
+            ? t('dashboard.smartAlerts', 'Akıllı Uyarılar')
+            : t('dashboard.recentNotifications', 'Son Bildirimler');
+    }, [recentNotifications, t]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -826,6 +851,23 @@ export function Dashboard() {
     const displayPnlValue = useCountUp(Number(summary?.portfolio?.totalPnlTry ?? 0));
     const displayPnlPct = useCountUp(Number(summary?.portfolio?.totalPnlPct ?? 0));
 
+    const realReturnTry = useMemo(() => {
+        if (insightSummary?.realReturnAvailable === true && Number.isFinite(Number(insightSummary.realReturn))) {
+            return Number(insightSummary.realReturn);
+        }
+        return null;
+    }, [insightSummary]);
+
+    const realReturnPct = useMemo(() => {
+        if (insightSummary?.realReturnAvailable === true && Number.isFinite(Number(insightSummary.realReturnPct))) {
+            return Number(insightSummary.realReturnPct);
+        }
+        return null;
+    }, [insightSummary]);
+
+    const displayRealReturn = useCountUp(realReturnTry ?? 0);
+    const displayRealReturnPct = useCountUp(realReturnPct ?? 0);
+
     const lastSnapshotDayLabel = useMemo(() => {
         if (!balancePoints.length) return null;
         return balancePoints[balancePoints.length - 1]?.date ?? null;
@@ -1035,6 +1077,26 @@ export function Dashboard() {
                 />
                 <DashboardKpiCard label={t('dashboard.totalCostTry', 'Toplam maliyet (TRY)')} value={formatMoney(displayCost)} />
                 <DashboardKpiCard label={t('dashboard.totalPnlTry', 'Toplam kar (PNL)')} value={formatMoney(displayPnlValue)} />
+                <DashboardKpiCard
+                    label={t('dashboard.realReturn', 'Reel K/Z')}
+                    value={
+                        realReturnTry != null
+                            ? formatMoney(displayRealReturn)
+                            : t('portfolio.realPnlWaitingCpi', 'TÜFE verisi bekleniyor')
+                    }
+                    sub={
+                        realReturnPct != null
+                            ? `${displayRealReturnPct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%`
+                            : undefined
+                    }
+                    valueClassName={
+                        realReturnTry != null
+                            ? realReturnTry >= 0
+                                ? 'portfolio-pnl-pos'
+                                : 'portfolio-pnl-neg'
+                            : 'kpi-value-small'
+                    }
+                />
             </div>
 
             <div className="dashboard-card dashboard-chart-card">
@@ -1259,9 +1321,7 @@ export function Dashboard() {
                             <span className="dashboard-notif-card__icon" aria-hidden>
                                 <Bell size={14} />
                             </span>
-                            <h2 className="section-title dashboard-notif-card__title">
-                                {t('dashboard.recentNotifications', 'Son Bildirimler')}
-                            </h2>
+                            <h2 className="section-title dashboard-notif-card__title">{notifCardTitle}</h2>
                             <button
                                 type="button"
                                 className="dashboard-notif-card__all"
