@@ -304,14 +304,14 @@ export function LandingPage() {
 
                 {panelTab === 'signin' ? (
                     <div className="landing-form">
-                        <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: 0 }}>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--landing-silver-muted)', margin: 0 }}>
                             {t(
                                 'landing.signinIntro',
                                 'Kurumsal giriş Keycloak üzerinden yapılır. Rolünüze göre OTP istenebilir.'
                             )}
                         </p>
                         {loginError ? <div className="landing-alert">{loginError}</div> : null}
-                        <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--landing-silver-muted)' }}>
                             {t('landing.signinNote', '“Beni hatırla” ve şifre politikaları Keycloak oturum ekranında yönetilir.')}
                         </p>
                         <button type="button" className="landing-btn-primary" style={{ marginTop: '0.5rem' }} onClick={() => login()}>

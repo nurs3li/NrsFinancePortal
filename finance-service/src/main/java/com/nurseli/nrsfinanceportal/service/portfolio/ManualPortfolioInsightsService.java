@@ -16,8 +16,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -27,13 +25,12 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ManualPortfolioInsightsService {
 
-    private static final ZoneId TZ = ZoneId.of("Europe/Istanbul");
-
     private final ManualPortfolioService manualPortfolioService;
     private final CurrentUserResolver currentUserResolver;
     private final MarketDataClient marketDataClient;
     private final ManualPortfolioNominalAnalysisCalculator nominalAnalysisCalculator;
     private final ManualPortfolioRealReturnCalculator realReturnCalculator;
+    private final ManualPortfolioCpiSupport cpiSupport;
     private final PortfolioConcentrationRiskService concentrationRiskService;
     private final PortfolioHealthScoreService healthScoreService;
     private final PortfolioInsightNotificationEvaluator notificationEvaluator;
@@ -65,8 +62,7 @@ public class ManualPortfolioInsightsService {
     }
 
     private ManualPortfolioInsightsResponse buildInsights(List<ManualPortfolioPosition> positions) {
-        LocalDate today = LocalDate.now(TZ);
-        CpiIndexLookup cpiLookup = loadCpiForPositions(positions, today);
+        CpiIndexLookup cpiLookup = cpiSupport.loadForPositions(positions);
         LatestPricingSnapshot pricing = marketDataClient.loadLatestPricing();
 
         ManualPortfolioRealReturnCalculator.PortfolioRealReturnResult real =
@@ -95,26 +91,6 @@ public class ManualPortfolioInsightsService {
         List<PortfolioInsightItemDto> insightItems = buildInsightItems(summary, concentration, health);
 
         return new ManualPortfolioInsightsResponse(summary, health, concentration, insightItems);
-    }
-
-    private CpiIndexLookup loadCpiForPositions(List<ManualPortfolioPosition> positions, LocalDate today) {
-        if (positions == null || positions.isEmpty()) {
-            return CpiIndexLookup.empty();
-        }
-        LocalDate min = null;
-        LocalDate max = today;
-        for (ManualPortfolioPosition p : positions) {
-            if (p.getBuyDate() != null) {
-                min = min == null || p.getBuyDate().isBefore(min) ? p.getBuyDate() : min;
-            }
-            if (p.getStatus() == ManualPositionStatus.SOLD && p.getSellDate() != null) {
-                max = p.getSellDate().isAfter(max) ? p.getSellDate() : max;
-            }
-        }
-        if (min == null) {
-            return CpiIndexLookup.empty();
-        }
-        return marketDataClient.loadCpiIndexLookup(min, max);
     }
 
     private Map<AssetType, BigDecimal> openValueByAssetType(

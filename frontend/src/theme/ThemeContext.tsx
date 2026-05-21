@@ -28,9 +28,9 @@ const LIGHT: ThemeTokens = {
     accentGradient: 'linear-gradient(135deg, #1d4ed8, #0ea5e9)',
     success: '#16a34a',
     error: '#dc2626',
-    headerBg: '#1e3a5f',
-    headerText: '#ffffff',
-    inputBg: '#f8fafc',
+    headerBg: 'rgba(255, 255, 255, 0.92)',
+    headerText: '#0f172a',
+    inputBg: '#ffffff',
     tableBorder: '#e2e8f0',
 };
 

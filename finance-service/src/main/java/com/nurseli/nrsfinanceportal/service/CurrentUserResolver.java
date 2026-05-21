@@ -66,6 +66,18 @@ public class CurrentUserResolver {
             user.setEmail(email);
             changed = true;
         }
+
+        String givenName = readJwtClaim("given_name");
+        String familyName = readJwtClaim("family_name");
+        if (givenName != null && !givenName.equals(user.getFirstName())) {
+            user.setFirstName(givenName);
+            changed = true;
+        }
+        if (familyName != null && !familyName.equals(user.getLastName())) {
+            user.setLastName(familyName);
+            changed = true;
+        }
+
         if (changed) {
             userRepository.save(user);
         }
@@ -104,10 +116,21 @@ public class CurrentUserResolver {
         }
     }
 
+    private String readJwtClaim(String claim) {
+        org.springframework.security.core.Authentication authentication =
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof org.springframework.security.oauth2.jwt.Jwt jwt)) {
+            return null;
+        }
+        String value = jwt.getClaimAsString(claim);
+        return value != null && !value.isBlank() ? value.trim() : null;
+    }
+
     private User createNewUser(String keycloakUserId, String email, String username, Role role) {
-        return userRepository.save(
-                User.createFromIdentity(keycloakUserId, email, username, role)
-        );
+        User user = User.createFromIdentity(keycloakUserId, email, username, role);
+        user.setFirstName(readJwtClaim("given_name"));
+        user.setLastName(readJwtClaim("family_name"));
+        return userRepository.save(user);
     }
 
     public Long getCurrentUserId() {

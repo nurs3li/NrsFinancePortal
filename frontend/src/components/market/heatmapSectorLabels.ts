@@ -4,6 +4,7 @@ import type { ChartRangeId } from './heatmapRange';
 const SECTOR_I18N_KEY: Record<string, string> = {
     ALL: 'heatmap.sector.all',
     BIST_EQUITY: 'heatmap.sector.bist',
+    TEFAS_FUNDS: 'heatmap.sector.tefasFunds',
     PRECIOUS_METALS: 'heatmap.sector.preciousMetals',
     COMMODITIES: 'heatmap.sector.preciousMetals',
     FOREX: 'heatmap.sector.forex',

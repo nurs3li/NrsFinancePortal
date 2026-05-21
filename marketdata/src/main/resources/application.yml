@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: market-data-service
+  # Repo kökündeki .env (EVDS_API_KEY vb.) IDE / mvn spring-boot:run için
+  config:
+    import: optional:file:.env[.properties],optional:file:../.env[.properties]
   jackson:
     time-zone: Europe/Istanbul
   datasource:
@@ -43,11 +46,12 @@ market:
     days: 3
   fx:
     effective-rates:
-      lookback-days: ${FX_EFFECTIVE_LOOKBACK_DAYS:400}
+      lookback-days: ${MARKET_FX_EFFECTIVE_LOOKBACK_DAYS:${FX_EFFECTIVE_LOOKBACK_DAYS:400}}
   evds:
     enabled: true
+    base-url: ${MARKET_EVDS_BASE_URL:https://evds3.tcmb.gov.tr/igmevdsms-dis}
     apiKey: ${EVDS_API_KEY:}
-    timeoutMs: 3000
+    timeoutMs: ${EVDS_TIMEOUT_MS:15000}
     # Mantıksal gösterge → EVDS seri kodu (Java içinde TP_* sabitlenmez).
     series:
       CPI_TR_INDEX: ${EVDS_SERIES_CPI_TR_INDEX:TP_GENENDEKS_T1}
@@ -221,18 +225,18 @@ market:
           yieldScale: 1
   inflation:
     backfill:
-      enabled: ${INFLATION_BACKFILL_ENABLED:false}
+      enabled: ${INFLATION_BACKFILL_ENABLED:true}
       from: ${INFLATION_BACKFILL_FROM:2003-01-01}
-      startup-enabled: ${INFLATION_BACKFILL_ON_STARTUP:false}
+      startup-enabled: ${INFLATION_BACKFILL_ON_STARTUP:true}
     cpi:
       persist-enabled: ${INFLATION_CPI_PERSIST_ENABLED:true}
       base-year: 2003
-      scheduler-enabled: ${INFLATION_CPI_SCHEDULER_ENABLED:false}
+      scheduler-enabled: ${INFLATION_CPI_SCHEDULER_ENABLED:true}
       scheduler-cron: ${INFLATION_CPI_SCHEDULER_CRON:0 0 7 3 * *}
     ppi:
       persist-enabled: ${INFLATION_PPI_PERSIST_ENABLED:true}
       base-year: 2003
-      scheduler-enabled: ${INFLATION_PPI_SCHEDULER_ENABLED:false}
+      scheduler-enabled: ${INFLATION_PPI_SCHEDULER_ENABLED:true}
       scheduler-cron: ${INFLATION_PPI_SCHEDULER_CRON:0 0 7 3 * *}
   deposit-rates:
     enabled: ${DEPOSIT_RATES_ENABLED:false}
@@ -354,6 +358,24 @@ app:
       enabled: ${DEBT_HISTORY_BACKFILL_ENABLED:false}
       periodDays: ${DEBT_HISTORY_BACKFILL_PERIOD_DAYS:730}
       shutdownOnComplete: ${DEBT_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
+  tefas:
+    enabled: ${TEFAS_ENABLED:true}
+    base-url: ${TEFAS_BASE_URL:https://www.tefas.gov.tr}
+    fund-kind: ${TEFAS_FUND_KIND:YAT}
+    # Yalnızca bu kodlar takip edilir; canlı 1000+ fon listesi çekilmez.
+    symbols:
+      # AAK/IIB TEFAS'ta yok (fonFiyatBilgiGetir boş döner) — geçerli kodlar:
+      - AAS
+      - TLY
+      - GAH
+      - AFT
+      - IPJ
+      - IIE
+    backfill-on-startup: ${TEFAS_BACKFILL_ON_STARTUP:true}
+    sync-profiles-on-startup: ${TEFAS_SYNC_PROFILES_ON_STARTUP:true}
+    history-backfill-months: ${TEFAS_HISTORY_BACKFILL_MONTHS:12}
+    min-history-rows-before-skip: ${TEFAS_MIN_HISTORY_ROWS:20}
+    daily-cron: ${TEFAS_DAILY_CRON:0 35 7 * * *}
   etf:
     symbols: # FinHub free plan: US ETF
       - SPY
@@ -546,9 +568,18 @@ app:
       evds:
         enabled: ${MARKET_EUROBONDS_EVDS_ENABLED:true}
         default-lookback-years: ${MARKET_EUROBONDS_EVDS_DEFAULT_LOOKBACK_YEARS:5}
+        backfill:
+          startup-enabled: ${MARKET_EUROBONDS_EVDS_BACKFILL_STARTUP_ENABLED:true}
+          from: ${MARKET_EUROBONDS_EVDS_BACKFILL_FROM:2019-01-01}
         latest-refresh:
           enabled: ${MARKET_EUROBONDS_EVDS_LATEST_REFRESH_ENABLED:true}
           fixed-delay-ms: ${MARKET_EUROBONDS_EVDS_LATEST_REFRESH_FIXED_DELAY_MS:86400000}
+        instruments:
+          enabled: ${MARKET_EUROBONDS_INSTRUMENTS_ENABLED:false}
+          startup-backfill-enabled: ${MARKET_EUROBONDS_INSTRUMENTS_STARTUP_BACKFILL_ENABLED:false}
+          default-lookback-years: 5
+          seed-fallback-enabled: false
+          list: []
         series:
           book-value: ${EVDS_SERIES_EUROBOND_GOV_BOOK_VALUE_WEEKLY:TP_EBONDYAZDEG_ST}
           market-value: ${EVDS_SERIES_EUROBOND_GOV_MARKET_VALUE_WEEKLY:TP_EBONDPIYDEG_ST}

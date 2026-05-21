@@ -48,6 +48,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneric(Exception ex, HttpServletRequest request) {
         log.error("[EXCEPTION] Unexpected error", ex);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorBody("Internal server error", request));
+        String message = "Internal server error";
+        Throwable root = ex;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String rootMsg = root.getMessage() != null ? root.getMessage().toLowerCase() : "";
+        if (rootMsg.contains("ssl") || rootMsg.contains("connection") || rootMsg.contains("oauth2.googleapis.com")) {
+            message = "E-posta servisi şu an Google'a bağlanamıyor. Lütfen kısa süre sonra tekrar deneyin.";
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(errorBody(message, request));
+        }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorBody(message, request));
     }
 }

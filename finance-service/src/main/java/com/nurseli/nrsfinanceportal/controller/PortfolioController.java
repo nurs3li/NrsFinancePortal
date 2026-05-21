@@ -15,7 +15,7 @@ import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.service.ManualPortfolioService;
 import com.nurseli.nrsfinanceportal.service.UnifiedPortfolioService;
 import com.nurseli.nrsfinanceportal.service.portfolio.ManualPortfolioInsightsService;
-import com.nurseli.nrsfinanceportal.service.portfolio.ManualPortfolioNominalAnalysisCalculator;
+import com.nurseli.nrsfinanceportal.service.portfolio.ManualPortfolioViewAssembler;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -32,7 +32,7 @@ public class PortfolioController {
 
     private final ManualPortfolioService manualPortfolioService;
     private final UnifiedPortfolioService unifiedPortfolioService;
-    private final ManualPortfolioNominalAnalysisCalculator nominalAnalysisCalculator;
+    private final ManualPortfolioViewAssembler manualPortfolioViewAssembler;
     private final ManualPortfolioInsightsService manualPortfolioInsightsService;
 
     @PostMapping("/manual")
@@ -41,18 +41,13 @@ public class PortfolioController {
             @Valid @RequestBody ManualPortfolioCreateRequest request
     ) {
         var saved = manualPortfolioService.create(request);
-        return ApiResponse.success(ManualPortfolioView.from(saved, nominalAnalysisCalculator.compute(saved)));
+        return ApiResponse.success(manualPortfolioViewAssembler.toView(saved));
     }
 
     @GetMapping("/manual/me")
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<List<ManualPortfolioView>> myManualPositions() {
-        return ApiResponse.success(
-                manualPortfolioService.listMine()
-                        .stream()
-                        .map(p -> ManualPortfolioView.from(p, nominalAnalysisCalculator.compute(p)))
-                        .toList()
-        );
+        return ApiResponse.success(manualPortfolioViewAssembler.toViews(manualPortfolioService.listMine()));
     }
 
     @PutMapping("/manual/{id}")
@@ -62,7 +57,7 @@ public class PortfolioController {
             @Valid @RequestBody ManualPortfolioCreateRequest request
     ) {
         var saved = manualPortfolioService.update(id, request);
-        return ApiResponse.success(ManualPortfolioView.from(saved, nominalAnalysisCalculator.compute(saved)));
+        return ApiResponse.success(manualPortfolioViewAssembler.toView(saved));
     }
 
     @PostMapping("/manual/{id}/close")
@@ -72,7 +67,7 @@ public class PortfolioController {
             @Valid @RequestBody ManualPortfolioCloseRequest request
     ) {
         var saved = manualPortfolioService.close(id, request);
-        return ApiResponse.success(ManualPortfolioView.from(saved, nominalAnalysisCalculator.compute(saved)));
+        return ApiResponse.success(manualPortfolioViewAssembler.toView(saved));
     }
 
     @DeleteMapping("/manual/{id}")
@@ -156,6 +151,26 @@ public class PortfolioController {
             @RequestParam String key
     ) {
         return ApiResponse.success(manualPortfolioService.timeseriesMineSoldLifecyclePnlSegment(from, to, mode, key));
+    }
+
+    @GetMapping("/manual/timeseries/me/real-return-pnl")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<List<ManualPortfolioTimeseriesPointDto>> manualTimeseriesRealReturnPnl(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ApiResponse.success(manualPortfolioService.timeseriesMineRealReturn(from, to));
+    }
+
+    @GetMapping("/manual/timeseries/me/real-return-pnl/segment")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<List<ManualPortfolioTimeseriesPointDto>> manualTimeseriesRealReturnPnlSegment(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam String mode,
+            @RequestParam String key
+    ) {
+        return ApiResponse.success(manualPortfolioService.timeseriesMineRealReturnSegment(from, to, mode, key));
     }
 
     @GetMapping("/manual/timeseries/me/open-unrealized-pnl")

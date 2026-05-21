@@ -279,6 +279,23 @@ public class ViopMarketDataService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown or disabled VIOP contract"));
         String canonical = canonical(entry);
         ZoneId zone = ZoneId.of(viopProperties.getTimezone());
+
+        ViopPriceAtResponse hit = resolvePriceAtFromDb(canonical, requestedDate, zone);
+        if (!ViopPriceMatchType.NOT_FOUND.name().equals(hit.matchType())) {
+            return hit;
+        }
+
+        backfillHistoryForPriceAt(canonical, entry, requestedDate, zone);
+        hit = resolvePriceAtFromDb(canonical, requestedDate, zone);
+        if (!ViopPriceMatchType.NOT_FOUND.name().equals(hit.matchType())) {
+            return hit;
+        }
+
+        log.info("VIOP_PRICE_AT_NOT_FOUND contractCode={} requestedDate={}", canonical, requestedDate);
+        return hit;
+    }
+
+    private ViopPriceAtResponse resolvePriceAtFromDb(String canonical, LocalDate requestedDate, ZoneId zone) {
         LocalDateTime requestedEcho = requestedDate.atStartOfDay(zone).toLocalDateTime();
         LocalDateTime dayStart = requestedEcho;
         LocalDateTime dayEnd = requestedDate.plusDays(1).atStartOfDay(zone).minusNanos(1).toLocalDateTime();
@@ -325,7 +342,6 @@ public class ViopMarketDataService {
                     ViopDataQuality.OK.name());
         }
 
-        log.info("VIOP_PRICE_AT_NOT_FOUND contractCode={} requestedDate={}", canonical, requestedDate);
         return new ViopPriceAtResponse(
                 canonical,
                 requestedEcho,
@@ -334,6 +350,45 @@ public class ViopMarketDataService {
                 ViopPriceMatchType.NOT_FOUND.name(),
                 SOURCE_LABEL_DB,
                 ViopDataQuality.OK.name());
+    }
+
+    private void backfillHistoryForPriceAt(
+            String canonical,
+            MarketViopProperties.IndexEntry entry,
+            LocalDate requestedDate,
+            ZoneId zone) {
+        LocalDate today = LocalDate.now(zone);
+        if (requestedDate.isAfter(today)) {
+            return;
+        }
+        int lookback = Math.max(14, viopProperties.getScheduler().getPriceAtBackfillDays());
+        LocalDate fetchFrom = requestedDate.minusDays(lookback);
+        LocalDate fetchTo = requestedDate.isBefore(today) ? requestedDate.plusDays(1) : today.plusDays(1);
+        LocalDateTime from = fetchFrom.atStartOfDay(zone).toLocalDateTime();
+        LocalDateTime to = fetchTo.atStartOfDay(zone).minusNanos(1).toLocalDateTime();
+        if (!from.isBefore(to)) {
+            return;
+        }
+        int period = viopProperties.getDefaultPeriodMinutes() > 0
+                ? viopProperties.getDefaultPeriodMinutes()
+                : 60;
+        try {
+            upsertHistoricalWindowParsed(canonical, entry, from, to, period, zone, System.currentTimeMillis(), "price_at");
+            log.info(
+                    "VIOP_PRICE_AT_BACKFILL_OK contractCode={} requestedDate={} from={} to={}",
+                    canonical,
+                    requestedDate,
+                    fetchFrom,
+                    fetchTo);
+        } catch (Exception e) {
+            log.warn(
+                    "VIOP_PRICE_AT_BACKFILL_FAILED contractCode={} requestedDate={} from={} to={} error={}",
+                    canonical,
+                    requestedDate,
+                    fetchFrom,
+                    fetchTo,
+                    e.getMessage());
+        }
     }
 
     /**

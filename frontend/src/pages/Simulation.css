@@ -271,6 +271,25 @@
     color: #0f172a;
 }
 
+[data-theme='light'] .sim-header__title {
+    color: var(--sim-text, #0f172a);
+}
+
+[data-theme='light'] .sim-header__lead {
+    color: var(--sim-text-muted, #475569);
+}
+
+[data-theme='light'] .sim-info-alert {
+    background: rgba(241, 245, 249, 0.95);
+    border-color: rgba(148, 163, 184, 0.28);
+    color: var(--sim-text-muted, #475569);
+}
+
+[data-theme='light'] .sim-section-title,
+[data-theme='light'] .sim-card-title {
+    color: var(--sim-text, #0f172a);
+}
+
 /* —— Yatırım simülasyonu UX layout —— */
 
 .sim-header {

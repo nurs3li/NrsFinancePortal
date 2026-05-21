@@ -10,6 +10,8 @@ import {
     YAxis,
 } from 'recharts';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { useTheme } from '../../theme/ThemeContext';
+import { chartGridStroke, chartTooltipContentStyle } from '../../lib/chartTheme';
 import type { PurchasingPowerData } from '../../hooks/usePurchasingPowerData';
 
 type Props = {
@@ -23,6 +25,7 @@ function fmtTry(locale: string, v: number) {
 
 function MarketPurchasingPowerCompareChartImpl({ data, tokens }: Props) {
     const { t, lang } = useLanguage();
+    const { theme } = useTheme();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
     const { chartSeries, lotCost, loading } = data;
 
@@ -48,7 +51,7 @@ function MarketPurchasingPowerCompareChartImpl({ data, tokens }: Props) {
             ) : (
                 <ResponsiveContainer width="100%" height={260}>
                     <LineChart data={chartSeries} margin={{ top: 8, right: 12, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke(theme)} />
                         <XAxis dataKey="date" tick={{ fontSize: 9, fill: tokens.textMuted }} minTickGap={28} />
                         <YAxis
                             tick={{ fontSize: 9, fill: tokens.textMuted }}
@@ -57,14 +60,10 @@ function MarketPurchasingPowerCompareChartImpl({ data, tokens }: Props) {
                         />
                         <Tooltip
                             formatter={(v, name) => [fmtTryStable(Number(v ?? 0)), String(name ?? '')]}
-                            contentStyle={{
-                                background: tokens.bgCard,
-                                border: `1px solid ${tokens.border}`,
-                                fontSize: 11,
-                            }}
+                            contentStyle={{ ...chartTooltipContentStyle(tokens), fontSize: 11 }}
                             isAnimationActive={false}
                         />
-                        <Legend wrapperStyle={{ fontSize: 10 }} />
+                        <Legend wrapperStyle={{ fontSize: 10, color: tokens.textMuted }} />
                         <Line
                             type="monotone"
                             dataKey="assetTry"

@@ -38,6 +38,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,
                                 "/api/news/**",
                                 "/api/market/**",
+                                "/api/market/eurobonds/instruments/seed-sync",
                                 "/api/funds/**",
                                 "/api/fund/**",
                                 "/api/viop/**",

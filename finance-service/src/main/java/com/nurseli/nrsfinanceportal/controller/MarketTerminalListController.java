@@ -19,12 +19,13 @@ public class MarketTerminalListController {
     public MarketTerminalListPageResponse list(
             @RequestParam String category,
             @RequestParam(required = false) String equitySubmarket,
+            @RequestParam(required = false) String fundSubmarket,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "5") int size,
             @RequestParam(defaultValue = "ALL") String filter,
             @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "desc") String dir,
             @RequestParam(required = false) String search) {
-        return marketTerminalListService.list(category, equitySubmarket, page, size, filter, sort, dir, search);
+        return marketTerminalListService.list(category, equitySubmarket, fundSubmarket, page, size, filter, sort, dir, search);
     }
 }

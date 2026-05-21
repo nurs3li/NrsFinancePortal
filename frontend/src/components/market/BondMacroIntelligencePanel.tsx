@@ -150,7 +150,7 @@ function MacroDepositRatesEvdsBlock({
                     style={{
                         height: 8,
                         borderRadius: 4,
-                        background: 'rgba(148,163,184,0.12)',
+                        background: 'var(--app-surface-soft-bg)',
                         marginBottom: 8,
                     }}
                 />
@@ -172,7 +172,7 @@ function MacroDepositRatesEvdsBlock({
                     <div style={{ width: '100%', height: 200 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={depositTryMerged} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                                 <XAxis dataKey="date" tick={{ fontSize: 8, fill: tokens.textMuted }} />
                                 <YAxis
                                     tick={{ fontSize: 9, fill: tokens.textMuted }}
@@ -243,7 +243,7 @@ function MacroDepositRatesEvdsBlock({
                 {t('market.bondMacroDepositEvdsTitle', 'Haftalık mevduat faizi (EVDS akım %)')}
             </div>
             {rows === undefined ? (
-                <div style={{ height: 44, borderRadius: 4, background: 'rgba(148,163,184,0.15)' }} />
+                <div style={{ height: 44, borderRadius: 4, background: 'var(--app-surface-soft-bg)' }} />
             ) : rows === null ? (
                 <p style={{ fontSize: 11, color: tokens.textMuted, margin: 0 }}>
                     {t('market.bondMacroDepositEvdsUnavailable', 'Mevduat faiz uçları aktif değil veya veri yok.')}
@@ -393,7 +393,7 @@ function MacroFxDepositRatesPanel({
                         style={{
                             height: 100,
                             borderRadius: 6,
-                            background: 'rgba(148,163,184,0.12)',
+                            background: 'var(--app-surface-soft-bg)',
                         }}
                     />
                 ) : !hasData ? (
@@ -424,7 +424,7 @@ function MacroFxDepositRatesPanel({
                                 <div style={{ width: '100%', height: 180 }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart data={usdMerged} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                                             <XAxis dataKey="date" tick={{ fontSize: 8, fill: tokens.textMuted }} />
                                             <YAxis
                                                 tick={{ fontSize: 9, fill: tokens.textMuted }}
@@ -451,7 +451,7 @@ function MacroFxDepositRatesPanel({
                                 <div style={{ width: '100%', height: 180 }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart data={eurMerged} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                                             <XAxis dataKey="date" tick={{ fontSize: 8, fill: tokens.textMuted }} />
                                             <YAxis
                                                 tick={{ fontSize: 9, fill: tokens.textMuted }}
@@ -547,7 +547,7 @@ function MacroInflationEvdsBlock({
                 <div style={{ fontSize: 12, fontWeight: 650, color: tokens.text, marginBottom: 6 }}>
                     {t('market.bondMacroInflationEvdsTitle', 'TÜFE ve Yİ-ÜFE (EVDS, aylık)')}
                 </div>
-                <div style={{ height: 56, borderRadius: 4, background: 'rgba(148,163,184,0.15)' }} />
+                <div style={{ height: 56, borderRadius: 4, background: 'var(--app-surface-soft-bg)' }} />
             </div>
         );
     }
@@ -576,28 +576,28 @@ function MacroInflationEvdsBlock({
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
                     <div style={{ border: `1px solid ${tokens.border}`, borderRadius: 8, padding: 8, background: tokens.bgCard }}>
-                        <div style={{ fontSize: 10, color: tokens.textMuted }}>TÜFE MoM</div>
+                        <div style={{ fontSize: 10, color: tokens.textMuted }}>{t('macro.inflation.kpi.cpiMoM', 'TÜFE Aylık')}</div>
                         <div style={{ fontSize: 14, fontWeight: 700, color: tokens.text }}>{fmtD(d?.cpiMoM ?? null)}</div>
                         <div style={{ fontSize: 9, color: tokens.textMuted, marginTop: 4 }}>
                             {formatLocaleDate(cpiD, locale)}
                         </div>
                     </div>
                     <div style={{ border: `1px solid ${tokens.border}`, borderRadius: 8, padding: 8, background: tokens.bgCard }}>
-                        <div style={{ fontSize: 10, color: tokens.textMuted }}>TÜFE YoY</div>
+                        <div style={{ fontSize: 10, color: tokens.textMuted }}>{t('macro.inflation.kpi.cpiYoY', 'TÜFE Yıllık')}</div>
                         <div style={{ fontSize: 14, fontWeight: 700, color: tokens.text }}>{fmtD(d?.cpiYoY ?? null)}</div>
                         <div style={{ fontSize: 9, color: tokens.textMuted, marginTop: 4 }}>
                             {formatLocaleDate(cpiD, locale)}
                         </div>
                     </div>
                     <div style={{ border: `1px solid ${tokens.border}`, borderRadius: 8, padding: 8, background: tokens.bgCard }}>
-                        <div style={{ fontSize: 10, color: tokens.textMuted }}>Yİ-ÜFE MoM</div>
+                        <div style={{ fontSize: 10, color: tokens.textMuted }}>{t('macro.inflation.kpi.ppiMoM', 'Yİ-ÜFE Aylık')}</div>
                         <div style={{ fontSize: 14, fontWeight: 700, color: tokens.text }}>{fmtD(d?.ppiMoM ?? null)}</div>
                         <div style={{ fontSize: 9, color: tokens.textMuted, marginTop: 4 }}>
                             {formatLocaleDate(ppiD, locale)}
                         </div>
                     </div>
                     <div style={{ border: `1px solid ${tokens.border}`, borderRadius: 8, padding: 8, background: tokens.bgCard }}>
-                        <div style={{ fontSize: 10, color: tokens.textMuted }}>Yİ-ÜFE YoY</div>
+                        <div style={{ fontSize: 10, color: tokens.textMuted }}>{t('macro.inflation.kpi.ppiYoY', 'Yİ-ÜFE Yıllık')}</div>
                         <div style={{ fontSize: 14, fontWeight: 700, color: tokens.text }}>{fmtD(d?.ppiYoY ?? null)}</div>
                         <div style={{ fontSize: 9, color: tokens.textMuted, marginTop: 4 }}>
                             {formatLocaleDate(ppiD, locale)}
@@ -614,7 +614,7 @@ function MacroInflationEvdsBlock({
                     <div style={{ width: '100%', height: 200 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={indexChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                                 <XAxis dataKey="period" tick={{ fontSize: 9, fill: tokens.textMuted }} />
                                 <YAxis
                                     tick={{ fontSize: 9, fill: tokens.textMuted }}
@@ -633,7 +633,7 @@ function MacroInflationEvdsBlock({
                                 <Line
                                     type="monotone"
                                     dataKey="cpi"
-                                    name="TÜFE endeks"
+                                    name={t('market.bondMacro.legend.cpiIndex', 'TÜFE endeks')}
                                     stroke="#38bdf8"
                                     dot={false}
                                     strokeWidth={2}
@@ -642,7 +642,7 @@ function MacroInflationEvdsBlock({
                                 <Line
                                     type="monotone"
                                     dataKey="ppi"
-                                    name="Yİ-ÜFE endeks"
+                                    name={t('market.bondMacro.legend.ppiIndex', 'Yİ-ÜFE endeks')}
                                     stroke="#a78bfa"
                                     dot={false}
                                     strokeWidth={2}
@@ -666,7 +666,7 @@ function MacroInflationEvdsBlock({
                 {t('market.bondMacroInflationEvdsTitle', 'TÜFE ve Yİ-ÜFE (EVDS, aylık)')}
             </div>
             {latest === undefined || compareRows === undefined ? (
-                <div style={{ height: 56, borderRadius: 4, background: 'rgba(148,163,184,0.15)' }} />
+                <div style={{ height: 56, borderRadius: 4, background: 'var(--app-surface-soft-bg)' }} />
             ) : latest === null && compareRows === null ? (
                 <p style={{ fontSize: 11, color: tokens.textMuted, margin: 0 }}>
                     {t('market.bondMacroInflationEvdsUnavailable', 'Enflasyon uçlarına ulaşılamadı veya veri yok.')}
@@ -675,25 +675,25 @@ function MacroInflationEvdsBlock({
                 <>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
                         <div style={{ border: `1px solid ${tokens.border}`, borderRadius: 8, padding: 8, background: tokens.bgCard }}>
-                            <div style={{ fontSize: 10, color: tokens.textMuted }}>TÜFE MoM</div>
+                            <div style={{ fontSize: 10, color: tokens.textMuted }}>{t('macro.inflation.kpi.cpiMoM', 'TÜFE Aylık')}</div>
                             <div style={{ fontSize: 14, fontWeight: 700, color: tokens.text }}>
                                 {formatPercent2(latest?.cpi?.monthlyChangePercent ?? null, locale)}
                             </div>
                         </div>
                         <div style={{ border: `1px solid ${tokens.border}`, borderRadius: 8, padding: 8, background: tokens.bgCard }}>
-                            <div style={{ fontSize: 10, color: tokens.textMuted }}>TÜFE YoY</div>
+                            <div style={{ fontSize: 10, color: tokens.textMuted }}>{t('macro.inflation.kpi.cpiYoY', 'TÜFE Yıllık')}</div>
                             <div style={{ fontSize: 14, fontWeight: 700, color: tokens.text }}>
                                 {formatPercent2(latest?.cpi?.annualChangePercent ?? null, locale)}
                             </div>
                         </div>
                         <div style={{ border: `1px solid ${tokens.border}`, borderRadius: 8, padding: 8, background: tokens.bgCard }}>
-                            <div style={{ fontSize: 10, color: tokens.textMuted }}>Yİ-ÜFE MoM</div>
+                            <div style={{ fontSize: 10, color: tokens.textMuted }}>{t('macro.inflation.kpi.ppiMoM', 'Yİ-ÜFE Aylık')}</div>
                             <div style={{ fontSize: 14, fontWeight: 700, color: tokens.text }}>
                                 {formatPercent2(latest?.ppi?.monthlyChangePercent ?? null, locale)}
                             </div>
                         </div>
                         <div style={{ border: `1px solid ${tokens.border}`, borderRadius: 8, padding: 8, background: tokens.bgCard }}>
-                            <div style={{ fontSize: 10, color: tokens.textMuted }}>Yİ-ÜFE YoY</div>
+                            <div style={{ fontSize: 10, color: tokens.textMuted }}>{t('macro.inflation.kpi.ppiYoY', 'Yİ-ÜFE Yıllık')}</div>
                             <div style={{ fontSize: 14, fontWeight: 700, color: tokens.text }}>
                                 {formatPercent2(latest?.ppi?.annualChangePercent ?? null, locale)}
                             </div>
@@ -709,7 +709,7 @@ function MacroInflationEvdsBlock({
                         <div style={{ width: '100%', height: 200 }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                                     <XAxis dataKey="period" tick={{ fontSize: 9, fill: tokens.textMuted }} />
                                     <YAxis
                                         tick={{ fontSize: 9, fill: tokens.textMuted }}
@@ -725,8 +725,8 @@ function MacroInflationEvdsBlock({
                                         contentStyle={{ fontSize: 11 }}
                                     />
                                     <Legend wrapperStyle={{ fontSize: 10 }} />
-                                    <Line type="monotone" dataKey="cpiYoY" name="TÜFE YoY" stroke="#38bdf8" dot={false} strokeWidth={2} connectNulls />
-                                    <Line type="monotone" dataKey="ppiYoY" name="Yİ-ÜFE YoY" stroke="#a78bfa" dot={false} strokeWidth={2} connectNulls />
+                                    <Line type="monotone" dataKey="cpiYoY" name={t('macro.inflation.legend.cpiYoY', 'TÜFE Yıllık')} stroke="#38bdf8" dot={false} strokeWidth={2} connectNulls />
+                                    <Line type="monotone" dataKey="ppiYoY" name={t('macro.inflation.legend.ppiYoY', 'Yİ-ÜFE Yıllık')} stroke="#a78bfa" dot={false} strokeWidth={2} connectNulls />
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
@@ -939,7 +939,7 @@ function MacroLoanRatesEvdsBlock({
                 </span>
             </div>
             {loading ? (
-                <div style={{ height: 72, borderRadius: 4, background: 'rgba(148,163,184,0.15)' }} />
+                <div style={{ height: 72, borderRadius: 4, background: 'var(--app-surface-soft-bg)' }} />
             ) : canShowLoanPanelPrimary ? (
                 <>
                     <div style={{ fontSize: 10, color: tokens.textMuted, marginBottom: 8 }}>
@@ -1054,7 +1054,7 @@ function MacroLoanRatesEvdsBlock({
                     <div style={{ width: '100%', height: 200 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={compareChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                                 <XAxis dataKey="date" tick={{ fontSize: 8, fill: tokens.textMuted }} />
                                 <YAxis tick={{ fontSize: 9, fill: tokens.textMuted }} tickFormatter={(v) => `${v}%`} width={40} />
                                 <Tooltip
@@ -1088,7 +1088,7 @@ function MacroLoanRatesEvdsBlock({
                     <div style={{ width: '100%', height: 200 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={policyVsEffective} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                                 <XAxis dataKey="date" tick={{ fontSize: 8, fill: tokens.textMuted }} />
                                 <YAxis tick={{ fontSize: 9, fill: tokens.textMuted }} tickFormatter={(v) => `${v}%`} width={40} />
                                 <Tooltip
@@ -1128,7 +1128,7 @@ function MacroLoanRatesEvdsBlock({
                                 }
                                 margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
                             >
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                                 <XAxis dataKey="date" tick={{ fontSize: 8, fill: tokens.textMuted }} />
                                 <YAxis tick={{ fontSize: 9, fill: tokens.textMuted }} tickFormatter={(v) => `${v}%`} width={40} />
                                 <Tooltip
@@ -1153,7 +1153,7 @@ function MacroLoanRatesEvdsBlock({
                     <div style={{ width: '100%', height: 180 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={spreadEffective} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
                                 <XAxis dataKey="date" tick={{ fontSize: 8, fill: tokens.textMuted }} />
                                 <YAxis tick={{ fontSize: 9, fill: tokens.textMuted }} tickFormatter={(v) => `${v}%`} width={40} />
                                 <Tooltip
@@ -1214,9 +1214,9 @@ function MacroDerivedKpiGrid({
     const freqW = t('market.macro.panel.freqWeeklyFlow', 'Haftalık akım');
 
     const tiles: { title: string; val: string; date?: string; freq: string }[] = [
-        { title: t('market.macro.panel.kpiCpiYoY', 'TÜFE YoY'), val: fmtD(d?.cpiYoY ?? null), date: cpiD, freq: freqMo },
-        { title: t('market.macro.panel.kpiCpiMoM', 'TÜFE MoM'), val: fmtD(d?.cpiMoM ?? null), date: cpiD, freq: freqMo },
-        { title: t('market.macro.panel.kpiPpiYoY', 'Yİ-ÜFE YoY'), val: fmtD(d?.ppiYoY ?? null), date: ppiD, freq: freqMo },
+        { title: t('macro.inflation.kpi.cpiYoY', 'TÜFE Yıllık'), val: fmtD(d?.cpiYoY ?? null), date: cpiD, freq: freqMo },
+        { title: t('macro.inflation.kpi.cpiMoM', 'TÜFE Aylık'), val: fmtD(d?.cpiMoM ?? null), date: cpiD, freq: freqMo },
+        { title: t('macro.inflation.kpi.ppiYoY', 'Yİ-ÜFE Yıllık'), val: fmtD(d?.ppiYoY ?? null), date: ppiD, freq: freqMo },
         {
             title: t('market.bondMacroTcmbPolicyRateTitle', 'TCMB Politika Faizi'),
             val:
@@ -1226,7 +1226,7 @@ function MacroDerivedKpiGrid({
             date: polO?.date,
             freq: freqMo,
         },
-        { title: t('market.macro.panel.kpiRealPolicy', 'Reel Politika Faizi'), val: fmtD(d?.realPolicyRate ?? null), date: polO?.date, freq: freqMo },
+        { title: t('macro.overview.kpi.realPolicyRate', 'Reel Politika Faizi'), val: fmtD(d?.realPolicyRate ?? null), date: polO?.date, freq: freqMo },
         { title: t('market.macro.panel.kpiRealDeposit1m', '1M TL Mevduat Reel Farkı'), val: fmtD(d?.realDepositRate ?? null), date: depD, freq: freqW },
         {
             title: t('market.macro.panel.kpiConsumerMinusPolicy', 'İhtiyaç Kredisi − Politika Faizi'),
@@ -1260,7 +1260,7 @@ function MacroDerivedKpiGrid({
                             style={{
                                 height: 10,
                                 width: '62%',
-                                background: 'rgba(148,163,184,0.2)',
+                                background: 'var(--app-surface-soft-bg)',
                                 borderRadius: 4,
                                 marginBottom: 10,
                             }}
@@ -1269,7 +1269,7 @@ function MacroDerivedKpiGrid({
                             style={{
                                 height: 14,
                                 width: '42%',
-                                background: 'rgba(148,163,184,0.25)',
+                                background: 'var(--app-surface-soft-bg)',
                                 borderRadius: 4,
                             }}
                         />
@@ -1356,7 +1356,7 @@ function MacroTcmbWeightedFundingCard({
                     style={{
                         height: 10,
                         borderRadius: 4,
-                        background: 'rgba(148,163,184,0.22)',
+                        background: 'var(--app-surface-soft-bg)',
                         width: '72%',
                     }}
                 />
@@ -1472,7 +1472,7 @@ export function BondMacroIntelligencePanel({ tokens }: Props) {
                             borderRadius: 8,
                             padding: 10,
                             marginBottom: 10,
-                            background: 'rgba(148,163,184,0.06)',
+                            background: 'var(--app-surface-soft-bg)',
                         }}
                     >
                         <div style={{ fontSize: 11, fontWeight: 650, color: tokens.text }}>

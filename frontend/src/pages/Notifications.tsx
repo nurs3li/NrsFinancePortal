@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     Bell,
     CheckCircle2,
@@ -16,7 +17,18 @@ import {
     isPriceAlertNotificationType,
     priceAlertNotificationTypeLabel,
 } from '../utils/priceAlertNotifications';
+import { AlarmsHubSection, type AlarmFilterTab } from '../components/inbox/AlarmsHubSection';
+import { InboxCardPagination } from '../components/inbox/InboxCardPagination';
+import '../components/inbox/inboxHub.css';
 import './Notifications.css';
+
+const INBOX_PAGE_SIZE = 10;
+
+function parseAlarmFilterParam(raw: string | null): AlarmFilterTab {
+    if (raw === 'past') return 'PAST';
+    if (raw === 'active') return 'ACTIVE';
+    return 'ALL';
+}
 
 type NotificationItem = {
     id: number;
@@ -126,14 +138,16 @@ export function Notifications() {
     const { tokens } = useTheme();
     const { t, lang } = useLanguage();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
+    const [searchParams] = useSearchParams();
+    const alarmFilter = parseAlarmFilterParam(searchParams.get('alarmFilter'));
     const [items, setItems] = useState<NotificationItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [page, setPage] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
     const [totalElements, setTotalElements] = useState(0);
-    const size = 20;
-    const [filter, setFilter] = useState<FilterTab>('UNREAD');
+    const size = INBOX_PAGE_SIZE;
+    const [filter, setFilter] = useState<FilterTab>('ALL');
     const [activeId, setActiveId] = useState<number | null>(null);
 
     const unreadOnly = filter === 'UNREAD';
@@ -229,149 +243,133 @@ export function Notifications() {
         '--notif-muted': tokens.textMuted,
     } as CSSProperties;
 
-    if (error) {
-        return (
-            <div className="notif-page" style={pageVars}>
-                <header className="notif-header">
-                    <span className="notif-header__icon">
-                        <Bell size={18} aria-hidden />
-                    </span>
-                    <h1 className="notif-header__title">
-                        {t('notifications.title', 'Bildirimler')}
-                    </h1>
-                </header>
-                <div className="notif-error">{error}</div>
-            </div>
-        );
-    }
-
     return (
         <div className="notif-page" style={pageVars}>
-            <header className="notif-header">
+            <header className="notif-header notif-header--split-page">
                 <span className="notif-header__icon" aria-hidden>
                     <Bell size={18} />
                 </span>
-                <h1 className="notif-header__title">
-                    {t('notifications.title', 'Bildirimler')}
-                </h1>
-                <span className="notif-header__count">
-                    {totalElements} {t('notifications.item', 'bildirim')}
-                </span>
+                <h1 className="notif-header__title">{t('inbox.pageTitle', 'Bildirimler ve Alarmlar')}</h1>
             </header>
 
-            <div className="notif-tabs" role="tablist" aria-label={t('notifications.filter', 'Filtre')}>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={filter === 'ALL'}
-                    className={`notif-tab ${filter === 'ALL' ? 'is-active' : ''}`}
-                    onClick={() => {
-                        setFilter('ALL');
-                        setPage(0);
-                    }}
-                >
-                    {t('notifications.all', 'Tümü')}
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    aria-selected={filter === 'UNREAD'}
-                    className={`notif-tab ${filter === 'UNREAD' ? 'is-active' : ''}`}
-                    onClick={() => {
-                        setFilter('UNREAD');
-                        setPage(0);
-                    }}
-                >
-                    {t('notifications.unread', 'Okunmamış')}
-                </button>
-            </div>
+            <div className="notif-page-split">
+                <section className="notif-inbox-card notif-inbox-card--notifications" aria-labelledby="notif-notifications-heading">
+                    <header className="notif-inbox-card__head">
+                        <span className="notif-inbox-card__icon" aria-hidden>
+                            <Bell size={18} />
+                        </span>
+                        <h2 id="notif-notifications-heading" className="notif-inbox-card__title">
+                            {t('notifications.title', 'Bildirimler')}
+                        </h2>
+                        <span className="notif-inbox-card__count">
+                            {totalElements} {t('notifications.item', 'bildirim')}
+                        </span>
+                    </header>
 
-            {loading ? (
-                <div className="notif-loading">{t('common.loading', 'Yükleniyor...')}</div>
-            ) : items.length === 0 ? (
-                <div className="notif-empty">{t('notifications.empty', 'Bildirim yok.')}</div>
-            ) : (
-                <div className="notif-list">
-                    {items.map((n) => {
-                        const category = classifyNotification(n.type);
-                        const color = categoryColor(category);
-                        const isUnread = !n.readAt;
-                        const occurredAt = n.lastOccurredAt ?? n.createdAt;
-                        return (
-                            <div
-                                key={n.id}
-                                role="button"
-                                tabIndex={0}
-                                className={`notif-item ${isUnread ? 'is-unread' : 'is-read'}`}
-                                onClick={() => setActiveId(n.id)}
-                                onKeyDown={(event) => {
-                                    if (event.key === 'Enter' || event.key === ' ') {
-                                        event.preventDefault();
-                                        setActiveId(n.id);
-                                    }
+                    <div className="notif-inbox-card__body">
+                        <div className="notif-tabs notif-tabs--in-card" role="tablist" aria-label={t('notifications.filter', 'Filtre')}>
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={filter === 'ALL'}
+                                className={`notif-tab ${filter === 'ALL' ? 'is-active' : ''}`}
+                                onClick={() => {
+                                    setFilter('ALL');
+                                    setPage(0);
                                 }}
                             >
-                                <span className="notif-item__type-icon" style={{ color }} aria-hidden>
-                                    <CategoryIcon category={category} size={16} />
-                                </span>
-                                <div className="notif-item__main">
-                                    <div className="notif-item__title">{n.title}</div>
-                                    <div className="notif-item__meta">
-                                        <span className="notif-item__type-chip">
-                                            {isPriceAlertNotificationType(n.type)
-                                                ? priceAlertNotificationTypeLabel(n.type, t)
-                                                : portfolioInsightNotificationTypeLabel(n.type, t)}
-                                        </span>
-                                        <span className="notif-item__date">
-                                            {new Date(occurredAt).toLocaleString(locale)}
-                                        </span>
-                                    </div>
-                                </div>
-                                {n.occurrenceCount > 1 ? (
-                                    <span
-                                        className="notif-item__count-badge"
-                                        title={t('notifications.occurrenceCount', 'Tekrar sayısı')}
-                                    >
-                                        {n.occurrenceCount}x
-                                    </span>
-                                ) : (
-                                    <span />
-                                )}
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                                    <span className="notif-item__hint">
-                                        {t('notifications.viewDetail', 'Detayı gör')}
-                                    </span>
-                                    <ChevronRight size={16} className="notif-item__chevron" aria-hidden />
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
+                                {t('notifications.all', 'Tümü')}
+                            </button>
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={filter === 'UNREAD'}
+                                className={`notif-tab ${filter === 'UNREAD' ? 'is-active' : ''}`}
+                                onClick={() => {
+                                    setFilter('UNREAD');
+                                    setPage(0);
+                                }}
+                            >
+                                {t('notifications.unread', 'Okunmamış')}
+                            </button>
+                        </div>
 
-            {totalPages > 1 && (
-                <div className="notif-pagination">
-                    <button
-                        type="button"
-                        className="notif-page-btn"
-                        disabled={page <= 0}
-                        onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    >
-                        {t('news.prev', 'Önceki')}
-                    </button>
-                    <span className="notif-page-info">
-                        {t('news.page', 'Sayfa')} {page + 1} / {totalPages}
-                    </span>
-                    <button
-                        type="button"
-                        className="notif-page-btn"
-                        disabled={page >= totalPages - 1}
-                        onClick={() => setPage((p) => p + 1)}
-                    >
-                        {t('news.next', 'Sonraki')}
-                    </button>
-                </div>
-            )}
+                        {error ? <div className="notif-error">{error}</div> : null}
+
+                        <div className="notif-inbox-card__list-pane">
+                            {loading && items.length === 0 ? (
+                                <div className="notif-loading">{t('common.loading', 'Yükleniyor...')}</div>
+                            ) : items.length === 0 ? (
+                                <div className="notif-empty">{t('notifications.empty', 'Bildirim yok.')}</div>
+                            ) : (
+                                <div className="notif-list notif-list--in-card">
+                                    {items.map((n) => {
+                                        const category = classifyNotification(n.type);
+                                        const color = categoryColor(category);
+                                        const isUnread = !n.readAt;
+                                        const occurredAt = n.lastOccurredAt ?? n.createdAt;
+                                        return (
+                                        <div
+                                            key={n.id}
+                                            role="button"
+                                            tabIndex={0}
+                                            className={`notif-item notif-item--compact ${isUnread ? 'is-unread' : 'is-read'}`}
+                                            onClick={() => setActiveId(n.id)}
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter' || event.key === ' ') {
+                                                    event.preventDefault();
+                                                    setActiveId(n.id);
+                                                }
+                                            }}
+                                        >
+                                            <span className="notif-item__type-icon" style={{ color }} aria-hidden>
+                                                <CategoryIcon category={category} size={15} />
+                                            </span>
+                                            <div className="notif-item__main">
+                                                <div className="notif-item__title">{n.title}</div>
+                                                <div className="notif-item__meta">
+                                                    <span className="notif-item__type-chip">
+                                                        {isPriceAlertNotificationType(n.type)
+                                                            ? priceAlertNotificationTypeLabel(n.type, t)
+                                                            : portfolioInsightNotificationTypeLabel(n.type, t)}
+                                                    </span>
+                                                    <span className="notif-item__date">
+                                                        {new Date(occurredAt).toLocaleString(locale, {
+                                                            dateStyle: 'short',
+                                                            timeStyle: 'short',
+                                                        })}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {n.occurrenceCount > 1 ? (
+                                                <span
+                                                    className="notif-item__count-badge"
+                                                    title={t('notifications.occurrenceCount', 'Tekrar sayısı')}
+                                                >
+                                                    {n.occurrenceCount}x
+                                                </span>
+                                            ) : null}
+                                            <ChevronRight size={15} className="notif-item__chevron" aria-hidden />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        <InboxCardPagination
+                            page={page}
+                            totalPages={totalPages}
+                            totalElements={totalElements}
+                            pageSize={INBOX_PAGE_SIZE}
+                            onPageChange={setPage}
+                            disabled={loading}
+                        />
+                    </div>
+                </section>
+
+                <AlarmsHubSection embedded initialFilter={alarmFilter} syncUrl />
+            </div>
 
             {activeNotification ? (
                 <NotificationDetailModal

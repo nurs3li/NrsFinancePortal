@@ -10,6 +10,9 @@ import { MarketFinvizTreemap, type TreemapTile } from '../components/market/Mark
 import { approxHeatmapPctFromSpark } from '../components/market/heatmapApproxPct';
 import { CHART_RANGE_SEQUENCE, type ChartRangeId, RANGE_TO_DAYS } from '../components/market/heatmapRange';
 import { heatmapRangeLabel, heatmapSectorLabel } from '../components/market/heatmapSectorLabels';
+import { fetchMarketTerminalList } from '../services/marketTerminalListApi';
+import { buildTefasTreemapTiles, HEATMAP_SECTOR_TEFAS_FUNDS, tefasHeatmapSortForRange } from '../utils/tefasHeatmap';
+import './MarketHeatmap.css';
 
 function fmtPct(v: number): string {
     return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
@@ -56,16 +59,43 @@ export function MarketHeatmap() {
     const [sectorFilter, setSectorFilter] = useState<string>('ALL');
 
     useEffect(() => {
-        const s = searchParams.get('sector');
-        if (s != null && s.trim().length > 0) {
-            setSectorFilter(s.trim());
+        if (searchParams.get('fundSubmarket') === 'TR') {
+            const sector = searchParams.get('sector');
+            navigate(sector?.trim() ? `/market/heatmap?sector=${encodeURIComponent(sector.trim())}` : '/market/heatmap', {
+                replace: true,
+            });
+            return;
         }
-    }, [searchParams]);
+        const s = searchParams.get('sector')?.trim();
+        if (s && s.length > 0) {
+            const normalized =
+                s === HEATMAP_SECTOR_TEFAS_FUNDS || /şemsiye/i.test(s) ? HEATMAP_SECTOR_TEFAS_FUNDS : s;
+            setSectorFilter(normalized);
+        }
+    }, [searchParams, navigate]);
 
     const { data, isLoading, error } = useQuery({
         queryKey: ['market', 'dashboard'],
         queryFn: () => financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => unwrapData<MarketDashboard>(r.data)),
         refetchInterval: 60_000,
+    });
+
+    const { data: tefasHeatmapPage, isLoading: loadingTefasHeatmap } = useQuery({
+        queryKey: ['market', 'tefas', 'heatmap-detail', chartRange],
+        queryFn: ({ signal }) =>
+            fetchMarketTerminalList(
+                {
+                    category: 'FUNDS',
+                    fundSubmarket: 'TR',
+                    page: 0,
+                    size: 100,
+                    filter: 'ALL',
+                    sort: tefasHeatmapSortForRange(chartRange),
+                    dir: 'desc',
+                },
+                signal,
+            ),
+        staleTime: 120_000,
     });
 
     const hasDashBist = useMemo(
@@ -149,11 +179,16 @@ export function MarketHeatmap() {
         return out;
     }, [hasDashBist, bistLatest]);
 
+    const tefasHeatmapTiles = useMemo(
+        () => buildTefasTreemapTiles(tefasHeatmapPage?.items ?? [], chartRange),
+        [tefasHeatmapPage?.items, chartRange],
+    );
+
     const heatTilesSource = useMemo(() => {
         const base = [...(data?.heatmapTiles ?? [])];
-        if (hasDashBist) return base;
-        return [...base, ...syntheticBistTiles];
-    }, [data?.heatmapTiles, hasDashBist, syntheticBistTiles]);
+        const withBist = hasDashBist ? base : [...base, ...syntheticBistTiles];
+        return [...withBist, ...tefasHeatmapTiles];
+    }, [data?.heatmapTiles, hasDashBist, syntheticBistTiles, tefasHeatmapTiles]);
 
     const sparklineMap = useMemo(() => {
         const m = new Map<string, number[]>();
@@ -170,6 +205,12 @@ export function MarketHeatmap() {
 
     const displayTiles = useMemo(() => {
         const withRange = heatTilesSource.map((tile) => {
+            if (tile.assetClass === 'FUND') {
+                return {
+                    ...tile,
+                    changeHorizon: chartRange,
+                };
+            }
             const closes = sparklineMap.get(`${tile.assetClass}|${tile.symbol}`) ?? [];
             const pct = approxHeatmapPctFromSpark(closes, tile.assetClass, tile.symbol, chartRange, tile.changePercent);
             return {
@@ -186,12 +227,12 @@ export function MarketHeatmap() {
         const all = new Set<string>();
         for (const t of heatTilesSource) all.add(t.sector);
         if (sectorFilter !== 'ALL') all.add(sectorFilter);
-        const rest = Array.from(all).sort((a, b) => a.localeCompare(b));
-        const preferred = ['BIST_EQUITY'];
+        const rest = Array.from(all).sort((a, b) => a.localeCompare(b, 'tr'));
+        const preferred = ['BIST_EQUITY', HEATMAP_SECTOR_TEFAS_FUNDS];
         const head = preferred.filter((k) => all.has(k));
         const tail = rest.filter((k) => !preferred.includes(k));
         return ['ALL', ...head, ...tail];
-    }, [heatTilesSource]);
+    }, [heatTilesSource, sectorFilter]);
 
     const sortedByAbsMove = useMemo(() => {
         const list = [...displayTiles];
@@ -219,17 +260,10 @@ export function MarketHeatmap() {
         }
     };
 
-    const pageStyle: React.CSSProperties = {
-        padding: 24,
-        background: tokens.bg,
-        color: tokens.text,
-        minHeight: '100%',
-    };
     const cardStyle: React.CSSProperties = {
-        padding: 16,
-        borderRadius: 12,
         background: tokens.bgCard,
         border: `1px solid ${tokens.border}`,
+        color: tokens.text,
     };
 
     const errMsg =
@@ -243,61 +277,40 @@ export function MarketHeatmap() {
     const sectorNameForUi = (k: string) => heatmapSectorLabel(k, t);
 
     return (
-        <div style={pageStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div>
-                    <h1 style={{ margin: 0, fontSize: '1.55rem', fontWeight: 700 }}>{t('market.detailedHeatmap', 'Detaylı Isı Haritası')}</h1>
-                    <p style={{ margin: '6px 0 0', color: tokens.textMuted, fontSize: '0.9rem' }}>
+        <main
+            className="heatmap-detail-page"
+            style={{ background: tokens.bg, color: tokens.text }}
+        >
+            <div className="heatmap-detail-page__header">
+                <div style={{ minWidth: 0, flex: '1 1 12rem' }}>
+                    <h1 className="heatmap-detail-page__title">{t('market.detailedHeatmap', 'Detaylı Isı Haritası')}</h1>
+                    <p className="heatmap-detail-page__subtitle" style={{ color: tokens.textMuted }}>
                         {t('heatmap.subtitle', 'Sektör / sembol dağılımı ve hover ile ayrıntılar.')}
                     </p>
                 </div>
                 <button
                     type="button"
+                    className="heatmap-detail-page__back"
                     onClick={() => navigate('/market')}
                     style={{
-                        padding: '8px 14px',
-                        borderRadius: 10,
                         border: `1px solid ${tokens.border}`,
                         background: tokens.bgCard,
                         color: tokens.text,
-                        cursor: 'pointer',
                     }}
                 >
                     {t('heatmap.backToMarket', '← Piyasa sayfasına dön')}
                 </button>
             </div>
 
-            {isLoading ? (
+            {isLoading || loadingTefasHeatmap ? (
                 <p style={{ color: tokens.textMuted }}>{t('common.loading', 'Yükleniyor...')}</p>
             ) : errMsg ? (
                 <p style={{ color: tokens.error }}>{t('news.errorPrefix', 'Hata')}: {errMsg}</p>
             ) : (
-                <div
-                    className="heatmap-detail-grid"
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'minmax(0, 1fr) 320px',
-                        gap: 16,
-                        alignItems: 'start',
-                    }}
-                >
-                    <style>{`
-                    @media (max-width: 1100px) {
-                      .heatmap-detail-grid { grid-template-columns: 1fr !important; }
-                    }
-                    `}</style>
-
-                    <div style={cardStyle}>
-                        <div
-                            style={{
-                                display: 'flex',
-                                flexWrap: 'wrap',
-                                alignItems: 'center',
-                                gap: 12,
-                                marginBottom: 10,
-                            }}
-                        >
-                            <label style={{ fontSize: 13, color: tokens.textMuted }}>
+                <div className="heatmap-detail-grid">
+                    <div className="heatmap-detail-card" style={cardStyle}>
+                        <div className="heatmap-detail-card__toolbar">
+                            <label style={{ color: tokens.textMuted }}>
                                 {t('heatmap.timeframe', 'Zaman dilimi')}:
                                 <select
                                     value={chartRange}
@@ -340,34 +353,41 @@ export function MarketHeatmap() {
                                     ))}
                                 </select>
                             </label>
-                            <span style={{ fontSize: 12, color: tokens.textMuted }}>
+                            <span className="heatmap-detail-card__hint" style={{ color: tokens.textMuted }}>
                                 {t('heatmap.clickHint', 'Kutuya tıklayınca seçili dönem ile gelişmiş grafikte açılır.')}
                             </span>
                         </div>
-                        <div style={{ marginBottom: 10, color: tokens.textMuted, fontSize: 13 }}>
+                        <div className="heatmap-detail-card__meta" style={{ color: tokens.textMuted }}>
                             Equity: {data?.heatmapMeta?.equityMode ?? 'EQUITY_FINVIZ'} (
-                            {data?.heatmapMeta?.equityChangeHorizon ?? '1D'} / {data?.heatmapMeta?.equityWeightMode ?? 'EQUAL'})
+                            {data?.heatmapMeta?.equityChangeHorizon ?? '1D'} /{' '}
+                            {data?.heatmapMeta?.equityWeightMode ?? 'EQUAL'})
                             {' · '}
-                            {t('heatmap.otherAssets', 'Diğer varlıklar')}: {data?.heatmapMeta?.multiAssetMode ?? 'MULTI_ASSET'} (
-                            {t('heatmap.uiHorizon', 'ekran')}: {rangeUi} / {data?.heatmapMeta?.multiAssetWeightMode ?? 'PRICE_SQRT'})
+                            {t('heatmap.otherAssets', 'Diğer varlıklar')}:{' '}
+                            {data?.heatmapMeta?.multiAssetMode ?? 'MULTI_ASSET'} ({t('heatmap.uiHorizon', 'ekran')}: {rangeUi} /{' '}
+                            {data?.heatmapMeta?.multiAssetWeightMode ?? 'PRICE_SQRT'})
+                            {tefasHeatmapTiles.length > 0
+                                ? ` · TEFAS: ${tefasHeatmapTiles.length} ${t('funds.turkishFunds', 'Türk fonları')} (${rangeUi})`
+                                : ''}
                         </div>
-                        <MarketFinvizTreemap
-                            tiles={displayTiles}
-                            borderColor={tokens.border}
-                            panelBg={tokens.bg}
-                            sectorDisplayName={sectorNameForUi}
-                            onTileHover={setHovered}
-                            onTileLeave={() => setHovered(null)}
-                            onTileClick={(tile) => {
-                                const type = toAdvancedType(tile.assetClass);
-                                navigate(
-                                    `/market/advanced?type=${type}&symbol=${encodeURIComponent(tile.symbol)}&days=${rangeDays}`,
-                                );
-                            }}
-                        />
+                        <div className="heatmap-detail-treemap">
+                            <MarketFinvizTreemap
+                                tiles={displayTiles}
+                                borderColor={tokens.border}
+                                panelBg={tokens.bg}
+                                sectorDisplayName={sectorNameForUi}
+                                onTileHover={setHovered}
+                                onTileLeave={() => setHovered(null)}
+                                onTileClick={(tile) => {
+                                    const type = toAdvancedType(tile.assetClass);
+                                    navigate(
+                                        `/market/advanced?type=${type}&symbol=${encodeURIComponent(tile.symbol)}&days=${rangeDays}`,
+                                    );
+                                }}
+                            />
+                        </div>
                     </div>
 
-                    <div style={{ ...cardStyle, position: 'sticky', top: 16 }}>
+                    <div className="heatmap-detail-card heatmap-detail-card--sticky" style={cardStyle}>
                         <h3 style={{ marginTop: 0, marginBottom: 10, fontSize: '1rem' }}>{t('heatmap.hoverDetail', 'Hover detayı')}</h3>
                         {hovered ? (
                             <div style={{ display: 'grid', gap: 6, fontSize: '0.9rem' }}>
@@ -418,6 +438,6 @@ export function MarketHeatmap() {
                     </div>
                 </div>
             )}
-        </div>
+        </main>
     );
 }

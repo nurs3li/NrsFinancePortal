@@ -34,6 +34,10 @@ export type TerminalListInstrumentVm = {
     marginRequirement?: number;
     longShort: string;
     listSubtitle?: string;
+    fundSubmarket?: string;
+    fundRiskLevel?: number;
+    fundReturn3y?: number;
+    fundReturn5y?: number;
 };
 
 function marketKindForCategory(category: MarketCategory): MarketKind {
@@ -147,6 +151,39 @@ export function terminalListItemToVm(item: MarketTerminalListItem): TerminalList
             source: item.source ?? undefined,
             type: 'STOCK',
             sparkline: normalizeTrendSparkline(spark, price, changePercent),
+            pctDay: item.pctDay,
+            pctWeek: item.pctWeek,
+            pctMonth: item.pctMonth,
+            pctYear: item.pctYear,
+            longShort: item.trend === 'UP' ? 'LONG' : 'SHORT',
+        };
+    }
+
+    if (item.category === 'FUNDS' && item.fundSubmarket === 'TR') {
+        const displayName =
+            (item.displayName && item.displayName.trim()) ||
+            (item.name && item.name.trim()) ||
+            symbol;
+        return {
+            symbol,
+            category: 'FUNDS',
+            displayName,
+            price,
+            changePercent,
+            dailyChangePercent,
+            trend: item.trend,
+            currency: item.currency ?? 'TRY',
+            marketRegion: item.marketRegion ?? 'TR',
+            exchange: item.exchange ?? 'TEFAS',
+            sector: item.sector ?? undefined,
+            source: item.source ?? 'TEFAS',
+            type: 'STOCK',
+            listSubtitle: item.sector ?? undefined,
+            fundSubmarket: 'TR',
+            fundRiskLevel: item.fundRiskLevel ?? undefined,
+            fundReturn3y: item.fundReturn3y ?? undefined,
+            fundReturn5y: item.fundReturn5y ?? undefined,
+            sparkline: [],
             pctDay: item.pctDay,
             pctWeek: item.pctWeek,
             pctMonth: item.pctMonth,

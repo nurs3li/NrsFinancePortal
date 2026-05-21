@@ -1,0 +1,138 @@
+/*
+ * Semantic surface + chart tokens for light/dark.
+ * Pages can use these classes instead of dark-only Tailwind-style literals.
+ */
+
+[data-theme='light'] {
+  --app-page-bg: #f1f5f9;
+  --app-text: #0f172a;
+  --app-text-muted: #475569;
+  --app-text-subtle: #64748b;
+  --app-surface-bg: #ffffff;
+  --app-surface-border: #e2e8f0;
+  --app-surface-soft-bg: #f8fafc;
+  --app-input-bg: #ffffff;
+  --app-input-border: #cbd5e1;
+  --app-table-head-bg: #f1f5f9;
+  --app-table-row-hover: rgba(241, 245, 249, 0.9);
+  --app-active-row-bg: rgba(59, 130, 246, 0.12);
+  --app-active-row-border: #3b82f6;
+  --app-positive: #15803d;
+  --app-negative: #b91c1c;
+  --app-warning: #b45309;
+  --chart-grid: rgba(148, 163, 184, 0.38);
+  --chart-axis: #475569;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-text: #0f172a;
+  --chart-tooltip-border: #cbd5e1;
+}
+
+[data-theme='dark'] {
+  --app-page-bg: #0f172a;
+  --app-text: #f8fafc;
+  --app-text-muted: #94a3b8;
+  --app-text-subtle: #64748b;
+  --app-surface-bg: rgba(30, 41, 59, 0.85);
+  --app-surface-border: rgba(51, 65, 85, 0.7);
+  --app-surface-soft-bg: rgba(15, 23, 42, 0.6);
+  --app-input-bg: rgba(2, 6, 23, 0.75);
+  --app-input-border: #334155;
+  --app-table-head-bg: rgba(15, 23, 42, 0.98);
+  --app-table-row-hover: rgba(30, 41, 59, 0.72);
+  --app-active-row-bg: rgba(30, 58, 138, 0.28);
+  --app-active-row-border: #60a5fa;
+  --app-positive: #4ade80;
+  --app-negative: #f87171;
+  --app-warning: #fbbf24;
+  --chart-grid: rgba(148, 163, 184, 0.2);
+  --chart-axis: #cbd5e1;
+  --chart-tooltip-bg: #0f172a;
+  --chart-tooltip-text: #f8fafc;
+  --chart-tooltip-border: #334155;
+}
+
+.app-page {
+  min-height: 100%;
+  background: var(--app-page-bg);
+  color: var(--app-text);
+}
+
+.app-surface {
+  background: var(--app-surface-bg);
+  color: var(--app-text);
+  border: 1px solid var(--app-surface-border);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+[data-theme='dark'] .app-surface {
+  box-shadow: none;
+}
+
+.app-surface-soft {
+  background: var(--app-surface-soft-bg);
+  color: var(--app-text);
+  border: 1px solid var(--app-surface-border);
+}
+
+.app-muted {
+  color: var(--app-text-muted);
+}
+
+.app-subtle {
+  color: var(--app-text-subtle);
+}
+
+.app-heading {
+  color: var(--app-text);
+}
+
+.app-border {
+  border-color: var(--app-surface-border);
+}
+
+.app-input {
+  background: var(--app-input-bg);
+  color: var(--app-text);
+  border: 1px solid var(--app-input-border);
+}
+
+.app-input::placeholder {
+  color: var(--app-text-subtle);
+}
+
+.app-button-secondary {
+  background: var(--app-surface-soft-bg);
+  color: var(--app-text);
+  border: 1px solid var(--app-input-border);
+}
+
+.app-table-header {
+  background: var(--app-table-head-bg);
+  color: var(--app-text-muted);
+  border-bottom: 1px solid var(--app-surface-border);
+}
+
+.app-table-row {
+  border-bottom: 1px solid var(--app-surface-border);
+}
+
+.app-table-row:hover {
+  background: var(--app-table-row-hover);
+}
+
+.app-active-row {
+  background: var(--app-active-row-bg);
+  border-left: 2px solid var(--app-active-row-border);
+}
+
+.app-positive {
+  color: var(--app-positive);
+}
+
+.app-negative {
+  color: var(--app-negative);
+}
+
+.app-warning {
+  color: var(--app-warning);
+}

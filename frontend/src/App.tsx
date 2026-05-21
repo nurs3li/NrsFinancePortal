@@ -15,12 +15,13 @@ import { Market } from './pages/Market';
 import { MarketMacroPage } from './pages/MarketMacroPage';
 import { MarketHeatmap } from './pages/MarketHeatmap';
 import { Portfolio } from './pages/Portfolio';
-import { Transactions } from './pages/Transactions';
+import { PortfolioAiAnalysis } from './pages/PortfolioAiAnalysis';
 import { Simulation } from './pages/Simulation';
 import { ViopBondAnalysis } from './pages/ViopBondAnalysis';
 import { AdminUsersAndAccounts } from './pages/AdminUsersAndAccounts';
 import { Notifications } from './pages/Notifications';
 import { AdminAudit } from './pages/AdminAudit';
+import { UserSettings } from './pages/UserSettings';
 
 // NOT: Onceden agir sayfalari React.lazy ile sarmaliyorduk. Ancak React 18 Suspense'in
 // "pending sirasinda eski UI'yi tut" davranisi nedeniyle VIOP sekmesindeki yogun render
@@ -97,6 +98,14 @@ function App() {
                                     }
                                 />
                                 <Route
+                                    path="/portfolio/ai-analysis"
+                                    element={
+                                        <ProtectedRoute>
+                                            <PortfolioAiAnalysis />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
                                     path="/viop-bond-analysis"
                                     element={
                                         <ProtectedRoute>
@@ -116,7 +125,7 @@ function App() {
                                     path="/transactions"
                                     element={
                                         <ProtectedRoute>
-                                            <Transactions />
+                                            <Navigate to="/portfolio" replace />
                                         </ProtectedRoute>
                                     }
                                 />
@@ -142,6 +151,14 @@ function App() {
                                     element={
                                         <ProtectedRoute>
                                             <Notifications />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/settings"
+                                    element={
+                                        <ProtectedRoute>
+                                            <UserSettings />
                                         </ProtectedRoute>
                                     }
                                 />

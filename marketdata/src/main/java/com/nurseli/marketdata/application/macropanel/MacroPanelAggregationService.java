@@ -305,7 +305,7 @@ public class MacroPanelAggregationService {
             if (!dbPts.isEmpty() && !evdsObs.isEmpty()) {
                 String dbLast = dbPts.getLast().asOf().toLocalDate().toString();
                 String evdsLast = evdsObs.getLast().date();
-                if (evdsLast != null && evdsLast.compareTo(dbLast) > 0) {
+                if (evdsLast != null && evdsLast.compareTo(dbLast) >= 0) {
                     return evdsObs;
                 }
                 return toObservationsFromPoints(dbPts);

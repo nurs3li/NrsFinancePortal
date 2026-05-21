@@ -105,6 +105,13 @@ export const macroEducationTerms = {
         detail: 'Kısa vade daha likit; uzun vade genelde daha yüksek faiz sunabilir ancak erişim kısıtlıdır.',
         category: 'deposit',
     },
+    bondMaturity: {
+        title: 'Vade',
+        short: 'Anaparanın geri ödeneceği tarih.',
+        detail:
+            'Tahvil veya bononun anapara geri ödeme tarihidir. Vade uzadıkça faiz, enflasyon ve risk beklentilerine duyarlılık artabilir.',
+        category: 'bond',
+    },
     loanRate: {
         title: 'Kredi Faizi Nedir?',
         short: 'Borçlanma maliyetini gösteren yüzde orandır.',
@@ -118,36 +125,55 @@ export const macroEducationTerms = {
         detail: 'Bankacılık sisteminde bu fark, aracılık marjının bir parçasını yansıtır.',
         category: 'credit',
     },
+    bondSectionIntro: {
+        title: 'Tahvil & Bono Bölümü',
+        short: 'Eğitim ve makro bağlantı modülü.',
+        detail:
+            'Bu bölüm canlı tahvil terminali değildir. Tahvil ve bononun temel mantığını, TCMB politika faizi ve enflasyonla ilişkisini anlatır. Canlı ISIN bazlı fiyatlar, piyasa değerleri ve performans grafikleri Piyasalar > Tahvil sekmesinde takip edilir.',
+        category: 'bond',
+    },
+    bondMacroDrivers: {
+        title: 'Tahvil/Bono Faizleri Nelerden Etkilenir?',
+        short: 'Kısa vade politika faizi; uzun vade enflasyon beklentisi ve risk primi.',
+        detail:
+            'Kısa vadeli araçlar (bono) TCMB politika faizine ve kısa vadeli TL faiz ortamına daha yakın tepki verir. Uzun vadeli tahviller ise enflasyon beklentisi, büyüme görünümü ve risk primi (kur, likidite, kredi riski) gibi faktörlerden daha fazla etkilenir. Bu panelde canlı getiri eğrisi yoktur; ilişki kavramsal olarak gösterilir.',
+        category: 'bond',
+    },
     bond: {
-        title: 'Tahvil Nedir?',
-        short: 'Genelde 1 yıldan uzun vadeli borçlanma senedidir.',
-        detail: 'Devlet veya şirketler nakit ihtiyacı için tahvil ihraç eder; yatırımcı kupon ve vade sonunda ödeme alır.',
+        title: 'Tahvil',
+        short: 'Genellikle 1 yıldan uzun vadeli borçlanma aracı.',
+        detail:
+            'Devletin veya şirketlerin genellikle 1 yıldan uzun vadeli borçlanmak için çıkardığı menkul kıymettir. Yatırımcı tahvil aldığında ihraççıya borç vermiş olur.',
         category: 'bond',
     },
     bono: {
-        title: 'Bono Nedir?',
-        short: 'Genelde 1 yıldan kısa vadeli borçlanma senedidir.',
-        detail: 'Türkiye’de pratik ayrım vade uzunluğuna göre yapılır; ikisi de sabit getirili borçlanma aracıdır.',
+        title: 'Bono',
+        short: 'Genellikle 1 yıldan kısa vadeli borçlanma aracı.',
+        detail:
+            'Genellikle 1 yıldan kısa vadeli borçlanma aracıdır. Mantığı tahvile benzer, ancak vadesi daha kısadır.',
         category: 'bond',
     },
     coupon: {
-        title: 'Kupon Nedir?',
-        short: 'Tahvilin dönemsel faiz ödemesidir.',
-        detail: 'Kupon oranı nominal değer üzerinden yıllık faiz oranını ifade eder; ödeme sıklığı farklı olabilir.',
+        title: 'Kupon',
+        short: 'Dönemsel faiz ödemesi.',
+        detail:
+            'Tahvilin belirli dönemlerde yatırımcıya ödediği faizdir. Kupon oranı, tahvilin piyasa getirisiyle aynı şey değildir.',
         category: 'bond',
     },
     yieldCurve: {
-        title: 'Getiri Eğrisi Nedir?',
-        short: 'Farklı vadelerdeki getirilerin karşılaştırılmasıdır.',
-        detail: 'Normal eğri uzun vadede daha yüksek getiri bekler; ters eğri ekonomik yavaşlama sinyali olabilir.',
+        title: 'Vade-Getiri Eğrisi',
+        short: 'Farklı vadelerdeki borçlanma getirilerini karşılaştırır.',
+        detail:
+            'Farklı vadelerdeki borçlanma araçlarının getiri seviyelerini karşılaştıran eğridir. Kısa vadeler politika faizinden, uzun vadeler enflasyon beklentisi ve risk priminden daha fazla etkilenebilir.',
         category: 'bond',
     },
     bondPriceYield: {
-        title: 'Tahvil Fiyatı ve Faiz İlişkisi',
-        short: 'Faiz yükselince mevcut tahvil fiyatı genelde düşer.',
+        title: 'Faiz-Fiyat İlişkisi',
+        short: 'Piyasa faizi ile tahvil fiyatı ters yönlü hareket edebilir.',
         detail:
-            'Yeni ihraçlar daha yüksek kuponla geldiğinde eski tahvillerin piyasa fiyatı düşerek getirisi piyasayla hizalanır.',
-        example: 'Faiz ↑ → Tahvil fiyatı ↓ (mevcut senetler için)',
+            'Piyasa faizleri yükseldiğinde eski düşük getirili tahvillerin fiyatı düşebilir. Piyasa faizleri düştüğünde ise eski yüksek getirili tahviller daha değerli hale gelebilir.',
+        example:
+            'Yeni tahviller daha yüksek faiz verirse, eski düşük kuponlu tahviller aynı fiyattan cazip olmaz. Bu nedenle eski tahvilin piyasa fiyatı düşerek yeni getiri seviyesine yaklaşır.',
         category: 'bond',
     },
     eurobond: {

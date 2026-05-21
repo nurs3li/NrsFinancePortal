@@ -52,6 +52,7 @@ public class MarketTerminalListService {
     public MarketTerminalListPageResponse list(
             String category,
             String equitySubmarket,
+            String fundSubmarket,
             int page,
             int size,
             String filter,
@@ -64,6 +65,9 @@ public class MarketTerminalListService {
         String f = filter != null ? filter.trim().toUpperCase(Locale.ROOT) : "ALL";
         String q = search != null ? search.trim().toLowerCase(Locale.ROOT) : "";
 
+        if ("FUNDS".equals(cat) && "TR".equalsIgnoreCase(fundSubmarket)) {
+            return listTefas(safePage, safeSize, sort, dir, q);
+        }
         if ("EQUITY".equals(cat) && "BIST".equalsIgnoreCase(equitySubmarket)) {
             return listBist(safePage, safeSize, f, sort, dir, q);
         }
@@ -105,6 +109,7 @@ public class MarketTerminalListService {
                     sym,
                     "EQUITY",
                     "BIST",
+                    null,
                     trim(r.displayName()),
                     trim(r.displayName()),
                     px,
@@ -131,7 +136,60 @@ public class MarketTerminalListService {
                     null,
                     null,
                     null,
+                    null,
+                    null,
+                    null,
+                    null,
                     null));
+        }
+        return toPageResponse(items, paged.page(), paged.size(), paged.totalElements());
+    }
+
+    private MarketTerminalListPageResponse listTefas(int page, int size, String sort, String dir, String search) {
+        MarketDataClient.TefasFundPage paged = marketDataClient.getTefasFundPage(page, size, sort, dir, search);
+        List<MarketDataClient.TefasFundRow> rows = paged.items() != null ? paged.items() : List.of();
+        List<MarketTerminalListItemDto> items = new ArrayList<>(rows.size());
+        for (MarketDataClient.TefasFundRow r : rows) {
+            double rYtd =
+                    r.returnYtd() != null && Double.isFinite(r.returnYtd()) ? r.returnYtd() : 0.0;
+            String trend = rYtd >= 0 ? "UP" : "DOWN";
+            double px = r.price() != null && r.price() > 0 ? r.price() : 0.0;
+            items.add(new MarketTerminalListItemDto(
+                    r.code(),
+                    "FUNDS",
+                    null,
+                    "TR",
+                    r.title(),
+                    r.title(),
+                    px,
+                    rYtd,
+                    r.return1m(),
+                    trend,
+                    null,
+                    "TRY",
+                    "TR",
+                    "TEFAS",
+                    r.fundType(),
+                    "TEFAS",
+                    null,
+                    List.of(),
+                    r.return1m(),
+                    r.return3m(),
+                    r.return6m(),
+                    r.return1y(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    r.riskLevel(),
+                    r.return6m(),
+                    r.return3y(),
+                    r.return5y()));
         }
         return toPageResponse(items, paged.page(), paged.size(), paged.totalElements());
     }
@@ -168,6 +226,7 @@ public class MarketTerminalListService {
                 sym,
                 "FUTURES",
                 null,
+                null,
                 sym,
                 sym,
                 px,
@@ -194,7 +253,11 @@ public class MarketTerminalListService {
                 null,
                 trim(r.contractMonth()),
                 bdObj(r.basis()),
-                bdObj(r.marginRequirement()));
+                bdObj(r.marginRequirement()),
+                null,
+                null,
+                null,
+                null);
     }
 
     private MarketTerminalListPageResponse listBond(
@@ -264,6 +327,7 @@ public class MarketTerminalListService {
                 sym,
                 "BOND",
                 null,
+                null,
                 sym,
                 sym,
                 px,
@@ -288,6 +352,10 @@ public class MarketTerminalListService {
                 null,
                 r.couponFrequencyPerYear(),
                 trim(r.couponFrequencyLabel()),
+                null,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null);
@@ -403,6 +471,7 @@ public class MarketTerminalListService {
                     c.symbol(),
                     category,
                     "EQUITY".equals(category) ? "US" : null,
+                    "FUNDS".equals(category) ? "US" : null,
                     c.symbol(),
                     c.symbol(),
                     c.price(),
@@ -421,6 +490,10 @@ public class MarketTerminalListService {
                     hz.pctWeek(),
                     hz.pctMonth(),
                     hz.pctYear(),
+                    null,
+                    null,
+                    null,
+                    null,
                     null,
                     null,
                     null,

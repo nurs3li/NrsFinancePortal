@@ -11,6 +11,8 @@ import {
     YAxis,
 } from 'recharts';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { useTheme } from '../../theme/ThemeContext';
+import { chartGridStroke, chartTooltipContentStyle } from '../../lib/chartTheme';
 import { fetchInterestInflationMacroPanel } from '../../services/marketDataService';
 import {
     DEPOSIT_TRY_CHART_LOGICAL_KEYS,
@@ -24,6 +26,7 @@ type Props = {
 
 export function MarketMacroRatesChartCard({ tokens }: Props) {
     const { t } = useLanguage();
+    const { theme } = useTheme();
 
     const { data: panel, isLoading } = useQuery({
         queryKey: ['market', 'macro', 'interest-inflation-panel'],
@@ -80,7 +83,7 @@ export function MarketMacroRatesChartCard({ tokens }: Props) {
                 <div className="terminal-macro-rates-chart-wrap">
                     <ResponsiveContainer width="100%" height={220}>
                         <LineChart data={merged} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke(theme)} />
                             <XAxis dataKey="period" tick={{ fontSize: 9, fill: tokens.textMuted }} />
                             <YAxis
                                 yAxisId="idx"
@@ -96,13 +99,9 @@ export function MarketMacroRatesChartCard({ tokens }: Props) {
                                 width={40}
                             />
                             <Tooltip
-                                contentStyle={{
-                                    background: tokens.bgCard,
-                                    border: `1px solid ${tokens.border}`,
-                                    fontSize: 11,
-                                }}
+                                contentStyle={{ ...chartTooltipContentStyle(tokens), fontSize: 11 }}
                             />
-                            <Legend wrapperStyle={{ fontSize: 10 }} />
+                            <Legend wrapperStyle={{ fontSize: 10, color: tokens.textMuted }} />
                             <Line
                                 yAxisId="idx"
                                 type="monotone"

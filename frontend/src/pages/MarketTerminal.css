@@ -1,4 +1,9 @@
 .terminal-page {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+    box-sizing: border-box;
     /*
      * Tema değişkenleri runtime'da Market.tsx (terminalVars) ile güncellenir.
      * Aşağıdakiler light başlangıç + IDE (custom property) çözümlemesi içindir.
@@ -32,7 +37,6 @@
     color: var(--terminal-text);
     position: relative;
     z-index: 0;
-    isolation: isolate;
     /*
      * Detay paneli `position: fixed` overlay ile aciliyor. Detay paneli iceriginde
      * scrollbar olabiliyor; eger ana sayfada da scrollbar varsa, panel acilirken/kapanirken
@@ -210,9 +214,17 @@
 
 .terminal-grid {
     display: grid;
-    grid-template-columns: minmax(400px, 1.05fr) minmax(0, 2.9fr) minmax(360px, 1.05fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 16px;
-    align-items: stretch;
+    align-items: start;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+}
+
+.terminal-grid > * {
+    min-width: 0;
+    max-width: 100%;
 }
 
 /*
@@ -1098,8 +1110,36 @@
     gap: 16px;
     position: relative;
     z-index: 0;
-    overflow: visible;
+    overflow: hidden;
     max-width: 100%;
+    min-width: 0;
+}
+
+.terminal-chart-surface {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    height: 300px;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+@media (min-width: 640px) {
+    .terminal-chart-surface {
+        height: 340px;
+    }
+}
+
+@media (min-width: 1024px) {
+    .terminal-chart-surface {
+        height: 420px;
+    }
+}
+
+@media (min-width: 1280px) {
+    .terminal-chart-surface {
+        height: 520px;
+    }
 }
 
 .terminal-chart-header {
@@ -1236,27 +1276,30 @@
 
 .terminal-controls {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
+    row-gap: 8px;
     margin-bottom: 8px;
-}
-
-/* Zaman aralığı + çizgi/mum modu aynı yatay satırda (MA/RSI sağda) */
-.terminal-controls__chart-toolbar {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: 10px;
-    flex: 1 1 auto;
     min-width: 0;
 }
 
+/* Zaman aralığı + çizgi/mum modu; MA/RSI dar alanda alta kayar */
+.terminal-controls__chart-toolbar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 12rem;
+    min-width: 0;
+    max-width: 100%;
+}
+
 .terminal-controls__chart-toolbar .terminal-category-scroll-shell--chart-range {
-    /* min-width: 0 flex içinde zaman şeridini 0 genişliğe çökertebiliyordu — kaybolma */
-    flex: 1 1 220px;
-    min-width: 11.5rem;
+    flex: 1 1 10rem;
+    min-width: 0;
     max-width: 100%;
 }
 
@@ -1279,7 +1322,10 @@
 .terminal-btn-row--indicators {
     position: relative;
     z-index: 3;
+    flex: 0 0 auto;
     flex-shrink: 0;
+    flex-wrap: nowrap;
+    align-self: flex-start;
 }
 
 .terminal-btn--indicator {
@@ -1544,7 +1590,9 @@
     flex-direction: column;
     gap: 16px;
     min-width: 0;
+    max-width: 100%;
     min-height: 0;
+    overflow-x: hidden;
     contain: layout;
 }
 
@@ -1575,11 +1623,25 @@
 .terminal-center-comparison,
 .terminal-right-comparison {
     margin-bottom: 0;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .terminal-right-comparison {
     flex-shrink: 0;
     margin-bottom: 12px;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.terminal-right-comparison .terminal-comparison-card__chip-row,
+.terminal-right-comparison .terminal-pp-compare-chart,
+.terminal-pp-compare-chart {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .terminal-grid--heatmap-rail .terminal-right-treemap-slot {
@@ -1599,16 +1661,30 @@
 .terminal-right-panel-scroll {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow-y: visible;
     overflow-x: hidden;
     overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-    padding-right: 2px;
+    padding-right: 0;
+}
+
+@media (min-width: 1280px) {
+    .terminal-right-panel-scroll {
+        overflow-y: auto;
+        scrollbar-gutter: stable;
+        padding-right: 2px;
+        max-height: none;
+    }
 }
 
 .terminal-right-treemap-slot {
     min-height: clamp(260px, 32vh, 520px);
     margin-bottom: 8px;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 .terminal-flash-up {
@@ -1741,46 +1817,19 @@
     cursor: wait;
 }
 
+/* Geniş masaüstü: üç kolon oranlarını hafifçe genişlet */
 @media (min-width: 1600px) {
-    .terminal-grid {
-        grid-template-columns: minmax(420px, 1fr) minmax(0, 3fr) minmax(380px, 1fr);
+    .terminal-grid,
+    .terminal-grid.terminal-spot-unified {
+        grid-template-columns: minmax(360px, 440px) minmax(0, 1fr) minmax(360px, 440px);
     }
 
-    .terminal-grid--market-unified,
-    .terminal-grid--viop-unified {
-        grid-template-columns: minmax(400px, 1.05fr) minmax(0, 2.9fr) minmax(360px, 1.05fr);
-    }
-
-    .terminal-grid.terminal-grid--list-undocked.terminal-grid--heatmap-rail {
-        grid-template-columns: 0 minmax(0, 3.45fr) minmax(260px, 0.88fr);
+    .terminal-grid--list-undocked.terminal-grid--heatmap-rail {
+        grid-template-columns: 0 minmax(0, 1fr) minmax(360px, 440px);
     }
 }
 
-@media (max-width: 1300px) {
-    .terminal-grid {
-        grid-template-columns: minmax(320px, 1fr) minmax(0, 1.5fr);
-    }
-    .terminal-right-panel {
-        grid-column: 1 / -1;
-        width: auto;
-        max-height: none;
-    }
-}
-
-@media (max-width: 980px) {
-    .terminal-grid {
-        grid-template-columns: 1fr;
-    }
-    .terminal-center-stack {
-        order: 1;
-    }
-    .terminal-left-panel {
-        order: 2;
-    }
-    .terminal-right-panel {
-        order: 3;
-    }
-}
+/* list-undocked yerleşimi — xl üç kolon bloğunda tanımlı */
 
 /* Hisse: ABD / BIST alt seçimi + BIST liste rozeti */
 .terminal-equity-submarket {
@@ -1845,14 +1894,112 @@
     vertical-align: middle;
 }
 
-/* Seçili enstrüman → açılır piyasa listesi; sol sütun daraltılıp orta kolon genler */
-.terminal-grid--list-undocked {
-    grid-template-columns: 0 minmax(0, 1fr) minmax(min(340px, 30vw), 1.08fr);
+.terminal-data-table--tefas {
+    font-size: 12px;
 }
 
-/* Spot + ısı haritası: orta kolon geniş, sağda karşılaştırma üstte — treemap dar sütunda */
+.terminal-data-table--tefas .tefas-fund-code {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.6rem;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: #1e3a5f;
+    color: #f8fafc;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+
+.tefas-fund-instrument {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+}
+
+.tefas-fund-instrument__main {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.tefas-fund-instrument__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #16a34a;
+    margin-top: 5px;
+    flex-shrink: 0;
+}
+
+.tefas-fund-instrument__name {
+    font-weight: 600;
+    font-size: 12px;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.tefas-fund-type-cell {
+    max-width: 9rem;
+}
+
+.tefas-fund-type {
+    display: block;
+    font-size: 11px;
+    color: var(--terminal-muted);
+    line-height: 1.25;
+    word-break: break-word;
+}
+
+.tefas-fund-risk-cell {
+    min-width: 3.5rem;
+}
+
+.tefas-risk {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: flex-start;
+}
+
+.tefas-risk__label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #b91c1c;
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 2px;
+}
+
+.tefas-risk__bar {
+    display: block;
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #f97316, #b91c1c);
+    max-width: 100%;
+}
+
+/* Seçili enstrüman → açılır piyasa listesi; dar/zoom’da tek kolon, geniş ekranda 2/3 kolon */
+.terminal-grid--list-undocked {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .terminal-grid--list-undocked.terminal-grid--heatmap-rail {
-    grid-template-columns: 0 minmax(0, 1fr) minmax(220px, 0.62fr);
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.terminal-grid--list-undocked .terminal-center-stack {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.terminal-grid--list-undocked .terminal-right-panel {
+    grid-column: 1;
+    grid-row: 2;
 }
 
 .terminal-left-panel--undocked-slot.terminal-card {
@@ -1878,19 +2025,43 @@
 }
 
 .terminal-spot-hero-rail--passthrough {
-    display: contents;
+    display: block;
 }
 
-/* Spot: tek terminal-grid — sol liste grid-row 1/-1 ile yukarı (hero ile aynı üst çizgi) uzar */
+.terminal-workspace {
+    width: 100%;
+    max-width: 1600px;
+    margin: 0 auto;
+    min-width: 0;
+    overflow-x: hidden;
+    box-sizing: border-box;
+}
+
+.market-main-grid {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.terminal-selected-instrument-row {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin-bottom: 14px;
+}
+
+.terminal-selected-instrument-row .terminal-hero {
+    margin-bottom: 0;
+}
+
+/* Spot: üç sütun tek satır — hero üst row’da, grid altında */
 .terminal-grid.terminal-spot-unified {
-    grid-template-rows: auto 1fr;
     align-items: start;
 }
 
-/* Sol sütun: kartlar içerik kadar uzar; grid hücresine sıkıştırılmaz */
 .terminal-spot-unified .terminal-left-column {
     grid-column: 1;
-    grid-row: 1 / -1;
+    grid-row: 1;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -1990,13 +2161,14 @@
 
 .terminal-left-column .terminal-pp-summary-grid dd,
 .terminal-left-column .terminal-pp-summary-grid dt {
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    word-break: normal;
 }
 
 .terminal-spot-unified .terminal-card.terminal-left-panel {
     grid-column: 1;
-    grid-row: 1 / -1;
-    align-self: stretch;
+    grid-row: 1;
+    align-self: start;
     min-height: 0;
     margin-top: 0;
 }
@@ -2010,21 +2182,26 @@
     height: auto;
 }
 
-.terminal-spot-unified .terminal-hero {
-    grid-column: 2 / -1;
+.terminal-spot-unified .terminal-left-column {
+    grid-column: 1;
     grid-row: 1;
-    margin-bottom: 10px;
 }
 
 .terminal-spot-unified .terminal-center-stack {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 2;
     min-width: 0;
     min-height: 0;
+    align-self: start;
 }
 
-.terminal-spot-unified {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(280px, 0.9fr);
+.terminal-spot-unified .terminal-right-panel {
+    grid-column: 1;
+    grid-row: 3;
+    min-width: 0;
+    min-height: 0;
+    align-self: start;
+    overflow: hidden;
 }
 
 .terminal-left-panel__inner {
@@ -2074,12 +2251,20 @@
     flex-shrink: 0;
     margin-bottom: 0;
     padding: 12px 14px;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .terminal-macro-card__title {
     font-size: 0.9rem;
     font-weight: 700;
     margin: 0 0 8px;
+    line-height: 1.3;
+    overflow-wrap: break-word;
+    word-break: normal;
+    white-space: normal;
 }
 
 .terminal-macro-card__muted,
@@ -2087,6 +2272,9 @@
     font-size: 0.72rem;
     line-height: 1.45;
     margin: 0;
+    overflow-wrap: break-word;
+    word-break: normal;
+    white-space: normal;
 }
 
 .terminal-macro-info-grid {
@@ -2129,6 +2317,15 @@
 
 .terminal-pp-compare-chart {
     flex-shrink: 0;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.terminal-pp-compare-chart .recharts-responsive-container {
+    min-width: 0 !important;
+    max-width: 100%;
 }
 
 .terminal-pp-summary-grid {
@@ -2180,16 +2377,96 @@
     min-width: 140px;
 }
 
-.terminal-spot-unified .terminal-right-panel {
-    grid-column: 3;
-    grid-row: 2;
-    min-width: 0;
-    min-height: 0;
+@media (max-width: 1279px) {
+    .terminal-page,
+    .terminal-workspace {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: hidden;
+        box-sizing: border-box;
+    }
+
+    .terminal-grid,
+    .terminal-grid.terminal-spot-unified,
+    .terminal-grid--list-undocked,
+    .terminal-grid--list-undocked.terminal-grid--heatmap-rail {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .terminal-spot-unified .terminal-left-column,
+    .terminal-spot-unified .terminal-center-stack,
+    .terminal-spot-unified .terminal-right-panel,
+    .terminal-grid--list-undocked .terminal-center-stack,
+    .terminal-grid--list-undocked .terminal-right-panel {
+        grid-column: 1;
+        grid-row: auto;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .terminal-left-column,
+    .terminal-left-column__card {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .terminal-center-stack {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+
+    .terminal-pp-compare-chart,
+    .terminal-macro-chart-card {
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    .terminal-treemap-scroll {
+        overflow-x: hidden;
+    }
 }
 
-@media (max-width: 1300px) {
-    .terminal-spot-unified {
-        grid-template-rows: auto auto auto;
+/* xl (1280+): klasik üç kolon — sol liste+özet | orta grafik | sağ içgörüler */
+@media (min-width: 1280px) {
+    .terminal-grid,
+    .terminal-grid.terminal-spot-unified,
+    .market-main-grid {
+        grid-template-columns: minmax(320px, 440px) minmax(0, 1fr) minmax(320px, 420px);
+    }
+
+    .terminal-grid--market-unified,
+    .terminal-grid--viop-unified {
+        grid-template-columns: minmax(320px, 440px) minmax(0, 1fr) minmax(320px, 420px);
+    }
+
+    .terminal-grid--market-unified .terminal-card.terminal-left-panel,
+    .terminal-grid--viop-unified .terminal-card.terminal-left-panel {
+        grid-column: 1;
+        grid-row: 1 / -1;
+        align-self: stretch;
+    }
+
+    .terminal-grid--market-unified .terminal-hero,
+    .terminal-grid--viop-unified .terminal-hero {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .terminal-grid--market-unified .terminal-center-stack,
+    .terminal-grid--viop-unified .terminal-center-stack {
+        grid-column: 2;
+        grid-row: 2;
+    }
+
+    .terminal-grid--market-unified .terminal-right-panel,
+    .terminal-grid--viop-unified .terminal-right-panel {
+        grid-column: 3;
+        grid-row: 1 / -1;
+        align-self: stretch;
     }
 
     .terminal-spot-unified .terminal-left-column,
@@ -2199,49 +2476,33 @@
         align-self: start;
     }
 
-    .terminal-spot-unified .terminal-hero {
+    .terminal-spot-unified .terminal-center-stack {
         grid-column: 2;
         grid-row: 1;
     }
 
-    .terminal-spot-unified .terminal-center-stack {
-        grid-column: 1 / -1;
-        grid-row: 2;
-    }
-
     .terminal-spot-unified .terminal-right-panel {
-        grid-column: 1 / -1;
-        grid-row: 3;
-    }
-}
-
-@media (max-width: 980px) {
-    .terminal-spot-unified {
-        grid-template-rows: auto auto auto auto;
+        grid-column: 3;
+        grid-row: 1;
+        align-self: start;
     }
 
-    .terminal-spot-unified .terminal-hero {
-        grid-column: 1;
+    .terminal-grid--list-undocked {
+        grid-template-columns: 0 minmax(0, 1fr) minmax(320px, 420px);
+    }
+
+    .terminal-grid--list-undocked.terminal-grid--heatmap-rail {
+        grid-template-columns: 0 minmax(0, 1fr) minmax(300px, 400px);
+    }
+
+    .terminal-grid--list-undocked .terminal-center-stack {
+        grid-column: 2;
         grid-row: 1;
     }
 
-    .terminal-spot-unified .terminal-left-column,
-    .terminal-spot-unified .terminal-card.terminal-left-panel {
-        grid-column: 1;
-        grid-row: 2;
-    }
-
-    .terminal-spot-unified .terminal-left-column {
-        max-height: none;
-        overflow: visible;
-    }
-
-    .terminal-spot-unified .terminal-center-stack {
-        grid-row: 3;
-    }
-
-    .terminal-spot-unified .terminal-right-panel {
-        grid-row: 4;
+    .terminal-grid--list-undocked .terminal-right-panel {
+        grid-column: 3;
+        grid-row: 1;
     }
 }
 
@@ -3102,6 +3363,50 @@
     color: var(--terminal-btn-active-text);
 }
 
+.terminal-center-panel--eurobond-evds {
+    min-height: min(72vh, 920px);
+    overflow: visible;
+}
+
+.terminal-center-panel--eurobond-evds .eurobond-macro-section {
+    margin-top: 0;
+    min-height: 0;
+}
+
+.terminal-data-table--eurobond-macro thead th {
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.terminal-eurobond-macro-row td {
+    vertical-align: middle;
+}
+
+.terminal-eurobond-macro-row__code {
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--terminal-muted, #94a3b8);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.terminal-eurobond-macro-row__label {
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 2px;
+}
+
+.terminal-eurobond-macro-row__group {
+    font-size: 12px;
+    color: var(--terminal-muted, #94a3b8);
+    white-space: nowrap;
+}
+
+.terminal-eurobond-macro-row__asof {
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--terminal-text, inherit);
+}
+
 .eurobond-gov-panel {
     padding: 4px 2px 16px;
 }
@@ -3147,4 +3452,681 @@
     font-size: 11px;
     line-height: 1.4;
     margin-top: 12px;
+}
+
+/* ==========================================================================
+ * Piyasalar — mobil + browser zoom responsive stabilizasyon
+ * ========================================================================== */
+
+.terminal-macro-info-grid > div,
+.terminal-pp-summary-grid > div {
+    min-width: 0;
+}
+
+.terminal-macro-info-grid dt,
+.terminal-pp-summary-grid dt {
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+.terminal-macro-info-grid dd,
+.terminal-pp-summary-grid dd {
+    overflow-wrap: break-word;
+    word-break: normal;
+    white-space: normal;
+}
+
+.terminal-macro-rates-chart-wrap {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.terminal-pp-compare-chart {
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Heatmap: kart içinde yatay kaydırma, body taşması yok */
+.terminal-treemap-scroll {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+}
+
+.terminal-treemap-scroll__inner {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.terminal-treemap-host {
+    width: 100%;
+    max-width: 100%;
+    min-height: 280px;
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    box-sizing: border-box;
+    margin: 0 auto;
+}
+
+/* Dar sağ sütunda kart içi yatay kaydırma (üç kolon masaüstü) */
+@media (min-width: 1280px) {
+    .terminal-right-treemap-slot .terminal-treemap-scroll {
+        overflow-x: auto;
+    }
+
+    .terminal-right-treemap-slot .terminal-treemap-scroll__inner {
+        min-width: min(100%, 520px);
+        width: max(100%, 520px);
+    }
+}
+
+
+/* Grafik toolbar — mobil wrap */
+.terminal-controls__chart-toolbar {
+    min-width: 0;
+}
+
+/* Mobil / dar tablet: MA·RSI ile zaman şeridi üst üste binmesin (≤640 grafik kartı grid ile override) */
+@media (max-width: 1279px) {
+    .terminal-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .terminal-controls__chart-toolbar {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .terminal-btn-row--indicators {
+        align-self: flex-start;
+    }
+}
+
+/* ======================================================================
+ * Grafik kartı — yalnızca dar telefon (≤640px); tablet/desktop dokunulmaz
+ * ====================================================================== */
+@media (max-width: 640px) {
+    .terminal-card.market-chart-card,
+    .terminal-card.terminal-center-panel.market-chart-card {
+        padding: 0.625rem 0.75rem;
+        margin-bottom: 10px;
+        min-height: 0;
+        overflow: hidden;
+        border-radius: 1rem;
+    }
+
+    /* Satır 1: zaman aralığı tam genişlik | Satır 2: grafik tipi + MA/RSI */
+    .terminal-card.market-chart-card > .terminal-controls {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+        align-items: center;
+        gap: 4px 6px;
+        margin-bottom: 6px;
+    }
+
+    .terminal-card.market-chart-card .terminal-controls__chart-toolbar {
+        display: contents;
+    }
+
+    .terminal-card.market-chart-card .terminal-category-scroll-shell--chart-range {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        margin: 0;
+        flex: none;
+    }
+
+    .terminal-card.market-chart-card
+        .terminal-category-scroll-shell--chart-range
+        .terminal-category-scroll-track {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .terminal-card.market-chart-card .terminal-category-scroll-shell--chart-mode {
+        grid-column: 1;
+        grid-row: 2;
+        justify-self: start;
+        margin: 0;
+        flex: none;
+    }
+
+    .terminal-card.market-chart-card
+        .terminal-category-scroll-shell--chart-range
+        .terminal-category-scroll-tab {
+        padding: 3px 5px;
+        font-size: 0.6875rem;
+    }
+
+    .terminal-card.market-chart-card
+        .terminal-category-scroll-shell--chart-mode
+        .terminal-category-scroll-tab--icon {
+        min-width: 34px;
+        padding: 5px 7px;
+    }
+
+    .terminal-card.market-chart-card .terminal-btn-row--indicators {
+        grid-column: 2;
+        grid-row: 2;
+        justify-self: end;
+        flex: none;
+        gap: 4px;
+        margin: 0;
+    }
+
+    .terminal-card.market-chart-card .terminal-btn--indicator {
+        min-width: 2.25rem;
+        min-height: 1.75rem;
+        padding: 0 0.5rem;
+        font-size: 0.6875rem;
+    }
+
+    .terminal-card.market-chart-card .terminal-chart-wrap {
+        gap: 4px;
+        margin-top: 0;
+    }
+
+    .terminal-card.market-chart-card .terminal-chart-header {
+        padding-right: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        row-gap: 4px;
+        margin-bottom: 0;
+        min-height: 0;
+    }
+
+    .terminal-card.market-chart-card .terminal-chart-header--compact {
+        margin-bottom: 0;
+    }
+
+    .terminal-card.market-chart-card .terminal-chart-header > .terminal-ohlc--overlay,
+    .terminal-card.market-chart-card .terminal-chart-header > .terminal-ohlc {
+        position: static;
+        flex: 0 0 auto;
+        max-width: 100%;
+        text-align: left;
+        margin: 0;
+        min-height: 0;
+        font-size: 0.625rem;
+        gap: 4px 8px;
+        line-height: 1.2;
+    }
+
+    .terminal-card.market-chart-card .terminal-chart-header .terminal-ohlc.muted {
+        opacity: 0.85;
+    }
+
+    .terminal-card.market-chart-card .terminal-chart-title {
+        flex: 0 0 auto;
+        font-size: 0.875rem;
+        line-height: 1.2;
+        margin: 0;
+    }
+
+    .terminal-card.market-chart-card .terminal-chart-subtitle {
+        flex: 0 0 auto;
+        font-size: 0.6875rem;
+        line-height: 1.25;
+        margin: 0;
+    }
+
+    .terminal-card.market-chart-card .terminal-chart-badges {
+        flex: 0 0 auto;
+        gap: 4px;
+        margin: 0;
+    }
+
+    .terminal-card.market-chart-card .terminal-chart-badge {
+        font-size: 0.625rem;
+        padding: 2px 6px;
+    }
+
+    .terminal-card.market-chart-card .terminal-chart-surface {
+        height: 212px;
+        min-height: 0;
+        margin-top: 0;
+    }
+
+    .terminal-card.market-chart-card .terminal-chart-empty {
+        margin: 0;
+        padding: 2px 0;
+        font-size: 0.75rem;
+    }
+
+    .terminal-card.market-chart-card .terminal-rsi {
+        padding-top: 4px;
+        min-height: 72px;
+    }
+
+    .terminal-card.market-chart-card .terminal-rsi-row {
+        min-height: 64px;
+        max-height: 72px;
+    }
+
+    .terminal-card.market-chart-card .terminal-rsi-head {
+        margin-bottom: 2px;
+        font-size: 0.6875rem;
+    }
+}
+
+@media (max-width: 767px) {
+    .app-main:has(.terminal-page) {
+        padding: 12px;
+        overflow-x: hidden;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .terminal-page {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        padding: 0;
+        overflow-x: hidden;
+        box-sizing: border-box;
+    }
+
+    .terminal-workspace {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: hidden;
+    }
+
+    .terminal-grid,
+    .terminal-center-stack,
+    .terminal-right-panel,
+    .terminal-right-panel-scroll {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: hidden;
+    }
+
+    .terminal-card:not(.market-chart-card) {
+        padding: 0.75rem;
+        margin-bottom: 12px;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .terminal-right-panel {
+        overflow: hidden;
+        padding: 0;
+    }
+
+    .terminal-right-panel-scroll {
+        overflow-x: hidden;
+        padding-left: 0;
+        padding-right: 0;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .terminal-right-treemap-slot {
+        min-height: 0;
+        width: 100%;
+        max-width: 100%;
+        margin: 0 0 8px;
+        padding: 0;
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+
+    .terminal-treemap-scroll {
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        box-sizing: border-box;
+    }
+
+    .terminal-treemap-scroll__inner {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        margin: 0;
+    }
+
+    .terminal-treemap-host {
+        width: 100%;
+        max-width: 100%;
+        min-height: 220px;
+        margin: 0 auto;
+    }
+
+    .terminal-treemap-host > div {
+        margin-left: auto;
+        margin-right: auto;
+        max-width: 100%;
+    }
+
+    .terminal-grid,
+    .terminal-grid.terminal-spot-unified,
+    .terminal-grid--list-undocked,
+    .terminal-grid--list-undocked.terminal-grid--heatmap-rail {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .terminal-grid--market-unified .terminal-card.terminal-left-panel,
+    .terminal-grid--viop-unified .terminal-card.terminal-left-panel,
+    .terminal-spot-unified .terminal-left-column,
+    .terminal-spot-unified .terminal-card.terminal-left-panel,
+    .terminal-spot-unified .terminal-center-stack,
+    .terminal-spot-unified .terminal-right-panel,
+    .terminal-grid--market-unified .terminal-hero,
+    .terminal-grid--market-unified .terminal-center-stack,
+    .terminal-grid--market-unified .terminal-right-panel {
+        grid-column: 1;
+        grid-row: auto;
+    }
+
+    .terminal-center-stack {
+        order: 0;
+    }
+
+    .terminal-left-panel,
+    .terminal-left-column {
+        order: 0;
+        max-height: none;
+    }
+
+    .terminal-right-panel {
+        order: 0;
+        width: 100%;
+        overflow: hidden;
+        padding: 0;
+    }
+
+    /* Seçili enstrüman hero */
+    .terminal-hero {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding: 1rem;
+    }
+
+    .terminal-hero--viop {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .terminal-hero-viop__mid {
+        align-items: flex-start;
+        text-align: left;
+    }
+
+    .terminal-hero-selector-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        width: 100%;
+    }
+
+    .terminal-hero-selector-row > .terminal-hero-selector--with-inline-quote,
+    .terminal-hero--spot-compact .terminal-hero-selector--with-inline-quote,
+    .terminal-hero-selector--with-inline-quote {
+        flex: 1 1 auto;
+        max-width: 100%;
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        position: static;
+    }
+
+    .terminal-hero-selector__quote {
+        align-items: flex-start;
+        text-align: left;
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .terminal-hero-selector__price {
+        font-size: 1.5rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: normal;
+        line-height: 1.15;
+    }
+
+    .terminal-hero-selector__pct {
+        font-size: 0.8125rem;
+    }
+
+    .terminal-hero-selector-row__trailing {
+        margin-left: 0;
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+
+    .terminal-hero-horizons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        width: 100%;
+        justify-content: stretch;
+        padding: 0;
+    }
+
+    .terminal-hero-horizons__cell {
+        align-items: flex-start;
+    }
+
+    .terminal-hero-horizons__lab,
+    .terminal-hero-horizons .terminal-horizon-pct {
+        font-size: 0.6875rem;
+        white-space: nowrap;
+    }
+
+    .terminal-hero--spot-compact .terminal-hero-hl-snippet {
+        display: none;
+    }
+
+    .terminal-btn {
+        min-height: 2rem;
+        padding: 0 0.625rem;
+        font-size: 0.75rem;
+    }
+
+    /* Makro / 1 lot özet kartları */
+    .terminal-left-column .terminal-macro-info-grid,
+    .terminal-macro-info-grid,
+    .terminal-left-column .terminal-pp-summary-grid,
+    .terminal-pp-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px 12px;
+    }
+
+    .terminal-macro-card__title,
+    .terminal-pp-summary-card h3,
+    .terminal-pp-summary-card h4 {
+        font-size: 1rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+        word-break: normal;
+    }
+
+    .terminal-macro-info-grid dt,
+    .terminal-pp-summary-grid dt {
+        font-size: 0.6875rem;
+        line-height: 1.25;
+    }
+
+    .terminal-macro-info-grid dd,
+    .terminal-pp-summary-grid dd {
+        font-size: 0.9375rem;
+    }
+
+    .terminal-macro-card__muted,
+    .terminal-macro-card__footnote,
+    .terminal-pp-summary-anchor {
+        font-size: 0.75rem;
+        line-height: 1.4;
+        overflow-wrap: break-word;
+        word-break: normal;
+    }
+
+    .terminal-macro-chart-card .terminal-macro-card__title {
+        font-size: 0.9375rem;
+        line-height: 1.3;
+        white-space: normal;
+    }
+
+    .terminal-macro-chart-card .terminal-macro-card__muted {
+        font-size: 0.75rem;
+        white-space: normal;
+    }
+
+    .terminal-pp-compare-chart {
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
+        padding: 0.75rem;
+    }
+
+    .terminal-pp-compare-chart .recharts-responsive-container {
+        min-width: 0 !important;
+        width: 100% !important;
+    }
+
+    .terminal-left-column {
+        width: 100%;
+        max-width: 100%;
+        padding-right: 0;
+    }
+
+    .terminal-left-column__card--compare,
+    .terminal-left-column__card--macro {
+        width: 100%;
+    }
+
+    .terminal-left-column .terminal-pp-summary-grid {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .terminal-macro-rates-chart-wrap {
+        min-height: 260px;
+    }
+
+    /* Piyasa listesi — kompakt, tablo yatay scroll */
+    .terminal-equity-submarket {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .terminal-submarket-chip {
+        width: 100%;
+        min-height: 2rem;
+        font-size: 0.75rem;
+        text-align: center;
+        justify-content: center;
+    }
+
+    .terminal-list-quick-filters__chips {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .terminal-search {
+        min-height: 2.5rem;
+        font-size: 0.875rem;
+    }
+
+    .terminal-data-table--picker-horizons {
+        min-width: 560px;
+    }
+
+    .terminal-data-table--picker-horizons th:nth-child(6),
+    .terminal-data-table--picker-horizons td:nth-child(6),
+    .terminal-data-table--picker-horizons th:nth-child(7),
+    .terminal-data-table--picker-horizons td:nth-child(7),
+    .terminal-data-table--picker-horizons th:nth-child(8),
+    .terminal-data-table--picker-horizons td:nth-child(8) {
+        display: none;
+    }
+}
+
+@media (max-width: 400px) {
+    .terminal-left-column .terminal-macro-info-grid,
+    .terminal-macro-info-grid,
+    .terminal-left-column .terminal-pp-summary-grid,
+    .terminal-pp-summary-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .terminal-hero-horizons {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 640px) and (max-width: 767px) {
+    .app-main:has(.terminal-page) {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 767px) {
+    .terminal-selected-instrument-row {
+        margin-bottom: 10px;
+    }
+}
+
+/* Light mode: dark-only fallbacks → theme variables */
+[data-theme='light'] .terminal-metrics {
+    color: var(--terminal-muted);
+}
+
+[data-theme='light'] .terminal-data-table--tefas .tefas-fund-code {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+[data-theme='light'] .terminal-mini-list strong {
+    color: var(--terminal-text);
+}
+
+[data-theme='light'] .instrument-drawer,
+[data-theme='light'] .instrument-drawer-backdrop + .instrument-drawer {
+    box-shadow: -8px 0 24px rgba(15, 23, 42, 0.12);
+}
+
+[data-theme='light'] .terminal-chart-tooltip,
+[data-theme='light'] .market-chart-tooltip {
+    background: var(--chart-tooltip-bg, #fff);
+    color: var(--chart-tooltip-text, #0f172a);
+    border-color: var(--chart-tooltip-border, #cbd5e1);
+}
+
+[data-theme='light'] .terminal-compare-panel,
+[data-theme='light'] .terminal-macro-card,
+[data-theme='light'] .terminal-insight-card {
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+[data-theme='light'] .terminal-data-table tbody tr:hover {
+    background: var(--terminal-hover-bg);
+}
+
+[data-theme='light'] .terminal-data-table tbody tr.is-active {
+    background: var(--terminal-active-row-bg);
 }

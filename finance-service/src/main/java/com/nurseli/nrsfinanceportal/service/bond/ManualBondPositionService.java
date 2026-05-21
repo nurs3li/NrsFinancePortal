@@ -46,7 +46,11 @@ public class ManualBondPositionService {
 
     @Transactional(readOnly = true)
     public BondPositionSummaryDto summaryMine() {
-        User user = currentUserResolver.getOrCreateCurrentUser();
+        return summaryForUser(currentUserResolver.getOrCreateCurrentUser());
+    }
+
+    @Transactional(readOnly = true)
+    public BondPositionSummaryDto summaryForUser(User user) {
         LocalDate today = LocalDate.now(TZ);
         List<ManualBondPosition> open = repository.findByUser_IdAndStatusOrderByBuyDateDesc(
                 user.getId(), BondPositionStatus.OPEN);

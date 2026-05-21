@@ -48,7 +48,7 @@ export function MacroIntelligencePage() {
                     title={t('nav.marketMacro', 'Faiz & Enflasyon Paneli')}
                     subtitle={t(
                         'market.bondMacroPageLead',
-                        'Enflasyon, TCMB politika faizi, TL mevduat, kredi faizleri, tahvil/bono ve eurobond verilerini finansal okuryazarlık odağıyla inceleyin.',
+                        'Enflasyon, TCMB politika faizi, TL mevduat, kredi faizleri, tahvil/bono ve eurobond (EVDS) verilerini finansal okuryazarlık odağıyla inceleyin.',
                     )}
                     lastUpdated={lastUpdatedLabel}
                     tokens={chartTokens}
@@ -56,8 +56,11 @@ export function MacroIntelligencePage() {
 
                 {data.panelError ? (
                     <EmptyStateCard
-                        title="Makro paneli şu an yüklenemedi"
-                        hint="Bölümler mümkün olan yedek uçlarla gösterilmeye devam eder."
+                        title={t('macro.panel.loadErrorTitle', 'Makro paneli şu an yüklenemedi')}
+                        hint={t(
+                            'macro.panel.loadErrorHint',
+                            'Bölümler mümkün olan yedek uçlarla gösterilmeye devam eder.',
+                        )}
                         tokens={chartTokens}
                         onRetry={() => void data.refetch()}
                     />

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import keycloak from './keycloak';
 import { financeClient } from '../api/client';
 import { effectiveRoleFromRealmRoles, readRealmRolesFromTokenParsed } from './jwtRoleUtils';
+import { useLanguage } from '../i18n/LanguageContext';
+import { useTheme } from '../theme/ThemeContext';
 
 export type UserRole = 'USER' | 'ADMIN';
 
@@ -35,6 +37,8 @@ function parseRole(r: string | undefined): UserRole | null {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+    const { t } = useLanguage();
+    const { tokens, theme } = useTheme();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [token, setToken] = useState<string | null>(null);
     const [user, setUser] = useState<CurrentUser | null>(null);
@@ -176,8 +180,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         zIndex: 9999,
                         padding: '10px 18px',
                         borderRadius: 10,
-                        background: 'rgba(15, 23, 42, 0.92)',
-                        color: '#e2e8f0',
+                        background: theme === 'light' ? 'rgba(255, 255, 255, 0.97)' : 'rgba(15, 23, 42, 0.92)',
+                        color: tokens.text,
+                        border: theme === 'light' ? `1px solid ${tokens.border}` : 'none',
                         fontSize: '0.875rem',
                         boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
                         maxWidth: 'min(420px, 92vw)',
@@ -192,12 +197,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                             marginLeft: 12,
                             background: 'transparent',
                             border: 'none',
-                            color: '#94a3b8',
+                            color: tokens.textMuted,
                             cursor: 'pointer',
                             fontSize: '0.8rem',
                         }}
                     >
-                        Tamam
+                        {t('common.ok', 'Tamam')}
                     </button>
                 </div>
             )}

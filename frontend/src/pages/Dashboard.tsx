@@ -12,32 +12,24 @@ import {
 import { useNavigate } from 'react-router-dom';
 import type { AxiosResponse } from 'axios';
 import DOMPurify from 'dompurify';
-import { financeClient, marketClient, notificationClient, readFinanceBinaryErrorMessage } from '../api/client';
-import { isPortfolioInsightNotificationType } from '../utils/portfolioInsightNotifications';
+import { financeClient, marketClient, readFinanceBinaryErrorMessage } from '../api/client';
 import type { LatestPriceRow, MarketDashboard } from '../components/market/marketTypes';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 import { useDocumentVisibility } from '../hooks/useDocumentVisibility';
-import { notificationKeys } from '../queries/notificationKeys';
 import { manualPortfolioKeys } from '../queries/manualPortfolioKeys';
 import { getManualPortfolioInsights } from '../services/manualPortfolioApi';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
-    Bell,
-    CheckCircle2,
+    ChevronLeft,
     ChevronRight,
-    Clock3,
     Coins,
     DollarSign,
-    Info,
-    ShieldAlert,
     TrendingUp,
-    Wallet,
     type LucideIcon,
 } from 'lucide-react';
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatAssetLabel, getDynamicLogoUrl, type MarketType } from '../lib/assetBranding';
 import { AssetLogo } from '../components/AssetLogo';
 import './Dashboard.css';
@@ -57,10 +49,18 @@ type PortfolioSummary = {
     totalPnlPct?: number;
     categories?: PortfolioCategoryBreakdown[];
 };
+type TradingSegmentSummary = {
+    totalCostTry?: number;
+    totalPnlTry?: number;
+    totalValueTry?: number;
+};
+
 type SummaryResponse = {
     portfolio?: PortfolioSummary;
-    /** Öncelikli toplam TRY; backend dashboard özeti */
+    /** Spot + vadeli (VİOP/tahvil) birleşik portföy değeri */
     totalPortfolioValueTry?: number;
+    spotTrading?: TradingSegmentSummary;
+    futuresDerivatives?: TradingSegmentSummary;
 };
 
 const FALLBACK_SUMMARY: SummaryResponse = {
@@ -83,17 +83,18 @@ const DISTRIBUTION_COLORS: Record<string, string> = {
     STOCK: '#3182CE',
 };
 
-type SnapshotRow = { snapshotAt: string; portfolioValueTry?: number };
-
-function assetTypeLabelTr(t: string): string {
+function assetTypeLabel(
+    translate: (key: string, fallback?: string) => string,
+    assetType: string,
+): string {
     const m: Record<string, string> = {
-        CRYPTO: 'Kripto',
-        FX: 'Döviz',
-        STOCK: 'Hisse',
-        METAL: 'Metal',
-        FUND: 'Fon',
+        CRYPTO: translate('dashboard.assetType.crypto', 'Kripto'),
+        FX: translate('dashboard.assetType.fx', 'Döviz'),
+        STOCK: translate('dashboard.assetType.stock', 'Hisse'),
+        METAL: translate('dashboard.assetType.metal', 'Metal'),
+        FUND: translate('dashboard.assetType.fund', 'Fon'),
     };
-    return m[t] ?? t;
+    return m[assetType] ?? assetType;
 }
 
 function buildDistributionConicGradient(slices: { key: string; pct: number }[], accent: string, borderColor: string): string {
@@ -131,104 +132,7 @@ type NewsDetailItem = NewsItem & {
     url?: string | null;
 };
 type NewsPage = { content: NewsItem[]; totalElements?: number };
-type TimeFilter = '1A' | '3A';
 
-/**
- * Dashboard'un sag panelindeki "Son Bildirimler" kartinda gosterdigimiz bildirim satiri.
- * Notifications sayfasindaki tam DTO'nun bir alt kumesi; Dashboard'da uzun body/referans
- * alanlarini render etmiyoruz, tikladiginda zaten Bildirimler sayfasina yonlendiriyoruz.
- */
-type NotificationSummary = {
-    id: number;
-    title: string;
-    type: string;
-    readAt: string | null;
-    createdAt: string;
-    lastOccurredAt: string | null;
-};
-
-// Spring Data 3.3+ VIA_DTO sekli (bkz. NotificationServiceApplication).
-type NotificationPage = {
-    content: NotificationSummary[];
-    page?: { totalElements?: number; size?: number; number?: number; totalPages?: number };
-};
-
-type NotifCategory = 'APPROVAL' | 'SECURITY' | 'REVIEW' | 'INFO';
-
-/**
- * Bildirim turunden (string) UI kategorisi cikariyoruz; Notifications sayfasindaki
- * `classifyNotification` ile ayni anahtar kelimeleri kullaniyoruz ki dashboard'daki
- * mini liste ile detay sayfasi tutarli renk/ikon gostersin.
- */
-function classifyNotification(type: string): NotifCategory {
-    const t = (type ?? '').toUpperCase();
-    if (t === 'REAL_RETURN_NEGATIVE' || t === 'PORTFOLIO_CONCENTRATION_RISK') {
-        return 'SECURITY';
-    }
-    if (t === 'REAL_RETURN_POSITIVE') {
-        return 'APPROVAL';
-    }
-    if (
-        t.includes('APPROVED') ||
-        t.includes('APPROVAL') ||
-        t.includes('SUCCESS') ||
-        t.includes('COMPLETED') ||
-        t.includes('CONFIRM') ||
-        t.includes('ONAY')
-    ) {
-        return 'APPROVAL';
-    }
-    if (
-        t.includes('SUSPICIOUS') ||
-        t.includes('SECURITY') ||
-        t.includes('RISK') ||
-        t.includes('REJECT') ||
-        t.includes('FAIL') ||
-        t.includes('FRAUD') ||
-        t.includes('BLOCK') ||
-        t.includes('FROZEN') ||
-        t.includes('GUVENL')
-    ) {
-        return 'SECURITY';
-    }
-    if (
-        t.includes('REVIEW') ||
-        t.includes('PENDING') ||
-        t.includes('REGISTERED') ||
-        t.includes('REQUEST') ||
-        t.includes('TASK') ||
-        t.includes('INCELE')
-    ) {
-        return 'REVIEW';
-    }
-    return 'INFO';
-}
-
-function notifCategoryColor(category: NotifCategory): string {
-    switch (category) {
-        case 'APPROVAL':
-            return '#22c55e';
-        case 'SECURITY':
-            return '#ef4444';
-        case 'REVIEW':
-            return '#38bdf8';
-        default:
-            return '#c0c0c0';
-    }
-}
-
-function NotifCategoryIcon({ category, size = 14 }: { category: NotifCategory; size?: number }) {
-    switch (category) {
-        case 'APPROVAL':
-            return <CheckCircle2 size={size} aria-hidden />;
-        case 'SECURITY':
-            return <ShieldAlert size={size} aria-hidden />;
-        case 'REVIEW':
-            return <Info size={size} aria-hidden />;
-        default:
-            return <Bell size={size} aria-hidden />;
-    }
-}
 type StarredAssetsResponse = {
     maxItems: number;
     selected: { marketType: string; symbol: string; position: number }[];
@@ -352,85 +256,30 @@ type StarAsset = {
     change24h: number;
     sparkline: number[];
 };
-type BalancePoint = { key: string; date: string; balance: number };
-
-const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
-    { id: '1A', label: '1 ay' },
-    { id: '3A', label: '3 ay' },
-];
+const STARRED_PAGE_SIZE = 7;
+const LATEST_NEWS_LIMIT = 7;
 
 const DashboardKpiCard = memo(function DashboardKpiCard({
     label,
     value,
     sub,
     valueClassName,
+    compact,
 }: {
     label: string;
     value: string;
     sub?: ReactNode;
     valueClassName?: string;
+    compact?: boolean;
 }) {
     return (
-        <div className="dashboard-card dashboard-kpi-card card-premium">
+        <div
+            className={`dashboard-card dashboard-kpi-card card-premium${compact ? ' dashboard-kpi-card--compact' : ''}`}
+        >
             <p className="kpi-label">{label}</p>
             <p className={`kpi-value ${valueClassName ?? ''}`.trim()}>{value}</p>
             {sub ? <p className="kpi-subtext">{sub}</p> : <span className="kpi-subtext kpi-subtext--placeholder" aria-hidden="true" />}
         </div>
-    );
-});
-
-const DashboardBalanceChart = memo(function DashboardBalanceChart({
-    balancePoints,
-    tokens,
-    formatMoney,
-}: {
-    balancePoints: BalancePoint[];
-    tokens: { border: string; textMuted: string; text: string; bgCard: string };
-    formatMoney: (v: number) => string;
-}) {
-    const tooltipRenderer = useCallback(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (props: any) => {
-            const { active, payload, label } = props;
-            if (!active || !payload?.length) return null;
-            return (
-                <div className="dashboard-chart-tooltip">
-                    <div className="dashboard-chart-tooltip-label">Tarih: {String(label ?? '')}</div>
-                    <div className="dashboard-chart-tooltip-value">{formatMoney(Number(payload[0]?.value ?? 0))}</div>
-                </div>
-            );
-        },
-        [formatMoney]
-    );
-
-    if (balancePoints.length === 0) {
-        return <p className="dashboard-muted">Bu aralıkta portföy anlığı yok; grafik oluşturulamadı.</p>;
-    }
-    return (
-        <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={balancePoints} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                <defs>
-                    <linearGradient id="balanceFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#60A5FA" stopOpacity={0.42} />
-                        <stop offset="35%" stopColor="#3182CE" stopOpacity={0.28} />
-                        <stop offset="100%" stopColor="#1e3a5f" stopOpacity={0.04} />
-                    </linearGradient>
-                </defs>
-                <CartesianGrid stroke={tokens.border} vertical={false} />
-                <XAxis dataKey="date" tick={{ fill: tokens.textMuted, fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis
-                    tick={{ fill: tokens.textMuted, fontSize: 12 }}
-                    tickFormatter={(v) => `${Math.round(Number(v) / 1000)}K`}
-                    axisLine={false}
-                    tickLine={false}
-                />
-                <Tooltip
-                    content={tooltipRenderer}
-                    cursor={{ stroke: 'rgba(203, 213, 225, 0.85)', strokeWidth: 1 }}
-                />
-                <Area type="monotone" dataKey="balance" stroke="#93C5FD" strokeWidth={3} fill="url(#balanceFill)" />
-            </AreaChart>
-        </ResponsiveContainer>
     );
 });
 
@@ -439,11 +288,15 @@ const StarredAssetRow = memo(function StarredAssetRow({
     logoUrl,
     fallback,
     onGoMarket,
+    numberLocale,
+    detailLabel,
 }: {
     asset: StarAsset;
     logoUrl: string | null;
     fallback: { Icon: LucideIcon; color: string };
     onGoMarket: () => void;
+    numberLocale: string;
+    detailLabel: string;
 }) {
     const pts = sparklinePolylinePoints(asset.sparkline.slice(-14));
     const up = asset.change24h >= 0;
@@ -478,13 +331,13 @@ const StarredAssetRow = memo(function StarredAssetRow({
                     <polyline points={pts} fill="none" stroke={up ? '#22c55e' : '#ef4444'} strokeWidth="2" />
                 </svg>
             </div>
-            <p className="asset-price">{asset.price > 0 ? asset.price.toLocaleString('tr-TR') : '-'}</p>
+            <p className="asset-price">{asset.price > 0 ? asset.price.toLocaleString(numberLocale) : '-'}</p>
             <p className={`asset-change ${up ? 'up' : 'down'}`}>
                 {up ? '+' : ''}
-                {asset.change24h.toLocaleString('tr-TR')}%
+                {asset.change24h.toLocaleString(numberLocale)}%
             </p>
             <span className="asset-row-go" aria-hidden="true">
-                Detaya Git <ChevronRight size={14} strokeWidth={2.5} />
+                {detailLabel} <ChevronRight size={14} strokeWidth={2.5} />
             </span>
         </div>
     );
@@ -551,9 +404,8 @@ export function Dashboard() {
     const { theme, tokens } = useTheme();
     const { t, lang } = useLanguage();
     const [summary, setSummary] = useState<SummaryResponse | null>(null);
-    const [balancePoints, setBalancePoints] = useState<BalancePoint[]>([]);
-    const [selectedFilter, setSelectedFilter] = useState<TimeFilter>('1A');
     const [starAssets, setStarAssets] = useState<StarAsset[]>([]);
+    const [starredPage, setStarredPage] = useState(0);
     const [latestNews, setLatestNews] = useState<NewsItem[]>([]);
     const [newsLoading, setNewsLoading] = useState(false);
     const [newsFadeIn, setNewsFadeIn] = useState(false);
@@ -561,18 +413,6 @@ export function Dashboard() {
     const [newsDetail, setNewsDetail] = useState<NewsDetailItem | null>(null);
     const [newsDetailLoading, setNewsDetailLoading] = useState(false);
     const tabVisible = useDocumentVisibility();
-    const { data: recentNotifications = [], isLoading: notificationsLoading } = useQuery({
-        queryKey: notificationKeys.dashboardRecent(),
-        queryFn: async () => {
-            const res = await notificationClient.get<NotificationPage>('/api/notifications/me', {
-                params: { page: 0, size: 4, unreadOnly: false, sort: ['lastOccurredAt,desc', 'createdAt,desc'] },
-            });
-            const content = res?.data?.content;
-            return Array.isArray(content) ? content : [];
-        },
-        staleTime: 120_000,
-        refetchInterval: tabVisible ? 180_000 : false,
-    });
 
     const insightsQuery = useQuery({
         queryKey: manualPortfolioKeys.insights(),
@@ -583,25 +423,16 @@ export function Dashboard() {
 
     const insightSummary = insightsQuery.data?.summary;
 
-    const notifCardTitle = useMemo(() => {
-        const hasInsight = recentNotifications.some((n) => isPortfolioInsightNotificationType(n.type));
-        return hasInsight
-            ? t('dashboard.smartAlerts', 'Akıllı Uyarılar')
-            : t('dashboard.recentNotifications', 'Son Bildirimler');
-    }, [recentNotifications, t]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const portfolioDistRef = useRef<HTMLDivElement>(null);
-    const newsListRef = useRef<HTMLDivElement>(null);
     /*
      * Haberler kartinin kendi yuksekligi, ust kolonlarin (Yildizlanan / Portfoy+Aktivite)
      * yuksegine gore stretch ile belirleniyor. Bunu doğrudan ölçüp haber sayısını adapte
      * ediyoruz; portfolioDistRef parent zincirine guvenmek artik dogru olmaz (Son Bildirimler
      * sag kolona tasindi). Bkz. news useLayoutEffect.
      */
-    const newsCardRef = useRef<HTMLDivElement>(null);
-    const [portfolioDistLayoutTick, setPortfolioDistLayoutTick] = useState(0);
 
     const fallbackIconMap = useMemo<Record<string, { Icon: LucideIcon; color: string }>>(
         () => ({
@@ -627,43 +458,7 @@ export function Dashboard() {
         return 0;
     };
 
-    const getFilterStart = (filter: TimeFilter): Date => {
-        const now = new Date();
-        const start = new Date(now);
-        if (filter === '1A') start.setDate(now.getDate() - 30);
-        if (filter === '3A') start.setDate(now.getDate() - 90);
-        return start;
-    };
-
     const hasLoadedOnceRef = useRef(false);
-
-    const buildSnapshotChartSeries = (rows: SnapshotRow[]): BalancePoint[] => {
-        if (!Array.isArray(rows) || rows.length === 0) return [];
-        const sorted = [...rows].sort((a, b) => new Date(a.snapshotAt).getTime() - new Date(b.snapshotAt).getTime());
-        const latestByDay = new Map<string, { balance: number }>();
-        sorted.forEach((row) => {
-            const dt = new Date(row.snapshotAt);
-            if (Number.isNaN(dt.getTime())) return;
-            const key = dt.toISOString().slice(0, 10);
-            latestByDay.set(key, {
-                balance: Number(row.portfolioValueTry ?? 0),
-            });
-        });
-        return [...latestByDay.entries()]
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .map(([key, value]) => ({
-                key,
-                date: new Date(`${key}T00:00:00`).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' }),
-                balance: value.balance,
-            }));
-    };
-
-    const unwrapSnapshotEnvelope = (res: AxiosResponse<unknown>): SnapshotRow[] => {
-        const body = res.data as { data?: unknown };
-        if (body && Array.isArray(body.data)) return body.data as SnapshotRow[];
-        if (Array.isArray(res.data)) return res.data as SnapshotRow[];
-        return [];
-    };
 
     const unwrapAxiosData = <T,>(res: AxiosResponse<T>): T => {
         const body = res.data as unknown;
@@ -681,37 +476,17 @@ export function Dashboard() {
         if (showLoader) setLoading(true);
         if (!silent) setError(null);
         try {
-            const end = new Date();
-            const start = getFilterStart(selectedFilter);
-            const loadSnapshotsInRange = async (): Promise<SnapshotRow[]> => {
-                try {
-                    const res = await financeClient.get('/api/portfolio/snapshots/me', {
-                        params: { from: start.toISOString(), to: end.toISOString() },
-                    });
-                    return unwrapSnapshotEnvelope(res);
-                } catch {
-                    return [];
-                }
-            };
-
-            const phase1 = await Promise.allSettled([
+            const summaryResult = await Promise.allSettled([
                 financeClient.get<SummaryResponse>('/api/dashboard/summary'),
-                loadSnapshotsInRange(),
             ]);
 
-            if (phase1[0].status === 'fulfilled') {
-                setSummary(unwrapAxiosData(phase1[0].value));
+            if (summaryResult[0].status === 'fulfilled') {
+                setSummary(unwrapAxiosData(summaryResult[0].value));
             } else {
                 if (!silent) {
-                    console.warn('Dashboard özet isteği başarısız', phase1[0].reason);
+                    console.warn('Dashboard özet isteği başarısız', summaryResult[0].reason);
                 }
                 setSummary(FALLBACK_SUMMARY);
-            }
-
-            if (phase1[1].status === 'fulfilled') {
-                setBalancePoints(buildSnapshotChartSeries(phase1[1].value));
-            } else {
-                setBalancePoints([]);
             }
 
             hasLoadedOnceRef.current = true;
@@ -816,7 +591,7 @@ export function Dashboard() {
         } finally {
             if (showLoader) setLoading(false);
         }
-    }, [selectedFilter]);
+    }, []);
 
     useEffect(() => {
         fetchDashboard(false);
@@ -825,12 +600,26 @@ export function Dashboard() {
     useRefetchOnFocus(() => fetchDashboard(true));
     usePolling(() => fetchDashboard(true), 180_000);
 
+    const numberLocale = lang === 'en' ? 'en-US' : 'tr-TR';
     const formatMoney = useCallback(
-        (v: number) => '₺' + v.toLocaleString('tr-TR', { maximumFractionDigits: 2 }),
-        []
+        (v: number) => '₺' + v.toLocaleString(numberLocale, { maximumFractionDigits: 2 }),
+        [numberLocale],
     );
 
-    const totalPortfolioTry = Number(summary?.totalPortfolioValueTry ?? summary?.portfolio?.totalValueTry ?? 0);
+    const spotSegment = summary?.spotTrading;
+    const futuresSegment = summary?.futuresDerivatives;
+
+    const spotCostTry = Number(spotSegment?.totalCostTry ?? summary?.portfolio?.totalCostTry ?? 0);
+    const spotPnlTry = Number(spotSegment?.totalPnlTry ?? summary?.portfolio?.totalPnlTry ?? 0);
+    const spotValueTry = Number(spotSegment?.totalValueTry ?? summary?.portfolio?.totalValueTry ?? 0);
+
+    const futuresCostTry = Number(futuresSegment?.totalCostTry ?? 0);
+    const futuresPnlTry = Number(futuresSegment?.totalPnlTry ?? 0);
+    const futuresValueTry = Number(futuresSegment?.totalValueTry ?? 0);
+
+    const totalPortfolioTry = Number(
+        summary?.totalPortfolioValueTry ?? spotValueTry + futuresValueTry,
+    );
 
     const distributionSlices = useMemo(() => {
         const distribution = summary?.portfolio?.distribution ?? {};
@@ -845,11 +634,38 @@ export function Dashboard() {
         }));
     }, [summary?.portfolio?.distribution, totalPortfolioTry]);
 
+    const categoryByAssetType = useMemo(() => {
+        const map = new Map<string, PortfolioCategoryBreakdown>();
+        for (const cat of summary?.portfolio?.categories ?? []) {
+            map.set(cat.assetType, cat);
+        }
+        return map;
+    }, [summary?.portfolio?.categories]);
+
     // İlk yüklemede KPI animasyonu; sonraki polling'de sıçrama yok.
+    const totalCostTry = spotCostTry + futuresCostTry;
+    const totalPnlTry = spotPnlTry + futuresPnlTry;
+
     const displayPortfolio = useCountUp(totalPortfolioTry);
-    const displayCost = useCountUp(Number(summary?.portfolio?.totalCostTry ?? 0));
-    const displayPnlValue = useCountUp(Number(summary?.portfolio?.totalPnlTry ?? 0));
+    const displaySpotValue = useCountUp(spotValueTry);
+    const displayTotalCost = useCountUp(totalCostTry);
+    const displayTotalPnl = useCountUp(totalPnlTry);
+    const displaySpotCost = useCountUp(spotCostTry);
+    const displaySpotPnl = useCountUp(spotPnlTry);
+    const displayFuturesCost = useCountUp(futuresCostTry);
+    const displayFuturesPnl = useCountUp(futuresPnlTry);
     const displayPnlPct = useCountUp(Number(summary?.portfolio?.totalPnlPct ?? 0));
+
+    const starredPageCount = Math.max(1, Math.ceil(starAssets.length / STARRED_PAGE_SIZE));
+    const starredPageSafe = Math.min(starredPage, starredPageCount - 1);
+    const starredPageAssets = useMemo(() => {
+        const start = starredPageSafe * STARRED_PAGE_SIZE;
+        return starAssets.slice(start, start + STARRED_PAGE_SIZE);
+    }, [starAssets, starredPageSafe]);
+
+    useEffect(() => {
+        setStarredPage((p) => Math.min(p, Math.max(0, Math.ceil(starAssets.length / STARRED_PAGE_SIZE) - 1)));
+    }, [starAssets.length]);
 
     const realReturnTry = useMemo(() => {
         if (insightSummary?.realReturnAvailable === true && Number.isFinite(Number(insightSummary.realReturn))) {
@@ -868,80 +684,38 @@ export function Dashboard() {
     const displayRealReturn = useCountUp(realReturnTry ?? 0);
     const displayRealReturnPct = useCountUp(realReturnPct ?? 0);
 
-    const lastSnapshotDayLabel = useMemo(() => {
-        if (!balancePoints.length) return null;
-        return balancePoints[balancePoints.length - 1]?.date ?? null;
-    }, [balancePoints]);
-
-    useEffect(() => {
-        const el = portfolioDistRef.current;
-        if (!el || !summary || loading) return;
-        let timeoutId: number;
-        const ro = new ResizeObserver(() => {
-            window.clearTimeout(timeoutId);
-            timeoutId = window.setTimeout(() => setPortfolioDistLayoutTick((n) => n + 1), 220);
-        });
-        ro.observe(el);
-        return () => {
-            window.clearTimeout(timeoutId);
-            ro.disconnect();
-        };
-    }, [summary, loading]);
-
     useLayoutEffect(() => {
         if (!summary || loading) return;
         let alive = true;
         setNewsLoading(true);
         setNewsFadeIn(false);
 
-        // Haberler kartı artık sağ kolonda kendi yüksekliğini diğer kolonlarla stretch
-        // alıyor. Hedef alanı doğrudan news-card'ın kendi yüksekliği belirliyor; bu sayede
-        // "Son Bildirimler" kartının sağ kolonda altında ne kadar yer kapladığından bağımsız
-        // olarak haber sayısı doğru ölçeklenir.
-        const measureTarget = () => newsCardRef.current?.getBoundingClientRect().height ?? 0;
-
         const run = async () => {
-            await Promise.resolve();
-            if (!alive) return;
-
-            const rowApprox = 58;
-            const headerOffset = 56; // baslik + ust padding
-            let size = Math.min(10, Math.max(5, Math.floor(Math.max(measureTarget() - headerOffset, 240) / rowApprox)));
-            let items: NewsItem[] = [];
-
-            for (let attempt = 0; attempt < 6; attempt++) {
+            try {
+                const res = await marketClient.get<NewsPage>('/api/news', {
+                    params: { page: 0, size: LATEST_NEWS_LIMIT, detail: false },
+                });
+                const body = res.data as NewsPage;
+                const items = Array.isArray(body?.content)
+                    ? body.content.slice(0, LATEST_NEWS_LIMIT)
+                    : [];
+                if (alive) setLatestNews(items);
+            } catch {
+                if (alive) setLatestNews([]);
+            } finally {
                 if (!alive) return;
-                try {
-                    const res = await marketClient.get<NewsPage>('/api/news', { params: { page: 0, size, detail: false } });
-                    const body = res.data as NewsPage;
-                    items = Array.isArray(body?.content) ? body.content : [];
-                } catch {
-                    items = [];
-                    break;
-                }
-                if (!alive) return;
-                setLatestNews(items);
-                await new Promise<void>((r) => requestAnimationFrame(() => r()));
-                const targetH = measureTarget();
-                const listH = newsListRef.current?.scrollHeight ?? 0;
-                // 10px tolerans: ufak overflow varsa size'i azalt; alt bosluk varsa devam.
-                const overflows = targetH > 0 && listH > targetH - headerOffset + 10;
-                if (!overflows || size <= 5 || items.length < size) break;
-                size = Math.max(5, size - 1);
+                setNewsLoading(false);
+                requestAnimationFrame(() => {
+                    if (alive) setNewsFadeIn(true);
+                });
             }
-
-            if (!alive) return;
-            setNewsLoading(false);
-            requestAnimationFrame(() => {
-                if (alive) setNewsFadeIn(true);
-            });
         };
 
         void run();
         return () => {
             alive = false;
         };
-    }, [summary, loading, lang, distributionSlices.length, portfolioDistLayoutTick]);
+    }, [summary, loading, lang]);
 
     const openNewsDetail = useCallback((item: NewsItem) => {
         setNewsDetailOpen(true);
@@ -992,18 +766,14 @@ export function Dashboard() {
                 <div className="dashboard-headline">
                     <h1 className="dashboard-title">{t('nav.dashboard', 'Dashboard')}</h1>
                 </div>
-                <div className="dashboard-kpi-grid">
-                    {Array.from({ length: 4 }).map((_, i) => (
+                <div className="dashboard-kpi-grid dashboard-kpi-grid--compact">
+                    {Array.from({ length: 8 }).map((_, i) => (
                         <div key={i} className="dashboard-card loading-card">
                             <div className="skeleton-line skeleton-title" />
                             <div className="skeleton-line skeleton-value" />
                             <div className="skeleton-line skeleton-sub" />
                         </div>
                     ))}
-                </div>
-                <div className="dashboard-card dashboard-chart-card loading-card">
-                    <div className="skeleton-line skeleton-section-title" />
-                    <div className="skeleton-chart" />
                 </div>
                 <div className="dashboard-bottom-grid">
                     <div className="dashboard-card loading-card">
@@ -1023,11 +793,6 @@ export function Dashboard() {
                             <div className="dashboard-card loading-card">
                                 <div className="skeleton-line skeleton-section-title" />
                                 <div className="skeleton-donut" />
-                            </div>
-                            <div className="dashboard-card loading-card">
-                                <div className="skeleton-line skeleton-section-title" />
-                                <div className="skeleton-line skeleton-sub" />
-                                <div className="skeleton-line skeleton-sub" />
                             </div>
                         </div>
                         <div className="dashboard-card loading-card dashboard-news-card-skel">
@@ -1070,13 +835,45 @@ export function Dashboard() {
                 <h1 className="dashboard-title">{t('nav.dashboard', 'Dashboard')}</h1>
             </div>
 
-            <div className="dashboard-kpi-grid">
+            <div className="dashboard-kpi-grid dashboard-kpi-grid--compact">
                 <DashboardKpiCard
                     label={t('dashboard.totalPortfolioValue', 'Toplam portföy değeri')}
                     value={formatMoney(displayPortfolio)}
+                    compact
                 />
-                <DashboardKpiCard label={t('dashboard.totalCostTry', 'Toplam maliyet (TRY)')} value={formatMoney(displayCost)} />
-                <DashboardKpiCard label={t('dashboard.totalPnlTry', 'Toplam kar (PNL)')} value={formatMoney(displayPnlValue)} />
+                <DashboardKpiCard
+                    label={t('dashboard.totalCostTry', 'Toplam maliyet (TRY)')}
+                    value={formatMoney(displayTotalCost)}
+                    compact
+                />
+                <DashboardKpiCard
+                    label={t('dashboard.totalPnlTry', 'Toplam kar (PNL)')}
+                    value={formatMoney(displayTotalPnl)}
+                    valueClassName={totalPnlTry >= 0 ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'}
+                    compact
+                />
+                <DashboardKpiCard
+                    label={t('dashboard.futuresTotalPnl', 'Vadeli işlem toplam K/Z')}
+                    value={formatMoney(displayFuturesPnl)}
+                    valueClassName={futuresPnlTry >= 0 ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'}
+                    compact
+                />
+                <DashboardKpiCard
+                    label={t('dashboard.futuresTotalCost', 'Vadeli işlem toplam maliyet')}
+                    value={formatMoney(displayFuturesCost)}
+                    compact
+                />
+                <DashboardKpiCard
+                    label={t('dashboard.spotTotalCost', 'Spot işlem toplam maliyet')}
+                    value={formatMoney(displaySpotCost)}
+                    compact
+                />
+                <DashboardKpiCard
+                    label={t('dashboard.spotTotalPnl', 'Spot işlem toplam K/Z')}
+                    value={formatMoney(displaySpotPnl)}
+                    valueClassName={spotPnlTry >= 0 ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'}
+                    compact
+                />
                 <DashboardKpiCard
                     label={t('dashboard.realReturn', 'Reel K/Z')}
                     value={
@@ -1086,7 +883,7 @@ export function Dashboard() {
                     }
                     sub={
                         realReturnPct != null
-                            ? `${displayRealReturnPct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%`
+                            ? `${displayRealReturnPct.toLocaleString(numberLocale, { maximumFractionDigits: 2 })}%`
                             : undefined
                     }
                     valueClassName={
@@ -1096,58 +893,78 @@ export function Dashboard() {
                                 : 'portfolio-pnl-neg'
                             : 'kpi-value-small'
                     }
+                    compact
                 />
-            </div>
-
-            <div className="dashboard-card dashboard-chart-card">
-                <div className="chart-card-header">
-                    <h2 className="section-title">
-                        {t('dashboard.portfolioSnapshotsChart', 'Portföy değeri (günlük anlık, TRY)')} —{' '}
-                        {selectedFilter === '1A' ? '30' : '90'} {t('dashboard.days', 'gün')}
-                    </h2>
-                    <div className="chart-filter-group">
-                        {TIME_FILTERS.map((filter) => (
-                            <button
-                                key={filter.id}
-                                type="button"
-                                className={`chart-filter-btn ${selectedFilter === filter.id ? 'active' : ''}`}
-                                onClick={() => setSelectedFilter(filter.id)}
-                            >
-                                {filter.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="chart-wrapper">
-                    <DashboardBalanceChart balancePoints={balancePoints} tokens={tokens} formatMoney={formatMoney} />
-                </div>
             </div>
 
             <div className="dashboard-bottom-grid">
                 <div className="dashboard-card dashboard-starred-card">
-                    <h2 className="section-title">{t('dashboard.starredAssets', 'Yıldızlanan varlıklar')}</h2>
-                    <div className="assets-table">
-                        {starAssets.map((asset) => {
-                            const logoUrl = getDynamicLogoUrl(asset.code, asset.marketType);
-                            const fallback = getFallbackIcon(asset.marketType);
-                            return (
-                                <StarredAssetRow
-                                    key={asset.key}
-                                    asset={asset}
-                                    logoUrl={logoUrl}
-                                    fallback={fallback}
-                                    onGoMarket={() => navigate('/market')}
-                                />
-                            );
-                        })}
+                    <h2 className="section-title section-title--compact">
+                        {t('dashboard.starredAssets', 'Yıldızlanan varlıklar')}
+                    </h2>
+                    <div className="assets-table assets-table--compact">
+                        {starredPageAssets.length === 0 ? (
+                            <p className="dashboard-muted dashboard-starred-empty">
+                                {t('dashboard.starredEmpty', 'Yıldızlanan varlık yok. Piyasa sayfasından ekleyebilirsiniz.')}
+                            </p>
+                        ) : (
+                            starredPageAssets.map((asset) => {
+                                const logoUrl = getDynamicLogoUrl(asset.code, asset.marketType);
+                                const fallback = getFallbackIcon(asset.marketType);
+                                return (
+                                    <StarredAssetRow
+                                        key={asset.key}
+                                        asset={asset}
+                                        logoUrl={logoUrl}
+                                        fallback={fallback}
+                                        onGoMarket={() => navigate('/market')}
+                                        numberLocale={numberLocale}
+                                        detailLabel={t('common.detail', 'Detaya git')}
+                                    />
+                                );
+                            })
+                        )}
                     </div>
+                    {starAssets.length > STARRED_PAGE_SIZE ? (
+                        <div className="dashboard-starred-pagination" aria-live="polite">
+                            <span className="dashboard-starred-pagination__count">
+                                {starredPageSafe * STARRED_PAGE_SIZE + 1}–
+                                {Math.min((starredPageSafe + 1) * STARRED_PAGE_SIZE, starAssets.length)} /{' '}
+                                {starAssets.length}
+                            </span>
+                            <div className="dashboard-starred-pagination__nav">
+                                <button
+                                    type="button"
+                                    className="dashboard-starred-page-btn"
+                                    disabled={starredPageSafe <= 0}
+                                    onClick={() => setStarredPage((p) => Math.max(0, p - 1))}
+                                    aria-label={t('dashboard.starredPrev', 'Önceki sayfa')}
+                                >
+                                    <ChevronLeft size={14} aria-hidden />
+                                </button>
+                                <span className="dashboard-starred-pagination__sep">
+                                    {starredPageSafe + 1} / {starredPageCount}
+                                </span>
+                                <button
+                                    type="button"
+                                    className="dashboard-starred-page-btn"
+                                    disabled={starredPageSafe >= starredPageCount - 1}
+                                    onClick={() =>
+                                        setStarredPage((p) => Math.min(starredPageCount - 1, p + 1))
+                                    }
+                                    aria-label={t('dashboard.starredNext', 'Sonraki sayfa')}
+                                >
+                                    <ChevronRight size={14} aria-hidden />
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
 
                 <div className="dashboard-side-panels">
                     <div className="dashboard-middle-column">
                         <div ref={portfolioDistRef} className="dashboard-card portfolio-dist-card">
-                        <h2 className="section-title">Portföy dağılımı</h2>
+                        <h2 className="section-title">{t('dashboard.portfolioDist.title', 'Portföy dağılımı')}</h2>
                         <p className="portfolio-dist-subtitle">
                             {t(
                                 'dashboard.portfolioDistHint',
@@ -1159,7 +976,9 @@ export function Dashboard() {
                                 <div className="donut-placeholder donut-empty">
                                     <div className="donut-inner">—</div>
                                 </div>
-                                <p className="dashboard-muted">Portföyde dağıtılacak varlık yok.</p>
+                                <p className="dashboard-muted">
+                                    {t('dashboard.portfolioDist.empty', 'Portföyde dağıtılacak varlık yok.')}
+                                </p>
                             </>
                         ) : (
                             <>
@@ -1168,122 +987,96 @@ export function Dashboard() {
                                         <span className="donut-inner-label">TRY</span>
                                     </div>
                                 </div>
-                                <ul className="donut-legend">
-                                    {distributionSlices.map((s) => (
-                                        <li key={s.key}>
-                                            <span
-                                                className="donut-legend-swatch"
-                                                style={{ background: DISTRIBUTION_COLORS[s.key] ?? '#3182CE' }}
-                                            />
-                                            <span className="donut-legend-label">{assetTypeLabelTr(s.key)}</span>
-                                            <span className="donut-legend-pct">
-                                                {s.pct.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}%
-                                            </span>
-                                        </li>
-                                    ))}
+                                <ul className="donut-legend" aria-label={t('dashboard.portfolioDist.legend', 'Dağılım özeti')}>
+                                    <li className="donut-legend-head" aria-hidden="true">
+                                        <span className="donut-legend-leading" />
+                                        <span>{t('dashboard.legend.cost', 'Maliyet')}</span>
+                                        <span>{t('dashboard.legend.profit', 'Kar')}</span>
+                                        <span>{t('dashboard.legend.share', 'Pay')}</span>
+                                    </li>
+                                    {distributionSlices.map((s) => {
+                                        const cat = categoryByAssetType.get(s.key);
+                                        const cost = Number(cat?.costTry ?? 0);
+                                        const pnl = Number(cat?.pnlTry ?? 0);
+                                        const up = pnl >= 0;
+                                        return (
+                                            <li key={s.key}>
+                                                <span className="donut-legend-leading">
+                                                    <span
+                                                        className="donut-legend-swatch"
+                                                        style={{
+                                                            background: DISTRIBUTION_COLORS[s.key] ?? '#3182CE',
+                                                        }}
+                                                    />
+                                                    <span className="donut-legend-label">
+                                                        {assetTypeLabel(t, s.key)}
+                                                    </span>
+                                                </span>
+                                                <span className="donut-legend-metric">{formatMoney(cost)}</span>
+                                                <span
+                                                    className={`donut-legend-metric ${up ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'}`}
+                                                >
+                                                    {formatMoney(pnl)}
+                                                </span>
+                                                <span className="donut-legend-pct">
+                                                    {s.pct.toLocaleString(numberLocale, {
+                                                        maximumFractionDigits: 1,
+                                                    })}
+                                                    %
+                                                </span>
+                                            </li>
+                                        );
+                                    })}
                                 </ul>
                                 <div className="portfolio-pnl-summary">
                                     <div className="portfolio-pnl-row">
-                                        <span>Toplam maliyet</span>
-                                        <span>{formatMoney(displayCost)}</span>
+                                        <span>{t('dashboard.pnl.totalCost', 'Toplam maliyet')}</span>
+                                        <span>{formatMoney(displaySpotCost)}</span>
                                     </div>
                                     <div className="portfolio-pnl-row">
-                                        <span>Güncel değer</span>
-                                        <span>{formatMoney(displayPortfolio)}</span>
+                                        <span>{t('dashboard.pnl.currentValue', 'Güncel değer')}</span>
+                                        <span>{formatMoney(displaySpotValue)}</span>
                                     </div>
                                     <div className="portfolio-pnl-row">
-                                        <span>Toplam kar (PNL)</span>
+                                        <span>{t('dashboard.pnl.totalPnl', 'Toplam kar (PNL)')}</span>
                                         <span
                                             className={
-                                                (summary.portfolio?.totalPnlTry ?? 0) >= 0 ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'
+                                                spotPnlTry >= 0 ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'
                                             }
                                         >
-                                            {formatMoney(displayPnlValue)}
+                                            {formatMoney(displaySpotPnl)}
                                         </span>
                                     </div>
                                     <div className="portfolio-pnl-row">
-                                        <span>Kar oranı</span>
+                                        <span>{t('dashboard.pnl.returnRate', 'Kar oranı')}</span>
                                         <span
                                             className={
                                                 (summary.portfolio?.totalPnlPct ?? 0) >= 0 ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'
                                             }
                                         >
-                                            {displayPnlPct.toLocaleString('tr-TR', {
+                                            {displayPnlPct.toLocaleString(numberLocale, {
                                                 maximumFractionDigits: 2,
                                             })}
                                             %
                                         </span>
                                     </div>
                                 </div>
-                                {(summary.portfolio?.categories?.length ?? 0) > 0 ? (
-                                    <>
-                                        <p className="portfolio-category-heading">Sınıf bazında</p>
-                                        <div className="portfolio-category-list">
-                                            {(summary.portfolio?.categories ?? []).map((cat) => {
-                                                const pnl = Number(cat.pnlTry ?? 0);
-                                                const up = pnl >= 0;
-                                                return (
-                                                    <div key={cat.assetType} className="portfolio-category-row">
-                                                        <div className="portfolio-category-title">{assetTypeLabelTr(cat.assetType)}</div>
-                                                        <div className="portfolio-category-metrics">
-                                                            <span className="portfolio-cat-val">{formatMoney(Number(cat.valueTry ?? 0))}</span>
-                                                            <span className={up ? 'portfolio-pnl-pos' : 'portfolio-pnl-neg'}>
-                                                                Kar {formatMoney(pnl)} (
-                                                                {Number(cat.pnlPct ?? 0).toLocaleString('tr-TR', {
-                                                                    maximumFractionDigits: 2,
-                                                                })}
-                                                                %)
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </>
-                                ) : null}
                             </>
                         )}
                     </div>
-
-                    <div className="dashboard-card dashboard-compact-card">
-                        <h2 className="section-title">{t('dashboard.snapshotActivity', 'Portföy anlıkları')}</h2>
-                        <div className="activity-row">
-                            <Clock3 size={14} className="activity-icon" />
-                            <div className="activity-text">
-                                <p className="activity-label">{t('dashboard.lastSnapshotDay', 'Son günlük nokta')}</p>
-                                <p className="activity-value">
-                                    {lastSnapshotDayLabel ?? t('dashboard.noSnapshotYet', 'Henüz anlık yok')}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="activity-row">
-                            <Wallet size={14} className="activity-icon" />
-                            <div className="activity-text">
-                                <p className="activity-label">{t('dashboard.summaryPortfolioTry', 'Özet portföy (TRY)')}</p>
-                                <p className="activity-value">{formatMoney(displayPortfolio)}</p>
-                            </div>
-                        </div>
-                    </div>
                     </div>
 
-                    {/*
-                     * Sag kolon: Haberler (esnek/uzun) + Son Bildirimler (alt, sabit). Kullanici
-                     * istegi: bildirim karti bos kalan sag alti doldursun, sayfanin tum
-                     * kolonlari ayni alt cizgide bitsin. Haber sayisi hesabi dinamik (newsCardRef
-                     * uzerinden olculur), yetersizse scroll uyutulur.
-                     */}
                     <div className="dashboard-right-column">
-                    <div ref={newsCardRef} className="dashboard-card dashboard-news-card dashboard-news-card--fill">
+                    <div className="dashboard-card dashboard-news-card dashboard-news-card--fill">
                         <h2 className="section-title">{t('dashboard.latestNews', 'En Son Haberler')}</h2>
                         <div
-                            ref={newsListRef}
                             className={`news-list news-list--stretch${newsFadeIn ? ' news-list--ready' : ''}${
                                 newsLoading ? ' news-list--loading' : ''
                             }`}
                         >
                             {newsLoading && latestNews.length === 0 ? (
                                 <div className="news-skeleton-block" aria-hidden="true">
-                                    {Array.from({ length: 8 }).map((_, i) => (
+                                    {Array.from({ length: LATEST_NEWS_LIMIT }).map((_, i) => (
                                         <div key={i} className="skeleton-news-row dashboard-news-skel-row">
                                             <div className="skeleton-dot" />
                                             <div className="skeleton-line skeleton-row-main" />
@@ -1292,7 +1085,7 @@ export function Dashboard() {
                                 </div>
                             ) : null}
                             {!newsLoading && latestNews.length === 0 ? (
-                                <p className="dashboard-muted">Haber verisi bulunamadı.</p>
+                                <p className="dashboard-muted">{t('dashboard.news.empty', 'Haber verisi bulunamadı.')}</p>
                             ) : null}
                             {latestNews.map((item) => (
                                 <button
@@ -1308,83 +1101,13 @@ export function Dashboard() {
                                             {preferTurkish && item.titleTr ? item.titleTr : item.title}
                                         </p>
                                         <p className="news-meta">
-                                            {item.source ?? 'Kaynak'} ·{' '}
+                                            {item.source ?? t('dashboard.news.sourceFallback', 'Kaynak')} ·{' '}
                                             {new Date(item.publishedAt).toLocaleString(uiLocale)}
                                         </p>
                                     </div>
                                 </button>
                             ))}
                         </div>
-                    </div>
-                    <div className="dashboard-card dashboard-compact-card dashboard-notif-card">
-                        <div className="dashboard-notif-card__header">
-                            <span className="dashboard-notif-card__icon" aria-hidden>
-                                <Bell size={14} />
-                            </span>
-                            <h2 className="section-title dashboard-notif-card__title">{notifCardTitle}</h2>
-                            <button
-                                type="button"
-                                className="dashboard-notif-card__all"
-                                onClick={() => navigate('/notifications')}
-                                title={t('dashboard.allNotifications', 'Tümünü gör')}
-                            >
-                                {t('dashboard.allNotifications', 'Tümü')}
-                                <ChevronRight size={12} strokeWidth={2.5} aria-hidden />
-                            </button>
-                        </div>
-                        {notificationsLoading && recentNotifications.length === 0 ? (
-                            <div className="dashboard-notif-skeleton" aria-hidden="true">
-                                {Array.from({ length: 3 }).map((_, i) => (
-                                    <div key={i} className="dashboard-notif-skel-row">
-                                        <div className="skeleton-dot" />
-                                        <div className="skeleton-line skeleton-row-main" />
-                                    </div>
-                                ))}
-                            </div>
-                        ) : null}
-                        {!notificationsLoading && recentNotifications.length === 0 ? (
-                            <p className="dashboard-muted dashboard-notif-empty">
-                                {t('dashboard.noNotifications', 'Henüz bildirim yok.')}
-                            </p>
-                        ) : null}
-                        <ul className="dashboard-notif-list">
-                            {recentNotifications.map((n) => {
-                                const cat = classifyNotification(n.type);
-                                const color = notifCategoryColor(cat);
-                                const occurredAt = n.lastOccurredAt ?? n.createdAt;
-                                const isUnread = !n.readAt;
-                                return (
-                                    <li
-                                        key={n.id}
-                                        className={`dashboard-notif-item${isUnread ? ' is-unread' : ''}`}
-                                    >
-                                        <button
-                                            type="button"
-                                            className="dashboard-notif-item__btn"
-                                            onClick={() => navigate('/notifications')}
-                                            title={t('notifications.viewDetail', 'Detayı gör')}
-                                        >
-                                            <span
-                                                className="dashboard-notif-item__icon"
-                                                style={{ color }}
-                                                aria-hidden
-                                            >
-                                                <NotifCategoryIcon category={cat} size={14} />
-                                            </span>
-                                            <span className="dashboard-notif-item__title">{n.title}</span>
-                                            <span className="dashboard-notif-item__date">
-                                                {new Date(occurredAt).toLocaleString(uiLocale, {
-                                                    day: '2-digit',
-                                                    month: '2-digit',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                })}
-                                            </span>
-                                        </button>
-                                    </li>
-                                );
-                            })}
-                        </ul>
                     </div>
                     </div>
                 </div>

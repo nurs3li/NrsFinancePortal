@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import type { CandlestickData, LogicalRange } from 'lightweight-charts';
 import { apiDatetimeToChartTime } from '../../lib/chartApiTime';
+import { createChartResizeScheduler } from './chartResize';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type CandleVM = {
@@ -124,16 +125,15 @@ function MarketTerminalChartImpl({
             .forEach((c) => byTime.set(String(toChartTime(c.time)), c));
         return [...byTime.values()];
     }, [candles, toChartTime]);
-    const chartHeight = 520;
-
     useEffect(() => {
         const el = chartRef.current;
         if (!el || chartApiRef.current) return;
         const widthPx = Math.max(320, el.clientWidth);
+        const heightPx = Math.max(260, el.clientHeight);
         const t = tokensRef.current;
         const chart = createChart(el, {
             width: widthPx,
-            height: chartHeight,
+            height: heightPx,
             layout: {
                 background: { color: t.bgCard },
                 textColor: t.text,
@@ -219,9 +219,11 @@ function MarketTerminalChartImpl({
 
         const onResize = () => {
             const w = Math.max(320, el.clientWidth);
+            const h = Math.max(260, el.clientHeight);
             const lay = computeTerminalTimeScaleLayout(w, Math.max(2, barCountRef.current), rangeRef.current);
             chart.applyOptions({
                 width: w,
+                height: h,
                 timeScale: {
                     borderColor: tokensRef.current.border,
                     timeVisible: true,
@@ -238,9 +240,10 @@ function MarketTerminalChartImpl({
                 chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
             }
         };
-        window.addEventListener('resize', onResize);
+        const resizeScheduler = createChartResizeScheduler(onResize);
+        const unbindResize = resizeScheduler.bind(el);
         return () => {
-            window.removeEventListener('resize', onResize);
+            unbindResize();
             crosshairRafRef.current?.();
             chart.remove();
             chartApiRef.current = null;
@@ -381,7 +384,8 @@ function MarketTerminalChartImpl({
             {emptyMessage ? <div className="terminal-chart-empty">{emptyMessage}</div> : null}
             <div
                 ref={chartRef}
-                style={{ width: '100%', height: chartHeight, display: showChart ? 'block' : 'none' }}
+                className="terminal-chart-surface"
+                style={{ display: showChart ? 'block' : 'none' }}
             />
             {showRsi ? (
                 <div className="terminal-rsi">

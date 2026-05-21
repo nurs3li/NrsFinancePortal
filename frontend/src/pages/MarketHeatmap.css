@@ -1,0 +1,200 @@
+/* Detaylı Isı Haritası — mobilde viewport içine sığdır, yatay sayfa kayması yok */
+
+.heatmap-detail-page {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    padding: 12px;
+}
+
+@media (min-width: 640px) {
+    .heatmap-detail-page {
+        padding: 16px;
+    }
+}
+
+@media (min-width: 1024px) {
+    .heatmap-detail-page {
+        padding: 24px;
+    }
+}
+
+.heatmap-detail-page__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.heatmap-detail-page__title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+@media (min-width: 640px) {
+    .heatmap-detail-page__title {
+        font-size: 1.55rem;
+    }
+}
+
+.heatmap-detail-page__subtitle {
+    margin: 6px 0 0;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.heatmap-detail-page__back {
+    flex-shrink: 0;
+    padding: 8px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.heatmap-detail-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+@media (min-width: 1100px) {
+    .heatmap-detail-grid {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+    }
+}
+
+.heatmap-detail-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 12px;
+    border-radius: 12px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+@media (min-width: 640px) {
+    .heatmap-detail-card {
+        padding: 16px;
+    }
+}
+
+.heatmap-detail-card--sticky {
+    position: sticky;
+    top: 16px;
+}
+
+.heatmap-detail-card__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 12px;
+    margin-bottom: 10px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.heatmap-detail-card__toolbar label {
+    font-size: 0.8125rem;
+    min-width: 0;
+}
+
+.heatmap-detail-card__toolbar select {
+    margin-left: 8px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    min-width: 0;
+    max-width: min(100%, 11rem);
+    box-sizing: border-box;
+}
+
+.heatmap-detail-card__hint {
+    font-size: 0.75rem;
+    line-height: 1.35;
+    min-width: 0;
+    flex: 1 1 12rem;
+}
+
+.heatmap-detail-card__meta {
+    margin-bottom: 10px;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* Treemap: mobilde sabit sığdır — yatay scroll yok */
+.heatmap-detail-treemap {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.heatmap-detail-treemap .terminal-treemap-scroll {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    box-sizing: border-box;
+}
+
+.heatmap-detail-treemap .terminal-treemap-scroll__inner {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+.heatmap-detail-treemap .terminal-treemap-host {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 200px;
+    margin: 0 auto;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.heatmap-detail-treemap .terminal-treemap-host > div {
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+}
+
+@media (max-width: 767px) {
+    .heatmap-detail-treemap .terminal-treemap-host {
+        min-height: 180px;
+    }
+}
+
+@media (min-width: 768px) {
+    .heatmap-detail-treemap .terminal-treemap-host {
+        min-height: 280px;
+    }
+}
+
+/* Layout içinde yatay taşmayı kes */
+.app-main:has(.heatmap-detail-page) {
+    overflow-x: hidden;
+    max-width: 100%;
+}

@@ -1,5 +1,8 @@
 import { useMemo } from 'react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useLanguage } from '../../../i18n/LanguageContext';
+import { useTheme } from '../../../theme/ThemeContext';
+import { chartGridStroke, chartTooltipContentStyle } from '../../../lib/chartTheme';
 import { formatLocaleDate, formatPercent2, lastObservation, selectMacroSeries } from '../../../utils/macroPanelSeries';
 import { MACRO_CHART_COLORS } from '../MacroTheme';
 import type { MacroIntelligencePanel } from '../hooks/useMacroIntelligenceData';
@@ -18,7 +21,13 @@ type Props = {
     tokens: MacroTheme;
 };
 
+function fillTemplate(template: string, vars: Record<string, string>): string {
+    return Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, v), template);
+}
+
 export function MacroOverviewSection({ panel, derived, panelLoading, locale, tokens }: Props) {
+    const { t } = useLanguage();
+    const { theme } = useTheme();
     const awaiting = '—';
     const fmt = (v: number | null | undefined) =>
         v == null || !Number.isFinite(Number(v)) ? awaiting : formatPercent2(v, locale);
@@ -28,28 +37,42 @@ export function MacroOverviewSection({ panel, derived, panelLoading, locale, tok
         const bullets: string[] = [];
         if (derived?.cpiYoY != null && pol?.value != null) {
             const gap = Number(pol.value) - Number(derived.cpiYoY);
-            bullets.push(
+            const tpl = gap >= 0 ? 'macro.overview.insight.policyAbove' : 'macro.overview.insight.policyBelow';
+            const fb =
                 gap >= 0
-                    ? `Politika faizi (${fmt(pol.value)}) TÜFE yıllık (${fmt(derived.cpiYoY)}) üzerinde — TL faiz ortamı sıkı görünüyor.`
-                    : `Politika faizi TÜFE yıllığın altında — reel faiz baskısı TL varlıklarını zorlayabilir.`,
+                    ? 'Politika faizi ({policy}) TÜFE yıllık ({cpi}) üzerinde — TL faiz ortamı sıkı görünüyor.'
+                    : 'Politika faizi TÜFE yıllığın altında — reel faiz baskısı TL varlıklarını zorlayabilir.';
+            bullets.push(
+                fillTemplate(t(tpl, fb), {
+                    policy: fmt(pol.value),
+                    cpi: fmt(derived.cpiYoY),
+                }),
             );
         }
         if (derived?.realPolicyRate != null) {
-            bullets.push(
+            const key =
                 Number(derived.realPolicyRate) >= 0
-                    ? `Reel politika faizi pozitif (${fmt(derived.realPolicyRate)}).`
-                    : `Reel politika faizi negatif (${fmt(derived.realPolicyRate)}).`,
-            );
+                    ? 'macro.overview.insight.realPolicyPos'
+                    : 'macro.overview.insight.realPolicyNeg';
+            const fb =
+                Number(derived.realPolicyRate) >= 0
+                    ? 'Reel politika faizi pozitif ({value}).'
+                    : 'Reel politika faizi negatif ({value}).';
+            bullets.push(fillTemplate(t(key, fb), { value: fmt(derived.realPolicyRate) }));
         }
         if (derived?.realDepositRate != null) {
-            bullets.push(
+            const key =
                 Number(derived.realDepositRate) >= 0
-                    ? `1 ay TL mevduat reel farkı pozitif (${fmt(derived.realDepositRate)}).`
-                    : `1 ay TL mevduat reel farkı negatif (${fmt(derived.realDepositRate)}).`,
-            );
+                    ? 'macro.overview.insight.depositPos'
+                    : 'macro.overview.insight.depositNeg';
+            const fb =
+                Number(derived.realDepositRate) >= 0
+                    ? '1 ay TL mevduat reel farkı pozitif ({value}).'
+                    : '1 ay TL mevduat reel farkı negatif ({value}).';
+            bullets.push(fillTemplate(t(key, fb), { value: fmt(derived.realDepositRate) }));
         }
         return bullets.slice(0, 3);
-    }, [derived, pol, locale]);
+    }, [derived, pol, locale, t]);
 
     const miniChart = useMemo(() => {
         const cpi = selectMacroSeries(panel?.series, 'CPI_TR_INDEX');
@@ -81,34 +104,34 @@ export function MacroOverviewSection({ panel, derived, panelLoading, locale, tok
     return (
         <MacroSection
             id="macro-overview"
-            title="Genel Bakış"
-            summary="Makro ortamın kısa özeti."
+            title={t('macro.overview.title', 'Genel Bakış')}
+            summary={t('macro.overview.summary', 'Makro ortamın kısa özeti.')}
             tokens={tokens}
         >
             <div className="macro-grid macro-grid--3">
                 <KpiCard
-                    title="TÜFE Yıllık"
+                    title={t('macro.overview.kpi.cpiYoY', 'TÜFE Yıllık')}
                     value={fmt(derived?.cpiYoY)}
                     meta={formatLocaleDate(lastObservation(selectMacroSeries(panel?.series, 'CPI_TR_INDEX'))?.date, locale)}
                     termId="cpi"
-                    infoAriaLabel="TÜFE hakkında bilgi"
+                    infoAriaLabel={t('macro.overview.info.cpi', 'TÜFE hakkında bilgi')}
                     tokens={tokens}
                     loading={panelLoading}
                 />
                 <KpiCard
-                    title="Politika Faizi"
+                    title={t('macro.overview.kpi.policyRate', 'Politika Faizi')}
                     value={pol ? fmt(pol.value) : awaiting}
                     meta={pol?.date ? formatLocaleDate(pol.date, locale) : undefined}
                     termId="policyRate"
-                    infoAriaLabel="Politika faizi hakkında bilgi"
+                    infoAriaLabel={t('macro.overview.info.policy', 'Politika faizi hakkında bilgi')}
                     tokens={tokens}
                     loading={panelLoading}
                 />
                 <KpiCard
-                    title="Reel Politika Faizi"
+                    title={t('macro.overview.kpi.realPolicyRate', 'Reel Politika Faizi')}
                     value={fmt(derived?.realPolicyRate)}
                     termId="realPolicyRate"
-                    infoAriaLabel="Reel politika faizi hakkında bilgi"
+                    infoAriaLabel={t('macro.overview.info.realPolicy', 'Reel politika faizi hakkında bilgi')}
                     tokens={tokens}
                     loading={panelLoading}
                 />
@@ -116,27 +139,46 @@ export function MacroOverviewSection({ panel, derived, panelLoading, locale, tok
 
             <div className="macro-grid macro-grid--8-4 macro-section__row">
                 <ChartCard
-                    title="Faiz ortamı karşılaştırması"
+                    title={t('macro.overview.chart.rateCompare', 'Faiz ortamı karşılaştırması')}
                     empty={miniChart.rows.length < 2}
                     tokens={tokens}
                     height={220}
                 >
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={miniChart.rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke(theme)} />
                             <XAxis dataKey="period" tick={{ fontSize: 9, fill: tokens.textMuted }} />
                             <YAxis tick={{ fontSize: 9, fill: tokens.textMuted }} tickFormatter={(v) => `${v}%`} width={42} />
-                            <Tooltip formatter={(v) => [`${Number(v).toFixed(2)}%`, '']} />
-                            <Legend wrapperStyle={{ fontSize: 10 }} />
-                            <Line type="monotone" dataKey="policy" name="Politika" stroke={MACRO_CHART_COLORS.blue} dot={false} strokeWidth={2} connectNulls />
-                            <Line type="monotone" dataKey="deposit" name="TL 1M Mevduat" stroke={MACRO_CHART_COLORS.green} dot={false} strokeWidth={2} connectNulls />
+                            <Tooltip
+                                formatter={(v) => [`${Number(v).toFixed(2)}%`, '']}
+                                contentStyle={chartTooltipContentStyle(tokens)}
+                            />
+                            <Legend wrapperStyle={{ fontSize: 10, color: tokens.textMuted }} />
+                            <Line
+                                type="monotone"
+                                dataKey="policy"
+                                name={t('macro.overview.chart.policy', 'Politika')}
+                                stroke={MACRO_CHART_COLORS.blue}
+                                dot={false}
+                                strokeWidth={2}
+                                connectNulls
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="deposit"
+                                name={t('macro.overview.chart.deposit1m', 'TL 1M Mevduat')}
+                                stroke={MACRO_CHART_COLORS.green}
+                                dot={false}
+                                strokeWidth={2}
+                                connectNulls
+                            />
                         </LineChart>
                     </ResponsiveContainer>
                 </ChartCard>
 
-                <InsightCard title="Bugün ne görüyoruz?" tokens={tokens}>
+                <InsightCard title={t('macro.overview.insight.title', 'Bugün ne görüyoruz?')} tokens={tokens}>
                     {insights.length === 0 ? (
-                        <p>Özet göstergeler yüklendiğinde kısa yorumlar burada görünür.</p>
+                        <p>{t('macro.overview.insight.empty', 'Özet göstergeler yüklendiğinde kısa yorumlar burada görünür.')}</p>
                     ) : (
                         <ul className="macro-insight-list">
                             {insights.map((line) => (
@@ -146,7 +188,8 @@ export function MacroOverviewSection({ panel, derived, panelLoading, locale, tok
                     )}
                     {miniChart.cpiYoY != null ? (
                         <p className="macro-insight__footnote">
-                            Güncel TÜFE yıllık: <strong>{fmt(miniChart.cpiYoY)}</strong>
+                            {t('macro.overview.insight.cpiFootnote', 'Güncel TÜFE yıllık:')}{' '}
+                            <strong>{fmt(miniChart.cpiYoY)}</strong>
                         </p>
                     ) : null}
                 </InsightCard>

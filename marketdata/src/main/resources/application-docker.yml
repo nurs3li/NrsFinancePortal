@@ -57,11 +57,12 @@ market:
     days: ${MARKET_STALE_TAIL_DAYS:3}
   fx:
     effective-rates:
-      lookback-days: ${FX_EFFECTIVE_LOOKBACK_DAYS:400}
+      lookback-days: ${MARKET_FX_EFFECTIVE_LOOKBACK_DAYS:${FX_EFFECTIVE_LOOKBACK_DAYS:400}}
   evds:
     enabled: true
+    base-url: ${MARKET_EVDS_BASE_URL:https://evds3.tcmb.gov.tr/igmevdsms-dis}
     apiKey: ${EVDS_API_KEY:}
-    timeoutMs: 3000
+    timeoutMs: ${EVDS_TIMEOUT_MS:15000}
     # Mantıksal gösterge → EVDS seri kodu (Java içinde TP_* sabitlenmez).
     series:
       CPI_TR_INDEX: ${EVDS_SERIES_CPI_TR_INDEX:TP_GENENDEKS_T1}
@@ -568,9 +569,18 @@ app:
       evds:
         enabled: ${MARKET_EUROBONDS_EVDS_ENABLED:true}
         default-lookback-years: ${MARKET_EUROBONDS_EVDS_DEFAULT_LOOKBACK_YEARS:5}
+        backfill:
+          startup-enabled: ${MARKET_EUROBONDS_EVDS_BACKFILL_STARTUP_ENABLED:true}
+          from: ${MARKET_EUROBONDS_EVDS_BACKFILL_FROM:2019-01-01}
         latest-refresh:
           enabled: ${MARKET_EUROBONDS_EVDS_LATEST_REFRESH_ENABLED:true}
           fixed-delay-ms: ${MARKET_EUROBONDS_EVDS_LATEST_REFRESH_FIXED_DELAY_MS:86400000}
+        instruments:
+          enabled: ${MARKET_EUROBONDS_INSTRUMENTS_ENABLED:false}
+          startup-backfill-enabled: ${MARKET_EUROBONDS_INSTRUMENTS_STARTUP_BACKFILL_ENABLED:false}
+          default-lookback-years: ${MARKET_EUROBONDS_INSTRUMENTS_LOOKBACK_YEARS:5}
+          seed-fallback-enabled: false
+          list: []
         series:
           book-value: ${EVDS_SERIES_EUROBOND_GOV_BOOK_VALUE_WEEKLY:TP_EBONDYAZDEG_ST}
           market-value: ${EVDS_SERIES_EUROBOND_GOV_MARKET_VALUE_WEEKLY:TP_EBONDPIYDEG_ST}

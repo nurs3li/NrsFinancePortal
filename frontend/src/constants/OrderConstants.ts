@@ -83,6 +83,16 @@ export function classifyDebtInstrument(name: string | undefined, issuer: string 
     const s = String(isin ?? '').toUpperCase();
     if (n.includes('EUROBOND') || i.includes('EUROBOND') || s.includes('XS')) return 'BOND_EUROBOND';
     if (
+        s.startsWith('US900') ||
+        n.includes('TÜRKİYE') ||
+        n.includes('TURKIYE') ||
+        n.includes('TURKEY') ||
+        i.includes('HAZINE') ||
+        (i.includes('TREASURY') && (n.includes('TURK') || n.includes('TURKIYE') || n.includes('TURKEY')))
+    ) {
+        return 'BOND_EUROBOND';
+    }
+    if (
         i.includes('HAZINE') ||
         i.includes('TREASURY') ||
         i.includes('CUMHURIYET') ||

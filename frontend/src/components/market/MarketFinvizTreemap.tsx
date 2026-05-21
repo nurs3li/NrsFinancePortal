@@ -132,13 +132,26 @@ export function MarketFinvizTreemap({
         const el = wrapRef.current;
         if (!el) return;
         const measure = () => {
-            const w = Math.max(220, Math.floor(el.getBoundingClientRect().width));
-            const h = Math.max(320, Math.min(540, Math.round(w * 0.95)));
+            const rectW = el.getBoundingClientRect().width || el.clientWidth;
+            const edgePad =
+                typeof window !== 'undefined' && window.innerWidth < 768 ? 48 : 32;
+            const vw =
+                typeof window !== 'undefined' ? Math.max(200, window.innerWidth - edgePad) : rectW;
+            const w = Math.max(200, Math.floor(Math.min(rectW, vw)));
+            const narrow = typeof window !== 'undefined' && window.innerWidth < 768;
+            const h = narrow
+                ? Math.max(180, Math.min(280, Math.round(w * 0.78)))
+                : Math.max(320, Math.min(540, Math.round(w * 0.95)));
             setSize((prev) => (prev.w !== w || prev.h !== h ? { w, h } : prev));
         };
         measure();
+        let resizeRaf = 0;
         const ro = new ResizeObserver(() => {
-            measure();
+            if (resizeRaf) return;
+            resizeRaf = requestAnimationFrame(() => {
+                resizeRaf = 0;
+                measure();
+            });
         });
         ro.observe(el);
         return () => ro.disconnect();
@@ -200,28 +213,30 @@ export function MarketFinvizTreemap({
 
     const sectorNodes = (root.children ?? []) as HierarchyRectangularNode<HNode>[];
     const leafNodes = root.leaves() as HierarchyRectangularNode<HNode>[];
+    const narrowViewport = typeof window !== 'undefined' && window.innerWidth < 768;
+    const showPctMinArea = narrowViewport ? 260 : 420;
+    const showSymMinArea = narrowViewport ? 100 : 180;
 
     return (
-        <div
-            ref={wrapRef}
-            style={{
-                width: '100%',
-                minHeight: 380,
-                position: 'relative',
-                background: panelBg,
-                borderRadius: 8,
-                border: `1px solid ${borderColor}`,
-                overflow: 'hidden',
-            }}
-        >
-            <div
-                style={{
-                    position: 'relative',
-                    width: size.w,
-                    height: size.h,
-                    margin: '0 auto',
-                }}
-            >
+        <div className="terminal-treemap-scroll">
+            <div className="terminal-treemap-scroll__inner">
+                <div
+                    ref={wrapRef}
+                    className="terminal-treemap-host"
+                    style={{
+                        background: panelBg,
+                        border: `1px solid ${borderColor}`,
+                    }}
+                >
+                    <div
+                        style={{
+                            position: 'relative',
+                            width: size.w,
+                            maxWidth: '100%',
+                            height: size.h,
+                            margin: '0 auto',
+                        }}
+                    >
                 {sectorNodes.map((node) => {
                     const sw = node.x1 - node.x0;
                     const sh = node.y1 - node.y0;
@@ -256,8 +271,8 @@ export function MarketFinvizTreemap({
                     const marketCapSource = node.data.marketCapSource ?? '';
                     const marketCapAsOf = node.data.marketCapAsOf ?? '';
                     const area = w * h;
-                    const showPct = area > 420;
-                    const showSym = area > 180;
+                    const showPct = area > showPctMinArea;
+                    const showSym = area > showSymMinArea;
                     const sk = node.data.sectorKey ?? node.parent?.data.sectorKey ?? 'OTHER';
                     const tile: TreemapTile = {
                         sector: sk,
@@ -323,7 +338,7 @@ export function MarketFinvizTreemap({
                                 <span
                                     style={{
                                         fontWeight: 700,
-                                        fontSize: w > 56 ? 12 : 10,
+                                        fontSize: narrowViewport ? (w > 44 ? 10 : 8) : w > 56 ? 12 : 10,
                                         color: textColor(ch),
                                         letterSpacing: 0.02,
                                         textAlign: 'center',
@@ -336,7 +351,7 @@ export function MarketFinvizTreemap({
                             {showPct ? (
                                 <span
                                     style={{
-                                        fontSize: 10,
+                                        fontSize: narrowViewport ? 8 : 10,
                                         fontWeight: 600,
                                         color: ch >= 0 ? '#bbf7d1' : '#fecaca',
                                         marginTop: 2,
@@ -352,7 +367,7 @@ export function MarketFinvizTreemap({
                 {sectorNodes.map((node) => {
                     const lw = node.x1 - node.x0;
                     const lh = node.y1 - node.y0;
-                    if (lw < 56 || lh < 36) return null;
+                    if (lw < (narrowViewport ? 44 : 56) || lh < (narrowViewport ? 28 : 36)) return null;
                     const sk = node.data.sectorKey ?? node.data.name;
                     return (
                         <div
@@ -363,7 +378,7 @@ export function MarketFinvizTreemap({
                                 top: node.y0 + 3,
                                 width: Math.max(0, lw - 8),
                                 maxHeight: 22,
-                                fontSize: lw < 140 ? 8 : 9,
+                                fontSize: narrowViewport ? 7 : lw < 140 ? 8 : 9,
                                 fontWeight: 800,
                                 letterSpacing: 0.04,
                                 color: 'rgba(248, 250, 252, 0.92)',
@@ -414,6 +429,8 @@ export function MarketFinvizTreemap({
                     </div>
                 </div>
             ) : null}
+                </div>
+            </div>
         </div>
     );
 }

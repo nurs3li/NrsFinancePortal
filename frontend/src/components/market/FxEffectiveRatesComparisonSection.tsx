@@ -189,7 +189,7 @@ export function FxEffectiveRatesComparisonSection({
             </div>
 
             {isLoading ? (
-                <div style={{ height: 120, borderRadius: 6, background: 'rgba(148,163,184,0.12)' }} aria-busy />
+                <div style={{ height: 120, borderRadius: 6, background: 'var(--app-surface-soft-bg)' }} aria-busy />
             ) : showEmpty ? (
                 <p style={{ margin: 0, fontSize: 12, color: tokens.textMuted }}>
                     {t('market.fxEffective.empty', 'TCMB/EVDS efektif kur verisi bekleniyor.')}

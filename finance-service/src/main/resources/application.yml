@@ -43,6 +43,17 @@ market-data:
   connect-timeout-ms: 5000
   response-timeout-ms: 20000
 
+openai:
+  api-key: ${OPENAI_API_KEY:}
+  model: ${OPENAI_MODEL:gpt-4o-mini}
+  temperature: ${OPENAI_TEMPERATURE:0.2}
+  timeout-seconds: ${OPENAI_TIMEOUT_SECONDS:60}
+
+portfolio-ai:
+  # 0 = sınırsız; >0 ise yalnızca başarılı OpenAI analizi kotaya sayılır (fallback sayılmaz)
+  daily-limit: ${PORTFOLIO_AI_DAILY_LIMIT:1}
+  prompt-version: v2
+
 management:
   endpoints:
     web:
@@ -88,6 +99,9 @@ app:
       realm: ${KEYCLOAK_ADMIN_REALM:nrs-finance}
       client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:}
       client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:}
+    password-grant:
+      client-id: ${KEYCLOAK_PASSWORD_GRANT_CLIENT_ID:nrs-frontend}
+      client-secret: ${KEYCLOAK_PASSWORD_GRANT_CLIENT_SECRET:}
     security:
       otp-enforcement-enabled: ${KEYCLOAK_SECURITY_OTP_ENFORCEMENT_ENABLED:false}
       # Realm rememberMe + oturum süreleri otomasyonu. Keycloak: Realm settings → Login → Remember me = ON

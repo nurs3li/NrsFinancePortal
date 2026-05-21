@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { macroEducationTerms, type MacroEducationTerm, type MacroTermId } from '../../../content/macroEducationTerms';
+import type { MacroEducationTerm, MacroTermId } from '../../../content/macroEducationTerms';
+import { useLocalizedMacroEducation } from '../../../content/useLocalizedMacroEducation';
 import type { MacroTheme } from '../MacroTheme';
 import { InfoModal } from './InfoModal';
 
@@ -11,6 +12,7 @@ const InfoTermContext = createContext<Ctx | null>(null);
 
 export function InfoTermProvider({ tokens, children }: { tokens: MacroTheme; children: ReactNode }) {
     const [activeId, setActiveId] = useState<MacroTermId | null>(null);
+    const macroEducationTerms = useLocalizedMacroEducation();
 
     const openTerm = useCallback((id: MacroTermId) => setActiveId(id), []);
     const close = useCallback(() => setActiveId(null), []);

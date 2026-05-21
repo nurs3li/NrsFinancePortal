@@ -1,6 +1,8 @@
 package com.nurseli.nrsfinanceportal.common.dto;
 
 import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPortfolioPosition;
+import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPositionRealReturnStatus;
+import com.nurseli.nrsfinanceportal.service.portfolio.ManualPortfolioRealReturnCalculator;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -43,6 +45,24 @@ public class ManualPortfolioView {
     private final BigDecimal totalProfit;
     private final BigDecimal totalReturnPct;
 
+    private final BigDecimal nominalCost;
+    private final BigDecimal exitValue;
+    private final BigDecimal nominalProfit;
+    private final BigDecimal nominalReturnPct;
+    private final BigDecimal inflationFactor;
+    private final BigDecimal inflationReturnPct;
+    private final BigDecimal inflationAdjustedCost;
+    private final BigDecimal realProfit;
+    private final BigDecimal realReturnPct;
+    private final boolean realReturnAvailable;
+    private final String realReturnStatus;
+    private final LocalDate cpiStartDate;
+    private final LocalDate cpiEndDate;
+    private final BigDecimal cpiStartValue;
+    private final BigDecimal cpiEndValue;
+    private final LocalDate calculationEndDate;
+    private final String calculationMode;
+
     public ManualPortfolioView(
             Long id,
             String type,
@@ -77,7 +97,24 @@ public class ManualPortfolioView {
             BigDecimal missedProfit,
             BigDecimal missedReturnPct,
             BigDecimal totalProfit,
-            BigDecimal totalReturnPct
+            BigDecimal totalReturnPct,
+            BigDecimal nominalCost,
+            BigDecimal exitValue,
+            BigDecimal nominalProfit,
+            BigDecimal nominalReturnPct,
+            BigDecimal inflationFactor,
+            BigDecimal inflationReturnPct,
+            BigDecimal inflationAdjustedCost,
+            BigDecimal realProfit,
+            BigDecimal realReturnPct,
+            boolean realReturnAvailable,
+            String realReturnStatus,
+            LocalDate cpiStartDate,
+            LocalDate cpiEndDate,
+            BigDecimal cpiStartValue,
+            BigDecimal cpiEndValue,
+            LocalDate calculationEndDate,
+            String calculationMode
     ) {
         this.id = id;
         this.type = type;
@@ -113,9 +150,44 @@ public class ManualPortfolioView {
         this.missedReturnPct = missedReturnPct;
         this.totalProfit = totalProfit;
         this.totalReturnPct = totalReturnPct;
+        this.nominalCost = nominalCost;
+        this.exitValue = exitValue;
+        this.nominalProfit = nominalProfit;
+        this.nominalReturnPct = nominalReturnPct;
+        this.inflationFactor = inflationFactor;
+        this.inflationReturnPct = inflationReturnPct;
+        this.inflationAdjustedCost = inflationAdjustedCost;
+        this.realProfit = realProfit;
+        this.realReturnPct = realReturnPct;
+        this.realReturnAvailable = realReturnAvailable;
+        this.realReturnStatus = realReturnStatus;
+        this.cpiStartDate = cpiStartDate;
+        this.cpiEndDate = cpiEndDate;
+        this.cpiStartValue = cpiStartValue;
+        this.cpiEndValue = cpiEndValue;
+        this.calculationEndDate = calculationEndDate;
+        this.calculationMode = calculationMode;
     }
 
-    public static ManualPortfolioView from(ManualPortfolioPosition p, ManualPortfolioNominalAnalysis a) {
+    public static ManualPortfolioView from(
+            ManualPortfolioPosition p,
+            ManualPortfolioNominalAnalysis a
+    ) {
+        return from(p, a, null);
+    }
+
+    public static ManualPortfolioView from(
+            ManualPortfolioPosition p,
+            ManualPortfolioNominalAnalysis a,
+            ManualPortfolioRealReturnCalculator.PositionRealReturn real
+    ) {
+        String statusName = real != null && real.realReturnStatus() != null
+                ? real.realReturnStatus().name()
+                : ManualPositionRealReturnStatus.NO_CPI_DATA.name();
+        String modeName = real != null && real.calculationMode() != null
+                ? real.calculationMode().name()
+                : null;
+
         return new ManualPortfolioView(
                 p.getId(),
                 p.getType().name(),
@@ -150,7 +222,24 @@ public class ManualPortfolioView {
                 a.missedProfit(),
                 a.missedReturnPct(),
                 a.totalProfit(),
-                a.totalReturnPct()
+                a.totalReturnPct(),
+                real != null ? real.nominalCost() : null,
+                real != null ? real.exitValue() : null,
+                real != null ? real.nominalProfit() : null,
+                real != null ? real.nominalReturnPct() : null,
+                real != null ? real.inflationFactor() : null,
+                real != null ? real.inflationReturnPct() : null,
+                real != null ? real.inflationAdjustedCost() : null,
+                real != null ? real.realProfit() : null,
+                real != null ? real.realReturnPct() : null,
+                real != null && real.realReturnAvailable(),
+                statusName,
+                real != null ? real.cpiStartDate() : null,
+                real != null ? real.cpiEndDate() : null,
+                real != null ? real.cpiStartValue() : null,
+                real != null ? real.cpiEndValue() : null,
+                real != null ? real.calculationEndDate() : null,
+                modeName
         );
     }
 
@@ -188,4 +277,21 @@ public class ManualPortfolioView {
     public BigDecimal getMissedReturnPct() { return missedReturnPct; }
     public BigDecimal getTotalProfit() { return totalProfit; }
     public BigDecimal getTotalReturnPct() { return totalReturnPct; }
+    public BigDecimal getNominalCost() { return nominalCost; }
+    public BigDecimal getExitValue() { return exitValue; }
+    public BigDecimal getNominalProfit() { return nominalProfit; }
+    public BigDecimal getNominalReturnPct() { return nominalReturnPct; }
+    public BigDecimal getInflationFactor() { return inflationFactor; }
+    public BigDecimal getInflationReturnPct() { return inflationReturnPct; }
+    public BigDecimal getInflationAdjustedCost() { return inflationAdjustedCost; }
+    public BigDecimal getRealProfit() { return realProfit; }
+    public BigDecimal getRealReturnPct() { return realReturnPct; }
+    public boolean isRealReturnAvailable() { return realReturnAvailable; }
+    public String getRealReturnStatus() { return realReturnStatus; }
+    public LocalDate getCpiStartDate() { return cpiStartDate; }
+    public LocalDate getCpiEndDate() { return cpiEndDate; }
+    public BigDecimal getCpiStartValue() { return cpiStartValue; }
+    public BigDecimal getCpiEndValue() { return cpiEndValue; }
+    public LocalDate getCalculationEndDate() { return calculationEndDate; }
+    public String getCalculationMode() { return calculationMode; }
 }

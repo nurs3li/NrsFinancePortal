@@ -66,6 +66,12 @@ public class RateLimitFilter implements Filter {
             return;
         }
 
+        // 1c) Portföy AI — uzun süren analiz + test sırasında Redis IP limiti 429 üretmesin
+        if (path.startsWith("/api/portfolio/ai/")) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         // 2) FM / Admin için sadece "okuma" GET isteklerini rate-limit dışı bırak
         if ("GET".equals(method)
                 && (path.startsWith("/api/tasks")                 // /api/tasks/me, /api/tasks/{id}

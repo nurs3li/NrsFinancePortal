@@ -2,14 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { financeClient } from '../api/client';
 import { useLanguage } from '../i18n/LanguageContext';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, type ThemeTokens } from '../theme/ThemeContext';
 import { ChevronDown, ChevronUp, Copy, ExternalLink, Filter, Loader2, Maximize2, Search, X } from 'lucide-react';
-
-const INPUT_BG = '#1A2333';
-const INPUT_BORDER = 'rgba(148, 163, 184, 0.45)';
-const SILVER_MUTED = '#B8C1CC';
-const SKELETON_LO = '#162032';
-const SKELETON_HI = '#1A2333';
 
 /** Canlı metrikler: görünür iframe alanı (px). */
 const AUDIT_GRAFANA_EMBED_HEIGHT_PX = 250;
@@ -676,8 +670,8 @@ export function AdminAudit() {
                     minWidth: 120,
                     padding: '12px 16px',
                     borderRadius: 10,
-                    border: active ? `2px solid ${tokens.accent}` : `1px solid ${INPUT_BORDER}`,
-                    background: active ? 'rgba(37, 99, 235, 0.15)' : INPUT_BG,
+                    border: active ? `2px solid ${tokens.accent}` : `1px solid ${tokens.border}`,
+                    background: active ? 'rgba(37, 99, 235, 0.15)' : tokens.inputBg,
                     color: active ? tokens.text : tokens.textMuted,
                     fontWeight: active ? 700 : 500,
                     fontSize: 13,
@@ -713,11 +707,11 @@ export function AdminAudit() {
                     z-index: 1;
                     background: linear-gradient(
                         90deg,
-                        ${SKELETON_LO} 0%,
-                        ${SKELETON_HI} 38%,
-                        #243047 50%,
-                        ${SKELETON_HI} 62%,
-                        ${SKELETON_LO} 100%
+                        ${tokens.inputBg} 0%,
+                        ${tokens.bgCard} 38%,
+                        ${tokens.border} 50%,
+                        ${tokens.bgCard} 62%,
+                        ${tokens.inputBg} 100%
                     );
                     background-size: 220% 100%;
                     animation: audit-grafana-shimmer 1.25s ease-in-out infinite;
@@ -767,6 +761,18 @@ export function AdminAudit() {
                         0 0 0 2px rgba(37, 99, 235, 0.28),
                         0 0 18px rgba(56, 189, 248, 0.28);
                 }
+                [data-theme='light'] .audit-discovery-input {
+                    background: rgba(255, 255, 255, 0.96);
+                    color: #0f172a;
+                    border-color: rgba(148, 163, 184, 0.45);
+                }
+                [data-theme='light'] .audit-discovery-input::placeholder {
+                    color: #64748b;
+                }
+                [data-theme='light'] .audit-discovery-input:focus {
+                    border-color: rgba(37, 99, 235, 0.55);
+                    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+                }
             `}</style>
             <div>
                 <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 4 }}>{t('admin.auditCenterTitle', 'Audit Center')}</h1>
@@ -814,7 +820,7 @@ export function AdminAudit() {
                                         borderRadius: 8,
                                         border: `1px solid rgba(184, 193, 204, 0.4)`,
                                         background: 'rgba(15, 23, 42, 0.82)',
-                                        color: SILVER_MUTED,
+                                        color: tokens.textMuted,
                                         cursor: 'pointer',
                                         padding: 0,
                                     };
@@ -974,7 +980,7 @@ export function AdminAudit() {
                                             justifyContent: 'space-between',
                                             padding: '12px 14px',
                                             borderBottom: `1px solid rgba(184, 193, 204, 0.2)`,
-                                            color: SILVER_MUTED,
+                                            color: tokens.textMuted,
                                             fontSize: 13,
                                             fontWeight: 600,
                                         }}
@@ -993,7 +999,7 @@ export function AdminAudit() {
                                                 borderRadius: 8,
                                                 border: `1px solid rgba(184, 193, 204, 0.35)`,
                                                 background: 'rgba(22, 32, 50, 0.9)',
-                                                color: SILVER_MUTED,
+                                                color: tokens.textMuted,
                                                 cursor: 'pointer',
                                             }}
                                         >
@@ -1025,7 +1031,7 @@ export function AdminAudit() {
                                                             display: 'block',
                                                             transform: `translateY(-${AUDIT_GRAFANA_CLIP_TOP_PX}px)`,
                                                             transformOrigin: 'top center',
-                                                            background: SKELETON_LO,
+                                                            background: tokens.inputBg,
                                                         }}
                                                     />
                                                 </div>
@@ -1080,8 +1086,8 @@ export function AdminAudit() {
                                             gap: 6,
                                             padding: '8px 14px',
                                             borderRadius: 8,
-                                            border: `1px solid ${INPUT_BORDER}`,
-                                            background: INPUT_BG,
+                                            border: `1px solid ${tokens.border}`,
+                                            background: tokens.inputBg,
                                             color: tokens.text,
                                             fontWeight: 600,
                                             fontSize: 13,
@@ -1097,7 +1103,7 @@ export function AdminAudit() {
                     <div
                         style={{
                             height: 1,
-                            background: tokens.border ?? INPUT_BORDER,
+                            background: tokens.border ?? tokens.border,
                             margin: '4px 0 8px',
                             opacity: 0.85,
                         }}
@@ -1151,7 +1157,7 @@ export function AdminAudit() {
                         {t('admin.auditSearch', 'Search')}
                     </button>
                 </div>
-                <p style={{ margin: '0 0 14px', fontSize: 11, color: SILVER_MUTED, opacity: 0.88, lineHeight: 1.45 }}>
+                <p style={{ margin: '0 0 14px', fontSize: 11, color: tokens.textMuted, opacity: 0.88, lineHeight: 1.45 }}>
                     {t(
                         'admin.auditDiscoverySmartHint',
                         'Enter ile arama: user:, userid:, service:, trace:, correlation: anahtarları ilgili filtreleri doldurur; kalan metin mesaj/logger aramasına gider.'
@@ -1193,7 +1199,7 @@ export function AdminAudit() {
                                 borderRadius: 999,
                                 border: '1px solid rgba(184, 193, 204, 0.35)',
                                 background: 'rgba(22, 32, 50, 0.55)',
-                                color: SILVER_MUTED,
+                                color: tokens.textMuted,
                                 fontSize: 12,
                                 fontWeight: 600,
                                 cursor: 'pointer',
@@ -1205,7 +1211,7 @@ export function AdminAudit() {
                 </div>
 
                 <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: SILVER_MUTED, marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: tokens.textMuted, marginBottom: 8 }}>
                         {t('admin.auditDiscoveryTimeLabel', 'Zaman aralığı')}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
@@ -1233,7 +1239,7 @@ export function AdminAudit() {
                                             : '1px solid rgba(184, 193, 204, 0.3)',
                                     background:
                                         timePreset === k ? 'rgba(37, 99, 235, 0.22)' : 'rgba(22, 32, 50, 0.5)',
-                                    color: timePreset === k ? tokens.text : SILVER_MUTED,
+                                    color: timePreset === k ? tokens.text : tokens.textMuted,
                                     fontSize: 12,
                                     fontWeight: timePreset === k ? 700 : 500,
                                     cursor: 'pointer',
@@ -1259,7 +1265,7 @@ export function AdminAudit() {
                                         : '1px solid rgba(184, 193, 204, 0.3)',
                                 background:
                                     timePreset === 'custom' ? 'rgba(37, 99, 235, 0.22)' : 'rgba(22, 32, 50, 0.5)',
-                                color: timePreset === 'custom' ? tokens.text : SILVER_MUTED,
+                                color: timePreset === 'custom' ? tokens.text : tokens.textMuted,
                                 fontSize: 12,
                                 fontWeight: timePreset === 'custom' ? 700 : 500,
                                 cursor: 'pointer',
@@ -1270,7 +1276,7 @@ export function AdminAudit() {
                     </div>
                     {timePreset === 'custom' && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 12 }}>
-                            <label style={{ ...labelCompact, color: SILVER_MUTED }}>
+                            <label style={{ ...labelCompact, color: tokens.textMuted }}>
                                 {t('admin.auditDiscoveryCustomFrom', 'Başlangıç')}
                                 <input
                                     type="datetime-local"
@@ -1283,7 +1289,7 @@ export function AdminAudit() {
                                     style={{ ...filterInput(tokens), marginTop: 6, minWidth: 200 }}
                                 />
                             </label>
-                            <label style={{ ...labelCompact, color: SILVER_MUTED }}>
+                            <label style={{ ...labelCompact, color: tokens.textMuted }}>
                                 {t('admin.auditDiscoveryCustomTo', 'Bitiş')}
                                 <input
                                     type="datetime-local"
@@ -1302,7 +1308,7 @@ export function AdminAudit() {
 
                 {(auditTab === 'system' || auditTab === 'critical') && (
                     <div style={{ marginBottom: 14 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: SILVER_MUTED, marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: tokens.textMuted, marginBottom: 8 }}>
                             {t('admin.auditDiscoveryServices', 'Hizmet seçimi')}
                         </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -1318,7 +1324,7 @@ export function AdminAudit() {
                                             borderRadius: 999,
                                             border: `1px solid ${on ? 'rgba(56, 189, 248, 0.55)' : 'rgba(184, 193, 204, 0.32)'}`,
                                             background: on ? 'rgba(37, 99, 235, 0.25)' : 'rgba(22, 32, 50, 0.45)',
-                                            color: on ? tokens.text : SILVER_MUTED,
+                                            color: on ? tokens.text : tokens.textMuted,
                                             fontSize: 11,
                                             fontWeight: on ? 700 : 500,
                                             cursor: 'pointer',
@@ -1330,7 +1336,7 @@ export function AdminAudit() {
                                 );
                             })}
                         </div>
-                        <p style={{ margin: '6px 0 0', fontSize: 11, color: SILVER_MUTED, opacity: 0.8 }}>
+                        <p style={{ margin: '6px 0 0', fontSize: 11, color: tokens.textMuted, opacity: 0.8 }}>
                             {t('admin.auditDiscoveryServicesHint', 'Hiçbiri seçili değilse tüm hizmetler. Birden çok seçim: OR (sunucu virgüllü sorgu).')}
                         </p>
                     </div>
@@ -1338,7 +1344,7 @@ export function AdminAudit() {
 
                 {auditTab === 'system' && (
                     <div style={{ marginBottom: 14 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: SILVER_MUTED, marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: tokens.textMuted, marginBottom: 8 }}>
                             {t('admin.auditDiscoveryLevels', 'Kayıt seviyesi')}
                         </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -1365,7 +1371,7 @@ export function AdminAudit() {
                                                     ? 'rgba(127, 29, 29, 0.35)'
                                                     : 'rgba(120, 53, 15, 0.35)'
                                                 : 'rgba(22, 32, 50, 0.45)',
-                                            color: on ? (err ? '#fecaca' : '#fde68a') : SILVER_MUTED,
+                                            color: on ? (err ? '#fecaca' : '#fde68a') : tokens.textMuted,
                                             fontSize: 12,
                                             fontWeight: 800,
                                             letterSpacing: '0.06em',
@@ -1386,7 +1392,7 @@ export function AdminAudit() {
                 )}
 
                 {auditTab === 'critical' && (
-                    <p style={{ margin: '0 0 12px', fontSize: 12, color: SILVER_MUTED }}>{t('admin.auditCriticalHint', 'Only ERROR level logs.')}</p>
+                    <p style={{ margin: '0 0 12px', fontSize: 12, color: tokens.textMuted }}>{t('admin.auditCriticalHint', 'Only ERROR level logs.')}</p>
                 )}
 
                 <details
@@ -1399,7 +1405,7 @@ export function AdminAudit() {
                             cursor: 'pointer',
                             fontSize: 12,
                             fontWeight: 700,
-                            color: SILVER_MUTED,
+                            color: tokens.textMuted,
                             listStyle: 'none',
                             display: 'flex',
                             alignItems: 'center',
@@ -1413,11 +1419,11 @@ export function AdminAudit() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(184, 193, 204, 0.15)' }}>
                         {auditTab === 'user' && (
                             <div>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: SILVER_MUTED, marginBottom: 8 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: tokens.textMuted, marginBottom: 8 }}>
                                     {t('admin.auditGroupIdentity', 'User')}
                                 </div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                                    <label style={{ ...labelCompact, color: SILVER_MUTED }}>
+                                    <label style={{ ...labelCompact, color: tokens.textMuted }}>
                                         {t('admin.auditUserId', 'User ID')}
                                         <input
                                             value={userId}
@@ -1427,7 +1433,7 @@ export function AdminAudit() {
                                             style={{ ...filterInput(tokens), marginTop: 6 }}
                                         />
                                     </label>
-                                    <label style={{ ...labelCompact, color: SILVER_MUTED }}>
+                                    <label style={{ ...labelCompact, color: tokens.textMuted }}>
                                         {t('admin.auditUsername', 'Username')}
                                         <input
                                             value={username}
@@ -1437,7 +1443,7 @@ export function AdminAudit() {
                                             style={{ ...filterInput(tokens), marginTop: 6 }}
                                         />
                                     </label>
-                                    <label style={{ ...labelCompact, color: SILVER_MUTED }}>
+                                    <label style={{ ...labelCompact, color: tokens.textMuted }}>
                                         {t('admin.auditActionType', 'Action')}
                                         <select
                                             value={actionType}
@@ -1463,10 +1469,10 @@ export function AdminAudit() {
                         {(auditTab === 'system' || auditTab === 'critical') && (
                             <>
                                 <div>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: SILVER_MUTED, marginBottom: 8 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: tokens.textMuted, marginBottom: 8 }}>
                                         {t('admin.auditGroupByUser', 'Kullanıcıya göre (opsiyonel)')}
                                     </div>
-                                    <label style={{ ...labelCompact, color: SILVER_MUTED, display: 'block', maxWidth: 400 }}>
+                                    <label style={{ ...labelCompact, color: tokens.textMuted, display: 'block', maxWidth: 400 }}>
                                         {t('admin.auditUsername', 'Username')}
                                         <input
                                             value={username}
@@ -1476,7 +1482,7 @@ export function AdminAudit() {
                                             style={{ ...filterInput(tokens), marginTop: 6, width: '100%' }}
                                         />
                                     </label>
-                                    <p style={{ margin: '8px 0 0', fontSize: 11, color: SILVER_MUTED, opacity: 0.85, maxWidth: 520 }}>
+                                    <p style={{ margin: '8px 0 0', fontSize: 11, color: tokens.textMuted, opacity: 0.85, maxWidth: 520 }}>
                                         {t(
                                             'admin.auditUsernameSystemHint',
                                             'Sistem loglarında userId/username alanı dolu olan kayıtları süzer. Trace ID yerine çoğu senaryoda bunu kullanın.'
@@ -1484,11 +1490,11 @@ export function AdminAudit() {
                                     </p>
                                 </div>
                                 <div>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: SILVER_MUTED, marginBottom: 8 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: tokens.textMuted, marginBottom: 8 }}>
                                         {t('admin.auditAdvancedTrace', 'İleri düzey: traceId / correlationId')}
                                     </div>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                                        <label style={{ ...labelCompact, color: SILVER_MUTED }}>
+                                        <label style={{ ...labelCompact, color: tokens.textMuted }}>
                                             traceId
                                             <input
                                                 value={traceId}
@@ -1497,7 +1503,7 @@ export function AdminAudit() {
                                                 style={{ ...filterMono(tokens), marginTop: 6 }}
                                             />
                                         </label>
-                                        <label style={{ ...labelCompact, color: SILVER_MUTED }}>
+                                        <label style={{ ...labelCompact, color: tokens.textMuted }}>
                                             correlationId
                                             <input
                                                 value={correlationId}
@@ -1508,7 +1514,7 @@ export function AdminAudit() {
                                         </label>
                                     </div>
                                 </div>
-                                <label style={{ ...labelCompact, color: SILVER_MUTED, display: 'block', maxWidth: 520 }}>
+                                <label style={{ ...labelCompact, color: tokens.textMuted, display: 'block', maxWidth: 520 }}>
                                     {t('admin.auditTechSearch', 'Extra keywords')}
                                     <input
                                         value={techQ}
@@ -1534,10 +1540,10 @@ export function AdminAudit() {
                     </div>
                 )}
                 {!listLoading && (
-                    <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${INPUT_BORDER}` }}>
+                    <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${tokens.border}` }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                             <thead>
-                                <tr style={{ background: INPUT_BG }}>
+                                <tr style={{ background: tokens.inputBg }}>
                                     <th style={{ ...th, width: 28 }} />
                                     <th style={th}>{t('admin.auditColTime', 'Time')}</th>
                                     <th style={th}>{t('admin.auditColService', 'Service')}</th>
@@ -1551,7 +1557,7 @@ export function AdminAudit() {
                                     <React.Fragment key={r.cursor}>
                                         <tr
                                             style={{
-                                                borderTop: `1px solid ${INPUT_BORDER}`,
+                                                borderTop: `1px solid ${tokens.border}`,
                                                 cursor: 'pointer',
                                                 background: expandedCursor === r.cursor ? 'rgba(37, 99, 235, 0.08)' : undefined,
                                             }}
@@ -1570,7 +1576,7 @@ export function AdminAudit() {
                                                             e.stopPropagation();
                                                             copyText(r.traceId!);
                                                         }}
-                                                        style={badgeBtn}
+                                                        style={badgeBtnStyle(tokens)}
                                                     >
                                                         <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.traceId.slice(0, 12)}…</span>
                                                         <Copy size={12} />
@@ -1586,7 +1592,7 @@ export function AdminAudit() {
                                         {expandedCursor === r.cursor && (
                                             <tr>
                                                 <td colSpan={6} style={{ padding: 0, background: tokens.bg }}>
-                                                    <div style={{ padding: 16, borderTop: `1px solid ${INPUT_BORDER}` }}>
+                                                    <div style={{ padding: 16, borderTop: `1px solid ${tokens.border}` }}>
                                                         {expandLoading && (
                                                             <div style={{ display: 'flex', gap: 8, color: tokens.textMuted }}>
                                                                 <Loader2 size={18} />
@@ -1610,7 +1616,7 @@ export function AdminAudit() {
                                                                 {expandRow.traceId && expandTrace?.found && (
                                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
                                                                         {expandTrace.nodes.map((n) => (
-                                                                            <span key={n.id} style={nodePill}>
+                                                                            <span key={n.id} style={nodePillStyle(tokens)}>
                                                                                 {n.label}{' '}
                                                                                 <span style={{ opacity: 0.7 }}>({n.durationMs} ms)</span>
                                                                             </span>
@@ -1624,7 +1630,7 @@ export function AdminAudit() {
                                                                         padding: 12,
                                                                         borderRadius: 8,
                                                                         background: '#0f172a',
-                                                                        color: '#e2e8f0',
+                                                                        color: tokens.text,
                                                                         fontSize: 11,
                                                                         maxHeight: 240,
                                                                         overflow: 'auto',
@@ -1696,45 +1702,50 @@ export function AdminAudit() {
     );
 }
 
-const labelCompact: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#94a3b8' };
+const labelCompact: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: 'var(--app-text-muted)' };
 
-const th: React.CSSProperties = { textAlign: 'left', padding: '10px 12px', fontSize: 11, textTransform: 'uppercase', color: '#94a3b8' };
+const th: React.CSSProperties = { textAlign: 'left', padding: '10px 12px', fontSize: 11, textTransform: 'uppercase', color: 'var(--app-text-muted)' };
 const td: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'middle' };
 
-const badgeBtn: React.CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '4px 8px',
-    borderRadius: 6,
-    border: '1px solid rgba(148, 163, 184, 0.5)',
-    background: '#0f172a',
-    color: '#e2e8f0',
-    cursor: 'pointer',
-    maxWidth: '100%',
-};
+function badgeBtnStyle(tokens: ThemeTokens): React.CSSProperties {
+    return {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 8px',
+        borderRadius: 6,
+        border: `1px solid ${tokens.border}`,
+        background: tokens.inputBg,
+        color: tokens.text,
+        cursor: 'pointer',
+        maxWidth: '100%',
+    };
+}
 
-const nodePill: React.CSSProperties = {
-    padding: '4px 10px',
-    borderRadius: 999,
-    background: '#1A2333',
-    border: '1px solid rgba(148, 163, 184, 0.35)',
-    fontSize: 12,
-};
+function nodePillStyle(tokens: ThemeTokens): React.CSSProperties {
+    return {
+        padding: '4px 10px',
+        borderRadius: 999,
+        background: tokens.inputBg,
+        border: `1px solid ${tokens.border}`,
+        fontSize: 12,
+        color: tokens.text,
+    };
+}
 
-function filterInput(tokens: { text: string }): React.CSSProperties {
+function filterInput(tokens: ThemeTokens): React.CSSProperties {
     return {
         padding: '8px 10px',
         borderRadius: 8,
-        border: `1px solid ${INPUT_BORDER}`,
-        background: '#0f172a',
+        border: `1px solid ${tokens.border}`,
+        background: tokens.inputBg,
         color: tokens.text,
         minWidth: 160,
         fontSize: 13,
     };
 }
 
-function filterMono(tokens: { text: string }): React.CSSProperties {
+function filterMono(tokens: ThemeTokens): React.CSSProperties {
     return { ...filterInput(tokens), fontFamily: 'ui-monospace, monospace', fontSize: 12 };
 }
 
@@ -1754,12 +1765,12 @@ function btnPrimaryLarge(): React.CSSProperties {
     };
 }
 
-function btnGhost(tokens: { border: string; bg: string; text: string }): React.CSSProperties {
+function btnGhost(tokens: ThemeTokens): React.CSSProperties {
     return {
         padding: '8px 14px',
         borderRadius: 8,
-        border: `1px solid ${INPUT_BORDER}`,
-        background: INPUT_BG,
+        border: `1px solid ${tokens.border}`,
+        background: tokens.inputBg,
         color: tokens.text,
         cursor: 'pointer',
     };

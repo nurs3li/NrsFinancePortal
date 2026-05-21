@@ -79,3 +79,15 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v27-manual-viop-bond-positions.yaml
+
+  - include:
+      file: db/changelog/v28-portfolio-ai-analysis.yaml
+
+  - include:
+      file: db/changelog/v29-portfolio-ai-analysis-title.yaml
+
+  - include:
+      file: db/changelog/v30-portfolio-ai-email-delivery.yaml
+
+  - include:
+      file: db/changelog/v31-user-profile-names.yaml

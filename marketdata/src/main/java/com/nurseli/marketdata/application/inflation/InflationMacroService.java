@@ -104,7 +104,7 @@ public class InflationMacroService {
     private InflationIndicatorSnapshotDto loadPpiSnapshot() {
         Optional<InflationMonthMetrics> db = inflationIndexQueryService.latestMetrics(InflationIndicatorType.PPI);
         Optional<InflationMonthMetrics> evds = loadPpiMetricsFromEvds();
-        if (db.isPresent() && evds.isPresent() && evds.get().yearMonth().isAfter(db.get().yearMonth())) {
+        if (db.isPresent() && evds.isPresent() && !evds.get().yearMonth().isBefore(db.get().yearMonth())) {
             return mapMetricsSnapshot(InflationIndicatorType.PPI, evds.get());
         }
         if (db.isPresent()) {
@@ -196,7 +196,7 @@ public class InflationMacroService {
         }
         YearMonth dbLast = db.getLast().yearMonth();
         YearMonth evdsLast = evds.getLast().yearMonth();
-        return evdsLast.isAfter(dbLast) ? evds : db;
+        return !evdsLast.isBefore(dbLast) ? evds : db;
     }
 
     private List<InflationMonthMetrics> fetchMetricsFromEvds(InflationIndicatorType type, YearMonth from, YearMonth to) {

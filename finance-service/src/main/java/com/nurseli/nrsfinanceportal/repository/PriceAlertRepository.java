@@ -3,6 +3,8 @@ package com.nurseli.nrsfinanceportal.repository;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.domain.pricealert.PriceAlert;
 import com.nurseli.nrsfinanceportal.domain.pricealert.PriceAlertStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +15,15 @@ import java.util.List;
 public interface PriceAlertRepository extends JpaRepository<PriceAlert, Long> {
 
     List<PriceAlert> findByUserIdOrderByCreatedAtDesc(Long userId);
+
+    Page<PriceAlert> findByUser_IdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+
+    Page<PriceAlert> findByUser_IdAndStatusOrderByCreatedAtDesc(Long userId, PriceAlertStatus status, Pageable pageable);
+
+    Page<PriceAlert> findByUser_IdAndStatusInOrderByCreatedAtDesc(
+            Long userId,
+            Collection<PriceAlertStatus> statuses,
+            Pageable pageable);
 
     @Query("SELECT a FROM PriceAlert a JOIN FETCH a.user WHERE a.status = :status")
     List<PriceAlert> findByStatusWithUser(@Param("status") PriceAlertStatus status);

@@ -1,0 +1,171 @@
+/* Header dropdown + Notifications page — Bildirimler | Alarmlar kaydırmalı sekme */
+
+.inbox-hub-tabs {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.35);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.inbox-hub-tabs--header {
+    margin: 0;
+    border-radius: 9px;
+}
+
+.inbox-hub-tabs--page {
+    margin-bottom: 14px;
+    max-width: 360px;
+}
+
+.inbox-hub-tabs__btn {
+    position: relative;
+    z-index: 1;
+    border: 0;
+    background: transparent;
+    color: var(--inbox-hub-muted, #94a3b8);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 7px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: color 0.2s ease;
+    white-space: nowrap;
+}
+
+.inbox-hub-tabs--page .inbox-hub-tabs__btn {
+    font-size: 0.86rem;
+    padding: 8px 14px;
+}
+
+.inbox-hub-tabs__btn.is-active {
+    color: var(--inbox-hub-text, #f8fafc);
+}
+
+.inbox-hub-tabs__indicator {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(50% - 4px);
+    border-radius: 7px;
+    background: linear-gradient(180deg, rgba(56, 189, 248, 0.22), rgba(56, 189, 248, 0.08));
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25) inset;
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+}
+
+.inbox-hub-tabs__indicator[data-active='alarms'] {
+    transform: translateX(calc(100% + 4px));
+}
+
+.header-dropdown__head-inbox {
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--header-border);
+}
+
+.header-dropdown__head-inbox .inbox-hub-tabs--header {
+    width: 100%;
+}
+
+.header-dropdown__alarm-item .header-dropdown__item-meta {
+    line-height: 1.35;
+}
+
+.alarm-status-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    margin-right: 6px;
+}
+
+.alarm-status-chip--active {
+    color: #4ade80;
+    background: rgba(34, 197, 94, 0.12);
+}
+
+.alarm-status-chip--triggered {
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.12);
+}
+
+.alarm-status-chip--disabled {
+    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.12);
+}
+
+.notif-header__hub {
+    flex: 1;
+    min-width: 0;
+    max-width: 360px;
+}
+
+.notif-header__hub .inbox-hub-tabs--page {
+    margin-bottom: 0;
+    max-width: none;
+}
+
+.notif-alarm-filter-tabs {
+    margin-bottom: 16px;
+}
+
+.notif-alarm-hint {
+    margin: 0 0 14px;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--notif-muted);
+}
+
+.alarm-list-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid rgba(192, 192, 192, 0.12);
+    background: rgba(15, 23, 42, 0.35);
+    margin-bottom: 10px;
+}
+
+.notif-alarm-list .alarm-list-item:last-child {
+    margin-bottom: 0;
+}
+
+.alarm-list-item__symbol {
+    font-weight: 700;
+    font-size: 0.92rem;
+}
+
+.alarm-list-item__meta {
+    font-size: 0.78rem;
+    color: var(--notif-muted);
+    margin-top: 4px;
+}
+
+.alarm-list-item__date {
+    font-size: 0.72rem;
+    color: var(--notif-muted);
+    white-space: nowrap;
+}
+
+[data-theme='light'] .inbox-hub-tabs {
+    background: rgba(241, 245, 249, 0.9);
+    border-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme='light'] .inbox-hub-tabs__btn.is-active {
+    color: #0f172a;
+}
+
+[data-theme='light'] .alarm-list-item {
+    background: #fff;
+    border-color: rgba(15, 23, 42, 0.08);
+}

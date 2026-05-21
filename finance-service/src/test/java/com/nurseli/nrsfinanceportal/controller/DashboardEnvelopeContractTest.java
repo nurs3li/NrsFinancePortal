@@ -57,6 +57,8 @@ class DashboardEnvelopeContractTest {
         when(current.getId()).thenReturn(1L);
         when(currentUserResolver.getOrCreateCurrentUser()).thenReturn(current);
 
+        var segment = new DashboardSummaryResponse.TradingSegmentSummary(
+                BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ONE);
         DashboardSummaryResponse response = new DashboardSummaryResponse(
                 new DashboardSummaryResponse.PortfolioSummary(
                         BigDecimal.ONE,
@@ -66,7 +68,9 @@ class DashboardEnvelopeContractTest {
                         BigDecimal.ZERO,
                         List.of()
                 ),
-                BigDecimal.ONE
+                new BigDecimal("2"),
+                segment,
+                segment
         );
         when(dashboardSummaryService.getSummary(1L)).thenReturn(response);
 
