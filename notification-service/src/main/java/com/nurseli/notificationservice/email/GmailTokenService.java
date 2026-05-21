@@ -34,35 +34,53 @@ public class GmailTokenService {
         form.add("refresh_token", gmailProperties.getRefreshToken());
         form.add("grant_type", "refresh_token");
 
-        GmailTokenResponse response = webClient.post()
-                .uri(TOKEN_URL)
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .bodyValue(form)
-                .exchangeToMono(resp -> {
-                    if (resp.statusCode().is2xxSuccessful()) {
-                        return resp.bodyToMono(GmailTokenResponse.class);
+        RuntimeException lastFailure = null;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                GmailTokenResponse response = webClient.post()
+                        .uri(TOKEN_URL)
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .bodyValue(form)
+                        .exchangeToMono(resp -> {
+                            if (resp.statusCode().is2xxSuccessful()) {
+                                return resp.bodyToMono(GmailTokenResponse.class);
+                            }
+                            return resp.bodyToMono(String.class)
+                                    .defaultIfEmpty("")
+                                    .flatMap(body -> {
+                                        String snippet = body.length() > 400 ? body.substring(0, 400) + "…" : body;
+                                        log.error("[GMAIL] Token endpoint failed status={} body={}", resp.statusCode(), snippet);
+                                        return Mono.error(new IllegalStateException(
+                                                "Gmail OAuth token alınamadı (" + resp.statusCode()
+                                                        + "). .env içindeki GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET ve "
+                                                        + "GMAIL_REFRESH_TOKEN aynı Google OAuth (Web) client’tan üretilmiş "
+                                                        + "olmalı; refresh token’ı OAuth Playground ile yenileyin. "
+                                                        + "Google: " + snippet));
+                                    });
+                        })
+                        .block();
+
+                if (response == null || response.access_token == null || response.access_token.isBlank()) {
+                    throw new IllegalStateException("Failed to obtain Gmail access token");
+                }
+                return response.access_token;
+            } catch (RuntimeException ex) {
+                lastFailure = ex;
+                if (attempt < 3) {
+                    log.warn("[GMAIL] Token fetch attempt {} failed: {}", attempt, ex.getMessage());
+                    try {
+                        Thread.sleep(400L * attempt);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw ex;
                     }
-                    return resp.bodyToMono(String.class)
-                            .defaultIfEmpty("")
-                            .flatMap(body -> {
-                                String snippet = body.length() > 400 ? body.substring(0, 400) + "…" : body;
-                                log.error("[GMAIL] Token endpoint failed status={} body={}", resp.statusCode(), snippet);
-                                return Mono.error(new IllegalStateException(
-                                        "Gmail OAuth token alınamadı (" + resp.statusCode()
-                                                + "). .env içindeki GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET ve "
-                                                + "GMAIL_REFRESH_TOKEN aynı Google OAuth (Web) client’tan üretilmiş "
-                                                + "olmalı; refresh token’ı OAuth Playground ile yenileyin. "
-                                                + "Google: " + snippet));
-                            });
-                })
-                .block();
-
-        if (response == null || response.access_token == null || response.access_token.isBlank()) {
-            log.error("[GMAIL] Failed to obtain access token from Google");
-            throw new IllegalStateException("Failed to obtain Gmail access token");
+                }
+            }
         }
-
-        return response.access_token;
+        log.error("[GMAIL] Failed to obtain access token after retries", lastFailure);
+        throw new IllegalStateException(
+                "Gmail OAuth bağlantısı kurulamadı. İnternet veya Google API erişimini kontrol edip tekrar deneyin.",
+                lastFailure);
     }
 
     /**
