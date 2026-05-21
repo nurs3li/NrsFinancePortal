@@ -12,6 +12,7 @@ import com.nurseli.marketdata.api.dto.PriceQuality;
 import com.nurseli.marketdata.api.exception.InvalidRequestException;
 import com.nurseli.marketdata.config.EquityProperties;
 import com.nurseli.marketdata.config.EtfProperties;
+import com.nurseli.marketdata.config.TefasProperties;
 import com.nurseli.marketdata.config.MarketMetalsIsyatirimProperties;
 import com.nurseli.marketdata.domain.metal.PreciousMetalUsdCatalog;
 import com.nurseli.marketdata.domain.price.CryptoSymbolMapping;
@@ -71,6 +72,7 @@ public class MarketPriceQueryService {
     private final FxDailyCandleRepository fxDailyCandleRepository;
     private final EquityProperties equityProperties;
     private final EtfProperties etfProperties;
+    private final TefasProperties tefasProperties;
     private final EquityMarketCapService equityMarketCapService;
     private final MetalPriceIngestService metalPriceIngestService;
     private final MarketMetalsIsyatirimProperties marketMetalsIsyatirimProperties;
@@ -738,11 +740,17 @@ public class MarketPriceQueryService {
             case FX -> Set.of("USDTRY", "EURTRY", "GBPTRY").contains(symbol);
             case CRYPTO -> CryptoSymbolMapping.SYMBOL_TO_ID.containsKey(symbol);
             case METALS -> "XAU_TRY".equals(symbol) || PreciousMetalUsdCatalog.isUsdOunceMetal(symbol);
-            case FUNDS -> etfProperties != null
-                    && etfProperties.getSymbols() != null
-                    && etfProperties.getSymbols().stream()
-                    .map(String::toUpperCase)
-                    .anyMatch(s -> s.equals(symbol));
+            case FUNDS -> {
+                String sym = symbol != null ? symbol.toUpperCase(Locale.ROOT) : "";
+                boolean etf = etfProperties != null
+                        && etfProperties.getSymbols() != null
+                        && etfProperties.getSymbols().stream()
+                        .map(String::toUpperCase)
+                        .anyMatch(s -> s.equals(sym));
+                boolean tefas = tefasProperties != null
+                        && tefasProperties.normalizedSymbols().contains(sym);
+                yield etf || tefas;
+            }
             case EQUITY -> equityProperties != null
                     && equityProperties.getSymbols() != null
                     && equityProperties.getSymbols().stream()

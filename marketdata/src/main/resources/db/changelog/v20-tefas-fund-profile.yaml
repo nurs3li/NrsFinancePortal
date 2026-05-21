@@ -1,0 +1,55 @@
+databaseChangeLog:
+  - changeSet:
+      id: 020-create-tefas-fund-profile
+      author: nurseli
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: tefas_fund_profile
+      changes:
+        - createTable:
+            tableName: tefas_fund_profile
+            columns:
+              - column:
+                  name: code
+                  type: VARCHAR(10)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: title
+                  type: VARCHAR(256)
+              - column:
+                  name: fund_type
+                  type: VARCHAR(128)
+              - column:
+                  name: risk_level
+                  type: INT
+              - column:
+                  name: tefas_listed
+                  type: BOOLEAN
+              - column:
+                  name: return_1m
+                  type: DOUBLE PRECISION
+              - column:
+                  name: return_3m
+                  type: DOUBLE PRECISION
+              - column:
+                  name: return_6m
+                  type: DOUBLE PRECISION
+              - column:
+                  name: return_1y
+                  type: DOUBLE PRECISION
+              - column:
+                  name: return_ytd
+                  type: DOUBLE PRECISION
+              - column:
+                  name: return_3y
+                  type: DOUBLE PRECISION
+              - column:
+                  name: return_5y
+                  type: DOUBLE PRECISION
+              - column:
+                  name: updated_at
+                  type: TIMESTAMPTZ

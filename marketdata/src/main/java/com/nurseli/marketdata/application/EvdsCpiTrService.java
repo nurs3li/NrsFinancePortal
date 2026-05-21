@@ -34,7 +34,7 @@ public class EvdsCpiTrService {
         if (db.isPresent() && evds.isPresent()) {
             YearMonth dbYm = db.get().yearMonth();
             YearMonth evdsYm = YearMonth.from(evds.get().indexMonth());
-            if (evdsYm.isAfter(dbYm)) {
+            if (!evdsYm.isBefore(dbYm)) {
                 return evds;
             }
         }

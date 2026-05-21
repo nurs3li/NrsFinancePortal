@@ -106,6 +106,8 @@ public interface MarketPriceHistoryRepository
 
     long countBySource(String source);
 
+    long countBySymbolAndSource(String symbol, String source);
+
     @Query("SELECT MIN(m.timestamp) FROM MarketPriceHistory m WHERE m.source = :source")
     Optional<LocalDateTime> findMinTimestampBySource(@Param("source") String source);
 

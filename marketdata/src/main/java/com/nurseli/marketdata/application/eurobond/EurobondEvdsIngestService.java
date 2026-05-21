@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.application.eurobond;
 
+import com.nurseli.marketdata.config.ConditionalOnEurobondEvds;
 import com.nurseli.marketdata.config.EurobondEvdsProperties;
 import com.nurseli.marketdata.config.EvdsProperties;
 import com.nurseli.marketdata.domain.eurobond.EurobondWeeklyObservation;
@@ -17,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
+@ConditionalOnEurobondEvds
 @RequiredArgsConstructor
 @Slf4j
 public class EurobondEvdsIngestService {

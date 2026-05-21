@@ -94,20 +94,39 @@ public class EvdsDebtClient {
         if (!evdsProperties.isEnabled() || seriesCode == null || seriesCode.isBlank()) {
             return List.of();
         }
+        String apiKey = evdsProperties.getApiKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("[EVDS_SERIES] skip {} — EVDS_API_KEY is empty", seriesCode);
+            return List.of();
+        }
         String normalizedSeries = normalizeSeriesCode(seriesCode);
         String json = webClient.get()
                 .uri(buildSeriesUri(normalizedSeries, startInclusive, endInclusive))
-                .header("key", evdsProperties.getApiKey())
+                .header("key", apiKey)
                 .retrieve()
                 .bodyToMono(String.class)
                 .timeout(java.time.Duration.ofMillis(evdsProperties.getTimeoutMs()))
                 .retryWhen(Retry.max(2))
                 .onErrorResume(ex -> {
-                    log.warn("[EVDS_SERIES] fetch failed for {}: {}", normalizedSeries, ex.getMessage());
+                    log.warn(
+                            "[EVDS_SERIES] fetch failed series={} baseUrl={} range={}..{} msg={}",
+                            normalizedSeries,
+                            evdsProperties.getBaseUrl(),
+                            startInclusive,
+                            endInclusive,
+                            ex.getMessage()
+                    );
                     return Mono.empty();
                 })
                 .block();
         if (json == null || json.isBlank()) {
+            log.warn(
+                    "[EVDS_SERIES] empty response series={} baseUrl={} range={}..{}",
+                    normalizedSeries,
+                    evdsProperties.getBaseUrl(),
+                    startInclusive,
+                    endInclusive
+            );
             return List.of();
         }
         List<EvdsSeriesPoint> parsed = parseAllPoints(json);

@@ -39,3 +39,7 @@ databaseChangeLog:
       file: db/changelog/v18-debt-coupon-frequency.yaml
   - include:
       file: db/changelog/v19-eurobond-weekly-observation.yaml
+  - include:
+      file: db/changelog/v20-tefas-fund-profile.yaml
+  - include:
+      file: db/changelog/v21-eurobond-instrument-price.yaml

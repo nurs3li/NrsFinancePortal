@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.application.eurobond;
 
+import com.nurseli.marketdata.config.ConditionalOnEurobondEvds;
 import com.nurseli.marketdata.config.EurobondEvdsProperties;
 import org.springframework.stereotype.Component;
 
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Component
+@ConditionalOnEurobondEvds
 public class EurobondSeriesRegistry {
 
     public static final String FREQUENCY_LABEL = "Haftalık";

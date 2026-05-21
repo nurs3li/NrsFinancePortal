@@ -1,0 +1,1932 @@
+{
+  "isin": "US900123AT75",
+  "source": "SEED_WEEKLY_PROXY",
+  "note": "Placeholder weekly history until EVDS per-ISIN or bank feed is wired.",
+  "points": [
+    {
+      "date": "2019-01-04",
+      "cleanPrice": 92.5715,
+      "yieldPct": 7.5289
+    },
+    {
+      "date": "2019-01-11",
+      "cleanPrice": 91.8255,
+      "yieldPct": 7.5286
+    },
+    {
+      "date": "2019-01-18",
+      "cleanPrice": 91.1927,
+      "yieldPct": 7.5283
+    },
+    {
+      "date": "2019-01-25",
+      "cleanPrice": 90.7594,
+      "yieldPct": 7.5279
+    },
+    {
+      "date": "2019-02-01",
+      "cleanPrice": 90.5852,
+      "yieldPct": 7.5276
+    },
+    {
+      "date": "2019-02-08",
+      "cleanPrice": 90.6945,
+      "yieldPct": 7.5272
+    },
+    {
+      "date": "2019-02-15",
+      "cleanPrice": 91.0736,
+      "yieldPct": 7.5267
+    },
+    {
+      "date": "2019-02-22",
+      "cleanPrice": 91.6721,
+      "yieldPct": 7.5263
+    },
+    {
+      "date": "2019-03-01",
+      "cleanPrice": 92.4103,
+      "yieldPct": 7.5258
+    },
+    {
+      "date": "2019-03-08",
+      "cleanPrice": 93.1894,
+      "yieldPct": 7.5253
+    },
+    {
+      "date": "2019-03-15",
+      "cleanPrice": 93.9051,
+      "yieldPct": 7.5247
+    },
+    {
+      "date": "2019-03-22",
+      "cleanPrice": 94.462,
+      "yieldPct": 7.5241
+    },
+    {
+      "date": "2019-03-29",
+      "cleanPrice": 94.7859,
+      "yieldPct": 7.5235
+    },
+    {
+      "date": "2019-04-05",
+      "cleanPrice": 94.8345,
+      "yieldPct": 7.5229
+    },
+    {
+      "date": "2019-04-12",
+      "cleanPrice": 94.6026,
+      "yieldPct": 7.5222
+    },
+    {
+      "date": "2019-04-19",
+      "cleanPrice": 94.123,
+      "yieldPct": 7.5215
+    },
+    {
+      "date": "2019-04-26",
+      "cleanPrice": 93.4624,
+      "yieldPct": 7.5208
+    },
+    {
+      "date": "2019-05-03",
+      "cleanPrice": 92.7118,
+      "yieldPct": 7.5201
+    },
+    {
+      "date": "2019-05-10",
+      "cleanPrice": 91.9745,
+      "yieldPct": 7.5193
+    },
+    {
+      "date": "2019-05-17",
+      "cleanPrice": 91.3523,
+      "yieldPct": 7.5185
+    },
+    {
+      "date": "2019-05-24",
+      "cleanPrice": 90.9312,
+      "yieldPct": 7.5176
+    },
+    {
+      "date": "2019-05-31",
+      "cleanPrice": 90.7705,
+      "yieldPct": 7.5167
+    },
+    {
+      "date": "2019-06-07",
+      "cleanPrice": 90.8939,
+      "yieldPct": 7.5158
+    },
+    {
+      "date": "2019-06-14",
+      "cleanPrice": 91.287,
+      "yieldPct": 7.5149
+    },
+    {
+      "date": "2019-06-21",
+      "cleanPrice": 91.899,
+      "yieldPct": 7.514
+    },
+    {
+      "date": "2019-06-28",
+      "cleanPrice": 92.6494,
+      "yieldPct": 7.513
+    },
+    {
+      "date": "2019-07-05",
+      "cleanPrice": 93.4389,
+      "yieldPct": 7.5119
+    },
+    {
+      "date": "2019-07-12",
+      "cleanPrice": 94.1632,
+      "yieldPct": 7.5109
+    },
+    {
+      "date": "2019-07-19",
+      "cleanPrice": 94.7267,
+      "yieldPct": 7.5098
+    },
+    {
+      "date": "2019-07-26",
+      "cleanPrice": 95.0556,
+      "yieldPct": 7.5087
+    },
+    {
+      "date": "2019-08-02",
+      "cleanPrice": 95.108,
+      "yieldPct": 7.5076
+    },
+    {
+      "date": "2019-08-09",
+      "cleanPrice": 94.8792,
+      "yieldPct": 7.5064
+    },
+    {
+      "date": "2019-08-16",
+      "cleanPrice": 94.403,
+      "yieldPct": 7.5052
+    },
+    {
+      "date": "2019-08-23",
+      "cleanPrice": 93.7465,
+      "yieldPct": 7.504
+    },
+    {
+      "date": "2019-08-30",
+      "cleanPrice": 93.0014,
+      "yieldPct": 7.5028
+    },
+    {
+      "date": "2019-09-06",
+      "cleanPrice": 92.2714,
+      "yieldPct": 7.5015
+    },
+    {
+      "date": "2019-09-13",
+      "cleanPrice": 91.6585,
+      "yieldPct": 7.5002
+    },
+    {
+      "date": "2019-09-20",
+      "cleanPrice": 91.2488,
+      "yieldPct": 7.4989
+    },
+    {
+      "date": "2019-09-27",
+      "cleanPrice": 91.1009,
+      "yieldPct": 7.4975
+    },
+    {
+      "date": "2019-10-04",
+      "cleanPrice": 91.2383,
+      "yieldPct": 7.4961
+    },
+    {
+      "date": "2019-10-11",
+      "cleanPrice": 91.6459,
+      "yieldPct": 7.4947
+    },
+    {
+      "date": "2019-10-18",
+      "cleanPrice": 92.2719,
+      "yieldPct": 7.4933
+    },
+    {
+      "date": "2019-10-25",
+      "cleanPrice": 93.0352,
+      "yieldPct": 7.4918
+    },
+    {
+      "date": "2019-11-01",
+      "cleanPrice": 93.8361,
+      "yieldPct": 7.4903
+    },
+    {
+      "date": "2019-11-08",
+      "cleanPrice": 94.5696,
+      "yieldPct": 7.4888
+    },
+    {
+      "date": "2019-11-15",
+      "cleanPrice": 95.1402,
+      "yieldPct": 7.4872
+    },
+    {
+      "date": "2019-11-22",
+      "cleanPrice": 95.4742,
+      "yieldPct": 7.4856
+    },
+    {
+      "date": "2019-11-29",
+      "cleanPrice": 95.5299,
+      "yieldPct": 7.484
+    },
+    {
+      "date": "2019-12-06",
+      "cleanPrice": 95.3035,
+      "yieldPct": 7.4824
+    },
+    {
+      "date": "2019-12-13",
+      "cleanPrice": 94.8294,
+      "yieldPct": 7.4807
+    },
+    {
+      "date": "2019-12-20",
+      "cleanPrice": 94.1756,
+      "yieldPct": 7.479
+    },
+    {
+      "date": "2019-12-27",
+      "cleanPrice": 93.4344,
+      "yieldPct": 7.4773
+    },
+    {
+      "date": "2020-01-03",
+      "cleanPrice": 92.7102,
+      "yieldPct": 7.4756
+    },
+    {
+      "date": "2020-01-10",
+      "cleanPrice": 92.1053,
+      "yieldPct": 7.4738
+    },
+    {
+      "date": "2020-01-17",
+      "cleanPrice": 91.7057,
+      "yieldPct": 7.472
+    },
+    {
+      "date": "2020-01-24",
+      "cleanPrice": 91.5701,
+      "yieldPct": 7.4702
+    },
+    {
+      "date": "2020-01-31",
+      "cleanPrice": 91.7213,
+      "yieldPct": 7.4683
+    },
+    {
+      "date": "2020-02-07",
+      "cleanPrice": 92.1433,
+      "yieldPct": 7.4665
+    },
+    {
+      "date": "2020-02-14",
+      "cleanPrice": 92.7838,
+      "yieldPct": 7.4646
+    },
+    {
+      "date": "2020-02-21",
+      "cleanPrice": 93.5607,
+      "yieldPct": 7.4626
+    },
+    {
+      "date": "2020-02-28",
+      "cleanPrice": 94.3735,
+      "yieldPct": 7.4607
+    },
+    {
+      "date": "2020-03-06",
+      "cleanPrice": 95.1168,
+      "yieldPct": 7.4587
+    },
+    {
+      "date": "2020-03-13",
+      "cleanPrice": 95.6947,
+      "yieldPct": 7.4567
+    },
+    {
+      "date": "2020-03-20",
+      "cleanPrice": 96.0335,
+      "yieldPct": 7.4547
+    },
+    {
+      "date": "2020-03-27",
+      "cleanPrice": 96.0921,
+      "yieldPct": 7.4526
+    },
+    {
+      "date": "2020-04-03",
+      "cleanPrice": 95.8671,
+      "yieldPct": 7.4506
+    },
+    {
+      "date": "2020-04-10",
+      "cleanPrice": 95.3938,
+      "yieldPct": 7.4485
+    },
+    {
+      "date": "2020-04-17",
+      "cleanPrice": 94.741,
+      "yieldPct": 7.4463
+    },
+    {
+      "date": "2020-04-24",
+      "cleanPrice": 94.002,
+      "yieldPct": 7.4442
+    },
+    {
+      "date": "2020-05-01",
+      "cleanPrice": 93.282,
+      "yieldPct": 7.442
+    },
+    {
+      "date": "2020-05-08",
+      "cleanPrice": 92.6836,
+      "yieldPct": 7.4398
+    },
+    {
+      "date": "2020-05-15",
+      "cleanPrice": 92.2931,
+      "yieldPct": 7.4376
+    },
+    {
+      "date": "2020-05-22",
+      "cleanPrice": 92.169,
+      "yieldPct": 7.4353
+    },
+    {
+      "date": "2020-05-29",
+      "cleanPrice": 92.3335,
+      "yieldPct": 7.4331
+    },
+    {
+      "date": "2020-06-05",
+      "cleanPrice": 92.7701,
+      "yieldPct": 7.4308
+    },
+    {
+      "date": "2020-06-12",
+      "cleanPrice": 93.4253,
+      "yieldPct": 7.4285
+    },
+    {
+      "date": "2020-06-19",
+      "cleanPrice": 94.2161,
+      "yieldPct": 7.4261
+    },
+    {
+      "date": "2020-06-26",
+      "cleanPrice": 95.0412,
+      "yieldPct": 7.4238
+    },
+    {
+      "date": "2020-07-03",
+      "cleanPrice": 95.7945,
+      "yieldPct": 7.4214
+    },
+    {
+      "date": "2020-07-10",
+      "cleanPrice": 96.3797,
+      "yieldPct": 7.419
+    },
+    {
+      "date": "2020-07-17",
+      "cleanPrice": 96.723,
+      "yieldPct": 7.4165
+    },
+    {
+      "date": "2020-07-24",
+      "cleanPrice": 96.7836,
+      "yieldPct": 7.4141
+    },
+    {
+      "date": "2020-07-31",
+      "cleanPrice": 96.5589,
+      "yieldPct": 7.4116
+    },
+    {
+      "date": "2020-08-07",
+      "cleanPrice": 96.0849,
+      "yieldPct": 7.4091
+    },
+    {
+      "date": "2020-08-14",
+      "cleanPrice": 95.4315,
+      "yieldPct": 7.4066
+    },
+    {
+      "date": "2020-08-21",
+      "cleanPrice": 94.6931,
+      "yieldPct": 7.404
+    },
+    {
+      "date": "2020-08-28",
+      "cleanPrice": 93.9755,
+      "yieldPct": 7.4015
+    },
+    {
+      "date": "2020-09-04",
+      "cleanPrice": 93.3821,
+      "yieldPct": 7.3989
+    },
+    {
+      "date": "2020-09-11",
+      "cleanPrice": 92.9996,
+      "yieldPct": 7.3963
+    },
+    {
+      "date": "2020-09-18",
+      "cleanPrice": 92.886,
+      "yieldPct": 7.3936
+    },
+    {
+      "date": "2020-09-25",
+      "cleanPrice": 93.0633,
+      "yieldPct": 7.391
+    },
+    {
+      "date": "2020-10-02",
+      "cleanPrice": 93.5142,
+      "yieldPct": 7.3883
+    },
+    {
+      "date": "2020-10-09",
+      "cleanPrice": 94.1841,
+      "yieldPct": 7.3856
+    },
+    {
+      "date": "2020-10-16",
+      "cleanPrice": 94.989,
+      "yieldPct": 7.3829
+    },
+    {
+      "date": "2020-10-23",
+      "cleanPrice": 95.8266,
+      "yieldPct": 7.3802
+    },
+    {
+      "date": "2020-10-30",
+      "cleanPrice": 96.5899,
+      "yieldPct": 7.3774
+    },
+    {
+      "date": "2020-11-06",
+      "cleanPrice": 97.182,
+      "yieldPct": 7.3747
+    },
+    {
+      "date": "2020-11-13",
+      "cleanPrice": 97.5293,
+      "yieldPct": 7.3719
+    },
+    {
+      "date": "2020-11-20",
+      "cleanPrice": 97.591,
+      "yieldPct": 7.369
+    },
+    {
+      "date": "2020-11-27",
+      "cleanPrice": 97.3653,
+      "yieldPct": 7.3662
+    },
+    {
+      "date": "2020-12-04",
+      "cleanPrice": 96.8891,
+      "yieldPct": 7.3634
+    },
+    {
+      "date": "2020-12-11",
+      "cleanPrice": 96.2335,
+      "yieldPct": 7.3605
+    },
+    {
+      "date": "2020-12-18",
+      "cleanPrice": 95.4938,
+      "yieldPct": 7.3576
+    },
+    {
+      "date": "2020-12-25",
+      "cleanPrice": 94.777,
+      "yieldPct": 7.3547
+    },
+    {
+      "date": "2021-01-01",
+      "cleanPrice": 94.1872,
+      "yieldPct": 7.3518
+    },
+    {
+      "date": "2021-01-08",
+      "cleanPrice": 93.8112,
+      "yieldPct": 7.3488
+    },
+    {
+      "date": "2021-01-15",
+      "cleanPrice": 93.7073,
+      "yieldPct": 7.3459
+    },
+    {
+      "date": "2021-01-22",
+      "cleanPrice": 93.8968,
+      "yieldPct": 7.3429
+    },
+    {
+      "date": "2021-01-29",
+      "cleanPrice": 94.3615,
+      "yieldPct": 7.3399
+    },
+    {
+      "date": "2021-02-05",
+      "cleanPrice": 95.046,
+      "yieldPct": 7.3369
+    },
+    {
+      "date": "2021-02-12",
+      "cleanPrice": 95.8649,
+      "yieldPct": 7.3339
+    },
+    {
+      "date": "2021-02-19",
+      "cleanPrice": 96.7148,
+      "yieldPct": 7.3308
+    },
+    {
+      "date": "2021-02-26",
+      "cleanPrice": 97.4878,
+      "yieldPct": 7.3277
+    },
+    {
+      "date": "2021-03-05",
+      "cleanPrice": 98.0864,
+      "yieldPct": 7.3247
+    },
+    {
+      "date": "2021-03-12",
+      "cleanPrice": 98.4369,
+      "yieldPct": 7.3216
+    },
+    {
+      "date": "2021-03-19",
+      "cleanPrice": 98.4987,
+      "yieldPct": 7.3184
+    },
+    {
+      "date": "2021-03-26",
+      "cleanPrice": 98.2707,
+      "yieldPct": 7.3153
+    },
+    {
+      "date": "2021-04-02",
+      "cleanPrice": 97.7908,
+      "yieldPct": 7.3122
+    },
+    {
+      "date": "2021-04-09",
+      "cleanPrice": 97.1311,
+      "yieldPct": 7.309
+    },
+    {
+      "date": "2021-04-16",
+      "cleanPrice": 96.3885,
+      "yieldPct": 7.3058
+    },
+    {
+      "date": "2021-04-23",
+      "cleanPrice": 95.6708,
+      "yieldPct": 7.3026
+    },
+    {
+      "date": "2021-04-30",
+      "cleanPrice": 95.0829,
+      "yieldPct": 7.2994
+    },
+    {
+      "date": "2021-05-07",
+      "cleanPrice": 94.7123,
+      "yieldPct": 7.2962
+    },
+    {
+      "date": "2021-05-14",
+      "cleanPrice": 94.617,
+      "yieldPct": 7.293
+    },
+    {
+      "date": "2021-05-21",
+      "cleanPrice": 94.8179,
+      "yieldPct": 7.2897
+    },
+    {
+      "date": "2021-05-28",
+      "cleanPrice": 95.296,
+      "yieldPct": 7.2865
+    },
+    {
+      "date": "2021-06-04",
+      "cleanPrice": 95.9946,
+      "yieldPct": 7.2832
+    },
+    {
+      "date": "2021-06-11",
+      "cleanPrice": 96.8271,
+      "yieldPct": 7.2799
+    },
+    {
+      "date": "2021-06-18",
+      "cleanPrice": 97.6889,
+      "yieldPct": 7.2766
+    },
+    {
+      "date": "2021-06-25",
+      "cleanPrice": 98.4711,
+      "yieldPct": 7.2733
+    },
+    {
+      "date": "2021-07-02",
+      "cleanPrice": 99.0757,
+      "yieldPct": 7.2699
+    },
+    {
+      "date": "2021-07-09",
+      "cleanPrice": 99.4284,
+      "yieldPct": 7.2666
+    },
+    {
+      "date": "2021-07-16",
+      "cleanPrice": 99.4891,
+      "yieldPct": 7.2632
+    },
+    {
+      "date": "2021-07-23",
+      "cleanPrice": 99.2573,
+      "yieldPct": 7.2599
+    },
+    {
+      "date": "2021-07-30",
+      "cleanPrice": 98.7721,
+      "yieldPct": 7.2565
+    },
+    {
+      "date": "2021-08-06",
+      "cleanPrice": 98.1068,
+      "yieldPct": 7.2531
+    },
+    {
+      "date": "2021-08-13",
+      "cleanPrice": 97.3594,
+      "yieldPct": 7.2497
+    },
+    {
+      "date": "2021-08-20",
+      "cleanPrice": 96.6393,
+      "yieldPct": 7.2463
+    },
+    {
+      "date": "2021-08-27",
+      "cleanPrice": 96.0519,
+      "yieldPct": 7.2428
+    },
+    {
+      "date": "2021-09-03",
+      "cleanPrice": 95.6853,
+      "yieldPct": 7.2394
+    },
+    {
+      "date": "2021-09-10",
+      "cleanPrice": 95.5975,
+      "yieldPct": 7.236
+    },
+    {
+      "date": "2021-09-17",
+      "cleanPrice": 95.809,
+      "yieldPct": 7.2325
+    },
+    {
+      "date": "2021-09-24",
+      "cleanPrice": 96.2997,
+      "yieldPct": 7.229
+    },
+    {
+      "date": "2021-10-01",
+      "cleanPrice": 97.0118,
+      "yieldPct": 7.2256
+    },
+    {
+      "date": "2021-10-08",
+      "cleanPrice": 97.8575,
+      "yieldPct": 7.2221
+    },
+    {
+      "date": "2021-10-15",
+      "cleanPrice": 98.7306,
+      "yieldPct": 7.2186
+    },
+    {
+      "date": "2021-10-22",
+      "cleanPrice": 99.5213,
+      "yieldPct": 7.2151
+    },
+    {
+      "date": "2021-10-29",
+      "cleanPrice": 100.1308,
+      "yieldPct": 7.2115
+    },
+    {
+      "date": "2021-11-05",
+      "cleanPrice": 100.4846,
+      "yieldPct": 7.208
+    },
+    {
+      "date": "2021-11-12",
+      "cleanPrice": 100.543,
+      "yieldPct": 7.2045
+    },
+    {
+      "date": "2021-11-19",
+      "cleanPrice": 100.306,
+      "yieldPct": 7.2009
+    },
+    {
+      "date": "2021-11-26",
+      "cleanPrice": 99.8139,
+      "yieldPct": 7.1974
+    },
+    {
+      "date": "2021-12-03",
+      "cleanPrice": 99.1413,
+      "yieldPct": 7.1938
+    },
+    {
+      "date": "2021-12-10",
+      "cleanPrice": 98.3877,
+      "yieldPct": 7.1903
+    },
+    {
+      "date": "2021-12-17",
+      "cleanPrice": 97.6634,
+      "yieldPct": 7.1867
+    },
+    {
+      "date": "2021-12-24",
+      "cleanPrice": 97.0752,
+      "yieldPct": 7.1831
+    },
+    {
+      "date": "2021-12-31",
+      "cleanPrice": 96.7113,
+      "yieldPct": 7.1795
+    },
+    {
+      "date": "2022-01-07",
+      "cleanPrice": 96.6299,
+      "yieldPct": 7.1759
+    },
+    {
+      "date": "2022-01-14",
+      "cleanPrice": 96.851,
+      "yieldPct": 7.1723
+    },
+    {
+      "date": "2022-01-21",
+      "cleanPrice": 97.3535,
+      "yieldPct": 7.1687
+    },
+    {
+      "date": "2022-01-28",
+      "cleanPrice": 98.0784,
+      "yieldPct": 7.1651
+    },
+    {
+      "date": "2022-02-04",
+      "cleanPrice": 98.9363,
+      "yieldPct": 7.1615
+    },
+    {
+      "date": "2022-02-11",
+      "cleanPrice": 99.8199,
+      "yieldPct": 7.1579
+    },
+    {
+      "date": "2022-02-18",
+      "cleanPrice": 100.6182,
+      "yieldPct": 7.1542
+    },
+    {
+      "date": "2022-02-25",
+      "cleanPrice": 101.2315,
+      "yieldPct": 7.1506
+    },
+    {
+      "date": "2022-03-04",
+      "cleanPrice": 101.5853,
+      "yieldPct": 7.147
+    },
+    {
+      "date": "2022-03-11",
+      "cleanPrice": 101.6399,
+      "yieldPct": 7.1433
+    },
+    {
+      "date": "2022-03-18",
+      "cleanPrice": 101.3963,
+      "yieldPct": 7.1397
+    },
+    {
+      "date": "2022-03-25",
+      "cleanPrice": 100.8958,
+      "yieldPct": 7.136
+    },
+    {
+      "date": "2022-04-01",
+      "cleanPrice": 100.2144,
+      "yieldPct": 7.1324
+    },
+    {
+      "date": "2022-04-08",
+      "cleanPrice": 99.4529,
+      "yieldPct": 7.1287
+    },
+    {
+      "date": "2022-04-15",
+      "cleanPrice": 98.7232,
+      "yieldPct": 7.1251
+    },
+    {
+      "date": "2022-04-22",
+      "cleanPrice": 98.1327,
+      "yieldPct": 7.1214
+    },
+    {
+      "date": "2022-04-29",
+      "cleanPrice": 97.7704,
+      "yieldPct": 7.1177
+    },
+    {
+      "date": "2022-05-06",
+      "cleanPrice": 97.6943,
+      "yieldPct": 7.1141
+    },
+    {
+      "date": "2022-05-13",
+      "cleanPrice": 97.9239,
+      "yieldPct": 7.1104
+    },
+    {
+      "date": "2022-05-20",
+      "cleanPrice": 98.4372,
+      "yieldPct": 7.1067
+    },
+    {
+      "date": "2022-05-27",
+      "cleanPrice": 99.1739,
+      "yieldPct": 7.103
+    },
+    {
+      "date": "2022-06-03",
+      "cleanPrice": 100.0431,
+      "yieldPct": 7.0994
+    },
+    {
+      "date": "2022-06-10",
+      "cleanPrice": 100.9361,
+      "yieldPct": 7.0957
+    },
+    {
+      "date": "2022-06-17",
+      "cleanPrice": 101.7408,
+      "yieldPct": 7.092
+    },
+    {
+      "date": "2022-06-24",
+      "cleanPrice": 102.3568,
+      "yieldPct": 7.0883
+    },
+    {
+      "date": "2022-07-01",
+      "cleanPrice": 102.7092,
+      "yieldPct": 7.0846
+    },
+    {
+      "date": "2022-07-08",
+      "cleanPrice": 102.7587,
+      "yieldPct": 7.081
+    },
+    {
+      "date": "2022-07-15",
+      "cleanPrice": 102.507,
+      "yieldPct": 7.0773
+    },
+    {
+      "date": "2022-07-22",
+      "cleanPrice": 101.9966,
+      "yieldPct": 7.0736
+    },
+    {
+      "date": "2022-07-29",
+      "cleanPrice": 101.305,
+      "yieldPct": 7.0699
+    },
+    {
+      "date": "2022-08-05",
+      "cleanPrice": 100.5344,
+      "yieldPct": 7.0662
+    },
+    {
+      "date": "2022-08-12",
+      "cleanPrice": 99.7979,
+      "yieldPct": 7.0626
+    },
+    {
+      "date": "2022-08-19",
+      "cleanPrice": 99.204,
+      "yieldPct": 7.0589
+    },
+    {
+      "date": "2022-08-26",
+      "cleanPrice": 98.842,
+      "yieldPct": 7.0552
+    },
+    {
+      "date": "2022-09-02",
+      "cleanPrice": 98.7702,
+      "yieldPct": 7.0515
+    },
+    {
+      "date": "2022-09-09",
+      "cleanPrice": 99.0072,
+      "yieldPct": 7.0479
+    },
+    {
+      "date": "2022-09-16",
+      "cleanPrice": 99.5302,
+      "yieldPct": 7.0442
+    },
+    {
+      "date": "2022-09-23",
+      "cleanPrice": 100.2775,
+      "yieldPct": 7.0405
+    },
+    {
+      "date": "2022-09-30",
+      "cleanPrice": 101.1568,
+      "yieldPct": 7.0368
+    },
+    {
+      "date": "2022-10-07",
+      "cleanPrice": 102.058,
+      "yieldPct": 7.0332
+    },
+    {
+      "date": "2022-10-14",
+      "cleanPrice": 102.8678,
+      "yieldPct": 7.0295
+    },
+    {
+      "date": "2022-10-21",
+      "cleanPrice": 103.485,
+      "yieldPct": 7.0259
+    },
+    {
+      "date": "2022-10-28",
+      "cleanPrice": 103.8347,
+      "yieldPct": 7.0222
+    },
+    {
+      "date": "2022-11-04",
+      "cleanPrice": 103.8777,
+      "yieldPct": 7.0186
+    },
+    {
+      "date": "2022-11-11",
+      "cleanPrice": 103.6165,
+      "yieldPct": 7.0149
+    },
+    {
+      "date": "2022-11-18",
+      "cleanPrice": 103.0949,
+      "yieldPct": 7.0113
+    },
+    {
+      "date": "2022-11-25",
+      "cleanPrice": 102.3918,
+      "yieldPct": 7.0076
+    },
+    {
+      "date": "2022-12-02",
+      "cleanPrice": 101.6109,
+      "yieldPct": 7.004
+    },
+    {
+      "date": "2022-12-09",
+      "cleanPrice": 100.8665,
+      "yieldPct": 7.0004
+    },
+    {
+      "date": "2022-12-16",
+      "cleanPrice": 100.268,
+      "yieldPct": 6.9968
+    },
+    {
+      "date": "2022-12-23",
+      "cleanPrice": 99.9054,
+      "yieldPct": 6.9932
+    },
+    {
+      "date": "2022-12-30",
+      "cleanPrice": 99.8366,
+      "yieldPct": 6.9895
+    },
+    {
+      "date": "2023-01-06",
+      "cleanPrice": 100.08,
+      "yieldPct": 6.9859
+    },
+    {
+      "date": "2023-01-13",
+      "cleanPrice": 100.6116,
+      "yieldPct": 6.9823
+    },
+    {
+      "date": "2023-01-20",
+      "cleanPrice": 101.3682,
+      "yieldPct": 6.9788
+    },
+    {
+      "date": "2023-01-27",
+      "cleanPrice": 102.2563,
+      "yieldPct": 6.9752
+    },
+    {
+      "date": "2023-02-03",
+      "cleanPrice": 103.1642,
+      "yieldPct": 6.9716
+    },
+    {
+      "date": "2023-02-10",
+      "cleanPrice": 103.9776,
+      "yieldPct": 6.968
+    },
+    {
+      "date": "2023-02-17",
+      "cleanPrice": 104.5946,
+      "yieldPct": 6.9645
+    },
+    {
+      "date": "2023-02-24",
+      "cleanPrice": 104.94,
+      "yieldPct": 6.9609
+    },
+    {
+      "date": "2023-03-03",
+      "cleanPrice": 104.9751,
+      "yieldPct": 6.9574
+    },
+    {
+      "date": "2023-03-10",
+      "cleanPrice": 104.7032,
+      "yieldPct": 6.9538
+    },
+    {
+      "date": "2023-03-17",
+      "cleanPrice": 104.1693,
+      "yieldPct": 6.9503
+    },
+    {
+      "date": "2023-03-24",
+      "cleanPrice": 103.4536,
+      "yieldPct": 6.9468
+    },
+    {
+      "date": "2023-03-31",
+      "cleanPrice": 102.6613,
+      "yieldPct": 6.9433
+    },
+    {
+      "date": "2023-04-07",
+      "cleanPrice": 101.908,
+      "yieldPct": 6.9398
+    },
+    {
+      "date": "2023-04-14",
+      "cleanPrice": 101.3041,
+      "yieldPct": 6.9363
+    },
+    {
+      "date": "2023-04-21",
+      "cleanPrice": 100.9399,
+      "yieldPct": 6.9328
+    },
+    {
+      "date": "2023-04-28",
+      "cleanPrice": 100.8732,
+      "yieldPct": 6.9293
+    },
+    {
+      "date": "2023-05-05",
+      "cleanPrice": 101.1218,
+      "yieldPct": 6.9258
+    },
+    {
+      "date": "2023-05-12",
+      "cleanPrice": 101.6606,
+      "yieldPct": 6.9224
+    },
+    {
+      "date": "2023-05-19",
+      "cleanPrice": 102.4251,
+      "yieldPct": 6.9189
+    },
+    {
+      "date": "2023-05-26",
+      "cleanPrice": 103.3204,
+      "yieldPct": 6.9155
+    },
+    {
+      "date": "2023-06-02",
+      "cleanPrice": 104.2335,
+      "yieldPct": 6.9121
+    },
+    {
+      "date": "2023-06-09",
+      "cleanPrice": 105.0489,
+      "yieldPct": 6.9087
+    },
+    {
+      "date": "2023-06-16",
+      "cleanPrice": 105.6642,
+      "yieldPct": 6.9053
+    },
+    {
+      "date": "2023-06-23",
+      "cleanPrice": 106.0039,
+      "yieldPct": 6.9019
+    },
+    {
+      "date": "2023-06-30",
+      "cleanPrice": 106.0298,
+      "yieldPct": 6.8985
+    },
+    {
+      "date": "2023-07-07",
+      "cleanPrice": 105.746,
+      "yieldPct": 6.8952
+    },
+    {
+      "date": "2023-07-14",
+      "cleanPrice": 105.1986,
+      "yieldPct": 6.8918
+    },
+    {
+      "date": "2023-07-21",
+      "cleanPrice": 104.4695,
+      "yieldPct": 6.8885
+    },
+    {
+      "date": "2023-07-28",
+      "cleanPrice": 103.6651,
+      "yieldPct": 6.8851
+    },
+    {
+      "date": "2023-08-04",
+      "cleanPrice": 102.9022,
+      "yieldPct": 6.8818
+    },
+    {
+      "date": "2023-08-11",
+      "cleanPrice": 102.2921,
+      "yieldPct": 6.8785
+    },
+    {
+      "date": "2023-08-18",
+      "cleanPrice": 101.9254,
+      "yieldPct": 6.8752
+    },
+    {
+      "date": "2023-08-25",
+      "cleanPrice": 101.8598,
+      "yieldPct": 6.872
+    },
+    {
+      "date": "2023-09-01",
+      "cleanPrice": 102.1125,
+      "yieldPct": 6.8687
+    },
+    {
+      "date": "2023-09-08",
+      "cleanPrice": 102.6572,
+      "yieldPct": 6.8655
+    },
+    {
+      "date": "2023-09-15",
+      "cleanPrice": 103.4282,
+      "yieldPct": 6.8622
+    },
+    {
+      "date": "2023-09-22",
+      "cleanPrice": 104.3291,
+      "yieldPct": 6.859
+    },
+    {
+      "date": "2023-09-29",
+      "cleanPrice": 105.2457,
+      "yieldPct": 6.8558
+    },
+    {
+      "date": "2023-10-06",
+      "cleanPrice": 106.0614,
+      "yieldPct": 6.8526
+    },
+    {
+      "date": "2023-10-13",
+      "cleanPrice": 106.6733,
+      "yieldPct": 6.8495
+    },
+    {
+      "date": "2023-10-20",
+      "cleanPrice": 107.0059,
+      "yieldPct": 6.8463
+    },
+    {
+      "date": "2023-10-27",
+      "cleanPrice": 107.0212,
+      "yieldPct": 6.8432
+    },
+    {
+      "date": "2023-11-03",
+      "cleanPrice": 106.7245,
+      "yieldPct": 6.8401
+    },
+    {
+      "date": "2023-11-10",
+      "cleanPrice": 106.1629,
+      "yieldPct": 6.837
+    },
+    {
+      "date": "2023-11-17",
+      "cleanPrice": 105.4196,
+      "yieldPct": 6.8339
+    },
+    {
+      "date": "2023-11-24",
+      "cleanPrice": 104.6026,
+      "yieldPct": 6.8308
+    },
+    {
+      "date": "2023-12-01",
+      "cleanPrice": 103.8296,
+      "yieldPct": 6.8277
+    },
+    {
+      "date": "2023-12-08",
+      "cleanPrice": 103.2127,
+      "yieldPct": 6.8247
+    },
+    {
+      "date": "2023-12-15",
+      "cleanPrice": 102.8428,
+      "yieldPct": 6.8217
+    },
+    {
+      "date": "2023-12-22",
+      "cleanPrice": 102.7775,
+      "yieldPct": 6.8187
+    },
+    {
+      "date": "2023-12-29",
+      "cleanPrice": 103.033,
+      "yieldPct": 6.8157
+    },
+    {
+      "date": "2024-01-05",
+      "cleanPrice": 103.5823,
+      "yieldPct": 6.8127
+    },
+    {
+      "date": "2024-01-12",
+      "cleanPrice": 104.3583,
+      "yieldPct": 6.8098
+    },
+    {
+      "date": "2024-01-19",
+      "cleanPrice": 105.2631,
+      "yieldPct": 6.8068
+    },
+    {
+      "date": "2024-01-26",
+      "cleanPrice": 106.1814,
+      "yieldPct": 6.8039
+    },
+    {
+      "date": "2024-02-02",
+      "cleanPrice": 106.9957,
+      "yieldPct": 6.801
+    },
+    {
+      "date": "2024-02-09",
+      "cleanPrice": 107.6026,
+      "yieldPct": 6.7981
+    },
+    {
+      "date": "2024-02-16",
+      "cleanPrice": 107.9266,
+      "yieldPct": 6.7953
+    },
+    {
+      "date": "2024-02-23",
+      "cleanPrice": 107.9303,
+      "yieldPct": 6.7924
+    },
+    {
+      "date": "2024-03-01",
+      "cleanPrice": 107.6197,
+      "yieldPct": 6.7896
+    },
+    {
+      "date": "2024-03-08",
+      "cleanPrice": 107.0432,
+      "yieldPct": 6.7868
+    },
+    {
+      "date": "2024-03-15",
+      "cleanPrice": 106.2854,
+      "yieldPct": 6.784
+    },
+    {
+      "date": "2024-03-22",
+      "cleanPrice": 105.4554,
+      "yieldPct": 6.7813
+    },
+    {
+      "date": "2024-03-29",
+      "cleanPrice": 104.672,
+      "yieldPct": 6.7785
+    },
+    {
+      "date": "2024-04-05",
+      "cleanPrice": 104.0479,
+      "yieldPct": 6.7758
+    },
+    {
+      "date": "2024-04-12",
+      "cleanPrice": 103.6743,
+      "yieldPct": 6.7731
+    },
+    {
+      "date": "2024-04-19",
+      "cleanPrice": 103.6084,
+      "yieldPct": 6.7704
+    },
+    {
+      "date": "2024-04-26",
+      "cleanPrice": 103.8659,
+      "yieldPct": 6.7677
+    },
+    {
+      "date": "2024-05-03",
+      "cleanPrice": 104.4183,
+      "yieldPct": 6.7651
+    },
+    {
+      "date": "2024-05-10",
+      "cleanPrice": 105.1976,
+      "yieldPct": 6.7625
+    },
+    {
+      "date": "2024-05-17",
+      "cleanPrice": 106.1046,
+      "yieldPct": 6.7599
+    },
+    {
+      "date": "2024-05-24",
+      "cleanPrice": 107.0228,
+      "yieldPct": 6.7573
+    },
+    {
+      "date": "2024-05-31",
+      "cleanPrice": 107.8339,
+      "yieldPct": 6.7548
+    },
+    {
+      "date": "2024-06-07",
+      "cleanPrice": 108.4343,
+      "yieldPct": 6.7522
+    },
+    {
+      "date": "2024-06-14",
+      "cleanPrice": 108.7483,
+      "yieldPct": 6.7497
+    },
+    {
+      "date": "2024-06-21",
+      "cleanPrice": 108.7393,
+      "yieldPct": 6.7472
+    },
+    {
+      "date": "2024-06-28",
+      "cleanPrice": 108.4141,
+      "yieldPct": 6.7448
+    },
+    {
+      "date": "2024-07-05",
+      "cleanPrice": 107.8224,
+      "yieldPct": 6.7423
+    },
+    {
+      "date": "2024-07-12",
+      "cleanPrice": 107.0498,
+      "yieldPct": 6.7399
+    },
+    {
+      "date": "2024-07-19",
+      "cleanPrice": 106.2068,
+      "yieldPct": 6.7375
+    },
+    {
+      "date": "2024-07-26",
+      "cleanPrice": 105.4129,
+      "yieldPct": 6.7351
+    },
+    {
+      "date": "2024-08-02",
+      "cleanPrice": 104.7816,
+      "yieldPct": 6.7328
+    },
+    {
+      "date": "2024-08-09",
+      "cleanPrice": 104.4038,
+      "yieldPct": 6.7304
+    },
+    {
+      "date": "2024-08-16",
+      "cleanPrice": 104.3367,
+      "yieldPct": 6.7281
+    },
+    {
+      "date": "2024-08-23",
+      "cleanPrice": 104.5949,
+      "yieldPct": 6.7258
+    },
+    {
+      "date": "2024-08-30",
+      "cleanPrice": 105.1493,
+      "yieldPct": 6.7236
+    },
+    {
+      "date": "2024-09-06",
+      "cleanPrice": 105.9303,
+      "yieldPct": 6.7213
+    },
+    {
+      "date": "2024-09-13",
+      "cleanPrice": 106.8376,
+      "yieldPct": 6.7191
+    },
+    {
+      "date": "2024-09-20",
+      "cleanPrice": 107.7538,
+      "yieldPct": 6.7169
+    },
+    {
+      "date": "2024-09-27",
+      "cleanPrice": 108.5601,
+      "yieldPct": 6.7148
+    },
+    {
+      "date": "2024-10-04",
+      "cleanPrice": 109.1523,
+      "yieldPct": 6.7126
+    },
+    {
+      "date": "2024-10-11",
+      "cleanPrice": 109.4552,
+      "yieldPct": 6.7105
+    },
+    {
+      "date": "2024-10-18",
+      "cleanPrice": 109.4326,
+      "yieldPct": 6.7084
+    },
+    {
+      "date": "2024-10-25",
+      "cleanPrice": 109.0923,
+      "yieldPct": 6.7064
+    },
+    {
+      "date": "2024-11-01",
+      "cleanPrice": 108.4851,
+      "yieldPct": 6.7043
+    },
+    {
+      "date": "2024-11-08",
+      "cleanPrice": 107.6979,
+      "yieldPct": 6.7023
+    },
+    {
+      "date": "2024-11-15",
+      "cleanPrice": 106.8419,
+      "yieldPct": 6.7003
+    },
+    {
+      "date": "2024-11-22",
+      "cleanPrice": 106.0379,
+      "yieldPct": 6.6984
+    },
+    {
+      "date": "2024-11-29",
+      "cleanPrice": 105.3992,
+      "yieldPct": 6.6964
+    },
+    {
+      "date": "2024-12-06",
+      "cleanPrice": 105.0172,
+      "yieldPct": 6.6945
+    },
+    {
+      "date": "2024-12-13",
+      "cleanPrice": 104.9482,
+      "yieldPct": 6.6926
+    },
+    {
+      "date": "2024-12-20",
+      "cleanPrice": 105.2063,
+      "yieldPct": 6.6908
+    },
+    {
+      "date": "2024-12-27",
+      "cleanPrice": 105.7612,
+      "yieldPct": 6.6889
+    },
+    {
+      "date": "2025-01-03",
+      "cleanPrice": 106.5423,
+      "yieldPct": 6.6871
+    },
+    {
+      "date": "2025-01-10",
+      "cleanPrice": 107.4483,
+      "yieldPct": 6.6853
+    },
+    {
+      "date": "2025-01-17",
+      "cleanPrice": 108.3608,
+      "yieldPct": 6.6836
+    },
+    {
+      "date": "2025-01-24",
+      "cleanPrice": 109.1604,
+      "yieldPct": 6.6819
+    },
+    {
+      "date": "2025-01-31",
+      "cleanPrice": 109.743,
+      "yieldPct": 6.6802
+    },
+    {
+      "date": "2025-02-07",
+      "cleanPrice": 110.0336,
+      "yieldPct": 6.6785
+    },
+    {
+      "date": "2025-02-14",
+      "cleanPrice": 109.9966,
+      "yieldPct": 6.6768
+    },
+    {
+      "date": "2025-02-21",
+      "cleanPrice": 109.6409,
+      "yieldPct": 6.6752
+    },
+    {
+      "date": "2025-02-28",
+      "cleanPrice": 109.0183,
+      "yieldPct": 6.6736
+    },
+    {
+      "date": "2025-03-07",
+      "cleanPrice": 108.2168,
+      "yieldPct": 6.672
+    },
+    {
+      "date": "2025-03-14",
+      "cleanPrice": 107.3484,
+      "yieldPct": 6.6705
+    },
+    {
+      "date": "2025-03-21",
+      "cleanPrice": 106.5345,
+      "yieldPct": 6.669
+    },
+    {
+      "date": "2025-03-28",
+      "cleanPrice": 105.8888,
+      "yieldPct": 6.6675
+    },
+    {
+      "date": "2025-04-04",
+      "cleanPrice": 105.5024,
+      "yieldPct": 6.6661
+    },
+    {
+      "date": "2025-04-11",
+      "cleanPrice": 105.4312,
+      "yieldPct": 6.6646
+    },
+    {
+      "date": "2025-04-18",
+      "cleanPrice": 105.6883,
+      "yieldPct": 6.6632
+    },
+    {
+      "date": "2025-04-25",
+      "cleanPrice": 106.2426,
+      "yieldPct": 6.6618
+    },
+    {
+      "date": "2025-05-02",
+      "cleanPrice": 107.0222,
+      "yieldPct": 6.6605
+    },
+    {
+      "date": "2025-05-09",
+      "cleanPrice": 107.9251,
+      "yieldPct": 6.6592
+    },
+    {
+      "date": "2025-05-16",
+      "cleanPrice": 108.832,
+      "yieldPct": 6.6579
+    },
+    {
+      "date": "2025-05-23",
+      "cleanPrice": 109.6234,
+      "yieldPct": 6.6566
+    },
+    {
+      "date": "2025-05-30",
+      "cleanPrice": 110.1951,
+      "yieldPct": 6.6554
+    },
+    {
+      "date": "2025-06-06",
+      "cleanPrice": 110.4724,
+      "yieldPct": 6.6542
+    },
+    {
+      "date": "2025-06-13",
+      "cleanPrice": 110.4206,
+      "yieldPct": 6.653
+    },
+    {
+      "date": "2025-06-20",
+      "cleanPrice": 110.0494,
+      "yieldPct": 6.6519
+    },
+    {
+      "date": "2025-06-27",
+      "cleanPrice": 109.4116,
+      "yieldPct": 6.6507
+    },
+    {
+      "date": "2025-07-04",
+      "cleanPrice": 108.5962,
+      "yieldPct": 6.6497
+    },
+    {
+      "date": "2025-07-11",
+      "cleanPrice": 107.7162,
+      "yieldPct": 6.6486
+    },
+    {
+      "date": "2025-07-18",
+      "cleanPrice": 106.893,
+      "yieldPct": 6.6476
+    },
+    {
+      "date": "2025-07-25",
+      "cleanPrice": 106.2407,
+      "yieldPct": 6.6466
+    },
+    {
+      "date": "2025-08-01",
+      "cleanPrice": 105.85,
+      "yieldPct": 6.6456
+    },
+    {
+      "date": "2025-08-08",
+      "cleanPrice": 105.7763,
+      "yieldPct": 6.6446
+    },
+    {
+      "date": "2025-08-15",
+      "cleanPrice": 106.0317,
+      "yieldPct": 6.6437
+    },
+    {
+      "date": "2025-08-22",
+      "cleanPrice": 106.5842,
+      "yieldPct": 6.6428
+    },
+    {
+      "date": "2025-08-29",
+      "cleanPrice": 107.3609,
+      "yieldPct": 6.642
+    },
+    {
+      "date": "2025-09-05",
+      "cleanPrice": 108.259,
+      "yieldPct": 6.6411
+    },
+    {
+      "date": "2025-09-12",
+      "cleanPrice": 109.1588,
+      "yieldPct": 6.6403
+    },
+    {
+      "date": "2025-09-19",
+      "cleanPrice": 109.9405,
+      "yieldPct": 6.6396
+    },
+    {
+      "date": "2025-09-26",
+      "cleanPrice": 110.4999,
+      "yieldPct": 6.6388
+    },
+    {
+      "date": "2025-10-03",
+      "cleanPrice": 110.7631,
+      "yieldPct": 6.6381
+    },
+    {
+      "date": "2025-10-10",
+      "cleanPrice": 110.6961,
+      "yieldPct": 6.6374
+    },
+    {
+      "date": "2025-10-17",
+      "cleanPrice": 110.3095,
+      "yieldPct": 6.6368
+    },
+    {
+      "date": "2025-10-24",
+      "cleanPrice": 109.6571,
+      "yieldPct": 6.6362
+    },
+    {
+      "date": "2025-10-31",
+      "cleanPrice": 108.8287,
+      "yieldPct": 6.6356
+    },
+    {
+      "date": "2025-11-07",
+      "cleanPrice": 107.9378,
+      "yieldPct": 6.635
+    },
+    {
+      "date": "2025-11-14",
+      "cleanPrice": 107.1063,
+      "yieldPct": 6.6345
+    },
+    {
+      "date": "2025-11-21",
+      "cleanPrice": 106.448,
+      "yieldPct": 6.634
+    },
+    {
+      "date": "2025-11-28",
+      "cleanPrice": 106.0533,
+      "yieldPct": 6.6335
+    },
+    {
+      "date": "2025-12-05",
+      "cleanPrice": 105.9769,
+      "yieldPct": 6.6331
+    },
+    {
+      "date": "2025-12-12",
+      "cleanPrice": 106.23,
+      "yieldPct": 6.6326
+    },
+    {
+      "date": "2025-12-19",
+      "cleanPrice": 106.7796,
+      "yieldPct": 6.6323
+    },
+    {
+      "date": "2025-12-26",
+      "cleanPrice": 107.5521,
+      "yieldPct": 6.6319
+    },
+    {
+      "date": "2026-01-02",
+      "cleanPrice": 108.4439,
+      "yieldPct": 6.6316
+    },
+    {
+      "date": "2026-01-09",
+      "cleanPrice": 109.335,
+      "yieldPct": 6.6313
+    },
+    {
+      "date": "2026-01-16",
+      "cleanPrice": 110.1055,
+      "yieldPct": 6.631
+    },
+    {
+      "date": "2026-01-23",
+      "cleanPrice": 110.6517,
+      "yieldPct": 6.6308
+    },
+    {
+      "date": "2026-01-30",
+      "cleanPrice": 110.9002,
+      "yieldPct": 6.6306
+    },
+    {
+      "date": "2026-02-06",
+      "cleanPrice": 110.8179,
+      "yieldPct": 6.6304
+    },
+    {
+      "date": "2026-02-13",
+      "cleanPrice": 110.4162,
+      "yieldPct": 6.6303
+    },
+    {
+      "date": "2026-02-20",
+      "cleanPrice": 109.7499,
+      "yieldPct": 6.6302
+    },
+    {
+      "date": "2026-02-27",
+      "cleanPrice": 108.9095,
+      "yieldPct": 6.6301
+    },
+    {
+      "date": "2026-03-06",
+      "cleanPrice": 108.0088,
+      "yieldPct": 6.63
+    },
+    {
+      "date": "2026-03-13",
+      "cleanPrice": 107.1699,
+      "yieldPct": 6.63
+    },
+    {
+      "date": "2026-03-20",
+      "cleanPrice": 106.5067,
+      "yieldPct": 6.63
+    },
+    {
+      "date": "2026-03-27",
+      "cleanPrice": 106.1091,
+      "yieldPct": 6.63
+    },
+    {
+      "date": "2026-04-03",
+      "cleanPrice": 106.0311,
+      "yieldPct": 6.63
+    },
+    {
+      "date": "2026-04-10",
+      "cleanPrice": 106.2831,
+      "yieldPct": 6.63
+    },
+    {
+      "date": "2026-04-17",
+      "cleanPrice": 106.8312,
+      "yieldPct": 6.63
+    },
+    {
+      "date": "2026-04-24",
+      "cleanPrice": 107.601,
+      "yieldPct": 6.63
+    },
+    {
+      "date": "2026-05-01",
+      "cleanPrice": 108.4885,
+      "yieldPct": 6.63
+    },
+    {
+      "date": "2026-05-08",
+      "cleanPrice": 109.3735,
+      "yieldPct": 6.63
+    },
+    {
+      "date": "2026-05-15",
+      "cleanPrice": 110.1361,
+      "yieldPct": 6.63
+    }
+  ]
+}

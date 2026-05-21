@@ -1,6 +1,7 @@
 package com.nurseli.marketdata.scheduler;
 
 import com.nurseli.marketdata.application.eurobond.EurobondEvdsIngestService;
+import com.nurseli.marketdata.config.ConditionalOnEurobondEvds;
 import com.nurseli.marketdata.config.EurobondEvdsProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,13 +10,14 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnEurobondEvds
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(
         prefix = "app.market.eurobonds.evds.latest-refresh",
         name = "enabled",
         havingValue = "true",
-        matchIfMissing = true)
+        matchIfMissing = false)
 public class EurobondEvdsLatestRefreshScheduler {
 
     private final EurobondEvdsProperties properties;

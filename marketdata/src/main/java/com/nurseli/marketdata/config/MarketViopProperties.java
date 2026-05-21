@@ -70,6 +70,10 @@ public class MarketViopProperties {
         /** Geçmiş penceresi (gün). */
         private int historyLookbackDays = 7;
         private int historyChunkDays = 7;
+        /**
+         * {@code price-at} isteğinde DB boşsa İş Yatırım'dan geriye dönük çekilecek gün sayısı.
+         */
+        private int priceAtBackfillDays = 60;
         /** @deprecated Cron yerine {@link #snapshotFixedDelayMs} kullanılıyor; geriye dönük YAML için tutulur. */
         @Deprecated
         private String snapshotCron = "0 */15 * * * *";
