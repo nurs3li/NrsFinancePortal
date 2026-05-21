@@ -178,17 +178,20 @@ export function AdminUsersAndAccounts() {
             `}</style>
             <h1 style={titleStyle}>{t('nav.userManagement', 'Kullanıcı Yönetimi')}</h1>
             <p style={mutedStyle}>
-                Keycloak realm rolleri ile uyumlu kullanıcı listesi. Rol ataması (USER) Keycloak admin client gerektirir.
+                {t(
+                    'admin.usersPageSubtitle',
+                    'Keycloak realm rolleri ile uyumlu kullanıcı listesi. Rol ataması (USER) Keycloak admin client gerektirir.',
+                )}
             </p>
 
             <div style={{ ...cardStyle, marginTop: 14, marginBottom: 18, position: 'relative' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Settings size={16} color={tokens.accent} />
-                        <strong style={{ color: tokens.text }}>Admin Tools</strong>
+                        <strong style={{ color: tokens.text }}>{t('admin.toolsTitle', 'Yönetici araçları')}</strong>
                     </div>
                     <button style={{ ...btnStyle, marginRight: 0 }} onClick={() => setShowTools((v) => !v)}>
-                        Araçlar
+                        {t('admin.toolsToggle', 'Araçlar')}
                     </button>
                 </div>
                 {showTools && (
@@ -201,7 +204,7 @@ export function AdminUsersAndAccounts() {
                             }}
                         >
                             <UserPlus size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-                            Yeni Kullanıcı Ekle
+                            {t('admin.addUser', 'Yeni kullanıcı ekle')}
                         </button>
                     </div>
                 )}
@@ -219,12 +222,12 @@ export function AdminUsersAndAccounts() {
                     <table style={tableStyle}>
                         <thead>
                         <tr>
-                            <th style={thStyle}>ID</th>
-                            <th style={thStyle}>Kullanıcı adı</th>
-                            <th style={thStyle}>E-posta</th>
-                            <th style={thStyle}>Yetki (Keycloak + DB)</th>
+                            <th style={thStyle}>{t('admin.colId', 'ID')}</th>
+                            <th style={thStyle}>{t('admin.colUsername', 'Kullanıcı adı')}</th>
+                            <th style={thStyle}>{t('admin.colEmail', 'E-posta')}</th>
+                            <th style={thStyle}>{t('admin.colRole', 'Yetki (Keycloak + DB)')}</th>
                             <th style={thStyle}>{t('admin.userLoginColumn', 'Giriş (Keycloak)')}</th>
-                            <th style={thStyle}>İnceleme</th>
+                            <th style={thStyle}>{t('admin.colInspection', 'İnceleme')}</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -236,7 +239,7 @@ export function AdminUsersAndAccounts() {
                                 <td style={tdStyle}>
                                     {u.role === 'ADMIN' && adminUserCount <= 1 ? (
                                         <span style={{ color: tokens.textMuted, fontSize: '0.82rem' }} title={t('admin.singleAdminHint', 'Sistemde tek yönetici varken rol düşürülemez; ADMIN atanamaz')}>
-                                            ADMIN <span style={{ opacity: 0.85 }}>(sabit)</span>
+                                            ADMIN <span style={{ opacity: 0.85 }}>({t('admin.adminFixed', 'sabit')})</span>
                                         </span>
                                     ) : u.role === 'ADMIN' && adminUserCount > 1 ? (
                                         <select
@@ -259,7 +262,7 @@ export function AdminUsersAndAccounts() {
                                                 minWidth: 180,
                                             }}
                                         >
-                                            <option value="">ADMIN → düşürmek için seç…</option>
+                                            <option value="">{t('admin.demoteSelectPlaceholder', 'ADMIN → düşürmek için seç…')}</option>
                                             <option value="USER">USER</option>
                                         </select>
                                     ) : (
@@ -340,10 +343,10 @@ export function AdminUsersAndAccounts() {
                                     <button
                                         style={{ ...btnStyle, marginRight: 0 }}
                                         onClick={() => openInspection(u.id)}
-                                        title="Kullanıcı detaylı inceleme"
+                                        title={t('admin.inspectTitleTooltip', 'Kullanıcı detaylı inceleme')}
                                     >
                                         <Eye size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-                                        İncele
+                                        {t('admin.inspectBtn', 'İncele')}
                                     </button>
                                 </td>
                             </tr>
@@ -370,7 +373,7 @@ export function AdminUsersAndAccounts() {
                     >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                             <div>
-                                <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>Kullanıcı detaylı inceleme</div>
+                                <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>{t('admin.inspectTitle', 'Kullanıcı detaylı inceleme')}</div>
                                 <div style={mutedStyle}>
                                     {inspectData?.username ?? '...'} • {inspectData?.email ?? '...'} • {inspectData?.role ?? '...'}
                                 </div>
@@ -385,12 +388,12 @@ export function AdminUsersAndAccounts() {
                         ) : inspectData?.role === 'USER' ? (
                             <div style={{ display: 'grid', gap: 12 }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
-                                    <div style={cardStyle}><div style={mutedStyle}>Toplam portföy değeri</div><div style={{ fontWeight: 800, marginTop: 4 }}>{formatMoney(inspectData.dashboardSummary?.portfolio?.totalValueTry)}</div></div>
-                                    <div style={cardStyle}><div style={mutedStyle}>Özet (dashboard)</div><div style={{ fontWeight: 800, marginTop: 4 }}>{formatMoney(inspectData.dashboardSummary?.totalPortfolioValueTry)}</div></div>
+                                    <div style={cardStyle}><div style={mutedStyle}>{t('admin.inspectTotalPortfolio', 'Toplam portföy değeri')}</div><div style={{ fontWeight: 800, marginTop: 4 }}>{formatMoney(inspectData.dashboardSummary?.portfolio?.totalValueTry)}</div></div>
+                                    <div style={cardStyle}><div style={mutedStyle}>{t('admin.inspectDashboardSummary', 'Özet (dashboard)')}</div><div style={{ fontWeight: 800, marginTop: 4 }}>{formatMoney(inspectData.dashboardSummary?.totalPortfolioValueTry)}</div></div>
                                 </div>
 
                                 <div style={{ ...cardStyle, padding: 12 }}>
-                                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Portföy — dağılım</div>
+                                    <div style={{ fontWeight: 700, marginBottom: 8 }}>{t('admin.inspectPortfolioDist', 'Portföy — dağılım')}</div>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 220px) 1fr', alignItems: 'center', gap: 12 }}>
                                         <div style={{ display: 'flex', justifyContent: 'center' }}>
                                             {(() => {
@@ -419,20 +422,20 @@ export function AdminUsersAndAccounts() {
                                                 </div>
                                             ))}
                                             {portfolioSlices(inspectData).length === 0 && (
-                                                <span style={mutedStyle}>Dağılım verisi yok</span>
+                                                <span style={mutedStyle}>{t('admin.inspectNoDistData', 'Dağılım verisi yok')}</span>
                                             )}
                                         </div>
                                     </div>
                                     <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-                                        <div style={mutedStyle}>Toplam maliyet: <strong style={{ color: tokens.text }}>{formatMoney(inspectData.dashboardSummary?.portfolio?.totalCostTry)}</strong></div>
-                                        <div style={mutedStyle}>Güncel değer: <strong style={{ color: tokens.text }}>{formatMoney(inspectData.dashboardSummary?.portfolio?.totalValueTry)}</strong></div>
-                                        <div style={mutedStyle}>Toplam kar: <strong style={{ color: (Number(inspectData.dashboardSummary?.portfolio?.totalPnlTry ?? 0) >= 0 ? tokens.success : tokens.error) }}>{formatMoney(inspectData.dashboardSummary?.portfolio?.totalPnlTry)}</strong></div>
-                                        <div style={mutedStyle}>Toplam PNL%: <strong style={{ color: (Number(inspectData.dashboardSummary?.portfolio?.totalPnlPct ?? 0) >= 0 ? tokens.success : tokens.error) }}>%{Number(inspectData.dashboardSummary?.portfolio?.totalPnlPct ?? 0).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR', { maximumFractionDigits: 2 })}</strong></div>
+                                        <div style={mutedStyle}>{t('admin.inspectTotalCost', 'Toplam maliyet')}: <strong style={{ color: tokens.text }}>{formatMoney(inspectData.dashboardSummary?.portfolio?.totalCostTry)}</strong></div>
+                                        <div style={mutedStyle}>{t('admin.inspectCurrentValue', 'Güncel değer')}: <strong style={{ color: tokens.text }}>{formatMoney(inspectData.dashboardSummary?.portfolio?.totalValueTry)}</strong></div>
+                                        <div style={mutedStyle}>{t('admin.inspectTotalProfit', 'Toplam kar')}: <strong style={{ color: (Number(inspectData.dashboardSummary?.portfolio?.totalPnlTry ?? 0) >= 0 ? tokens.success : tokens.error) }}>{formatMoney(inspectData.dashboardSummary?.portfolio?.totalPnlTry)}</strong></div>
+                                        <div style={mutedStyle}>{t('admin.inspectTotalPnlPct', 'Toplam PNL%')}: <strong style={{ color: (Number(inspectData.dashboardSummary?.portfolio?.totalPnlPct ?? 0) >= 0 ? tokens.success : tokens.error) }}>%{Number(inspectData.dashboardSummary?.portfolio?.totalPnlPct ?? 0).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR', { maximumFractionDigits: 2 })}</strong></div>
                                     </div>
                                 </div>
                             </div>
                         ) : (
-                            <p style={mutedStyle}>Bu rol için portföy özeti yok (yalnızca USER).</p>
+                            <p style={mutedStyle}>{t('admin.inspectNoPortfolioForRole', 'Bu rol için portföy özeti yok (yalnızca USER).')}</p>
                         )}
                     </div>
                 </div>

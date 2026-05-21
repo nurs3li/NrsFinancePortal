@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef } from 'react';
 import { createChart } from 'lightweight-charts';
 import type { LogicalRange, Time } from 'lightweight-charts';
 import { apiDatetimeToChartTime } from '../../lib/chartApiTime';
+import { createChartResizeScheduler } from './chartResize';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type CandlePoint = {
@@ -68,7 +69,6 @@ function SpotTerminalChartImpl({
     const barCountRef = useRef(0);
     const candleByTimeRef = useRef<Map<string, CandlePoint>>(new Map());
 
-    const chartHeight = 520;
     const tokensRef = useRef(tokens);
     tokensRef.current = tokens;
     const onCrosshairDateRef = useRef(onCrosshairDate);
@@ -98,9 +98,10 @@ function SpotTerminalChartImpl({
 
         const t = tokensRef.current;
         const widthPx = Math.max(320, el.clientWidth);
+        const heightPx = Math.max(260, el.clientHeight);
         const chart = createChart(el, {
             width: widthPx,
-            height: chartHeight,
+            height: heightPx,
             layout: {
                 background: { color: t.bgCard },
                 textColor: t.text,
@@ -181,9 +182,11 @@ function SpotTerminalChartImpl({
 
         const onResize = () => {
             const w = Math.max(320, el.clientWidth);
+            const h = Math.max(260, el.clientHeight);
             const lay = computeTerminalTimeScaleLayout(w, Math.max(2, barCountRef.current), rangeRef.current);
             chart.applyOptions({
                 width: w,
+                height: h,
                 timeScale: {
                     borderColor: tokensRef.current.border,
                     timeVisible: true,
@@ -200,10 +203,11 @@ function SpotTerminalChartImpl({
                 chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
             }
         };
-        window.addEventListener('resize', onResize);
+        const resizeScheduler = createChartResizeScheduler(onResize);
+        const unbindResize = resizeScheduler.bind(el);
 
         return () => {
-            window.removeEventListener('resize', onResize);
+            unbindResize();
             chart.remove();
             chartApiRef.current = null;
             closeAreaRef.current = null;
@@ -305,7 +309,8 @@ function SpotTerminalChartImpl({
             {emptyMessage ? <div className="terminal-chart-empty">{emptyMessage}</div> : null}
             <div
                 ref={chartRef}
-                style={{ width: '100%', height: chartHeight, display: showChart ? 'block' : 'none' }}
+                className="terminal-chart-surface"
+                style={{ display: showChart ? 'block' : 'none' }}
             />
             {showRsi && showChart ? (
                 <div className="terminal-rsi">

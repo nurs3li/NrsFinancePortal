@@ -12,12 +12,22 @@
   color-scheme: light;
   --page-bg: #f1f5f9;
   --text: #0f172a;
+  --chart-grid: rgba(148, 163, 184, 0.38);
+  --chart-axis: #475569;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-text: #0f172a;
+  --chart-tooltip-border: #cbd5e1;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
   --page-bg: #0f172a;
   --text: #f8fafc;
+  --chart-grid: rgba(148, 163, 184, 0.2);
+  --chart-axis: #cbd5e1;
+  --chart-tooltip-bg: #0f172a;
+  --chart-tooltip-text: #f8fafc;
+  --chart-tooltip-border: #334155;
 }
 
 body {

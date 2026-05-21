@@ -506,6 +506,219 @@
     }
 }
 
+/* İki sütun: bildirimler (sol) + alarmlar (sağ) */
+.notif-header--split-page .notif-header__title {
+    margin: 0;
+    font-size: 1.35rem;
+}
+
+.notif-page-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 18px;
+    align-items: stretch;
+    max-width: 1280px;
+}
+
+.notif-inbox-card {
+    border-radius: 16px;
+    border: 1px solid rgba(192, 192, 192, 0.14);
+    background: rgba(15, 23, 42, 0.42);
+    box-shadow: 0 10px 32px rgba(2, 6, 23, 0.22);
+    height: min(680px, calc(100vh - 200px));
+    min-height: 480px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.notif-inbox-card__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(192, 192, 192, 0.12);
+}
+
+.notif-inbox-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid rgba(192, 192, 192, 0.16);
+    background: rgba(192, 192, 192, 0.06);
+    color: #d4d4d8;
+    flex-shrink: 0;
+}
+
+.notif-inbox-card__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    flex: 1;
+    min-width: 0;
+}
+
+.notif-inbox-card__count {
+    font-size: 0.72rem;
+    color: var(--notif-muted);
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(192, 192, 192, 0.14);
+    white-space: nowrap;
+}
+
+.notif-inbox-card__body {
+    padding: 12px 14px 14px;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.notif-inbox-card__list-pane {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    margin-bottom: 4px;
+    padding-right: 2px;
+}
+
+.notif-inbox-card__list-pane .notif-empty,
+.notif-inbox-card__list-pane .notif-loading,
+.notif-inbox-card__list-pane .notif-error {
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.notif-tabs--in-card {
+    margin-bottom: 12px;
+    width: 100%;
+}
+
+.notif-alarm-filter-tabs--embedded {
+    margin-bottom: 12px;
+    width: 100%;
+}
+
+.notif-list--in-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.notif-alarm-list--embedded {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.notif-item--compact {
+    grid-template-columns: auto 1fr auto auto;
+    gap: 8px;
+    padding: 10px 10px 10px 12px;
+}
+
+.notif-item--compact .notif-item__type-icon {
+    width: 28px;
+    height: 28px;
+}
+
+.notif-item--compact .notif-item__title {
+    font-size: 0.84rem;
+}
+
+.notif-item--compact .notif-item__meta {
+    flex-wrap: wrap;
+    gap: 4px 6px;
+}
+
+.notif-item--compact .notif-item__type-chip {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.notif-item--compact .notif-item__hint {
+    display: none;
+}
+
+.notif-item--compact .notif-item__chevron {
+    opacity: 0.55;
+}
+
+.alarm-list-item--compact {
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
+    padding: 10px 10px;
+    margin-bottom: 8px;
+}
+
+.alarm-list-item__body {
+    min-width: 0;
+}
+
+.alarm-list-item__aside {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.alarm-list-item--compact .alarm-list-item__meta {
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
+
+.inbox-card-pagination {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid rgba(192, 192, 192, 0.1);
+}
+
+.inbox-card-pagination__info {
+    font-size: 0.74rem;
+    color: var(--notif-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.inbox-card-pagination__nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+[data-theme='light'] .notif-inbox-card {
+    background: #fff;
+    border-color: rgba(15, 23, 42, 0.08);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+@media (max-width: 1024px) {
+    .notif-page-split {
+        grid-template-columns: 1fr;
+    }
+
+    .notif-inbox-card {
+        height: auto;
+        min-height: 420px;
+        max-height: min(560px, 70vh);
+    }
+}
+
 /* Mobile uyumu */
 @media (max-width: 720px) {
     .notif-page {

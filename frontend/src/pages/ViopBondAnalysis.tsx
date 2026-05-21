@@ -10,6 +10,7 @@ import { CombinedFinancialSummaryCards } from '../components/viopBond/CombinedFi
 import { ViopBondTabs } from '../components/viopBond/ViopBondTabs';
 import { ViopAnalysisTab } from '../components/viopBond/ViopAnalysisTab';
 import { BondAnalysisTab } from '../components/viopBond/BondAnalysisTab';
+import { buildCombinedRiskReasons } from '../components/viopBond/bondAnalysisHelpers';
 import './Portfolio.css';
 import './ViopBondAnalysis.css';
 
@@ -33,7 +34,10 @@ export function ViopBondAnalysis() {
         queryFn: getBondSummary,
     });
 
-    const openProductCount = (viopSummary?.openPositionCount ?? 0) + (bondSummary?.openPositionCount ?? 0);
+    const openBondCount = bondSummary?.openPositionCount ?? 0;
+    const openViopCount = viopSummary?.openPositionCount ?? 0;
+
+    const totalPnl = (bondSummary?.totalPnl ?? 0) + (viopSummary?.totalUnrealizedPnl ?? 0);
 
     const riskStatus = useMemo(() => {
         const exposure = combined?.totalRiskExposure ?? 0;
@@ -45,6 +49,11 @@ export function ViopBondAnalysis() {
         return t('viopBond.riskBalanced', 'Dengeli');
     }, [combined, t]);
 
+    const riskReasons = useMemo(
+        () => buildCombinedRiskReasons(combined, riskStatus, openBondCount, openViopCount, t),
+        [combined, riskStatus, openBondCount, openViopCount, t],
+    );
+
     const pageStyle: CSSProperties = {
         background: tokens.bg,
         color: tokens.text,
@@ -54,6 +63,7 @@ export function ViopBondAnalysis() {
         border: tokens.border,
         bgCard: tokens.bgCard,
         textMuted: tokens.textMuted,
+        text: tokens.text,
     };
 
     const pageVars = {
@@ -73,7 +83,7 @@ export function ViopBondAnalysis() {
                 <p className="vb-hero-sub" style={{ color: tokens.textMuted }}>
                     {t(
                         'viopBond.subtitle',
-                        'Vadeli işlem ve sabit getirili ürünlerinizi vade, teminat, kupon ve risk maruziyetiyle analiz edin.',
+                        'Vadeli işlem, tahvil, bono ve eurobond pozisyonlarınızı risk, vade ve getiri açısından takip edin.',
                     )}
                 </p>
             </header>
@@ -82,18 +92,26 @@ export function ViopBondAnalysis() {
                 summary={combined}
                 loading={combinedLoading}
                 tokens={cardTokens}
-                openProductCount={openProductCount}
+                totalPnl={totalPnl}
                 riskStatus={riskStatus}
+                riskReasons={riskReasons}
             />
 
             <section className="vb-tab-shell pf-card-premium" style={{ borderColor: tokens.border, background: tokens.bgCard }}>
-                <ViopBondTabs
-                    active={tab}
-                    onChange={setTab}
-                    viopLabel={t('viopBond.tabViop', 'VİOP')}
-                    bondLabel={t('viopBond.tabBond', 'Tahvil & Eurobond')}
-                />
-                {tab === 'viop' ? <ViopAnalysisTab tokens={cardTokens} /> : <BondAnalysisTab tokens={cardTokens} />}
+                <div className="vb-tab-bar-wrap">
+                    <div className="vb-tab-bar">
+                        <ViopBondTabs
+                            active={tab}
+                            onChange={setTab}
+                            viopLabel={t('viopBond.tabViop', 'VİOP')}
+                            bondLabel={t('viopBond.tabBond', 'Tahvil & Eurobond')}
+                            tokens={cardTokens}
+                        />
+                    </div>
+                </div>
+                <div className="vb-tab-body">
+                    {tab === 'viop' ? <ViopAnalysisTab tokens={cardTokens} /> : <BondAnalysisTab tokens={cardTokens} />}
+                </div>
             </section>
         </div>
     );

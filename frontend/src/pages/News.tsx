@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { marketClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -26,16 +26,16 @@ type NewsPage = {
     page: { size: number; number: number; totalElements: number; totalPages: number };
 };
 
-const CATEGORIES = [
-    { value: '', label: 'Tümü' },
-    { value: 'GENERAL', label: 'Genel' },
-    { value: 'FOREX', label: 'Döviz' },
-    { value: 'COMMODITY', label: 'Altın' },
-    { value: 'FUND', label: 'Fonlar' },
-    { value: 'CRYPTO', label: 'Kripto' },
-    { value: 'STOCK', label: 'Hisse' },
-    { value: 'VIOP', label: 'VİOP' },
-    { value: 'BOND', label: 'Tahvil' },
+const CATEGORY_DEFS = [
+    { value: '', labelKey: 'news.category.all', labelFallback: 'Tümü' },
+    { value: 'GENERAL', labelKey: 'news.category.general', labelFallback: 'Genel' },
+    { value: 'FOREX', labelKey: 'news.category.fx', labelFallback: 'Döviz' },
+    { value: 'COMMODITY', labelKey: 'news.category.gold', labelFallback: 'Altın' },
+    { value: 'FUND', labelKey: 'news.category.funds', labelFallback: 'Fonlar' },
+    { value: 'CRYPTO', labelKey: 'news.category.crypto', labelFallback: 'Kripto' },
+    { value: 'STOCK', labelKey: 'news.category.stock', labelFallback: 'Hisse' },
+    { value: 'VIOP', labelKey: 'news.category.viop', labelFallback: 'VİOP' },
+    { value: 'BOND', labelKey: 'news.category.bond', labelFallback: 'Tahvil' },
 ];
 
 export function News() {
@@ -51,20 +51,33 @@ export function News() {
     const [detailLoading, setDetailLoading] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const detailColRef = useRef<HTMLDivElement>(null);
     const preferTurkish = lang === 'tr';
     const uiLocale = lang === 'en' ? 'en-US' : 'tr-TR';
 
+    const pageCssVars = {
+        '--news-bg': tokens.bg,
+        '--news-text': tokens.text,
+        '--news-muted': tokens.textMuted,
+        '--news-card': tokens.bgCard,
+        '--news-border': tokens.border,
+        '--news-accent': tokens.accent,
+        '--news-error': tokens.error,
+    } as React.CSSProperties;
+
     useEffect(() => {
         if (!queryCategory) return;
-        const allowed = new Set(CATEGORIES.map((x) => x.value));
+        const allowed = new Set(CATEGORY_DEFS.map((x) => x.value));
         if (allowed.has(queryCategory)) {
             setCategory(queryCategory);
             setPageNum(0);
         }
     }, [queryCategory]);
 
+    const contentNotFoundHtml = `<p>${t('news.contentNotFound', 'İçerik bulunamadı.')}</p>`;
+
     const extractReadableNewsBody = (rawHtml: string | null | undefined): string => {
-        if (!rawHtml || !rawHtml.trim()) return '<p>İçerik bulunamadı.</p>';
+        if (!rawHtml || !rawHtml.trim()) return contentNotFoundHtml;
 
         try {
             const parser = new DOMParser();
@@ -84,7 +97,7 @@ export function News() {
             });
 
             const candidate = doc.querySelector('article') || doc.querySelector('.content') || doc.querySelector('main') || doc.body;
-            const cleaned = candidate?.innerHTML?.trim() || '<p>İçerik bulunamadı.</p>';
+            const cleaned = candidate?.innerHTML?.trim() || contentNotFoundHtml;
             return DOMPurify.sanitize(cleaned, {
                 USE_PROFILES: { html: true },
                 ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'a', 'blockquote', 'h2', 'h3', 'h4'],
@@ -106,6 +119,12 @@ export function News() {
             .finally(() => setLoading(false));
     }, [category, pageNum]);
 
+    const scrollDetailIntoView = useCallback(() => {
+        if (typeof window === 'undefined') return;
+        if (!window.matchMedia('(max-width: 1023px)').matches) return;
+        detailColRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, []);
+
     const loadNewsDetail = (id: number, optimisticItem?: NewsItem) => {
         if (optimisticItem) {
             setSelected(optimisticItem);
@@ -117,7 +136,10 @@ export function News() {
             .catch(() => {
                 // Detay açılamazsa liste deneyimini bozma.
             })
-            .finally(() => setDetailLoading(false));
+            .finally(() => {
+                setDetailLoading(false);
+                requestAnimationFrame(() => scrollDetailIntoView());
+            });
     };
 
     useEffect(() => {
@@ -128,152 +150,144 @@ export function News() {
             return;
         }
         loadNewsDetail(focusId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- focusId/page tetikleyici; loadNewsDetail stabil davranış
     }, [focusId, page]);
 
-    const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%' };
-    const titleStyle: React.CSSProperties = { fontSize: '1.75rem', fontWeight: 700, marginBottom: 4 };
-    const mutedStyle: React.CSSProperties = { color: tokens.textMuted, fontSize: '0.875rem' };
+    const displayTitle = (item: NewsItem) =>
+        preferTurkish && item.titleTr ? item.titleTr : item.title;
+
+    const renderDetailBody = () => {
+        if (detailLoading) {
+            return (
+                <div>
+                    {selected ? (
+                        <div className="news-detail-card news-detail-card--preview">
+                            <h2 className="news-detail-card__title">{displayTitle(selected)}</h2>
+                            {selected.summary ? (
+                                <div
+                                    className="content-container"
+                                    dangerouslySetInnerHTML={{
+                                        __html: extractReadableNewsBody(selected.summary),
+                                    }}
+                                />
+                            ) : null}
+                        </div>
+                    ) : null}
+                    <p className="news-page__muted">{t('news.loading', 'Yükleniyor...')}</p>
+                </div>
+            );
+        }
+        if (selected) {
+            return (
+                <div className="news-detail-card">
+                    <h2 className="news-detail-card__title">{displayTitle(selected)}</h2>
+                    <div className="news-detail-meta">
+                        <span>
+                            <strong>{t('news.source', 'Kaynak')}:</strong> {selected.source ?? 'Unknown'}
+                        </span>
+                        <span>
+                            <strong>{t('news.date', 'Tarih')}:</strong>{' '}
+                            {new Date(selected.publishedAt).toLocaleString(uiLocale)}
+                        </span>
+                    </div>
+                    <div
+                        className="content-container"
+                        dangerouslySetInnerHTML={{
+                            __html: extractReadableNewsBody(
+                                (preferTurkish ? selected.contentTr : null) ?? selected.content ?? selected.summary
+                            ),
+                        }}
+                    />
+                    {selected.url && (
+                        <a href={selected.url} target="_blank" rel="noreferrer" className="news-source-button">
+                            {t('news.goToSource', 'Kaynağa git')}
+                        </a>
+                    )}
+                </div>
+            );
+        }
+        return <p className="news-page__detail-placeholder">{t('news.selectPrompt', 'Detay için listeden bir haber seçin.')}</p>;
+    };
 
     if (error) {
         return (
-            <div style={pageStyle}>
-                <h1 style={titleStyle}>Haberler</h1>
-                <p style={{ ...mutedStyle, color: tokens.error }}>{t('news.errorPrefix', 'Hata')}: {error}</p>
+            <div className="news-page" style={pageCssVars}>
+                <h1 className="news-page__title">{t('news.title', 'Haberler')}</h1>
+                <p className="news-page__muted news-page__muted--error">
+                    {t('news.errorPrefix', 'Hata')}: {error}
+                </p>
             </div>
         );
     }
 
     return (
-        <div style={pageStyle}>
-            <h1 style={titleStyle}>{t('news.title', 'Haberler')}</h1>
-            <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {CATEGORIES.map((c) => (
+        <div className="news-page" style={pageCssVars}>
+            <h1 className="news-page__title">{t('news.title', 'Haberler')}</h1>
+            <div className="news-page__categories" role="tablist" aria-label={t('news.title', 'Haberler')}>
+                {CATEGORY_DEFS.map((c) => (
                     <button
                         key={c.value || 'all'}
                         type="button"
-                        onClick={() => { setCategory(c.value); setPageNum(0); }}
-                        style={{
-                            padding: '8px 16px',
-                            fontSize: '0.875rem',
-                            fontWeight: category === c.value ? 600 : 500,
-                            background: category === c.value ? tokens.accent : tokens.bgCard,
-                            color: category === c.value ? '#fff' : tokens.text,
-                            border: `1px solid ${tokens.border}`,
-                            borderRadius: 8,
-                            cursor: 'pointer',
+                        role="tab"
+                        aria-selected={category === c.value}
+                        className={`news-page__category-btn${category === c.value ? ' news-page__category-btn--active' : ''}`}
+                        onClick={() => {
+                            setCategory(c.value);
+                            setPageNum(0);
                         }}
                     >
-                        {c.label}
+                        {t(c.labelKey, c.labelFallback)}
                     </button>
                 ))}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-                <div>
-                    {loading && <p style={mutedStyle}>{t('news.loading', 'Yükleniyor...')}</p>}
-                    {page?.content?.length === 0 && <p style={mutedStyle}>{t('news.empty', 'Haber yok.')}</p>}
-                    <ul style={{ listStyle: 'none', padding: 0 }}>
+            <div className="news-page__layout">
+                <div className="news-page__list-col">
+                    {loading && <p className="news-page__muted">{t('news.loading', 'Yükleniyor...')}</p>}
+                    {page?.content?.length === 0 && <p className="news-page__muted">{t('news.empty', 'Haber yok.')}</p>}
+                    <ul className="news-page__list">
                         {page?.content?.map((item) => (
-                            <li
-                                key={item.id}
-                                onClick={() => loadNewsDetail(item.id, item)}
-                                style={{
-                                    padding: 12,
-                                    marginBottom: 8,
-                                    border: `1px solid ${selected?.id === item.id ? tokens.accent : tokens.border}`,
-                                    borderRadius: 8,
-                                    cursor: 'pointer',
-                                    background: tokens.bgCard,
-                                }}
-                            >
-                                <strong style={{ fontSize: '0.9375rem' }}>
-                                    {preferTurkish && item.titleTr ? item.titleTr : item.title}
-                                </strong>
-                                <div style={{ fontSize: '0.75rem', color: tokens.textMuted, marginTop: 4 }}>
-                                    {item.source} · {new Date(item.publishedAt).toLocaleString(uiLocale)}
-                                </div>
+                            <li key={item.id}>
+                                <button
+                                    type="button"
+                                    className={`news-page__card${selected?.id === item.id ? ' news-page__card--active' : ''}`}
+                                    onClick={() => loadNewsDetail(item.id, item)}
+                                >
+                                    <span className="news-page__card-title">{displayTitle(item)}</span>
+                                    <div className="news-page__card-meta">
+                                        <span>{item.source}</span>
+                                        <span aria-hidden>·</span>
+                                        <span>{new Date(item.publishedAt).toLocaleString(uiLocale)}</span>
+                                    </div>
+                                </button>
                             </li>
                         ))}
                     </ul>
                     {page && page.page && page.page.totalElements > page.page.size && (
-                        <div style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.875rem' }}>
+                        <div className="news-page__pagination">
                             <button
                                 type="button"
+                                className="news-page__page-btn"
                                 disabled={pageNum === 0}
                                 onClick={() => setPageNum((p) => p - 1)}
-                                style={{ padding: '6px 12px', background: tokens.bgCard, color: tokens.text, border: `1px solid ${tokens.border}`, borderRadius: 8, cursor: pageNum === 0 ? 'default' : 'pointer' }}
                             >
                                 {t('news.prev', 'Önceki')}
                             </button>
-                            <span style={{ color: tokens.textMuted }}>
+                            <span className="news-page__page-info">
                                 {t('news.page', 'Sayfa')} {page.page.number + 1} / {page.page.totalPages}
                             </span>
                             <button
                                 type="button"
+                                className="news-page__page-btn"
                                 disabled={(page.page.number + 1) * page.page.size >= page.page.totalElements}
                                 onClick={() => setPageNum((p) => p + 1)}
-                                style={{ padding: '6px 12px', background: tokens.bgCard, color: tokens.text, border: `1px solid ${tokens.border}`, borderRadius: 8, cursor: (page.page.number + 1) * page.page.size >= page.page.totalElements ? 'default' : 'pointer' }}
                             >
                                 {t('news.next', 'Sonraki')}
                             </button>
                         </div>
                     )}
                 </div>
-                <div>
-                    {detailLoading ? (
-                        <div>
-                            {selected ? (
-                                <div
-                                    style={{
-                                        padding: 16,
-                                        marginBottom: 12,
-                                        border: `1px solid ${tokens.border}`,
-                                        borderRadius: 8,
-                                        background: tokens.bgCard,
-                                        opacity: 0.92,
-                                    }}
-                                >
-                                    <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: 8 }}>
-                                        {preferTurkish && selected.titleTr ? selected.titleTr : selected.title}
-                                    </h2>
-                                    {selected.summary ? (
-                                        <div
-                                            className="content-container"
-                                            style={{ fontSize: '0.875rem', color: tokens.textMuted }}
-                                            dangerouslySetInnerHTML={{
-                                                __html: extractReadableNewsBody(selected.summary),
-                                            }}
-                                        />
-                                    ) : null}
-                                </div>
-                            ) : null}
-                            <p style={{ color: tokens.textMuted }}>{t('news.loading', 'Yükleniyor...')}</p>
-                        </div>
-                    ) : selected ? (
-                        <div style={{ padding: 16, border: `1px solid ${tokens.border}`, borderRadius: 8, background: tokens.bgCard }} className="news-detail-card">
-                            <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: 8 }}>
-                                {preferTurkish && selected.titleTr ? selected.titleTr : selected.title}
-                            </h2>
-                            <div className="news-detail-meta">
-                                <span><strong>{t('news.source', 'Kaynak')}:</strong> {selected.source ?? 'Unknown'}</span>
-                                <span><strong>{t('news.date', 'Tarih')}:</strong> {new Date(selected.publishedAt).toLocaleString(uiLocale)}</span>
-                            </div>
-                            <div
-                                className="content-container"
-                                dangerouslySetInnerHTML={{
-                                    __html: extractReadableNewsBody(
-                                        (preferTurkish ? selected.contentTr : null) ?? selected.content ?? selected.summary
-                                    ),
-                                }}
-                            />
-                            {selected.url && (
-                                <a href={selected.url} target="_blank" rel="noreferrer" className="news-source-button">
-                                    {t('news.goToSource', 'Kaynağa git')}
-                                </a>
-                            )}
-                        </div>
-                    ) : (
-                        <p style={{ color: tokens.textMuted }}>{t('news.selectPrompt', 'Detay için listeden bir haber seçin.')}</p>
-                    )}
+                <div className="news-page__detail-col" ref={detailColRef}>
+                    {renderDetailBody()}
                 </div>
             </div>
         </div>

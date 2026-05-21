@@ -119,6 +119,28 @@ export async function getManualOpenUnrealizedPnlTimeseries(
     return unwrapFinanceSuccess<ManualPortfolioTimeseriesPoint[]>(res);
 }
 
+export async function getManualRealReturnPnlTimeseries(
+    fromIsoDate: string,
+    toIsoDate: string,
+): Promise<ManualPortfolioTimeseriesPoint[]> {
+    const res = await financeClient.get('/api/portfolio/manual/timeseries/me/real-return-pnl', {
+        params: { from: fromIsoDate, to: toIsoDate },
+    });
+    return unwrapFinanceSuccess<ManualPortfolioTimeseriesPoint[]>(res);
+}
+
+export async function getManualRealReturnPnlSegment(
+    fromIsoDate: string,
+    toIsoDate: string,
+    mode: 'TYPE' | 'SYMBOL',
+    key: string,
+): Promise<ManualPortfolioTimeseriesPoint[]> {
+    const res = await financeClient.get('/api/portfolio/manual/timeseries/me/real-return-pnl/segment', {
+        params: { from: fromIsoDate, to: toIsoDate, mode, key },
+    });
+    return unwrapFinanceSuccess<ManualPortfolioTimeseriesPoint[]>(res);
+}
+
 export async function getManualOpenUnrealizedPnlSegment(
     fromIsoDate: string,
     toIsoDate: string,

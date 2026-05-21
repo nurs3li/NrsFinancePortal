@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import type { LogicalRange, Time } from 'lightweight-charts';
 import { apiDatetimeToChartTime as toChartTime } from '../../lib/chartApiTime';
+import { createChartResizeScheduler } from './chartResize';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
 type ViopPoint = {
@@ -84,7 +85,6 @@ function ViopTerminalChartImpl({
         tokensRef.current = tokens;
     });
     const [hover, setHover] = useState<ViopPoint | null>(null);
-    const chartHeight = 520;
     const sorted = useMemo(() => {
         // Exact timestamp tabanlı dedup: aynı saniyeyi paylaşan iki snapshot bulunmaz; gün dahilindeki
         // intra-day örnekleri kaybetmiyoruz.
@@ -105,10 +105,11 @@ function ViopTerminalChartImpl({
         const el = chartRef.current;
         if (!el || chartApiRef.current) return;
         const widthPx = Math.max(320, el.clientWidth);
+        const heightPx = Math.max(260, el.clientHeight);
         const t = tokensRef.current;
         const chart = createChart(el, {
             width: widthPx,
-            height: chartHeight,
+            height: heightPx,
             layout: {
                 background: { color: t.bgCard },
                 textColor: t.text,
@@ -217,9 +218,11 @@ function ViopTerminalChartImpl({
 
         const onResize = () => {
             const w = Math.max(320, el.clientWidth);
+            const h = Math.max(260, el.clientHeight);
             const lay = computeTerminalTimeScaleLayout(w, Math.max(2, barCountRef.current), rangeRef.current);
             chart.applyOptions({
                 width: w,
+                height: h,
                 timeScale: {
                     borderColor: tokensRef.current.border,
                     timeVisible: true,
@@ -236,9 +239,10 @@ function ViopTerminalChartImpl({
                 chart.timeScale().setVisibleLogicalRange(logicalRangeRef.current);
             }
         };
-        window.addEventListener('resize', onResize);
+        const resizeScheduler = createChartResizeScheduler(onResize);
+        const unbindResize = resizeScheduler.bind(el);
         return () => {
-            window.removeEventListener('resize', onResize);
+            unbindResize();
             crosshairRafRef.current?.();
             chart.remove();
             chartApiRef.current = null;
@@ -376,13 +380,8 @@ function ViopTerminalChartImpl({
             ) : null}
             <div
                 ref={chartRef}
-                style={{
-                    width: '100%',
-                    maxWidth: '100%',
-                    height: chartHeight,
-                    overflow: 'hidden',
-                    display: showChart ? 'block' : 'none',
-                }}
+                className="terminal-chart-surface"
+                style={{ display: showChart ? 'block' : 'none' }}
             />
         </div>
     );

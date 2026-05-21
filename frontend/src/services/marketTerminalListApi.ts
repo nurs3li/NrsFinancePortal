@@ -9,6 +9,7 @@ export type MarketTerminalListItem = {
     symbol: string;
     category: MarketCategory;
     equitySubmarket?: string | null;
+    fundSubmarket?: string | null;
     displayName?: string | null;
     name?: string | null;
     price: number;
@@ -36,6 +37,10 @@ export type MarketTerminalListItem = {
     contractMonth?: string | null;
     basis?: number | null;
     marginRequirement?: number | null;
+    fundRiskLevel?: number | null;
+    fundReturn6m?: number | null;
+    fundReturn3y?: number | null;
+    fundReturn5y?: number | null;
 };
 
 export type MarketTerminalListPage = {
@@ -48,9 +53,12 @@ export type MarketTerminalListPage = {
     hasPrevious: boolean;
 };
 
+export type FundSubmarket = 'US' | 'TR';
+
 export type MarketTerminalListParams = {
     category: MarketCategory;
     equitySubmarket?: string;
+    fundSubmarket?: FundSubmarket;
     page?: number;
     size?: number;
     filter?: string;
@@ -67,6 +75,7 @@ export async function fetchMarketTerminalList(
         params: {
             category: params.category,
             equitySubmarket: params.equitySubmarket,
+            fundSubmarket: params.fundSubmarket,
             page: params.page ?? 0,
             size: params.size ?? MARKET_LIST_PAGE_SIZE,
             filter: params.filter ?? 'ALL',

@@ -1333,7 +1333,7 @@ function AnalysisBody({
 
 function MetricMini({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
     return (
-        <div style={{ borderRadius: 10, border: '1px solid rgba(148,163,184,0.25)', padding: 8 }}>
+        <div style={{ borderRadius: 10, border: '1px solid var(--app-surface-border)', padding: 8 }}>
             <div style={{ fontSize: '0.68rem', opacity: 0.85 }}>{label}</div>
             <div className={valueClass} style={{ fontWeight: 800, fontSize: '0.88rem' }}>
                 {value}

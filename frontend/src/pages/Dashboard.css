@@ -143,12 +143,38 @@
   margin-bottom: 16px;
 }
 
+.dashboard-kpi-grid--compact {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .dashboard-kpi-card {
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-height: 132px;
   text-align: center;
+}
+
+.dashboard-kpi-card--compact {
+  min-height: 88px;
+  padding: 10px 8px;
+}
+
+.dashboard-kpi-card--compact .kpi-label {
+  font-size: 0.65rem;
+  line-height: 1.25;
+  margin-bottom: 4px;
+}
+
+.dashboard-kpi-card--compact .kpi-value {
+  font-size: clamp(0.72rem, 0.9vw, 0.95rem);
+  line-height: 1.2;
+}
+
+.dashboard-kpi-card--compact .kpi-subtext {
+  font-size: 0.65rem;
+  margin-top: 2px;
 }
 
 .card-premium {
@@ -275,29 +301,134 @@
 
 .dashboard-bottom-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 2.05fr);
   gap: 16px;
   /*
    * 3 kolon (Yildizlanan / Portfoy+ozetler / Haberler) ayni alt cizgide bitsin diye
    * align-items: start yerine stretch kullaniyoruz. Boylece her grid hucresi en uzun
    * komsunun yuksegine genisler ve "Haberler" karti dikeyde otomatik dolar.
    */
-  align-items: stretch;
+  align-items: start;
 }
 
 .dashboard-bottom-grid > .dashboard-starred-card {
-  /* Sol kolon en uzun olmasa bile en azindan diger 2 kolonun yuksekligini takip eder. */
-  height: 100%;
+  height: auto;
+  align-self: start;
   display: flex;
   flex-direction: column;
 }
 
 .dashboard-bottom-grid > .dashboard-starred-card .assets-table {
-  /*
-   * "Yildizlanan varliklar" tablosunu kart icindeki kalan tum alana yay; alta bos beyaz
-   * birakmadan, satirlari yeniden boyutlamadan dengeli bir hizalama sagliyoruz.
-   */
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+}
+
+.dashboard-starred-card {
+  min-width: 0;
+}
+
+.section-title--compact {
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.assets-table--compact {
+  margin-top: 8px;
+}
+
+.dashboard-starred-card .asset-row {
+  grid-template-columns: minmax(0, 1.2fr) 56px minmax(0, 0.65fr) minmax(0, 0.52fr);
+  gap: 6px;
+  padding: 8px 28px 8px 0;
+}
+
+.dashboard-starred-card .asset-row--interactive {
+  margin: 0 -4px;
+  padding-left: 4px;
+  padding-right: 32px;
+}
+
+.dashboard-starred-card .asset-sparkline {
+  max-width: 56px;
+  height: 20px;
+}
+
+.dashboard-starred-card .asset-name {
+  font-size: 0.78rem;
+}
+
+.dashboard-starred-card .asset-code {
+  font-size: 0.65rem;
+}
+
+.dashboard-starred-card .asset-price {
+  font-size: 0.78rem;
+}
+
+.dashboard-starred-card .asset-change {
+  font-size: 0.74rem;
+}
+
+.dashboard-starred-card .asset-logo-image,
+.dashboard-starred-card .asset-logo-fallback {
+  width: 20px;
+  height: 20px;
+}
+
+.dashboard-starred-empty {
+  padding: 12px 4px;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.dashboard-starred-pagination {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--dashboard-border, #E2E8F0);
+  font-size: 0.72rem;
+  color: var(--dashboard-muted, #718096);
+}
+
+.dashboard-starred-pagination__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.dashboard-starred-pagination__sep {
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5rem;
+  text-align: center;
+}
+
+.dashboard-starred-page-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dashboard-border, #E2E8F0);
+  background: color-mix(in srgb, var(--dashboard-card, #fff) 88%, transparent);
+  color: var(--dashboard-text, #1A202C);
+  border-radius: 8px;
+  padding: 4px 6px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.dashboard-starred-page-btn:hover:not(:disabled) {
+  border-color: var(--dashboard-accent, #3182CE);
+  color: var(--dashboard-accent, #3182CE);
+}
+
+.dashboard-starred-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .dashboard-side-panels {
@@ -309,7 +440,7 @@
    */
   align-self: stretch;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.28fr) minmax(0, 0.92fr);
   gap: 16px;
   max-height: none;
   overflow: visible;
@@ -343,7 +474,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  height: 100%;
+  align-self: stretch;
   min-height: 0;
 }
 
@@ -482,17 +613,12 @@
 }
 
 .dashboard-middle-column {
-  /*
-   * Orta kolon: Portföy dağılımı (üst) + Son aktivite (alt). "Son Bildirimler" sağ kolona
-   * (haberler altina) tasindi; boylece orta kolon hem portfolio donut'una hem de aktivite
-   * karti icin nefes alacak alan birakir, sayfanin alt cizgisi tum kolonlarda stretch ile
-   * esitlenir.
-   */
   display: flex;
   flex-direction: column;
   gap: 14px;
   align-content: start;
-  height: 100%;
+  align-self: start;
+  height: auto;
 }
 
 .portfolio-dist-card {
@@ -504,6 +630,11 @@
   font-size: 0.75rem;
   color: var(--dashboard-muted, #718096);
   line-height: 1.35;
+}
+
+.dashboard-middle-column .donut-placeholder {
+  width: 148px;
+  height: 148px;
 }
 
 .donut-placeholder {
@@ -553,11 +684,34 @@
 }
 
 .donut-legend li {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(4.5rem, 1.05fr) minmax(5.5rem, 1fr) minmax(5.5rem, 1fr) 2.75rem;
+  gap: 4px 8px;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--dashboard-text, #2D3748);
+}
+
+.donut-legend-head {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dashboard-muted, #718096);
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--dashboard-border, #E5E7EB);
+  margin-bottom: 2px;
+}
+
+.donut-legend-head .donut-legend-leading {
+  visibility: hidden;
+}
+
+.donut-legend-leading {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.78rem;
-  color: var(--dashboard-text, #2D3748);
+  min-width: 0;
 }
 
 .donut-legend-swatch {
@@ -568,14 +722,22 @@
 }
 
 .donut-legend-label {
-  flex: 1;
   min-width: 0;
+  font-weight: 600;
+}
+
+.donut-legend-metric {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--dashboard-muted, #718096);
 }
 
 .donut-legend-pct {
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: var(--dashboard-muted, #718096);
+  font-weight: 700;
+  text-align: right;
+  color: var(--dashboard-text, #1A202C);
 }
 
 .portfolio-pnl-summary {
@@ -1112,8 +1274,18 @@
   color: var(--dashboard-accent, #3182CE);
 }
 
+@media (max-width: 1400px) {
+  .dashboard-kpi-grid--compact {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1240px) {
   .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-kpi-grid--compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

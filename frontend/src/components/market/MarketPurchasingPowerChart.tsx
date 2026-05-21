@@ -12,6 +12,8 @@ import {
 } from 'recharts';
 import { marketClient } from '../../api/client';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { useTheme } from '../../theme/ThemeContext';
+import { chartGridStroke, chartTooltipContentStyle } from '../../lib/chartTheme';
 import { RANGE_TO_DAYS, type ChartRangeId } from './heatmapRange';
 import { fetchInterestInflationMacroPanel } from '../../services/marketDataService';
 import { buildPurchasingPowerSeries, type DateValue } from '../../utils/marketPurchasingPower';
@@ -51,6 +53,7 @@ function mid(row: HistoryRow): number | null {
 
 export function MarketPurchasingPowerChart({ symbol, range, candles, anchorDate, anchorAmountTry, tokens }: Props) {
     const { t, lang } = useLanguage();
+    const { theme } = useTheme();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
     const days = RANGE_TO_DAYS[range] ?? 365;
 
@@ -151,7 +154,7 @@ export function MarketPurchasingPowerChart({ symbol, range, candles, anchorDate,
             ) : (
                 <ResponsiveContainer width="100%" height={400}>
                     <LineChart data={series} margin={{ top: 8, right: 12, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke(theme)} />
                         <XAxis dataKey="date" tick={{ fontSize: 9, fill: tokens.textMuted }} />
                         <YAxis
                             tick={{ fontSize: 9, fill: tokens.textMuted }}
@@ -160,13 +163,9 @@ export function MarketPurchasingPowerChart({ symbol, range, candles, anchorDate,
                         />
                         <Tooltip
                             formatter={(v, name) => [fmtTry(Number(v ?? 0)), String(name ?? '')]}
-                            contentStyle={{
-                                background: tokens.bgCard,
-                                border: `1px solid ${tokens.border}`,
-                                fontSize: 11,
-                            }}
+                            contentStyle={{ ...chartTooltipContentStyle(tokens), fontSize: 11 }}
                         />
-                        <Legend wrapperStyle={{ fontSize: 10 }} />
+                        <Legend wrapperStyle={{ fontSize: 10, color: tokens.textMuted }} />
                         <Line
                             type="monotone"
                             dataKey="assetTry"

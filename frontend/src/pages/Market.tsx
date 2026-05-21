@@ -47,7 +47,17 @@ import { MarketMacroInfoCard } from '../components/market/MarketMacroInfoCard';
 import { MarketPurchasingPowerSummaryLive } from '../components/market/MarketPurchasingPowerSummaryLive';
 import { MarketPurchasingPowerCompareChart } from '../components/market/MarketPurchasingPowerCompareChart';
 import { usePurchasingPowerData } from '../hooks/usePurchasingPowerData';
-import { fetchMarketTerminalList, MARKET_LIST_PAGE_SIZE } from '../services/marketTerminalListApi';
+import {
+    fetchMarketTerminalList,
+    MARKET_LIST_PAGE_SIZE,
+    type FundSubmarket,
+} from '../services/marketTerminalListApi';
+import {
+    fetchTefasFundHistory,
+    mapTerminalSortToTefas,
+    tefasMonthsForChartRange,
+} from '../services/tefasFundApi';
+import { buildTefasTreemapTiles, tefasHeatmapSortForRange } from '../utils/tefasHeatmap';
 import { terminalListItemToVm } from '../utils/marketTerminalListVm';
 import { istanbulTodayYmd } from '../components/simulation/simDates';
 import { clampPpAnchorYmd, firstYmdFromCandles, lastYmdFromCandles } from '../utils/marketPurchasingPower';
@@ -145,6 +155,10 @@ type InstrumentVm = MarketInstrument & {
     expiryDate?: string;
     marginRequirement?: number;
     longShort?: 'LONG' | 'SHORT' | 'NÖTR';
+    fundSubmarket?: FundSubmarket;
+    fundRiskLevel?: number;
+    fundReturn3y?: number;
+    fundReturn5y?: number;
 };
 
 /** Piyasa seçici tablosu: Fiyat ve horizon % sütunları için sıralama anahtarı */
@@ -665,18 +679,21 @@ function viopCatBadgeClass(cat: ViopCategory): string {
     }
 }
 
-function viopAssetClassTitle(cat: ViopCategory | null): string {
+function viopAssetClassTitle(
+    cat: ViopCategory | null,
+    tr: (key: string, fallback?: string) => string,
+): string {
     switch (cat) {
         case 'INDEX':
-            return 'Endeks Vadeli';
+            return tr('market.viop.cat.index', 'Endeks Vadeli');
         case 'FX':
-            return 'Döviz Vadeli';
+            return tr('market.viop.cat.fx', 'Döviz Vadeli');
         case 'COMMODITY':
-            return 'Altın Vadeli';
+            return tr('market.viop.cat.commodity', 'Altın Vadeli');
         case 'EQUITY':
-            return 'Pay Vadeli';
+            return tr('market.viop.cat.equity', 'Pay Vadeli');
         default:
-            return 'VİOP';
+            return tr('market.viop.cat.default', 'VİOP');
     }
 }
 
@@ -689,32 +706,40 @@ function viopPriceDecimals(symbol: string): number {
     return 2;
 }
 
-function fmtViopMktSide(n: number | null | undefined, maximumFractionDigits: number): string | null {
+function fmtViopMktSide(
+    n: number | null | undefined,
+    maximumFractionDigits: number,
+    locale: string,
+): string | null {
     if (n == null || !Number.isFinite(Number(n))) return null;
     const v = Number(n);
     if (v <= 0) return null;
-    return v.toLocaleString('tr-TR', { maximumFractionDigits, minimumFractionDigits: 0 });
+    return v.toLocaleString(locale, { maximumFractionDigits, minimumFractionDigits: 0 });
 }
 
 function fmtViopBidAskLine(
     bid: number | null | undefined,
     ask: number | null | undefined,
-    maximumFractionDigits: number
+    maximumFractionDigits: number,
+    locale: string,
 ): string {
-    const b = fmtViopMktSide(bid, maximumFractionDigits);
-    const a = fmtViopMktSide(ask, maximumFractionDigits);
+    const b = fmtViopMktSide(bid, maximumFractionDigits, locale);
+    const a = fmtViopMktSide(ask, maximumFractionDigits, locale);
     if (b && a) return `${b} / ${a}`;
     if (b) return `${b} / —`;
     if (a) return `— / ${a}`;
     return '—';
 }
 
-function viopDataQualityHint(s: ViopContractSnapshotApi | undefined): string | null {
+function viopDataQualityHint(
+    s: ViopContractSnapshotApi | undefined,
+    tr: (key: string, fallback?: string) => string,
+): string | null {
     if (!s?.dataQuality) return null;
     const q = String(s.dataQuality).toUpperCase();
     if (q.includes('STALE')) return 'STALE';
-    if (q.includes('DELAY')) return 'GECİKME';
-    if (q.includes('FALLBACK') || q.includes('LOW')) return 'TAHMİNİ';
+    if (q.includes('DELAY')) return tr('market.dataQuality.delay', 'GECİKME');
+    if (q.includes('FALLBACK') || q.includes('LOW')) return tr('market.dataQuality.estimated', 'TAHMİNİ');
     return null;
 }
 
@@ -884,6 +909,19 @@ function effectiveViopCarryPercent(v: ViopSnapshot, price: number): number {
  * orta seviye olarak küçük tutuyoruz — gerçek mod sadece boş latest senaryosunda devrede.
  */
 type EquitySubmarket = 'US' | 'BIST';
+
+function rowIsTefasFundVm(row: Pick<InstrumentVm, 'category' | 'exchange' | 'fundSubmarket'>): boolean {
+    return (
+        row.category === 'FUNDS' &&
+        (row.fundSubmarket === 'TR' || String(row.exchange ?? '').toUpperCase() === 'TEFAS')
+    );
+}
+
+function tefasRiskLevelDisplay(risk: number | undefined | null): string {
+    if (risk == null || !Number.isFinite(risk)) return '—';
+    const n = Math.min(7, Math.max(1, Math.round(risk)));
+    return `${n}/7`;
+}
 
 /** Grafik aralığı: dahili `1D` vb. — Türkçe kısa etiket (UI). */
 function chartRangeUiShortLabel(r: ChartRangeId): string {
@@ -1290,6 +1328,7 @@ function isStarredResolved(data: StarredAssetsApiResponse | undefined, mt: strin
 export function Market() {
     const { theme, tokens } = useTheme();
     const { t, lang } = useLanguage();
+    const numberLocale = lang === 'en' ? 'en-US' : 'tr-TR';
     const navigate = useNavigate();
     const [activeCategory, setActiveCategory] = useState<MarketCategory>('EQUITY');
     const [showUsdInTry, setShowUsdInTry] = useState(false);
@@ -1299,6 +1338,9 @@ export function Market() {
     const [liveOverrides, setLiveOverrides] = useState<Record<string, LiveTick>>({});
     const [range, setRange] = useState<ChartRangeId>('1M');
     const [equitySubmarket, setEquitySubmarket] = useState<EquitySubmarket>('US');
+    const [fundSubmarket, setFundSubmarket] = useState<FundSubmarket>('TR');
+    const isTefasFundsView = activeCategory === 'FUNDS' && fundSubmarket === 'TR';
+    const isBondInstrumentsView = activeCategory === 'BOND';
     /** Hisse / kripto / FX / metaller / fonlar (ısı haritası + makro kartlar). */
     const isSpotMarketCategory =
         activeCategory === 'EQUITY' ||
@@ -1313,6 +1355,8 @@ export function Market() {
     /** Açılır piyasa listesinde gezilen kategori / alt pazar; grafik `activeCategory` ile ayrılır — chip’e basınca hero değişmez. */
     const [pickerCategory, setPickerCategory] = useState<MarketCategory>('EQUITY');
     const [pickerEquitySubmarket, setPickerEquitySubmarket] = useState<EquitySubmarket>('US');
+    const [pickerFundSubmarket, setPickerFundSubmarket] = useState<FundSubmarket>('TR');
+    const isTefasFundsPicker = pickerCategory === 'FUNDS' && pickerFundSubmarket === 'TR';
     const [bistRange, setBistRange] = useState<ChartRangeId>('1M');
     const trendChartRange: ChartRangeId =
         activeCategory === 'EQUITY' && equitySubmarket === 'BIST' ? bistRange : range;
@@ -1328,6 +1372,28 @@ export function Market() {
     const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down'>>({});
     const prevPricesRef = useRef<Record<string, number>>({});
     const prevTerminalCategoryRef = useRef<MarketCategory>(activeCategory);
+
+    /** Faiz paneli CTA → Piyasalar Tahvil sekmesi (sessionStorage, tek seferlik). */
+    useEffect(() => {
+        try {
+            const pref = sessionStorage.getItem('nrs.market.prefCategory');
+            if (
+                pref === 'BOND' ||
+                pref === 'FUTURES' ||
+                pref === 'EQUITY' ||
+                pref === 'CRYPTO' ||
+                pref === 'FX' ||
+                pref === 'METALS' ||
+                pref === 'FUNDS'
+            ) {
+                setActiveCategory(pref);
+                setPickerCategory(pref);
+                sessionStorage.removeItem('nrs.market.prefCategory');
+            }
+        } catch {
+            /* ignore */
+        }
+    }, []);
 
     const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
     const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
@@ -1354,6 +1420,8 @@ export function Market() {
         assetType: PriceAlertAssetType;
         symbol: string;
         displayName?: string;
+        referencePrice?: number | null;
+        priceCurrency?: string | null;
     } | null>(null);
     const [effectiveRatesOpen, setEffectiveRatesOpen] = useState(false);
 
@@ -1429,10 +1497,21 @@ export function Market() {
         [starredAssets, starMutation]
     );
 
+    const applyPickerCategory = useCallback(
+        (id: MarketCategory) => {
+            setPickerCategory(id);
+            setActiveCategory(id);
+            setMarketListQuickFilter('ALL');
+            setMarketListPage(0);
+        },
+        [],
+    );
+
     const handleInstrumentSelectorClick = useCallback(() => {
         if (isSpotTerminalLayout) {
             setPickerCategory(activeCategory);
             setPickerEquitySubmarket(equitySubmarket);
+            setPickerFundSubmarket(fundSubmarket);
             leftMarketPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             return;
         }
@@ -1440,15 +1519,36 @@ export function Market() {
             if (!wasOpen) {
                 setPickerCategory(activeCategory);
                 setPickerEquitySubmarket(equitySubmarket);
+                setPickerFundSubmarket(fundSubmarket);
             }
             return !wasOpen;
         });
-    }, [activeCategory, equitySubmarket, isSpotTerminalLayout]);
+    }, [activeCategory, equitySubmarket, fundSubmarket, isSpotTerminalLayout]);
 
     useEffect(() => {
         setInstrumentListOpen(false);
         setMarketListQuickFilter('ALL');
-    }, [activeCategory, equitySubmarket]);
+    }, [activeCategory, equitySubmarket, fundSubmarket]);
+
+    /** Spot terminal: sol liste sekmeleri grafikle aynı kategori/alt pazarı göstersin. */
+    useEffect(() => {
+        if (!isSpotTerminalLayout) return;
+        setPickerCategory(activeCategory);
+        setPickerEquitySubmarket(equitySubmarket);
+        setPickerFundSubmarket(fundSubmarket);
+    }, [isSpotTerminalLayout, activeCategory, equitySubmarket, fundSubmarket]);
+
+    useEffect(() => {
+        if (activeCategory !== 'FUNDS') return;
+        setCompareSymbols([]);
+        setCompareRows([]);
+    }, [fundSubmarket, activeCategory]);
+
+    useEffect(() => {
+        if (activeCategory !== 'BOND') return;
+        setCompareSymbols([]);
+        setCompareRows([]);
+    }, [activeCategory]);
 
     useEffect(() => {
         if (!instrumentListOpen) return;
@@ -1487,13 +1587,14 @@ export function Market() {
     /** VİOP: grafik VİOP modunda; snapshot yalnızca seçili + liste sayfası. */
     const needViopTerminalData = activeCategory === 'FUTURES';
 
-    /** Tahvil: yalnızca grafik tahvil modunda (liste `/terminal/list` ile gelir). */
-    const needDebtTerminalData = activeCategory === 'BOND';
+    /** Tahvil: DİBS/bono ISIN listesi ve grafik. */
+    const needDebtTerminalData = isBondInstrumentsView;
     const needDebtCatalog = needDebtTerminalData;
 
     const pickerMatchesChart =
         pickerCategory === activeCategory &&
-        (activeCategory !== 'EQUITY' || pickerEquitySubmarket === equitySubmarket);
+        (activeCategory !== 'EQUITY' || pickerEquitySubmarket === equitySubmarket) &&
+        (activeCategory !== 'FUNDS' || pickerFundSubmarket === fundSubmarket);
 
     /** Grafik ve batch istekleri seçili `range` ile aynı kalır (VİOP/tahvil 1G dahil). */
     const dataRangeForChart: ChartRangeId = range;
@@ -1506,7 +1607,7 @@ export function Market() {
         queryKey: ['market', 'dashboard', 'terminal'],
         queryFn: () =>
             financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => unwrapData(r)),
-        enabled: activeCategory !== 'FUTURES' && activeCategory !== 'BOND',
+        enabled: activeCategory !== 'FUTURES' && activeCategory !== 'BOND' && !isTefasFundsView,
         staleTime: 30_000,
         refetchInterval: activeCategory === 'FUTURES' || activeCategory === 'BOND' ? false : 12_000,
         refetchOnWindowFocus: false,
@@ -1539,6 +1640,7 @@ export function Market() {
             'list',
             pickerCategory,
             pickerEquitySubmarket,
+            pickerFundSubmarket,
             marketListPage,
             marketListQuickFilter,
             searchTerm,
@@ -1550,17 +1652,59 @@ export function Market() {
                 {
                     category: pickerCategory,
                     equitySubmarket: pickerCategory === 'EQUITY' ? pickerEquitySubmarket : undefined,
+                    fundSubmarket: pickerCategory === 'FUNDS' ? pickerFundSubmarket : undefined,
                     page: marketListPage,
-                    size: MARKET_LIST_PAGE_SIZE,
+                    size:
+                        pickerCategory === 'FUNDS' && pickerFundSubmarket === 'TR'
+                            ? 12
+                            : MARKET_LIST_PAGE_SIZE,
                     filter: marketListQuickFilter,
-                    sort: terminalListSortKey,
+                    sort:
+                        pickerCategory === 'FUNDS' && pickerFundSubmarket === 'TR'
+                            ? mapTerminalSortToTefas(terminalListSortKey) ?? undefined
+                            : terminalListSortKey,
                     dir: terminalListSortDir,
                     search: searchTerm,
                 },
                 signal,
             ),
-        placeholderData: (prev) => prev,
-        staleTime: pickerCategory === 'BOND' || pickerCategory === 'FUTURES' ? 30_000 : 8_000,
+        // Alt pazar (TR/US fon) değişince önceki ETF listesini gösterme — TEFAS boş dönse bile EEM/SPY kalmasın.
+        placeholderData: (previousData, previousQuery) => {
+            if (!previousData || !previousQuery?.queryKey) return undefined;
+            const pk = previousQuery.queryKey as readonly unknown[];
+            if (pk[3] !== pickerCategory) return undefined;
+            if (pickerCategory === 'EQUITY' && pk[4] !== pickerEquitySubmarket) return undefined;
+            if (pickerCategory === 'FUNDS' && pk[5] !== pickerFundSubmarket) return undefined;
+            return previousData;
+        },
+        staleTime:
+            pickerCategory === 'FUNDS' && pickerFundSubmarket === 'TR'
+                ? 120_000
+                : pickerCategory === 'BOND' || pickerCategory === 'FUTURES'
+                  ? 30_000
+                  : 8_000,
+    });
+
+    const TEFAS_HEATMAP_PAGE_SIZE = 48;
+
+    const { data: tefasHeatmapPage } = useQuery({
+        queryKey: ['market', 'tefas', 'heatmap', range, fundSubmarket],
+        queryFn: ({ signal }) =>
+            fetchMarketTerminalList(
+                {
+                    category: 'FUNDS',
+                    fundSubmarket: 'TR',
+                    page: 0,
+                    size: TEFAS_HEATMAP_PAGE_SIZE,
+                    filter: 'ALL',
+                    sort: tefasHeatmapSortForRange(range),
+                    dir: 'desc',
+                },
+                signal,
+            ),
+        enabled: isTefasFundsView,
+        staleTime: 120_000,
+        refetchInterval: 180_000,
     });
 
     /** Dashboard beklenmeden ilk satırdan sembol seç — grafik istekleri hemen başlasın. */
@@ -1578,7 +1722,15 @@ export function Market() {
 
     useEffect(() => {
         setMarketListPage(0);
-    }, [pickerCategory, pickerEquitySubmarket, marketListQuickFilter, searchTerm, terminalListSortKey, terminalListSortDir]);
+    }, [
+        pickerCategory,
+        pickerEquitySubmarket,
+        pickerFundSubmarket,
+        marketListQuickFilter,
+        searchTerm,
+        terminalListSortKey,
+        terminalListSortDir,
+    ]);
 
     const bistSparkSymbolsCsv = useMemo(() => {
         if (pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST') {
@@ -1703,7 +1855,7 @@ export function Market() {
         isSpotMarketCategory &&
         ((activeCategory === 'EQUITY' && equitySubmarket !== 'BIST') ||
             activeCategory === 'CRYPTO' ||
-            activeCategory === 'FUNDS' ||
+            (activeCategory === 'FUNDS' && fundSubmarket === 'US') ||
             activeCategory === 'METALS');
     const { data: usdTryRatePayload } = useQuery({
         queryKey: ['market', 'terminal', 'usd-try-rate'],
@@ -1918,8 +2070,22 @@ export function Market() {
         return m;
     }, [dashboard]);
 
+    const tefasHistoryMonths = useMemo(() => tefasMonthsForChartRange(range), [range]);
+
+    const {
+        data: tefasHistory = [],
+        isLoading: loadingTefasHistory,
+        isFetching: fetchingTefasHistory,
+    } = useQuery({
+        queryKey: ['market', 'tefas', 'history', selectedSymbol, tefasHistoryMonths],
+        queryFn: ({ signal }) =>
+            fetchTefasFundHistory(normalizeSymbolKey(selectedSymbol), tefasHistoryMonths, signal),
+        enabled: isTefasFundsView && Boolean(selectedSymbol),
+        staleTime: 120_000,
+    });
+
     const buildInstruments = useCallback(
-        (cat: MarketCategory, eqSub: EquitySubmarket): MarketInstrument[] => {
+        (cat: MarketCategory, eqSub: EquitySubmarket, fundSub: FundSubmarket): MarketInstrument[] => {
         if (cat === 'FUTURES') {
             if (pickerMatchesChart && (terminalListPageData?.items?.length ?? 0) > 0) {
                 return terminalListPageData!.items
@@ -1965,6 +2131,26 @@ export function Market() {
                 });
             }
             return out.sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
+        }
+        if (cat === 'FUNDS' && fundSub === 'TR') {
+            if (pickerMatchesChart && (terminalListPageData?.items?.length ?? 0) > 0) {
+                return terminalListPageData!.items
+                    .filter((row) => row.category === 'FUNDS' && row.fundSubmarket === 'TR')
+                    .map((row) => ({
+                        symbol: normalizeSymbolKey(row.symbol),
+                        category: 'FUNDS' as const,
+                        displayName: row.displayName ?? row.name ?? row.symbol,
+                        price: row.price,
+                        changePercent: row.changePercent,
+                        dailyChangePercent: row.dailyChangePercent ?? row.changePercent,
+                        trend: row.trend,
+                        currency: row.currency ?? 'TRY',
+                        marketRegion: row.marketRegion ?? 'TR',
+                        exchange: row.exchange ?? 'TEFAS',
+                        sector: row.sector ?? undefined,
+                    }));
+            }
+            return [];
         }
         if (cat === 'BOND') {
             if (pickerMatchesChart && (terminalListPageData?.items?.length ?? 0) > 0) {
@@ -2207,8 +2393,8 @@ export function Market() {
     );
 
     const instruments = useMemo(
-        () => buildInstruments(activeCategory, equitySubmarket),
-        [buildInstruments, activeCategory, equitySubmarket]
+        () => buildInstruments(activeCategory, equitySubmarket, fundSubmarket),
+        [buildInstruments, activeCategory, equitySubmarket, fundSubmarket]
     );
     useEffect(() => {
         if (activeCategory === 'FUTURES' || activeCategory === 'BOND') {
@@ -2334,6 +2520,7 @@ export function Market() {
     const chartIndicatorsEnabled =
         Boolean(selectedSymbol && marketType) &&
         !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST') &&
+        !(activeCategory === 'FUNDS' && fundSubmarket === 'TR') &&
         (showMa || showRsi || spotChartMode === 'CANDLE');
 
     const macroSidebarQueriesEnabled = Boolean(selectedSymbol);
@@ -2370,7 +2557,8 @@ export function Market() {
         queryKey: ['market', 'candles', 'terminal', activeCategory, selectedSymbol, days, terminalHourlyRange ? `hourly:${range}` : 'daily'],
         enabled:
             Boolean(selectedSymbol && marketType) &&
-            !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST'),
+            !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST') &&
+            !(activeCategory === 'FUNDS' && fundSubmarket === 'TR'),
         queryFn: async ({ signal }) => {
             if (activeCategory === 'METALS' && !terminalHourlyRange) {
                 const symbolCandidates = [selectedSymbol, selectedSymbol === 'ALTIN_TRY' ? 'XAU_TRY' : 'ALTIN_TRY']
@@ -2494,7 +2682,7 @@ export function Market() {
     });
     const { data: debtHistory = [], isLoading: loadingDebtHistory } = useQuery({
         queryKey: ['market', 'debt-history', selectedSymbol, bondHistoryDays],
-        enabled: activeCategory === 'BOND' && Boolean(selectedSymbol),
+        enabled: isBondInstrumentsView && Boolean(selectedSymbol),
         queryFn: ({ signal }) =>
             marketClient
                 .get<DebtSnapshot[]>('/api/market/debt/history', {
@@ -2502,8 +2690,8 @@ export function Market() {
                     signal,
                 })
                 .then((r) => r.data),
-        refetchInterval: activeCategory === 'BOND' && Boolean(selectedSymbol) ? 60_000 : false,
-        refetchOnWindowFocus: activeCategory === 'BOND' && Boolean(selectedSymbol),
+        refetchInterval: isBondInstrumentsView && Boolean(selectedSymbol) ? 60_000 : false,
+        refetchOnWindowFocus: isBondInstrumentsView && Boolean(selectedSymbol),
         staleTime: 90_000,
         placeholderData: (prev) => prev,
     });
@@ -2527,7 +2715,7 @@ export function Market() {
                 };
             });
         }
-        if (activeCategory === 'BOND') {
+        if (isBondInstrumentsView) {
             const sorted = [...debtHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
             const raw = sorted.map((x, idx) => {
                 const close = Number(x.dirtyPrice ?? 0);
@@ -2560,9 +2748,29 @@ export function Market() {
                 return { time, open, high, low, close, volume };
             });
         }
+        if (activeCategory === 'FUNDS' && fundSubmarket === 'TR') {
+            return [...tefasHistory]
+                .filter((r) => r.date && Number.isFinite(Number(r.price)) && Number(r.price) > 0)
+                .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+                .map((row, idx, arr) => {
+                    const close = Number(row.price);
+                    const prevClose = idx > 0 ? Number(arr[idx - 1]?.price ?? close) : close;
+                    const open = Number.isFinite(prevClose) && prevClose > 0 ? prevClose : close;
+                    const d = String(row.date ?? '').slice(0, 10);
+                    const time = d.length === 10 ? `${d}T12:00:00` : new Date().toISOString();
+                    return {
+                        time,
+                        open,
+                        high: Math.max(open, close),
+                        low: Math.min(open, close),
+                        close,
+                        volume: 0,
+                    };
+                });
+        }
         const series = batchData?.series?.[selectedSymbol] ?? [];
         if (series.length > 0) {
-            if (activeCategory === 'FUNDS') {
+        if (activeCategory === 'FUNDS') {
                 const sorted = [...series].sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
                 return sorted.map((x, idx) => {
                     const close = Number(x.c ?? x.o ?? x.h ?? x.l ?? 0);
@@ -2595,9 +2803,22 @@ export function Market() {
             const prev = idx > 0 ? Number(closes[idx - 1]?.value ?? close) : close;
             return { time: p.t, open: prev, high: Math.max(prev, close), low: Math.min(prev, close), close, volume: 0 };
         });
-    }, [activeCategory, equitySubmarket, viopHistoryApi, debtHistory, batchData, indicatorData, selectedSymbol, terminalHourlyRange, days, bistCandles]);
+    }, [
+        activeCategory,
+        equitySubmarket,
+        fundSubmarket,
+        viopHistoryApi,
+        debtHistory,
+        batchData,
+        indicatorData,
+        selectedSymbol,
+        terminalHourlyRange,
+        days,
+        bistCandles,
+        tefasHistory,
+    ]);
     const bondDualPoints = useMemo(() => {
-        if (activeCategory !== 'BOND') return [];
+        if (!isBondInstrumentsView) return [];
         const sorted = [...debtHistory].sort((a, b) => new Date(a.asOf ?? 0).getTime() - new Date(b.asOf ?? 0).getTime());
         const mapped = sorted
             .map((x) => ({
@@ -2615,7 +2836,7 @@ export function Market() {
         const last = mapped[mapped.length - 1];
         if (out[out.length - 1] !== last) out.push(last);
         return out;
-    }, [activeCategory, debtHistory]);
+    }, [isBondInstrumentsView, debtHistory]);
     const viopLinePoints = useMemo(() => {
         if (activeCategory !== 'FUTURES') return [];
         const pts = viopHistoryApi?.points ?? [];
@@ -2642,27 +2863,27 @@ export function Market() {
     }, [activeCategory, viopHistoryApi]);
 
     const bondChartSeriesSig = useMemo(
-        () => (activeCategory === 'BOND' ? chartPriceSeriesSignature(bondDualPoints) : ''),
-        [activeCategory, bondDualPoints],
+        () => (isBondInstrumentsView ? chartPriceSeriesSignature(bondDualPoints) : ''),
+        [isBondInstrumentsView, bondDualPoints],
     );
     const viopChartSeriesSig = useMemo(
         () => (activeCategory === 'FUTURES' ? chartPriceSeriesSignature(viopLinePoints) : ''),
         [activeCategory, viopLinePoints],
     );
     const bondChartMa7 = useMemo(() => {
-        if (activeCategory !== 'BOND' || !bondDualPoints.length) return [];
+        if (!isBondInstrumentsView || !bondDualPoints.length) return [];
         return movingAverage(
             bondDualPoints.map((p) => ({ time: p.time, close: p.price })),
             7,
         );
-    }, [activeCategory, bondChartSeriesSig, bondDualPoints]);
+    }, [isBondInstrumentsView, bondChartSeriesSig, bondDualPoints]);
     const bondChartMa21 = useMemo(() => {
-        if (activeCategory !== 'BOND' || !bondDualPoints.length) return [];
+        if (!isBondInstrumentsView || !bondDualPoints.length) return [];
         return movingAverage(
             bondDualPoints.map((p) => ({ time: p.time, close: p.price })),
             21,
         );
-    }, [activeCategory, bondChartSeriesSig, bondDualPoints]);
+    }, [isBondInstrumentsView, bondChartSeriesSig, bondDualPoints]);
     const viopChartMa7 = useMemo(() => {
         if (activeCategory !== 'FUTURES' || !viopLinePoints.length) return [];
         return movingAverage(
@@ -2729,7 +2950,8 @@ export function Market() {
                 const debtMeta = debtMetaMap[symbolKey];
                 const latestDebt = debtLatestMap[symbolKey];
                 const fromIsin = extractMaturityDate(symbolKey);
-                const fromApi = latestDebt?.maturityDate ?? debtMeta?.maturityDate;
+                const fromApi =
+                    latestDebt?.maturityDate ?? debtMeta?.maturityDate ?? (ins as InstrumentVm).maturityDate;
                 const remainingFromIsin = getRemainingDays(symbolKey);
                 const remainingDays =
                     latestDebt?.daysToMaturity ??
@@ -2921,7 +3143,7 @@ export function Market() {
 
     const instrumentVms = useMemo(() => mapInstrumentsToVms(instruments), [mapInstrumentsToVms, instruments]);
     const selectedBondStructuredYield = useMemo(() => {
-        if (activeCategory !== 'BOND' || !selectedSymbol) return false;
+        if (!isBondInstrumentsView || !selectedSymbol) return false;
         return debtHasStructuredYieldData(debtLatestMap[normalizeSymbolKey(selectedSymbol)]);
     }, [activeCategory, selectedSymbol, debtLatestMap]);
     const pickerMarketListQuickChips = useMemo(() => {
@@ -2938,7 +3160,6 @@ export function Market() {
             { id: 'ALL', label: t('market.filterAll', 'Tümü') },
             { id: 'UP', label: t('market.filterGainers', 'Yükselenler') },
             { id: 'DOWN', label: t('market.filterLosers', 'Düşenler') },
-            { id: 'VOL', label: t('market.filterVolume', 'Hacim') },
         ];
     }, [pickerCategory, t]);
 
@@ -2946,15 +3167,35 @@ export function Market() {
         const allowed =
             pickerCategory === 'FUTURES'
                 ? new Set(['ALL', 'VIOP_FX', 'VIOP_INDEX', 'VIOP_COMMODITY', 'VIOP_EQUITY'])
-                : new Set(['ALL', 'UP', 'DOWN', 'VOL']);
+                : new Set(['ALL', 'UP', 'DOWN']);
         if (!allowed.has(marketListQuickFilter)) {
             setMarketListQuickFilter('ALL');
         }
     }, [pickerCategory, marketListQuickFilter]);
 
     const pickerDisplayedInstruments = useMemo(() => {
+        if (pickerCategory === 'BOND') {
+            if ((terminalListPageData?.items?.length ?? 0) > 0) {
+                return (terminalListPageData!.items ?? []).map(
+                    (row) => terminalListItemToVm(row) as InstrumentVm,
+                );
+            }
+            const dibInstruments = buildInstruments(
+                'BOND',
+                pickerEquitySubmarket,
+                pickerFundSubmarket,
+            );
+            return mapInstrumentsToVms(dibInstruments);
+        }
         return (terminalListPageData?.items ?? []).map((row) => terminalListItemToVm(row) as InstrumentVm);
-    }, [terminalListPageData]);
+    }, [
+        terminalListPageData,
+        pickerCategory,
+        buildInstruments,
+        mapInstrumentsToVms,
+        pickerEquitySubmarket,
+        pickerFundSubmarket,
+    ]);
     const marketListTotalPages = terminalListPageData?.totalPages ?? 0;
     const marketListTotalElements = terminalListPageData?.totalElements ?? 0;
     const selectedInstrumentVm = useMemo(() => {
@@ -3264,6 +3505,25 @@ export function Market() {
             };
         }
         if (selectedInstrumentVm.category === 'FUNDS') {
+            if (rowIsTefasFundVm(selectedInstrumentVm)) {
+                return {
+                    title: t('funds.tefasInfoTitle', 'TEFAS Fon Bilgisi'),
+                    rows: [
+                        ['Kod', selectedInstrumentVm.symbol],
+                        ['Fon', selectedInstrumentVm.displayName],
+                        ['Tür', selectedInstrumentVm.listSubtitle ?? selectedInstrumentVm.sector ?? '—'],
+                        [
+                            t('funds.riskLevel', 'Risk'),
+                            tefasRiskLevelDisplay(selectedInstrumentVm.fundRiskLevel),
+                        ],
+                        ['Kaynak', 'TEFAS'],
+                    ],
+                    description: t(
+                        'funds.tefasFootnote',
+                        'Getiri ve fiyat verileri TEFAS resmi API üzerinden alınır; geçmiş fiyatlar fon pay değeridir.',
+                    ),
+                };
+            }
             const meta = etfMeta[key];
             return meta
                 ? {
@@ -3354,10 +3614,24 @@ export function Market() {
             .map((tile) => enrichTreemapTileForChartRange(tile, dashboard, range));
     }, [dashboard, activeCategory, range]);
 
+    const tefasTreemapTiles = useMemo(() => {
+        if (!isTefasFundsView) return [];
+        const items = tefasHeatmapPage?.items ?? [];
+        return buildTefasTreemapTiles(items, range);
+    }, [isTefasFundsView, tefasHeatmapPage?.items, range]);
+
     const insightsTreemapTilesEffective = useMemo(() => {
+        if (isTefasFundsView) return tefasTreemapTiles;
         if (activeCategory === 'EQUITY' && equitySubmarket === 'BIST') return bistTreemapTiles;
         return insightsTreemapTiles;
-    }, [activeCategory, equitySubmarket, bistTreemapTiles, insightsTreemapTiles]);
+    }, [
+        isTefasFundsView,
+        tefasTreemapTiles,
+        activeCategory,
+        equitySubmarket,
+        bistTreemapTiles,
+        insightsTreemapTiles,
+    ]);
 
     const futuresTopMovers = useMemo(
         () => [...instruments].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent)).slice(0, 5),
@@ -3791,14 +4065,23 @@ export function Market() {
         if (activeCategory === 'EQUITY' && equitySubmarket === 'BIST') {
             return t('stocks.bistAnalysisTitle', 'Türk Hisse Piyasa Analizi');
         }
+        if (isTefasFundsView) {
+            return t('funds.tefasAnalysisTitle', 'Türk Fonları — TEFAS');
+        }
         return `${categoryLabel(activeCategory)} ${t('market.marketAnalysis', 'Piyasa Analiz')}`;
-    }, [activeCategory, equitySubmarket, categoryLabel, t]);
+    }, [activeCategory, equitySubmarket, isTefasFundsView, categoryLabel, t]);
     const spotTerminalSubtitle = useMemo(() => {
         if (activeCategory === 'EQUITY' && equitySubmarket === 'BIST') {
             return t('stocks.bistAnalysisSubtitle', 'BIST günlük fiyat verileri ve düzeltilmiş kapanış grafiği');
         }
+        if (isTefasFundsView) {
+            return t(
+                'funds.tefasAnalysisSubtitle',
+                'TEFAS fon getirileri ve pay değeri geçmişi — resmi dağıtım platformu verisi',
+            );
+        }
         return undefined;
-    }, [activeCategory, equitySubmarket, t]);
+    }, [activeCategory, equitySubmarket, isTefasFundsView, t]);
     const viopTerminalTitle = useMemo(() => {
         if (activeCategory !== 'FUTURES' || !selectedSymbol) {
             return t('market.viopAnalysisTitle', 'VIOP Piyasa Analiz');
@@ -3890,7 +4173,7 @@ export function Market() {
             <div className={`terminal-card ${cardClass}`}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <strong style={{ fontSize: 14 }}>{t('market.comparisonChart', 'Karşılaştırma Grafiği (Baz 100)')}</strong>
-                    <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                    <div style={{ fontSize: 12, color: 'var(--terminal-muted)' }}>
                         {activeCategory === 'FUTURES'
                             ? t(
                                   'market.compareFromListHintViop',
@@ -4001,10 +4284,7 @@ export function Market() {
                             <MarketCategoryScrollTabs
                                 categories={marketListCategoryTabs}
                                 value={pickerCategory}
-                                onChange={(id) => {
-                                    setPickerCategory(id);
-                                    setMarketListQuickFilter('ALL');
-                                }}
+                                onChange={(id) => applyPickerCategory(id)}
                                 ariaLabel={t('market.categorySelectAria', 'Piyasa kategorisi')}
                             />
                             {pickerCategory === 'EQUITY' ? (
@@ -4034,6 +4314,36 @@ export function Market() {
                                         title={t('stocks.bist', 'Borsa İstanbul')}
                                     >
                                         {t('stocks.turkishStocks', 'Türk Hisseleri')}
+                                    </button>
+                                </div>
+                            ) : null}
+                            {pickerCategory === 'FUNDS' ? (
+                                <div
+                                    className="terminal-equity-submarket"
+                                    role="group"
+                                    aria-label={t('funds.submarketGroup', 'Fon alt pazarı')}
+                                >
+                                    <button
+                                        type="button"
+                                        className={`terminal-submarket-chip ${pickerFundSubmarket === 'TR' ? 'is-active' : ''}`}
+                                        onClick={() => {
+                                            setPickerFundSubmarket('TR');
+                                            setMarketListQuickFilter('ALL');
+                                        }}
+                                        title={t('funds.tefasSource', 'TEFAS')}
+                                    >
+                                        {t('funds.turkishFunds', 'Türk Fonları')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`terminal-submarket-chip ${pickerFundSubmarket === 'US' ? 'is-active' : ''}`}
+                                        onClick={() => {
+                                            setPickerFundSubmarket('US');
+                                            setMarketListQuickFilter('ALL');
+                                        }}
+                                        title={t('funds.usEtfs', 'ABD ETF')}
+                                    >
+                                        {t('funds.usFunds', 'Amerika Fonları')}
                                     </button>
                                 </div>
                             ) : null}
@@ -4078,7 +4388,7 @@ export function Market() {
                                 <table
                                     className={`terminal-data-table terminal-data-table--picker-horizons ${
                                         pickerCategory === 'FUTURES' ? 'terminal-data-table--viop' : ''
-                                    }`}
+                                    }${isTefasFundsPicker ? ' terminal-data-table--tefas' : ''}`}
                                 >
                                     <thead>
                                         <tr>
@@ -4093,6 +4403,12 @@ export function Market() {
                                                 <GitCompare size={13} strokeWidth={2.2} aria-hidden className="terminal-picker-cmp-head__ic" />
                                             </th>
                                             <th>{t('market.instrument', 'Enstrüman')}</th>
+                                            {isTefasFundsPicker ? (
+                                                <>
+                                                    <th scope="col">{t('funds.fundType', 'Fon türü')}</th>
+                                                    <th scope="col">{t('funds.riskLevel', 'Risk')}</th>
+                                                </>
+                                            ) : null}
                                             <th
                                                 scope="col"
                                                 aria-sort={
@@ -4113,7 +4429,9 @@ export function Market() {
                                                             : t('market.sortByPrice', 'Fiyata göre sırala')
                                                     }
                                                 >
-                                                    {t('market.price', 'Fiyat')}
+                                                    {isTefasFundsPicker
+                                                        ? t('funds.navPrice', 'Pay değeri')
+                                                        : t('market.price', 'Fiyat')}
                                                     {pickerTableSort?.key === 'price'
                                                         ? pickerTableSort.dir === 'asc'
                                                             ? ' \u2191'
@@ -4125,7 +4443,9 @@ export function Market() {
                                                 className="terminal-horizon-pct-head"
                                                 scope="col"
                                                 title={
-                                                    pickerCategory === 'BOND'
+                                                    isTefasFundsPicker
+                                                        ? t('funds.return1mHint', 'Son 1 ay getirisi (TEFAS)')
+                                                        : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizonDayHint', '1 günlük fiyat değişimi (faiz/yield değil)')
                                                         : t('market.horizonDayHint', 'Günlük değişim: canlı veya spark son noktaları')
                                                 }
@@ -4142,7 +4462,9 @@ export function Market() {
                                                     className="terminal-sort-th terminal-sort-th--pct"
                                                     onClick={() => togglePickerListSort('pctDay')}
                                                 >
-                                                    {pickerCategory === 'BOND'
+                                                    {isTefasFundsPicker
+                                                        ? t('funds.return1m', '1A')
+                                                        : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizon1g', '1G')
                                                         : t('market.horizonDay', 'Gün')}
                                                     {pickerTableSort?.key === 'pctDay'
@@ -4173,7 +4495,9 @@ export function Market() {
                                                     className="terminal-sort-th terminal-sort-th--pct"
                                                     onClick={() => togglePickerListSort('pctWeek')}
                                                 >
-                                                    {pickerCategory === 'BOND'
+                                                    {isTefasFundsPicker
+                                                        ? t('funds.return3m', '3A')
+                                                        : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizon1h', '1H')
                                                         : t('market.horizonWeek', 'Hafta')}
                                                     {pickerTableSort?.key === 'pctWeek'
@@ -4204,7 +4528,9 @@ export function Market() {
                                                     className="terminal-sort-th terminal-sort-th--pct"
                                                     onClick={() => togglePickerListSort('pctMonth')}
                                                 >
-                                                    {pickerCategory === 'BOND'
+                                                    {isTefasFundsPicker
+                                                        ? t('funds.return6m', '6A')
+                                                        : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizon1a', '1A')
                                                         : t('market.horizonMonth', 'Ay')}
                                                     {pickerTableSort?.key === 'pctMonth'
@@ -4235,7 +4561,9 @@ export function Market() {
                                                     className="terminal-sort-th terminal-sort-th--pct"
                                                     onClick={() => togglePickerListSort('pctYear')}
                                                 >
-                                                    {pickerCategory === 'BOND'
+                                                    {isTefasFundsPicker
+                                                        ? t('funds.return1y', '1Y')
+                                                        : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizon1y', '1Y')
                                                         : t('market.horizonYear', 'Yıl')}
                                                     {pickerTableSort?.key === 'pctYear'
@@ -4245,6 +4573,20 @@ export function Market() {
                                                         : ''}
                                                 </button>
                                             </th>
+                                            {isTefasFundsPicker ? (
+                                                <>
+                                                    <th className="terminal-horizon-pct-head" scope="col" title={t('funds.returnYtdHint', 'Yıl başından bugüne')}>
+                                                        {t('funds.returnYtd', 'YBB')}
+                                                    </th>
+                                                    <th className="terminal-horizon-pct-head" scope="col">
+                                                        {t('funds.return3y', '3Y')}
+                                                    </th>
+                                                    <th className="terminal-horizon-pct-head" scope="col">
+                                                        {t('funds.return5y', '5Y')}
+                                                    </th>
+                                                </>
+                                            ) : null}
+                                            {!isTefasFundsPicker ? (
                                             <th
                                                 title={
                                                     pickerCategory === 'BOND'
@@ -4263,19 +4605,29 @@ export function Market() {
                                                     ? t('market.bondTrendCol', '1A Fiyat Trendi')
                                                     : `${t('market.trend', 'Trend')} (${chartRangeUiShortLabel(range)})`}
                                             </th>
+                                            ) : null}
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {loadingTerminalList ? (
                                             <tr>
-                                                <td colSpan={9} className="terminal-chart-empty" style={{ padding: 16, textAlign: 'left' }}>
-                                                    {t('market.listLoading', 'Liste yükleniyor…')}
+                                                <td
+                                                    colSpan={isTefasFundsPicker ? 13 : 9}
+                                                    className="terminal-chart-empty"
+                                                    style={{ padding: 16, textAlign: 'left' }}
+                                                >
+                                                    {isTefasFundsPicker
+                                                        ? t(
+                                                              'funds.tefasListLoading',
+                                                              'Türk fonları yükleniyor…',
+                                                          )
+                                                        : t('market.listLoading', 'Liste yükleniyor…')}
                                                 </td>
                                             </tr>
                                         ) : pickerDisplayedInstruments.length === 0 ? (
                                             <tr>
                                                 <td
-                                                    colSpan={9}
+                                                    colSpan={isTefasFundsPicker ? 13 : 9}
                                                     className="terminal-chart-empty"
                                                     style={{ padding: 16, textAlign: 'left' }}
                                                 >
@@ -4294,7 +4646,12 @@ export function Market() {
                                                                     'stocks.bistListEmpty',
                                                                     'BIST için gösterilecek sembol bulunamadı (fiyat verisi yok).',
                                                                 )
-                                                              : t('market.listEmptyCategory', 'Bu kategoride gösterilecek varlık yok.')}
+                                                              : pickerCategory === 'FUNDS' && pickerFundSubmarket === 'TR'
+                                                                ? t(
+                                                                      'funds.tefasListEmpty',
+                                                                      'TEFAS fon listesi boş veya eşleşen sonuç yok.',
+                                                                  )
+                                                                : t('market.listEmptyCategory', 'Bu kategoride gösterilecek varlık yok.')}
                                                 </td>
                                             </tr>
                                         ) : (
@@ -4312,7 +4669,7 @@ export function Market() {
                                                 row.category === 'BOND'
                                                     ? `ISIN: ${row.symbol}\nVade: ${formatDateTr(row.maturityDate ?? extractMaturityDate(row.symbol))}\nKalan Gün: ${
                                                           daysValue != null ? daysValue : '—'
-                                                      }\nPiyasa fiyatı: ${rowPriceDisp.glyph} ${rowPriceDisp.amount.toLocaleString('tr-TR', {
+                                                      }\nPiyasa fiyatı: ${rowPriceDisp.glyph} ${rowPriceDisp.amount.toLocaleString(numberLocale, {
                                                           maximumFractionDigits: 4,
                                                       })}\nNot: Dönemsel % değerleri fiyat performansıdır; tahvil faizi (yield) değildir.`
                                                     : undefined;
@@ -4320,6 +4677,7 @@ export function Market() {
                                                 row.category === 'EQUITY' &&
                                                 row.marketRegion === 'TR' &&
                                                 String(row.exchange ?? '').toUpperCase() === 'BIST';
+                                            const rowIsTefas = rowIsTefasFundVm(row);
                                             const rowMatchesChartSelection =
                                                 (row.category === 'FUTURES'
                                                     ? viopSymbolKeysEquivalent(selectedSymbol, row.symbol)
@@ -4327,7 +4685,9 @@ export function Market() {
                                                       normalizeSymbolKey(row.symbol)) &&
                                                 activeCategory === row.category &&
                                                 (row.category !== 'EQUITY' ||
-                                                    equitySubmarket === (rowIsBistEquity ? 'BIST' : 'US'));
+                                                    equitySubmarket === (rowIsBistEquity ? 'BIST' : 'US')) &&
+                                                (row.category !== 'FUNDS' ||
+                                                    fundSubmarket === (rowIsTefas ? 'TR' : 'US'));
                                             const rowKey = normalizeSymbolKey(row.symbol);
                                             const rowInCompareSet = compareSymbols.some((s) => normalizeSymbolKey(s) === rowKey);
                                             const comparePickerFull = compareSymbols.length >= 4 && !rowInCompareSet;
@@ -4346,6 +4706,12 @@ export function Market() {
                                                     setPickerCategory(row.category);
                                                     if (row.category === 'EQUITY') {
                                                         setEquitySubmarket(rowIsBistEquity ? 'BIST' : 'US');
+                                                        setPickerEquitySubmarket(rowIsBistEquity ? 'BIST' : 'US');
+                                                    }
+                                                    if (row.category === 'FUNDS') {
+                                                        const sub: FundSubmarket = rowIsTefas ? 'TR' : 'US';
+                                                        setFundSubmarket(sub);
+                                                        setPickerFundSubmarket(sub);
                                                     }
                                                     const nextSymbol =
                                                         row.category === 'FUTURES'
@@ -4395,6 +4761,11 @@ export function Market() {
                                                                     setPriceAlertTarget({
                                                                         ...pa,
                                                                         displayName: row.displayName ?? row.symbol,
+                                                                        referencePrice:
+                                                                            Number.isFinite(row.price) && row.price > 0
+                                                                                ? row.price
+                                                                                : null,
+                                                                        priceCurrency: row.currency ?? 'TRY',
                                                                     });
                                                                 }
                                                             }}
@@ -4481,13 +4852,25 @@ export function Market() {
                                                                 </div>
                                                                 {(() => {
                                                                     const snap = viopSnapshotBySymbol[normalizeSymbolKey(row.symbol)];
-                                                                    const hint = viopDataQualityHint(snap);
+                                                                    const hint = viopDataQualityHint(snap, t);
                                                                     return hint ? (
                                                                         <div style={{ marginTop: 2 }}>
                                                                             <span className="viop-stale-pill">{hint}</span>
                                                                         </div>
                                                                     ) : null;
                                                                 })()}
+                                                            </div>
+                                                        </div>
+                                                    ) : rowIsTefas ? (
+                                                        <div className="tefas-fund-instrument">
+                                                            <span className="tefas-fund-code" title={row.symbol}>
+                                                                {row.symbol}
+                                                            </span>
+                                                            <div className="tefas-fund-instrument__main">
+                                                                <span className="tefas-fund-instrument__dot" aria-hidden />
+                                                                <span className="tefas-fund-instrument__name" title={row.displayName}>
+                                                                    {row.displayName}
+                                                                </span>
                                                             </div>
                                                         </div>
                                                     ) : (
@@ -4540,17 +4923,18 @@ export function Market() {
                                                                 <>
                                                                     <div style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.25, marginTop: 2, wordBreak: 'break-word' }}>
                                                                         {bondListSubtitle(row.symbol, {
-                                                                            displayName:
-                                                                                debtNameMap[normalizeSymbolKey(row.symbol)] ??
-                                                                                row.displayName,
-                                                                            issuer:
-                                                                                debtMetaMap[normalizeSymbolKey(row.symbol)]
-                                                                                    ?.issuer,
-                                                                            maturityDate: row.maturityDate,
-                                                                            daysToMaturity: daysValue ?? row.daysToMaturity,
-                                                                            formatDate: formatDateTr,
-                                                                            t,
-                                                                        })}
+                                                                                  displayName:
+                                                                                      debtNameMap[normalizeSymbolKey(row.symbol)] ??
+                                                                                      row.displayName,
+                                                                                  issuer:
+                                                                                      debtMetaMap[normalizeSymbolKey(row.symbol)]
+                                                                                          ?.issuer,
+                                                                                  maturityDate: row.maturityDate,
+                                                                                  daysToMaturity:
+                                                                                      daysValue ?? row.daysToMaturity,
+                                                                                  formatDate: formatDateTr,
+                                                                                  t,
+                                                                              })}
                                                                     </div>
                                                                 </>
                                                             ) : (
@@ -4561,11 +4945,32 @@ export function Market() {
                                                         </>
                                                     )}
                                                 </td>
+                                                {rowIsTefas ? (
+                                                    <>
+                                                        <td className="tefas-fund-type-cell" title={row.listSubtitle ?? row.sector ?? ''}>
+                                                            <span className="tefas-fund-type">{row.listSubtitle ?? row.sector ?? '—'}</span>
+                                                        </td>
+                                                        <td className="tefas-fund-risk-cell">
+                                                            <div className="tefas-risk">
+                                                                <span className="tefas-risk__label">
+                                                                    {tefasRiskLevelDisplay(row.fundRiskLevel)}
+                                                                </span>
+                                                                <span
+                                                                    className="tefas-risk__bar"
+                                                                    style={{
+                                                                        width: `${row.fundRiskLevel != null && Number.isFinite(row.fundRiskLevel) ? (Math.min(7, Math.max(1, Math.round(row.fundRiskLevel)) / 7) * 100) : 0}%`,
+                                                                    }}
+                                                                    aria-hidden
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                    </>
+                                                ) : null}
                                                 <td className="terminal-picker-price-cell" title={rowPriceDisp.title}>
                                                     <div className="terminal-picker-price-stack">
                                                         <div className="terminal-picker-price-stack__main">
                                                             <span style={{ opacity: 0.8 }}>{rowPriceDisp.glyph}</span>{' '}
-                                                            {rowPriceDisp.amount.toLocaleString('tr-TR', {
+                                                            {rowPriceDisp.amount.toLocaleString(numberLocale, {
                                                                 maximumFractionDigits:
                                                                     row.category === 'FUTURES' ? viopPriceDecimals(row.symbol) : 4,
                                                             })}
@@ -4591,6 +4996,20 @@ export function Market() {
                                                 <td className={horizonPctClassName(row.pctYear)} title={t('market.horizonYear', 'Yıl')}>
                                                     {formatHorizonPct(row.pctYear)}
                                                 </td>
+                                                {rowIsTefas ? (
+                                                    <>
+                                                        <td className={horizonPctClassName(row.changePercent)} title={t('funds.returnYtd', 'YBB')}>
+                                                            {formatHorizonPct(row.changePercent)}
+                                                        </td>
+                                                        <td className={horizonPctClassName(row.fundReturn3y)} title={t('funds.return3y', '3Y')}>
+                                                            {formatHorizonPct(row.fundReturn3y)}
+                                                        </td>
+                                                        <td className={horizonPctClassName(row.fundReturn5y)} title={t('funds.return5y', '5Y')}>
+                                                            {formatHorizonPct(row.fundReturn5y)}
+                                                        </td>
+                                                    </>
+                                                ) : null}
+                                                {!rowIsTefas ? (
                                                 <td>
                                                     {(() => {
                                                         // Sparkline yon-rengi ve uzunlugu, secili periyoda gore (BOND/FUTURES
@@ -4609,7 +5028,7 @@ export function Market() {
                                                                     style={{
                                                                         height: 24,
                                                                         borderRadius: 4,
-                                                                        background: 'rgba(148,163,184,0.18)',
+                                                                        background: 'var(--app-surface-soft-bg)',
                                                                     }}
                                                                     title={t('stocks.sparkLoading', 'Mini grafik yükleniyor')}
                                                                 />
@@ -4641,6 +5060,7 @@ export function Market() {
                                                         );
                                                     })()}
                                                 </td>
+                                                ) : null}
                                             </tr>
                                             );
                                         })
@@ -4818,7 +5238,7 @@ export function Market() {
             <div
                 ref={terminalHeroRef}
                 className={`terminal-hero ${activeCategory === 'FUTURES' ? 'terminal-hero--viop' : ''}${
-                    activeCategory === 'BOND' ? ' terminal-hero--bond' : ''
+                    isBondInstrumentsView ? ' terminal-hero--bond' : ''
                 }${
                     isSpotTerminalLayout && activeCategory !== 'FUTURES' ? ' terminal-hero--spot-compact' : ''
                 }`}
@@ -4857,17 +5277,17 @@ export function Market() {
                                     const cat = viopCategoryFor(hero.symbol);
                                     if (!cat) return null;
                                     return (
-                                        <span className={viopCatBadgeClass(cat)} title={viopAssetClassTitle(cat)}>
+                                        <span className={viopCatBadgeClass(cat)} title={viopAssetClassTitle(cat, t)}>
                                             {VIOP_CATEGORY_CHIP[cat].label}
                                         </span>
                                     );
                                 })()}
                                 <span className="instrument-highlight-chip" style={{ borderColor: 'var(--terminal-border)', color: 'var(--terminal-text)' }}>
-                                    {viopAssetClassTitle(viopCategoryFor(hero.symbol))}
+                                    {viopAssetClassTitle(viopCategoryFor(hero.symbol), t)}
                                 </span>
                                 {(() => {
                                     const snap = viopSnapshotBySymbol[normalizeSymbolKey(hero.symbol)];
-                                    const hint = viopDataQualityHint(snap);
+                                    const hint = viopDataQualityHint(snap, t);
                                     return hint ? <span className="viop-stale-pill">{hint}</span> : null;
                                 })()}
                             </div>
@@ -4889,7 +5309,7 @@ export function Market() {
                                 {heroScaled ? (
                                     <>
                                         <span style={{ opacity: 0.85 }}>{heroScaled.glyph}</span>{' '}
-                                        {heroScaled.amount.toLocaleString('tr-TR', {
+                                        {heroScaled.amount.toLocaleString(numberLocale, {
                                             maximumFractionDigits: viopPriceDecimals(hero.symbol),
                                         })}
                                     </>
@@ -4917,13 +5337,14 @@ export function Market() {
                                     {fmtViopBidAskLine(
                                         futuresHeaderMetrics?.bid ?? null,
                                         futuresHeaderMetrics?.ask ?? null,
-                                        viopPriceDecimals(hero.symbol)
+                                        viopPriceDecimals(hero.symbol),
+                                        numberLocale,
                                     )}
                                 </dd>
                                 <dt>{t('market.open', 'Açılış')}</dt>
                                 <dd>
                                     {futuresHeaderMetrics?.open != null && Number.isFinite(futuresHeaderMetrics.open)
-                                        ? futuresHeaderMetrics.open.toLocaleString('tr-TR', {
+                                        ? futuresHeaderMetrics.open.toLocaleString(numberLocale, {
                                               maximumFractionDigits: viopPriceDecimals(hero.symbol),
                                           })
                                         : '—'}
@@ -4931,13 +5352,13 @@ export function Market() {
                                 <dt>{t('market.dayHighLow', 'Gün Yük / Düş')}</dt>
                                 <dd>
                                     {futuresHeaderMetrics?.high != null && Number.isFinite(futuresHeaderMetrics.high)
-                                        ? futuresHeaderMetrics.high.toLocaleString('tr-TR', {
+                                        ? futuresHeaderMetrics.high.toLocaleString(numberLocale, {
                                               maximumFractionDigits: viopPriceDecimals(hero.symbol),
                                           })
                                         : '—'}{' '}
                                     /{' '}
                                     {futuresHeaderMetrics?.low != null && Number.isFinite(futuresHeaderMetrics.low)
-                                        ? futuresHeaderMetrics.low.toLocaleString('tr-TR', {
+                                        ? futuresHeaderMetrics.low.toLocaleString(numberLocale, {
                                               maximumFractionDigits: viopPriceDecimals(hero.symbol),
                                           })
                                         : '—'}
@@ -4945,17 +5366,17 @@ export function Market() {
                                 <dt>{t('market.volumeQty', 'Hacim / Adet')}</dt>
                                 <dd>
                                     {futuresHeaderMetrics?.volume != null
-                                        ? futuresHeaderMetrics.volume.toLocaleString('tr-TR')
+                                        ? futuresHeaderMetrics.volume.toLocaleString(numberLocale)
                                         : '—'}{' '}
                                     /{' '}
                                     {futuresHeaderMetrics?.quantity != null
-                                        ? futuresHeaderMetrics.quantity.toLocaleString('tr-TR')
+                                        ? futuresHeaderMetrics.quantity.toLocaleString(numberLocale)
                                         : '—'}
                                 </dd>
                                 <dt>{t('market.settlement', 'Uzlaşma')}</dt>
                                 <dd>
                                     {futuresHeaderMetrics?.settlement != null && Number.isFinite(futuresHeaderMetrics.settlement)
-                                        ? futuresHeaderMetrics.settlement.toLocaleString('tr-TR', {
+                                        ? futuresHeaderMetrics.settlement.toLocaleString(numberLocale, {
                                               maximumFractionDigits: viopPriceDecimals(hero.symbol),
                                           })
                                         : '—'}
@@ -4963,7 +5384,7 @@ export function Market() {
                                 <dt>{t('market.preSettlement', 'Ön uzlaşma')}</dt>
                                 <dd>
                                     {futuresHeaderMetrics?.preSettlement != null && Number.isFinite(futuresHeaderMetrics.preSettlement)
-                                        ? futuresHeaderMetrics.preSettlement.toLocaleString('tr-TR', {
+                                        ? futuresHeaderMetrics.preSettlement.toLocaleString(numberLocale, {
                                               maximumFractionDigits: viopPriceDecimals(hero.symbol),
                                           })
                                         : '—'}
@@ -4971,19 +5392,19 @@ export function Market() {
                                 <dt>{t('market.initialMargin', 'Teminat')}</dt>
                                 <dd>
                                     {futuresHeaderMetrics?.initialMargin != null && Number.isFinite(futuresHeaderMetrics.initialMargin)
-                                        ? futuresHeaderMetrics.initialMargin.toLocaleString('tr-TR')
+                                        ? futuresHeaderMetrics.initialMargin.toLocaleString(numberLocale)
                                         : '—'}
                                 </dd>
                                 <dt>{t('market.limitUpDown', 'Tavan / Taban')}</dt>
                                 <dd>
                                     {futuresHeaderMetrics?.limitUp != null && Number.isFinite(futuresHeaderMetrics.limitUp)
-                                        ? futuresHeaderMetrics.limitUp.toLocaleString('tr-TR', {
+                                        ? futuresHeaderMetrics.limitUp.toLocaleString(numberLocale, {
                                               maximumFractionDigits: viopPriceDecimals(hero.symbol),
                                           })
                                         : '—'}{' '}
                                     /{' '}
                                     {futuresHeaderMetrics?.limitDown != null && Number.isFinite(futuresHeaderMetrics.limitDown)
-                                        ? futuresHeaderMetrics.limitDown.toLocaleString('tr-TR', {
+                                        ? futuresHeaderMetrics.limitDown.toLocaleString(numberLocale, {
                                               maximumFractionDigits: viopPriceDecimals(hero.symbol),
                                           })
                                         : '—'}
@@ -5064,7 +5485,7 @@ export function Market() {
                                     {hero
                                         ? activeCategory === 'FUTURES'
                                             ? parseViopContractLabel(hero.symbol)
-                                            : activeCategory === 'BOND'
+                                            : isBondInstrumentsView
                                             ? debtNameMap[hero.symbol] ?? hero.symbol
                                             : activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
                                             ? hero.displayName
@@ -5073,7 +5494,7 @@ export function Market() {
                                             : formatAssetLabel(hero.symbol, marketKindForCategory(activeCategory))
                                         : '—'}
                                 </div>
-                                {activeCategory === 'BOND' && hero ? (
+                                {isBondInstrumentsView && hero ? (
                                     <div
                                         style={{
                                             fontFamily: 'ui-monospace, monospace',
@@ -5103,7 +5524,7 @@ export function Market() {
                                 <div
                                     className="terminal-hero-selector__price"
                                     title={
-                                        activeCategory === 'BOND'
+                                        isBondInstrumentsView
                                             ? t('market.bondHeroMarketPriceTip', 'Piyasa fiyatı (TRY). Bu değer tahvil faizi (yield) değildir.')
                                             : heroScaled?.title
                                     }
@@ -5111,7 +5532,7 @@ export function Market() {
                                     {heroScaled ? (
                                         <>
                                             <span style={{ opacity: 0.8 }}>{heroScaled.glyph}</span>{' '}
-                                            {heroScaled.amount.toLocaleString('tr-TR', { maximumFractionDigits: 4 })}
+                                            {heroScaled.amount.toLocaleString(numberLocale, { maximumFractionDigits: 4 })}
                                             {heroScaled.suffix ?? ''}
                                         </>
                                     ) : (
@@ -5127,14 +5548,14 @@ export function Market() {
                                               : 'is-down'
                                     }`}
                                     title={
-                                        activeCategory === 'BOND'
+                                        isBondInstrumentsView
                                             ? t(
                                                   'market.bondHeroDailyPriceChgTip',
                                                   'Günlük fiyat değişimi (%). Tahvil faizi veya garanti getiri değildir.',
                                               )
                                             : undefined
                                     }
-                                    style={activeCategory === 'BOND' ? { display: 'flex', alignItems: 'center', gap: 6 } : undefined}
+                                    style={isBondInstrumentsView ? { display: 'flex', alignItems: 'center', gap: 6 } : undefined}
                                 >
                                     {hero ? (
                                         Math.abs(hero.changePercent) < 0.005 ? (
@@ -5148,7 +5569,7 @@ export function Market() {
                                     ) : (
                                         '—'
                                     )}
-                                    {activeCategory === 'BOND' ? (
+                                    {isBondInstrumentsView ? (
                                         <span
                                             title={t(
                                                 'market.bondHeroNotYieldTip',
@@ -5193,7 +5614,7 @@ export function Market() {
                                 <span style={{ opacity: 0.8 }}>{heroScaled?.glyph ?? ''}</span>
                                 {heroScaled ? ' ' : ''}
                                 {heroScaled || hero
-                                    ? (heroScaled?.high ?? hero?.high ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })
+                                    ? (heroScaled?.high ?? hero?.high ?? 0).toLocaleString(numberLocale, { maximumFractionDigits: 4 })
                                     : '—'}
                             </div>
                             <div title={heroScaled?.title}>
@@ -5201,10 +5622,10 @@ export function Market() {
                                 <span style={{ opacity: 0.8 }}>{heroScaled?.glyph ?? ''}</span>
                                 {heroScaled ? ' ' : ''}
                                 {heroScaled || hero
-                                    ? (heroScaled?.low ?? hero?.low ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })
+                                    ? (heroScaled?.low ?? hero?.low ?? 0).toLocaleString(numberLocale, { maximumFractionDigits: 4 })
                                     : '—'}
                             </div>
-                            {activeCategory === 'BOND' && bondContractSummary ? (
+                            {isBondInstrumentsView && bondContractSummary ? (
                                 <>
                                     <div>
                                         {t('market.maturity', 'Vade')}: {bondContractSummary.maturityDate ?? '—'}
@@ -5226,54 +5647,54 @@ export function Market() {
                                     <div>
                                         Δ:{' '}
                                         {futuresHeaderMetrics.changeAmount != null && Number.isFinite(futuresHeaderMetrics.changeAmount)
-                                            ? futuresHeaderMetrics.changeAmount.toLocaleString('tr-TR', { maximumFractionDigits: 2 })
+                                            ? futuresHeaderMetrics.changeAmount.toLocaleString(numberLocale, { maximumFractionDigits: 2 })
                                             : '—'}
                                         {futuresHeaderMetrics.changePercent != null && Number.isFinite(futuresHeaderMetrics.changePercent)
-                                            ? ` (${futuresHeaderMetrics.changePercent >= 0 ? '+' : ''}${futuresHeaderMetrics.changePercent.toLocaleString('tr-TR', {
+                                            ? ` (${futuresHeaderMetrics.changePercent >= 0 ? '+' : ''}${futuresHeaderMetrics.changePercent.toLocaleString(numberLocale, {
                                                   maximumFractionDigits: 2,
                                               })}%)`
                                             : ''}
                                     </div>
                                     <div>
                                         A/S:{' '}
-                                        {futuresHeaderMetrics.bid != null ? futuresHeaderMetrics.bid.toLocaleString('tr-TR') : '—'} /{' '}
-                                        {futuresHeaderMetrics.ask != null ? futuresHeaderMetrics.ask.toLocaleString('tr-TR') : '—'}
+                                        {futuresHeaderMetrics.bid != null ? futuresHeaderMetrics.bid.toLocaleString(numberLocale) : '—'} /{' '}
+                                        {futuresHeaderMetrics.ask != null ? futuresHeaderMetrics.ask.toLocaleString(numberLocale) : '—'}
                                     </div>
                                     <div>
                                         Açılış / G / D:{' '}
-                                        {futuresHeaderMetrics.open != null ? futuresHeaderMetrics.open.toLocaleString('tr-TR') : '—'} ·{' '}
-                                        {futuresHeaderMetrics.high != null ? futuresHeaderMetrics.high.toLocaleString('tr-TR') : '—'} ·{' '}
-                                        {futuresHeaderMetrics.low != null ? futuresHeaderMetrics.low.toLocaleString('tr-TR') : '—'}
+                                        {futuresHeaderMetrics.open != null ? futuresHeaderMetrics.open.toLocaleString(numberLocale) : '—'} ·{' '}
+                                        {futuresHeaderMetrics.high != null ? futuresHeaderMetrics.high.toLocaleString(numberLocale) : '—'} ·{' '}
+                                        {futuresHeaderMetrics.low != null ? futuresHeaderMetrics.low.toLocaleString(numberLocale) : '—'}
                                     </div>
                                     <div>
                                         Hacim / Adet:{' '}
                                         {futuresHeaderMetrics.volume != null
-                                            ? futuresHeaderMetrics.volume.toLocaleString('tr-TR')
+                                            ? futuresHeaderMetrics.volume.toLocaleString(numberLocale)
                                             : '—'}{' '}
                                         /{' '}
                                         {futuresHeaderMetrics.quantity != null
-                                            ? futuresHeaderMetrics.quantity.toLocaleString('tr-TR')
+                                            ? futuresHeaderMetrics.quantity.toLocaleString(numberLocale)
                                             : '—'}
                                     </div>
                                     <div>
                                         Uzlaşma / Ön uzlaşma:{' '}
                                         {futuresHeaderMetrics.settlement != null
-                                            ? futuresHeaderMetrics.settlement.toLocaleString('tr-TR')
+                                            ? futuresHeaderMetrics.settlement.toLocaleString(numberLocale)
                                             : '—'}{' '}
                                         /{' '}
                                         {futuresHeaderMetrics.preSettlement != null
-                                            ? futuresHeaderMetrics.preSettlement.toLocaleString('tr-TR')
+                                            ? futuresHeaderMetrics.preSettlement.toLocaleString(numberLocale)
                                             : '—'}
                                     </div>
                                     <div>
                                         Teminat / Tavan–Taban:{' '}
                                         {futuresHeaderMetrics.initialMargin != null
-                                            ? futuresHeaderMetrics.initialMargin.toLocaleString('tr-TR')
+                                            ? futuresHeaderMetrics.initialMargin.toLocaleString(numberLocale)
                                             : '—'}{' '}
                                         /{' '}
-                                        {futuresHeaderMetrics.limitUp != null ? futuresHeaderMetrics.limitUp.toLocaleString('tr-TR') : '—'} –{' '}
+                                        {futuresHeaderMetrics.limitUp != null ? futuresHeaderMetrics.limitUp.toLocaleString(numberLocale) : '—'} –{' '}
                                         {futuresHeaderMetrics.limitDown != null
-                                            ? futuresHeaderMetrics.limitDown.toLocaleString('tr-TR')
+                                            ? futuresHeaderMetrics.limitDown.toLocaleString(numberLocale)
                                             : '—'}
                                     </div>
                                     <div style={{ fontSize: 11, opacity: 0.85 }}>
@@ -5348,10 +5769,6 @@ export function Market() {
     return (
         <div className="terminal-page" style={terminalVars}>
             {renderMarketListExpandOverlay()}
-            {!isSpotTerminalLayout  ? (
-                <div className="terminal-spot-hero-rail--passthrough">{renderInstrumentHero()}</div>
-            ) : null}
-
 
             {instrumentListOpen && !isSpotTerminalLayout ? (
                 <button
@@ -5366,19 +5783,19 @@ export function Market() {
                 <div className="terminal-card">{t('market.loading', 'Piyasa terminali yükleniyor...')}</div>
             ) : (
                 <>
-                    <div
-                        className={`terminal-grid${
-                            isSpotTerminalLayout ? ' terminal-grid--heatmap-rail terminal-spot-unified' : ' terminal-grid--list-undocked'
-                        }`}
-                    >
-                        {isSpotTerminalLayout ? renderLeftSpotColumn() : renderMarketListPanel()}
-                        {isSpotTerminalLayout ? renderInstrumentHero() : null}
-
+                    <div className="terminal-workspace">
+                        <div className="terminal-selected-instrument-row">{renderInstrumentHero()}</div>
                         <div
-                                ref={centerStackRef}
-                                className="terminal-center-stack"
-                            >
-                        <div className="terminal-card terminal-center-panel">
+                            className={`terminal-grid market-main-grid${
+                                isSpotTerminalLayout
+                                    ? ' terminal-grid--heatmap-rail terminal-spot-unified'
+                                    : ' terminal-grid--list-undocked'
+                            }`}
+                        >
+                            {isSpotTerminalLayout ? renderLeftSpotColumn() : renderMarketListPanel()}
+
+                            <div ref={centerStackRef} className="terminal-center-stack">
+                        <div className="terminal-card terminal-center-panel market-chart-card">
                             <div className="terminal-controls">
                                 <div className="terminal-controls__chart-toolbar">
                                     <MarketCategoryScrollTabs
@@ -5392,7 +5809,7 @@ export function Market() {
                                         }
                                         ariaLabel={t('market.chartRangeAria', 'Grafik zaman aralığı')}
                                     />
-                                    {activeCategory === 'BOND' ? (
+                                    {isBondInstrumentsView ? (
                                         <MarketCategoryScrollTabs
                                             className="terminal-category-scroll-shell--chart-mode"
                                             categories={bondChartModeTabs}
@@ -5428,7 +5845,7 @@ export function Market() {
                                     rsiAvailable={chartIndicatorRsiAvailable}
                                 />
                             </div>
-                            {activeCategory === 'BOND' && bondChartMode === 'DUAL' ? (
+                            {isBondInstrumentsView && bondChartMode === 'DUAL' ? (
                                 <BondTerminalChart
                                     points={bondDualPoints}
                                     ma7={bondChartMa7}
@@ -5467,7 +5884,9 @@ export function Market() {
                                     loading={
                                         activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
                                             ? loadingBistCandles
-                                            : loadingCandles || loadingIndicators
+                                            : activeCategory === 'FUNDS' && fundSubmarket === 'TR'
+                                              ? loadingTefasHistory || fetchingTefasHistory
+                                              : loadingCandles || loadingIndicators
                                     }
                                     trendLabel={hero?.trend}
                                     timeframeLabel={chartTfLabel}
@@ -5479,14 +5898,14 @@ export function Market() {
                                 <MarketTerminalChart
                                     candles={candles}
                                     ma7={
-                                        activeCategory === 'BOND'
+                                        isBondInstrumentsView
                                             ? bondChartMa7
                                             : activeCategory === 'FUTURES'
                                               ? viopChartMa7
                                               : ma7
                                     }
                                     ma21={
-                                        activeCategory === 'BOND'
+                                        isBondInstrumentsView
                                             ? bondChartMa21
                                             : activeCategory === 'FUTURES'
                                               ? viopChartMa21
@@ -5499,7 +5918,9 @@ export function Market() {
                                     loading={
                                         activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
                                             ? loadingBistCandles
-                                            : loadingCandles || loadingIndicators || loadingViopHistory || loadingDebtHistory
+                                            : activeCategory === 'FUNDS' && fundSubmarket === 'TR'
+                                              ? loadingTefasHistory || fetchingTefasHistory
+                                              : loadingCandles || loadingIndicators || loadingViopHistory || loadingDebtHistory
                                     }
                                     symbol={selectedSymbol}
                                     trendLabel={hero?.trend}
@@ -5545,7 +5966,7 @@ export function Market() {
                                             <dt>{t('market.settlement', 'Uzlaşma')}</dt>
                                             <dd>
                                                 {viopContractSummary.settlement != null
-                                                    ? viopContractSummary.settlement.toLocaleString('tr-TR', {
+                                                    ? viopContractSummary.settlement.toLocaleString(numberLocale, {
                                                           maximumFractionDigits: 4,
                                                       })
                                                     : '—'}
@@ -5555,7 +5976,7 @@ export function Market() {
                                             <dt>{t('market.preSettlement', 'Ön uzlaşma')}</dt>
                                             <dd>
                                                 {viopContractSummary.preSettlement != null
-                                                    ? viopContractSummary.preSettlement.toLocaleString('tr-TR', {
+                                                    ? viopContractSummary.preSettlement.toLocaleString(numberLocale, {
                                                           maximumFractionDigits: 4,
                                                       })
                                                     : '—'}
@@ -5565,7 +5986,7 @@ export function Market() {
                                             <dt>{t('market.initialMargin', 'Teminat')}</dt>
                                             <dd>
                                                 {viopContractSummary.initialMargin != null
-                                                    ? viopContractSummary.initialMargin.toLocaleString('tr-TR')
+                                                    ? viopContractSummary.initialMargin.toLocaleString(numberLocale)
                                                     : '—'}
                                             </dd>
                                         </div>
@@ -5582,7 +6003,7 @@ export function Market() {
                                 </div>
                             </div>
                         ) : null}
-                        {activeCategory === 'BOND' && bondContractSummary ? (
+                        {isBondInstrumentsView && bondContractSummary ? (
                             <div className="terminal-bottom-cards">
                                 <div className="terminal-mini-card">
                                     <h4>{t('market.bondMaturitySummaryTitle', 'Vade / kupon özeti')}</h4>
@@ -5604,7 +6025,7 @@ export function Market() {
                                             <dd>
                                                 {bondContractSummary.couponRate != null &&
                                                 Number.isFinite(Number(bondContractSummary.couponRate))
-                                                    ? `${Number(bondContractSummary.couponRate).toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%`
+                                                    ? `${Number(bondContractSummary.couponRate).toLocaleString(numberLocale, { maximumFractionDigits: 2 })}%`
                                                     : '—'}
                                             </dd>
                                         </div>
@@ -5622,7 +6043,7 @@ export function Market() {
                                             <dd>
                                                 {bondContractSummary.dirtyPrice != null &&
                                                 Number.isFinite(Number(bondContractSummary.dirtyPrice))
-                                                    ? Number(bondContractSummary.dirtyPrice).toLocaleString('tr-TR', {
+                                                    ? Number(bondContractSummary.dirtyPrice).toLocaleString(numberLocale, {
                                                           maximumFractionDigits: 4,
                                                       })
                                                     : '—'}
@@ -5671,7 +6092,11 @@ export function Market() {
                                         />
                                     </div>
                                     <div style={{ marginTop: 8 }}>
-                                        <button type="button" className="terminal-btn" onClick={() => navigate('/market/heatmap')}>
+                                        <button
+                                            type="button"
+                                            className="terminal-btn"
+                                            onClick={() => navigate('/market/heatmap')}
+                                        >
                                             {t('market.detailedHeatmap', 'Detaylı ısı haritası')}
                                         </button>
                                     </div>
@@ -5715,7 +6140,7 @@ export function Market() {
                                             </span>
                                             <span className={v.changePercent >= 0 ? 'terminal-pct-pos' : 'terminal-pct-neg'}>
                                                 {v.changePercent >= 0 ? '+' : ''}
-                                                {v.changePercent.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
+                                                {v.changePercent.toLocaleString(numberLocale, { maximumFractionDigits: 2 })}%
                                             </span>
                                         </div>
                                         );
@@ -5754,7 +6179,7 @@ export function Market() {
                                                     </div>
                                                 ) : null}
                                             </span>
-                                            <span>{v.volume.toLocaleString('tr-TR')}</span>
+                                            <span>{v.volume.toLocaleString(numberLocale)}</span>
                                         </div>
                                         );
                                     })}
@@ -5793,7 +6218,7 @@ export function Market() {
                                                 ) : null}
                                             </span>
                                             <span className="terminal-pct-pos">
-                                                +{v.changePercent.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
+                                                +{v.changePercent.toLocaleString(numberLocale, { maximumFractionDigits: 2 })}%
                                             </span>
                                         </div>
                                         );
@@ -5831,7 +6256,7 @@ export function Market() {
                                                 ) : null}
                                             </span>
                                             <span className="terminal-pct-neg">
-                                                {v.changePercent.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
+                                                {v.changePercent.toLocaleString(numberLocale, { maximumFractionDigits: 2 })}%
                                             </span>
                                         </div>
                                         );
@@ -5857,7 +6282,7 @@ export function Market() {
                                 </>
                             ) : null}
 
-                            {activeCategory === 'BOND' ? (
+                            {isBondInstrumentsView ? (
                                 <>
                                     <div className="terminal-mini-card" style={{ marginBottom: 10 }}>
                                         <h4 style={{ margin: '0 0 8px', fontSize: 13 }}>
@@ -5892,7 +6317,7 @@ export function Market() {
                                                         </span>
                                                         <span className={v.changePercent >= 0 ? 'terminal-pct-pos' : 'terminal-pct-neg'}>
                                                             {v.changePercent >= 0 ? '+' : ''}
-                                                            {v.changePercent.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
+                                                            {v.changePercent.toLocaleString(numberLocale, { maximumFractionDigits: 2 })}%
                                                         </span>
                                                     </div>
                                                 );
@@ -5911,7 +6336,7 @@ export function Market() {
                                                             {v.symbol}
                                                         </span>
                                                         <span className="terminal-pct-pos">
-                                                            {v.yieldPct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}%
+                                                            {v.yieldPct.toLocaleString(numberLocale, { maximumFractionDigits: 2 })}%
                                                         </span>
                                                     </div>
                                                 ))
@@ -5943,19 +6368,21 @@ export function Market() {
 
                             {activeCategory === 'FX' ? (
                                 <div className="terminal-mini-list">
-                                    <strong style={{ fontSize: 13 }}>Makas / Volatilite</strong>
+                                    <strong style={{ fontSize: 13 }}>{t('market.fxSpreadVolTitle', 'Makas / volatilite')}</strong>
                                     {instruments.slice(0, 8).map((ins) => {
                                         const vk = `FX:${normalizeSymbolKey(ins.symbol)}`;
                                         const dv = volatilityByKey[vk];
                                         const volPct =
                                             dv != null && Number.isFinite(dv) && dv > 0
-                                                ? (dv * 100).toLocaleString('tr-TR', { maximumFractionDigits: 2 })
-                                                : Math.abs(ins.changePercent).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+                                                ? (dv * 100).toLocaleString(numberLocale, { maximumFractionDigits: 2 })
+                                                : Math.abs(ins.changePercent).toLocaleString(numberLocale, { maximumFractionDigits: 2 });
                                         return (
                                             <div key={`fx-metric-${ins.symbol}`} className="terminal-mini-item">
                                                 <span>{ins.symbol}</span>
                                                 <span>
-                                                    Makas {(ins.metrics?.basis ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 4 })} · Vol {volPct}%
+                                                    {t('market.spreadShort', 'Makas')}{' '}
+                                                    {(ins.metrics?.basis ?? 0).toLocaleString(numberLocale, { maximumFractionDigits: 4 })} ·{' '}
+                                                    {t('market.volShort', 'Vol')} {volPct}%
                                                 </span>
                                             </div>
                                         );
@@ -5969,7 +6396,7 @@ export function Market() {
                                     {cryptoDominance.map((r) => (
                                         <div key={`d-${r.symbol}`} className="terminal-mini-item">
                                             <span>{r.symbol}</span>
-                                            <span>%{r.dominancePct.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}</span>
+                                            <span>%{r.dominancePct.toLocaleString(numberLocale, { maximumFractionDigits: 2 })}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -5977,8 +6404,12 @@ export function Market() {
                             </div>
                         </div>
                     </div>
+                    </div>
 
-                    <div style={{ marginTop: 8, display: 'flex', gap: 12, fontSize: 11, color: '#94a3b8' }}>
+                    <div
+                        className="terminal-page-footnote"
+                        style={{ marginTop: 8, display: 'flex', gap: 12, fontSize: 11, color: 'var(--terminal-muted)' }}
+                    >
                         <span>{t('market.viopContracts', 'VİOP kontrat')}: {viopContracts.length}</span>
                         <span>{t('market.bondInstruments', 'Tahvil enstrüman')}: {debtCatalog.length}</span>
                     </div>
@@ -5989,7 +6420,7 @@ export function Market() {
                 <button
                     type="button"
                     className="instrument-drawer-backdrop"
-                    aria-label="Detay panelini kapat"
+                    aria-label={t('market.drawerCloseAria', 'Detay panelini kapat')}
                     onClick={() => setIsDetailPanelOpen(false)}
                 />
                 <aside
@@ -6024,13 +6455,13 @@ export function Market() {
                                             const cat = viopCategoryFor(selectedInstrumentVm.symbol);
                                             if (!cat) return null;
                                             return (
-                                                <span className={viopCatBadgeClass(cat)} title={viopAssetClassTitle(cat)}>
+                                                <span className={viopCatBadgeClass(cat)} title={viopAssetClassTitle(cat, t)}>
                                                     {VIOP_CATEGORY_CHIP[cat].label}
                                                 </span>
                                             );
                                         })()}
                                         <span className="instrument-highlight-chip" style={{ borderColor: 'var(--terminal-border)', color: 'var(--terminal-text)' }}>
-                                            {viopAssetClassTitle(viopCategoryFor(selectedInstrumentVm.symbol))}
+                                            {viopAssetClassTitle(viopCategoryFor(selectedInstrumentVm.symbol), t)}
                                         </span>
                                         {selectedInstrumentVm.expiryDate ? (
                                             <span className="instrument-highlight-chip">{selectedInstrumentVm.expiryDate}</span>
@@ -6047,7 +6478,7 @@ export function Market() {
                                     const fd = viopPriceDecimals(selectedInstrumentVm.symbol);
                                     const fmt = (n: number | null | undefined) =>
                                         n != null && Number.isFinite(Number(n))
-                                            ? Number(n).toLocaleString('tr-TR', { maximumFractionDigits: fd, minimumFractionDigits: 0 })
+                                            ? Number(n).toLocaleString(numberLocale, { maximumFractionDigits: fd, minimumFractionDigits: 0 })
                                             : '—';
                                     const chgCls =
                                         (s?.changePercent != null && Number(s.changePercent) >= 0) ||
@@ -6076,7 +6507,9 @@ export function Market() {
                                                             : '—'}
                                                     </span>
                                                     <span className="viop-drawer-kv__label">{t('market.bidAsk', 'Alış / Satış')}</span>
-                                                    <span className="viop-drawer-kv__val">{fmtViopBidAskLine(s?.bid ?? null, s?.ask ?? null, fd)}</span>
+                                                    <span className="viop-drawer-kv__val">
+                                                        {fmtViopBidAskLine(s?.bid ?? null, s?.ask ?? null, fd, numberLocale)}
+                                                    </span>
                                                     <span className="viop-drawer-kv__label">{t('market.open', 'Açılış')}</span>
                                                     <span className="viop-drawer-kv__val">{fmt(openVal)}</span>
                                                     <span className="viop-drawer-kv__label">{t('market.dayHighLow', 'Gün Yük / Düş')}</span>
@@ -6090,11 +6523,11 @@ export function Market() {
                                                 <div className="viop-drawer-kv">
                                                     <span className="viop-drawer-kv__label">{t('market.volume', 'Hacim')}</span>
                                                     <span className="viop-drawer-kv__val">
-                                                        {s?.volume != null ? Number(s.volume).toLocaleString('tr-TR') : '—'}
+                                                        {s?.volume != null ? Number(s.volume).toLocaleString(numberLocale) : '—'}
                                                     </span>
                                                     <span className="viop-drawer-kv__label">{t('market.quantity', 'Adet')}</span>
                                                     <span className="viop-drawer-kv__val">
-                                                        {s?.quantity != null ? Number(s.quantity).toLocaleString('tr-TR') : '—'}
+                                                        {s?.quantity != null ? Number(s.quantity).toLocaleString(numberLocale) : '—'}
                                                     </span>
                                                     <span className="viop-drawer-kv__label">{t('market.settlement', 'Uzlaşma')}</span>
                                                     <span className="viop-drawer-kv__val">{fmt(s?.settlement)}</span>
@@ -6134,7 +6567,7 @@ export function Market() {
                                                     <span className="viop-drawer-kv__val">{fmt(s?.initialMargin)}</span>
                                                     <span className="viop-drawer-kv__label">{t('market.marginRequirement', 'Teminat gereksinimi')}</span>
                                                     <span className="viop-drawer-kv__val">
-                                                        {Number(selectedInstrumentVm.marginRequirement ?? 0).toLocaleString('tr-TR', {
+                                                        {Number(selectedInstrumentVm.marginRequirement ?? 0).toLocaleString(numberLocale, {
                                                             maximumFractionDigits: 2,
                                                         })}
                                                     </span>
@@ -6197,7 +6630,7 @@ export function Market() {
                                         {drawerInstrumentPrice ? (
                                             <>
                                                 <span style={{ opacity: 0.8 }}>{drawerInstrumentPrice.glyph}</span>{' '}
-                                                {drawerInstrumentPrice.amount.toLocaleString('tr-TR', {
+                                                {drawerInstrumentPrice.amount.toLocaleString(numberLocale, {
                                                     maximumFractionDigits: 4,
                                                 })}
                                                 {drawerInstrumentPrice.suffix ?? ''}
@@ -6246,9 +6679,9 @@ export function Market() {
                                                     t,
                                                 )}
                                             </div>
-                                            <div>Vade Tarihi</div>
+                                            <div>{t('market.drawer.maturityDate', 'Vade tarihi')}</div>
                                             <div>{formatDateTr(selectedInstrumentVm.maturityDate ?? extractMaturityDate(selectedInstrumentVm.symbol))}</div>
-                                            <div>Vadeye Kalan Gün</div>
+                                            <div>{t('market.drawer.daysToMaturity', 'Vadeye kalan gün')}</div>
                                             <div>
                                                 {(() => {
                                                     const days = selectedInstrumentVm.daysToMaturity ?? getRemainingDays(selectedInstrumentVm.symbol);
@@ -6315,7 +6748,12 @@ export function Market() {
                                                 <div className="instrument-meta-description">{selectedInstrumentMeta.description}</div>
                                             </>
                                         ) : (
-                                            <div className="instrument-meta-empty">Bu enstrüman için özel açıklama yakında eklenecek.</div>
+                                            <div className="instrument-meta-empty">
+                                                {t(
+                                                    'market.drawer.emptyMeta',
+                                                    'Bu enstrüman için özel açıklama yakında eklenecek.',
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -6332,6 +6770,8 @@ export function Market() {
                     assetType={priceAlertTarget.assetType}
                     symbol={priceAlertTarget.symbol}
                     displayName={priceAlertTarget.displayName}
+                    referencePrice={priceAlertTarget.referencePrice}
+                    priceCurrency={priceAlertTarget.priceCurrency}
                 />
             ) : null}
             <FxEffectiveRatesModal

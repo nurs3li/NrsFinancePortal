@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useLanguage } from '../../../i18n/LanguageContext';
+import { useTheme } from '../../../theme/ThemeContext';
+import { chartGridStroke, chartTooltipContentStyle } from '../../../lib/chartTheme';
 import {
     fetchInflationCompare,
     fetchInflationLatest,
@@ -46,6 +49,8 @@ export function MacroInflationSection({
     locale,
     tokens,
 }: Props) {
+    const { t } = useLanguage();
+    const { theme } = useTheme();
     const { openTerm } = useInfoTerm();
     const [latest, setLatest] = useState<InflationLatestResponse | null | undefined>(undefined);
     const [compareRows, setCompareRows] = useState<InflationCompareRow[] | null | undefined>(undefined);
@@ -89,35 +94,91 @@ export function MacroInflationSection({
 
     const kpis = panelInflationFromPanel
         ? [
-              { title: 'TÜFE Aylık', value: fmt(derived?.cpiMoM), termId: 'mom' as const, label: 'TÜFE aylık değişim' },
-              { title: 'TÜFE Yıllık', value: fmt(derived?.cpiYoY), termId: 'yoy' as const, label: 'TÜFE yıllık değişim' },
-              { title: 'Yİ-ÜFE Aylık', value: fmt(derived?.ppiMoM), termId: 'ppi' as const, label: 'Yİ-ÜFE aylık' },
-              { title: 'Yİ-ÜFE Yıllık', value: fmt(derived?.ppiYoY), termId: 'yoy' as const, label: 'Yİ-ÜFE yıllık' },
+              {
+                  titleKey: 'macro.inflation.kpi.cpiMoM',
+                  titleFb: 'TÜFE Aylık',
+                  value: fmt(derived?.cpiMoM),
+                  termId: 'mom' as const,
+                  infoKey: 'macro.inflation.info.cpiMoM',
+                  infoFb: 'TÜFE aylık değişim',
+              },
+              {
+                  titleKey: 'macro.inflation.kpi.cpiYoY',
+                  titleFb: 'TÜFE Yıllık',
+                  value: fmt(derived?.cpiYoY),
+                  termId: 'yoy' as const,
+                  infoKey: 'macro.inflation.info.cpiYoY',
+                  infoFb: 'TÜFE yıllık değişim',
+              },
+              {
+                  titleKey: 'macro.inflation.kpi.ppiMoM',
+                  titleFb: 'Yİ-ÜFE Aylık',
+                  value: fmt(derived?.ppiMoM),
+                  termId: 'ppi' as const,
+                  infoKey: 'macro.inflation.info.ppiMoM',
+                  infoFb: 'Yİ-ÜFE aylık',
+              },
+              {
+                  titleKey: 'macro.inflation.kpi.ppiYoY',
+                  titleFb: 'Yİ-ÜFE Yıllık',
+                  value: fmt(derived?.ppiYoY),
+                  termId: 'yoy' as const,
+                  infoKey: 'macro.inflation.info.ppiYoY',
+                  infoFb: 'Yİ-ÜFE yıllık',
+              },
           ]
         : [
-              { title: 'TÜFE Aylık', value: formatPercent2(latest?.cpi?.monthlyChangePercent, locale), termId: 'mom' as const, label: 'TÜFE aylık' },
-              { title: 'TÜFE Yıllık', value: formatPercent2(latest?.cpi?.annualChangePercent, locale), termId: 'yoy' as const, label: 'TÜFE yıllık' },
-              { title: 'Yİ-ÜFE Aylık', value: formatPercent2(latest?.ppi?.monthlyChangePercent, locale), termId: 'ppi' as const, label: 'Yİ-ÜFE aylık' },
-              { title: 'Yİ-ÜFE Yıllık', value: formatPercent2(latest?.ppi?.annualChangePercent, locale), termId: 'yoy' as const, label: 'Yİ-ÜFE yıllık' },
+              {
+                  titleKey: 'macro.inflation.kpi.cpiMoM',
+                  titleFb: 'TÜFE Aylık',
+                  value: formatPercent2(latest?.cpi?.monthlyChangePercent, locale),
+                  termId: 'mom' as const,
+                  infoKey: 'macro.inflation.info.cpiMoM',
+                  infoFb: 'TÜFE aylık',
+              },
+              {
+                  titleKey: 'macro.inflation.kpi.cpiYoY',
+                  titleFb: 'TÜFE Yıllık',
+                  value: formatPercent2(latest?.cpi?.annualChangePercent, locale),
+                  termId: 'yoy' as const,
+                  infoKey: 'macro.inflation.info.cpiYoY',
+                  infoFb: 'TÜFE yıllık',
+              },
+              {
+                  titleKey: 'macro.inflation.kpi.ppiMoM',
+                  titleFb: 'Yİ-ÜFE Aylık',
+                  value: formatPercent2(latest?.ppi?.monthlyChangePercent, locale),
+                  termId: 'ppi' as const,
+                  infoKey: 'macro.inflation.info.ppiMoM',
+                  infoFb: 'Yİ-ÜFE aylık',
+              },
+              {
+                  titleKey: 'macro.inflation.kpi.ppiYoY',
+                  titleFb: 'Yİ-ÜFE Yıllık',
+                  value: formatPercent2(latest?.ppi?.annualChangePercent, locale),
+                  termId: 'yoy' as const,
+                  infoKey: 'macro.inflation.info.ppiYoY',
+                  infoFb: 'Yİ-ÜFE yıllık',
+              },
           ];
 
     return (
         <MacroSection
             id="macro-inflation"
-            title="Enflasyon"
-            summary="TÜFE ve Yİ-ÜFE endeks ile enflasyon hızı."
+            title={t('macro.inflation.title', 'Enflasyon')}
+            summary={t('macro.inflation.summary', 'TÜFE ve Yİ-ÜFE endeks ile enflasyon hızı.')}
             termId="cpi"
-            infoAriaLabel="Enflasyon bölümü hakkında bilgi"
+            infoAriaLabel={t('macro.inflation.infoSection', 'Enflasyon bölümü hakkında bilgi')}
             tokens={tokens}
         >
             <div className="macro-grid macro-grid--4">
                 {kpis.map((k) => (
                     <KpiCard
-                        key={k.title}
-                        title={k.title}
+                        key={k.titleKey}
+                        title={t(k.titleKey, k.titleFb)}
                         value={k.value}
                         termId={k.termId}
-                        infoAriaLabel={`${k.label} hakkında bilgi`}
+                        infoAriaLabel={t(k.infoKey, k.infoFb)}
                         tokens={tokens}
                         loading={panelLoading || (!panelInflationFromPanel && latest === undefined)}
                     />
@@ -126,53 +187,91 @@ export function MacroInflationSection({
 
             <div className="macro-grid macro-grid--2">
                 <ChartCard
-                    title="TÜFE ve Yİ-ÜFE endeks trendi"
+                    title={t('macro.inflation.chart.index', 'TÜFE ve Yİ-ÜFE endeks trendi')}
                     termId="indexLevelChart"
-                    infoAriaLabel="Endeks seviyesi grafiği hakkında bilgi"
+                    infoAriaLabel={t('macro.inflation.chart.indexInfo', 'Endeks seviyesi grafiği hakkında bilgi')}
                     empty={!hasIndex}
                     tokens={tokens}
                 >
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={indexChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke(theme)} />
                             <XAxis dataKey="period" tick={{ fontSize: 9, fill: tokens.textMuted }} />
                             <YAxis tick={{ fontSize: 9, fill: tokens.textMuted }} tickFormatter={(v) => formatIndex2(Number(v), locale)} width={48} />
-                            <Tooltip formatter={(v) => [formatIndex2(Number(v), locale), '']} />
-                            <Legend wrapperStyle={{ fontSize: 10 }} />
-                            <Line type="monotone" dataKey="cpi" name="TÜFE" stroke={MACRO_CHART_COLORS.blue} dot={false} strokeWidth={2} connectNulls />
-                            <Line type="monotone" dataKey="ppi" name="Yİ-ÜFE" stroke={MACRO_CHART_COLORS.violet} dot={false} strokeWidth={2} connectNulls />
+                            <Tooltip
+                                formatter={(v) => [formatIndex2(Number(v), locale), '']}
+                                contentStyle={chartTooltipContentStyle(tokens)}
+                            />
+                            <Legend wrapperStyle={{ fontSize: 10, color: tokens.textMuted }} />
+                            <Line
+                                type="monotone"
+                                dataKey="cpi"
+                                name={t('macro.inflation.legend.cpi', 'TÜFE')}
+                                stroke={MACRO_CHART_COLORS.blue}
+                                dot={false}
+                                strokeWidth={2}
+                                connectNulls
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="ppi"
+                                name={t('macro.inflation.legend.ppi', 'Yİ-ÜFE')}
+                                stroke={MACRO_CHART_COLORS.violet}
+                                dot={false}
+                                strokeWidth={2}
+                                connectNulls
+                            />
                         </LineChart>
                     </ResponsiveContainer>
                 </ChartCard>
 
                 <ChartCard
-                    title="Yıllık enflasyon trendi"
+                    title={t('macro.inflation.chart.yoy', 'Yıllık enflasyon trendi')}
                     termId="yoy"
-                    infoAriaLabel="Yıllık enflasyon grafiği hakkında bilgi"
+                    infoAriaLabel={t('macro.inflation.chart.yoyInfo', 'Yıllık enflasyon grafiği hakkında bilgi')}
                     empty={!hasYoY}
-                    emptyHint="Yıllık enflasyon serisi henüz yüklenemedi."
+                    emptyHint={t('macro.inflation.chart.yoyEmpty', 'Yıllık enflasyon serisi henüz yüklenemedi.')}
                     tokens={tokens}
                 >
                     {hasYoY ? (
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={yoyChart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                                <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke(theme)} />
                                 <XAxis dataKey="period" tick={{ fontSize: 9, fill: tokens.textMuted }} />
                                 <YAxis tick={{ fontSize: 9, fill: tokens.textMuted }} tickFormatter={(v) => `${v}%`} width={44} />
-                                <Tooltip formatter={(v) => [`${Number(v).toFixed(2)}%`, '']} />
-                                <Legend wrapperStyle={{ fontSize: 10 }} />
-                                <Line type="monotone" dataKey="cpiYoY" name="TÜFE Yıllık" stroke={MACRO_CHART_COLORS.blue} dot={false} strokeWidth={2} connectNulls />
-                                <Line type="monotone" dataKey="ppiYoY" name="Yİ-ÜFE Yıllık" stroke={MACRO_CHART_COLORS.violet} dot={false} strokeWidth={2} connectNulls />
+                                <Tooltip
+                                    formatter={(v) => [`${Number(v).toFixed(2)}%`, '']}
+                                    contentStyle={chartTooltipContentStyle(tokens)}
+                                />
+                                <Legend wrapperStyle={{ fontSize: 10, color: tokens.textMuted }} />
+                                <Line
+                                    type="monotone"
+                                    dataKey="cpiYoY"
+                                    name={t('macro.inflation.legend.cpiYoY', 'TÜFE Yıllık')}
+                                    stroke={MACRO_CHART_COLORS.blue}
+                                    dot={false}
+                                    strokeWidth={2}
+                                    connectNulls
+                                />
+                                <Line
+                                    type="monotone"
+                                    dataKey="ppiYoY"
+                                    name={t('macro.inflation.legend.ppiYoY', 'Yİ-ÜFE Yıllık')}
+                                    stroke={MACRO_CHART_COLORS.violet}
+                                    dot={false}
+                                    strokeWidth={2}
+                                    connectNulls
+                                />
                             </LineChart>
                         </ResponsiveContainer>
                     ) : null}
                 </ChartCard>
             </div>
 
-            <InsightCard title="100 TL'nin alım gücü" tokens={tokens} accent="violet">
-                <p>Enflasyon arttıkça aynı 100 TL daha az ürün alır.</p>
+            <InsightCard title={t('macro.inflation.insight.title', "100 TL'nin alım gücü")} tokens={tokens} accent="violet">
+                <p>{t('macro.inflation.insight.body', 'Enflasyon arttıkça aynı 100 TL daha az ürün alır.')}</p>
                 <button type="button" className="macro-link-btn" onClick={() => openTerm('purchasingPower')}>
-                    Bu ne demek?
+                    {t('macro.inflation.insight.link', 'Bu ne demek?')}
                 </button>
             </InsightCard>
         </MacroSection>

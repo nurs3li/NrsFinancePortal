@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { MacroEducationTerm } from '../../../content/macroEducationTerms';
+import { useLanguage } from '../../../i18n/LanguageContext';
 import type { MacroTheme } from '../MacroTheme';
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export function InfoModal({ open, onClose, term, tokens }: Props) {
+    const { t } = useLanguage();
     const dialogRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -49,7 +51,7 @@ export function InfoModal({ open, onClose, term, tokens }: Props) {
                     <h2 id="macro-info-title" className="macro-info-modal__title">
                         {term.title}
                     </h2>
-                    <button type="button" className="macro-info-modal__close" onClick={onClose} aria-label="Kapat">
+                    <button type="button" className="macro-info-modal__close" onClick={onClose} aria-label={t('common.close', 'Kapat')}>
                         <X size={18} />
                     </button>
                 </div>
@@ -60,7 +62,7 @@ export function InfoModal({ open, onClose, term, tokens }: Props) {
                 {term.formula ? (
                     <div className="macro-info-modal__block">
                         <div className="macro-info-modal__label" style={{ color: tokens.textMuted }}>
-                            Formül
+                            {t('macro.edu.label.formula', 'Formül')}
                         </div>
                         <code className="macro-info-modal__formula">{term.formula}</code>
                     </div>
@@ -68,7 +70,7 @@ export function InfoModal({ open, onClose, term, tokens }: Props) {
                 {term.example ? (
                     <div className="macro-info-modal__block">
                         <div className="macro-info-modal__label" style={{ color: tokens.textMuted }}>
-                            Örnek
+                            {t('macro.edu.label.example', 'Örnek')}
                         </div>
                         <p className="macro-info-modal__detail">{term.example}</p>
                     </div>
@@ -76,7 +78,7 @@ export function InfoModal({ open, onClose, term, tokens }: Props) {
                 {term.whyItMatters ? (
                     <div className="macro-info-modal__block macro-info-modal__block--highlight">
                         <div className="macro-info-modal__label" style={{ color: tokens.textMuted }}>
-                            Neden önemli?
+                            {t('macro.edu.label.whyItMatters', 'Neden önemli?')}
                         </div>
                         <p className="macro-info-modal__detail">{term.whyItMatters}</p>
                     </div>

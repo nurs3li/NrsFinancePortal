@@ -62,7 +62,33 @@ export type ManualPortfolioView = {
     missedReturnPct?: number | null;
     totalProfit?: number | null;
     totalReturnPct?: number | null;
+    nominalCost?: number | null;
+    exitValue?: number | null;
+    nominalProfit?: number | null;
+    nominalReturnPct?: number | null;
+    inflationFactor?: number | null;
+    inflationReturnPct?: number | null;
+    inflationAdjustedCost?: number | null;
+    realProfit?: number | null;
+    realReturnPct?: number | null;
+    realReturnAvailable?: boolean;
+    realReturnStatus?: ManualPositionRealReturnStatus | string | null;
+    cpiStartDate?: string | null;
+    cpiEndDate?: string | null;
+    cpiStartValue?: number | null;
+    cpiEndValue?: number | null;
+    calculationEndDate?: string | null;
+    calculationMode?: ManualPositionRealReturnCalculationMode | string | null;
 };
+
+export type ManualPositionRealReturnStatus =
+    | 'BEAT_INFLATION'
+    | 'LOST_TO_INFLATION'
+    | 'NO_CPI_DATA';
+
+export type ManualPositionRealReturnCalculationMode =
+    | 'OPEN_POSITION_MARK_TO_MARKET'
+    | 'SOLD_POSITION';
 
 export type ManualSummary = {
     totalPositions: number;
