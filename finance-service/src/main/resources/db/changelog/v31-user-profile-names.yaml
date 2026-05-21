@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - changeSet:
+      id: v31-user-profile-names
+      author: nurseli
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: first_name
+                  type: VARCHAR(128)
+              - column:
+                  name: last_name
+                  type: VARCHAR(128)

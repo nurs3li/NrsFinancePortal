@@ -7,10 +7,14 @@ import com.nurseli.nrsfinanceportal.domain.pricing.SymbolNormalizer;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.dto.pricealert.PriceAlertCreateRequest;
 import com.nurseli.nrsfinanceportal.dto.pricealert.PriceAlertDto;
+import com.nurseli.nrsfinanceportal.dto.pricealert.PriceAlertPageResponse;
 import com.nurseli.nrsfinanceportal.dto.pricealert.PriceAlertUpdateRequest;
 import com.nurseli.nrsfinanceportal.repository.PriceAlertRepository;
 import com.nurseli.nrsfinanceportal.service.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -28,12 +33,41 @@ public class PriceAlertService {
     private final CurrentUserResolver currentUserResolver;
     private final PriceAlertProperties properties;
 
+    private static final int MAX_PAGE_SIZE = 50;
+
     @Transactional(readOnly = true)
     public List<PriceAlertDto> listForCurrentUser() {
         Long userId = currentUserResolver.getCurrentUserId();
         return priceAlertRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(PriceAlertDto::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PriceAlertPageResponse listPageForCurrentUser(int page, int size, String filter) {
+        Long userId = currentUserResolver.getCurrentUserId();
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(1, size), MAX_PAGE_SIZE);
+        PageRequest pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        String normalizedFilter = filter == null ? "all" : filter.trim().toLowerCase(Locale.ROOT);
+        Page<PriceAlert> result = switch (normalizedFilter) {
+            case "active" -> priceAlertRepository.findByUser_IdAndStatusOrderByCreatedAtDesc(
+                    userId, PriceAlertStatus.ACTIVE, pageable);
+            case "past" -> priceAlertRepository.findByUser_IdAndStatusInOrderByCreatedAtDesc(
+                    userId, Set.of(PriceAlertStatus.TRIGGERED, PriceAlertStatus.DISABLED), pageable);
+            default -> priceAlertRepository.findByUser_IdOrderByCreatedAtDesc(userId, pageable);
+        };
+
+        List<PriceAlertDto> content = result.getContent().stream().map(PriceAlertDto::from).toList();
+        return new PriceAlertPageResponse(
+                content,
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages(),
+                result.hasNext(),
+                result.hasPrevious());
     }
 
     @Transactional

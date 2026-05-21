@@ -6,6 +6,7 @@ public record MarketTerminalListItemDto(
         String symbol,
         String category,
         String equitySubmarket,
+        String fundSubmarket,
         String displayName,
         String name,
         double price,
@@ -32,4 +33,8 @@ public record MarketTerminalListItemDto(
         String couponFrequencyLabel,
         String contractMonth,
         Double basis,
-        Double marginRequirement) {}
+        Double marginRequirement,
+        Integer fundRiskLevel,
+        Double fundReturn6m,
+        Double fundReturn3y,
+        Double fundReturn5y) {}

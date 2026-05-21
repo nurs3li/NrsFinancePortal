@@ -20,6 +20,12 @@ class EvdsObservationDateParserTest {
     }
 
     @Test
+    void parsesEvdsSingleDigitMonth() {
+        assertEquals(LocalDate.of(2026, 4, 1), EvdsObservationDateParser.parse("2026-4"));
+        assertEquals(LocalDate.of(2026, 1, 1), EvdsObservationDateParser.parse("2026-1"));
+    }
+
+    @Test
     void parsesIsoDate() {
         assertEquals(LocalDate.of(2026, 5, 8), EvdsObservationDateParser.parse("2026-05-08"));
     }

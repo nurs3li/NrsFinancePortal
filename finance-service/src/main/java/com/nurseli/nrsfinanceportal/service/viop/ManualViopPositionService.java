@@ -48,7 +48,11 @@ public class ManualViopPositionService {
 
     @Transactional(readOnly = true)
     public ViopPositionSummaryDto summaryMine() {
-        User user = currentUserResolver.getOrCreateCurrentUser();
+        return summaryForUser(currentUserResolver.getOrCreateCurrentUser());
+    }
+
+    @Transactional(readOnly = true)
+    public ViopPositionSummaryDto summaryForUser(User user) {
         Map<String, BigDecimal> prices = priceResolver.loadLatestPricesBySymbol();
         LocalDate today = LocalDate.now(TZ);
         List<ManualViopPosition> open = repository.findByUser_IdAndStatusOrderByEntryDateDesc(

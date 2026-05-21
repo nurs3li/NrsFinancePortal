@@ -29,6 +29,12 @@ public class User {
     @Column(name = "email")
     private String email;
 
+    @Column(name = "first_name")
+    private String firstName;
+
+    @Column(name = "last_name")
+    private String lastName;
+
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified;
 
@@ -154,5 +160,27 @@ public class User {
         if (email != null && !email.isBlank()) {
             this.email = email;
         }
+    }
+
+    public void setUsername(String username) {
+        if (username != null && !username.isBlank()) {
+            this.username = username;
+        }
+    }
+
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName != null && firstName.isBlank() ? null : firstName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName != null && lastName.isBlank() ? null : lastName;
     }
 }

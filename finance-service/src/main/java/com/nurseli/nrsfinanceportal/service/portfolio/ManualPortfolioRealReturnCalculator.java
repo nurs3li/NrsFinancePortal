@@ -2,6 +2,8 @@ package com.nurseli.nrsfinanceportal.service.portfolio;
 
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioNominalAnalysis;
 import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPortfolioPosition;
+import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPositionRealReturnCalculationMode;
+import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPositionRealReturnStatus;
 import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPositionStatus;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.CpiIndexLookup;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient;
@@ -27,12 +29,23 @@ public class ManualPortfolioRealReturnCalculator {
     private final ManualPortfolioNominalAnalysisCalculator nominalAnalysisCalculator;
 
     public record PositionRealReturn(
-            BigDecimal buyCost,
-            BigDecimal evaluatedValue,
+            BigDecimal nominalCost,
+            BigDecimal exitValue,
+            BigDecimal nominalProfit,
+            BigDecimal nominalReturnPct,
+            BigDecimal inflationFactor,
+            BigDecimal inflationReturnPct,
             BigDecimal inflationAdjustedCost,
-            BigDecimal realReturn,
+            BigDecimal realProfit,
             BigDecimal realReturnPct,
-            boolean included
+            boolean realReturnAvailable,
+            ManualPositionRealReturnStatus realReturnStatus,
+            LocalDate cpiStartDate,
+            LocalDate cpiEndDate,
+            BigDecimal cpiStartValue,
+            BigDecimal cpiEndValue,
+            LocalDate calculationEndDate,
+            ManualPositionRealReturnCalculationMode calculationMode
     ) {}
 
     public record PortfolioRealReturnResult(
@@ -59,15 +72,12 @@ public class ManualPortfolioRealReturnCalculator {
             return emptyResult();
         }
 
-        Optional<BigDecimal> latestCpi = cpiLookup.latestIndex();
-        boolean cpiOk = cpiLookup.isAvailable() && latestCpi.isPresent();
-
         BigDecimal openCurrentValue = BigDecimal.ZERO;
         BigDecimal closedRealizedValue = BigDecimal.ZERO;
-        BigDecimal totalInvested = BigDecimal.ZERO;
-        BigDecimal nominalReturnSum = BigDecimal.ZERO;
-        BigDecimal inflationAdjustedTotal = BigDecimal.ZERO;
-        BigDecimal realReturnTotal = BigDecimal.ZERO;
+        BigDecimal totalNominalCost = BigDecimal.ZERO;
+        BigDecimal totalExitValue = BigDecimal.ZERO;
+        BigDecimal totalNominalProfit = BigDecimal.ZERO;
+        BigDecimal totalInflationAdjustedCost = BigDecimal.ZERO;
         boolean anyRealIncluded = false;
         List<PositionRealReturn> perPosition = new ArrayList<>();
 
@@ -75,57 +85,115 @@ public class ManualPortfolioRealReturnCalculator {
             BigDecimal priceTry = marketDataClient.getPriceTry(p.getType(), p.getSymbol(), pricing);
             ManualPortfolioNominalAnalysis nominal = nominalAnalysisCalculator.computeWithCurrentPrice(p, priceTry);
             if (nominal == null) {
-                perPosition.add(new PositionRealReturn(BigDecimal.ZERO, BigDecimal.ZERO, null, null, null, false));
+                perPosition.add(new PositionRealReturn(
+                        BigDecimal.ZERO, BigDecimal.ZERO, null, null,
+                        null, null, null, null, null,
+                        false, ManualPositionRealReturnStatus.NO_CPI_DATA,
+                        null, null, null, null, null, null));
                 continue;
             }
 
-            BigDecimal qty = nz(p.getQuantity());
-            BigDecimal buyCost = nz(p.getBuyPrice()).multiply(qty).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
-            totalInvested = totalInvested.add(nz(nominal.buyCost()));
+            BigDecimal nominalCost = nz(nominal.buyCost());
+            totalNominalCost = totalNominalCost.add(nominalCost);
 
-            BigDecimal evaluatedValue;
-            BigDecimal nominalPnl;
+            BigDecimal exitValue;
+            BigDecimal nominalProfit;
+            ManualPositionRealReturnCalculationMode mode;
+            LocalDate calculationEndDate;
+
             if (p.getStatus() == ManualPositionStatus.OPEN) {
-                evaluatedValue = nominal.currentValue() != null
-                        ? nominal.currentValue()
-                        : BigDecimal.ZERO;
-                openCurrentValue = openCurrentValue.add(evaluatedValue);
-                nominalPnl = nominal.unrealizedProfit() != null ? nominal.unrealizedProfit() : BigDecimal.ZERO;
+                exitValue = nominal.currentValue() != null ? nominal.currentValue() : BigDecimal.ZERO;
+                openCurrentValue = openCurrentValue.add(exitValue);
+                nominalProfit = nominal.unrealizedProfit() != null ? nominal.unrealizedProfit() : BigDecimal.ZERO;
+                mode = ManualPositionRealReturnCalculationMode.OPEN_POSITION_MARK_TO_MARKET;
+                calculationEndDate = cpiLookup.latestMonth().orElse(null);
             } else {
-                evaluatedValue = nz(p.getSellPrice()).multiply(qty).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
-                closedRealizedValue = closedRealizedValue.add(evaluatedValue);
-                nominalPnl = nominal.realizedProfit() != null ? nominal.realizedProfit() : BigDecimal.ZERO;
+                BigDecimal qty = nz(p.getQuantity());
+                exitValue = nz(p.getSellPrice()).multiply(qty).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+                closedRealizedValue = closedRealizedValue.add(exitValue);
+                nominalProfit = nominal.realizedProfit() != null ? nominal.realizedProfit() : BigDecimal.ZERO;
+                mode = ManualPositionRealReturnCalculationMode.SOLD_POSITION;
+                calculationEndDate = p.getSellDate();
             }
-            nominalReturnSum = nominalReturnSum.add(nominalPnl);
 
-            Optional<BigDecimal> buyCpi = cpiLookup.indexAtOrBefore(p.getBuyDate());
+            totalExitValue = totalExitValue.add(exitValue);
+            totalNominalProfit = totalNominalProfit.add(nominalProfit);
+
+            Optional<LocalDate> cpiStartMonth = cpiLookup.monthAtOrBefore(p.getBuyDate());
+            Optional<BigDecimal> buyCpi = cpiStartMonth.flatMap(m -> cpiLookup.indexAtOrBefore(m));
+            Optional<LocalDate> cpiEndMonth;
             Optional<BigDecimal> endCpi;
             if (p.getStatus() == ManualPositionStatus.OPEN) {
-                endCpi = latestCpi;
+                cpiEndMonth = cpiLookup.latestMonth();
+                endCpi = cpiLookup.latestIndex();
             } else {
                 LocalDate sellDate = p.getSellDate() != null ? p.getSellDate() : LocalDate.now();
-                endCpi = cpiLookup.indexAtOrBefore(sellDate);
+                cpiEndMonth = cpiLookup.monthAtOrBefore(sellDate);
+                endCpi = cpiEndMonth.flatMap(m -> cpiLookup.indexAtOrBefore(m));
             }
 
-            if (!cpiOk || buyCpi.isEmpty() || endCpi.isEmpty()) {
-                perPosition.add(new PositionRealReturn(buyCost, evaluatedValue, null, null, null, false));
+            if (cpiStartMonth.isEmpty() || buyCpi.isEmpty() || cpiEndMonth.isEmpty() || endCpi.isEmpty()) {
+                perPosition.add(new PositionRealReturn(
+                        nominalCost,
+                        exitValue,
+                        nominalProfit,
+                        pct(nominalProfit, nominalCost),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        false,
+                        ManualPositionRealReturnStatus.NO_CPI_DATA,
+                        null,
+                        null,
+                        null,
+                        null,
+                        calculationEndDate,
+                        mode
+                ));
                 continue;
             }
 
-            BigDecimal cpiFactor = endCpi.get().divide(buyCpi.get(), MONEY_SCALE, RoundingMode.HALF_UP);
-            BigDecimal inflationAdjustedCost = buyCost.multiply(cpiFactor).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
-            BigDecimal realReturn = evaluatedValue.subtract(inflationAdjustedCost).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
-            BigDecimal realReturnPct = pct(realReturn, inflationAdjustedCost);
+            BigDecimal inflationFactor = endCpi.get().divide(buyCpi.get(), MONEY_SCALE, RoundingMode.HALF_UP);
+            BigDecimal inflationReturnPct = inflationFactor.subtract(BigDecimal.ONE)
+                    .multiply(BigDecimal.valueOf(100))
+                    .setScale(PCT_SCALE, RoundingMode.HALF_UP);
+            BigDecimal inflationAdjustedCost = nominalCost.multiply(inflationFactor).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+            BigDecimal realProfit = exitValue.subtract(inflationAdjustedCost).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+            BigDecimal realReturnPct = returnPctFromRatio(exitValue, inflationAdjustedCost);
 
-            inflationAdjustedTotal = inflationAdjustedTotal.add(inflationAdjustedCost);
-            realReturnTotal = realReturnTotal.add(realReturn);
+            totalInflationAdjustedCost = totalInflationAdjustedCost.add(inflationAdjustedCost);
             anyRealIncluded = true;
+
+            ManualPositionRealReturnStatus status = realReturnPct != null
+                    && realReturnPct.compareTo(BigDecimal.ZERO) >= 0
+                    ? ManualPositionRealReturnStatus.BEAT_INFLATION
+                    : ManualPositionRealReturnStatus.LOST_TO_INFLATION;
+
             perPosition.add(new PositionRealReturn(
-                    buyCost, evaluatedValue, inflationAdjustedCost, realReturn, realReturnPct, true));
+                    nominalCost,
+                    exitValue,
+                    nominalProfit,
+                    pct(nominalProfit, nominalCost),
+                    inflationFactor,
+                    inflationReturnPct,
+                    inflationAdjustedCost,
+                    realProfit,
+                    realReturnPct,
+                    true,
+                    status,
+                    cpiStartMonth.get(),
+                    cpiEndMonth.get(),
+                    buyCpi.get(),
+                    endCpi.get(),
+                    calculationEndDate,
+                    mode
+            ));
         }
 
         BigDecimal totalEvaluated = openCurrentValue.add(closedRealizedValue);
-        BigDecimal nominalReturnPct = pct(nominalReturnSum, totalInvested);
+        BigDecimal nominalReturnPct = pct(totalNominalProfit, totalNominalCost);
 
         if (!anyRealIncluded) {
             String reason = !cpiLookup.isAvailable()
@@ -135,8 +203,8 @@ public class ManualPortfolioRealReturnCalculator {
                     openCurrentValue,
                     closedRealizedValue,
                     totalEvaluated,
-                    totalInvested,
-                    nominalReturnSum,
+                    totalNominalCost,
+                    totalNominalProfit,
                     nominalReturnPct,
                     null,
                     null,
@@ -147,16 +215,19 @@ public class ManualPortfolioRealReturnCalculator {
             );
         }
 
-        BigDecimal portfolioRealReturnPct = pct(realReturnTotal, inflationAdjustedTotal);
+        BigDecimal totalRealProfit = totalExitValue.subtract(totalInflationAdjustedCost)
+                .setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+        BigDecimal portfolioRealReturnPct = returnPctFromRatio(totalExitValue, totalInflationAdjustedCost);
+
         return new PortfolioRealReturnResult(
                 openCurrentValue,
                 closedRealizedValue,
                 totalEvaluated,
-                totalInvested,
-                nominalReturnSum,
+                totalNominalCost,
+                totalNominalProfit,
                 nominalReturnPct,
-                inflationAdjustedTotal,
-                realReturnTotal,
+                totalInflationAdjustedCost,
+                totalRealProfit,
                 portfolioRealReturnPct,
                 true,
                 null,
@@ -190,6 +261,16 @@ public class ManualPortfolioRealReturnCalculator {
             return null;
         }
         return profit.divide(base, PCT_SCALE, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(PCT_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal returnPctFromRatio(BigDecimal exitValue, BigDecimal inflationAdjustedCost) {
+        if (exitValue == null || inflationAdjustedCost == null || inflationAdjustedCost.signum() <= 0) {
+            return null;
+        }
+        return exitValue.divide(inflationAdjustedCost, PCT_SCALE + 2, RoundingMode.HALF_UP)
+                .subtract(BigDecimal.ONE)
                 .multiply(BigDecimal.valueOf(100))
                 .setScale(PCT_SCALE, RoundingMode.HALF_UP);
     }

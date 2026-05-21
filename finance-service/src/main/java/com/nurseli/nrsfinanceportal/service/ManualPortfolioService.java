@@ -17,10 +17,14 @@ import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPriceSource;
 import com.nurseli.nrsfinanceportal.domain.pricing.SymbolNormalizer;
 import com.nurseli.nrsfinanceportal.domain.portfolio.SnapshotTriggerType;
 import com.nurseli.nrsfinanceportal.domain.user.User;
+import com.nurseli.nrsfinanceportal.infrastructure.client.market.CpiIndexLookup;
 import com.nurseli.nrsfinanceportal.repository.ManualPortfolioPositionRepository;
 import com.nurseli.nrsfinanceportal.service.portfolio.HistoricalManualPriceResolverService;
 import com.nurseli.nrsfinanceportal.service.portfolio.HistoricalManualPriceResolverService.ManualChartPoint;
+import com.nurseli.nrsfinanceportal.service.portfolio.ManualPortfolioCpiSupport;
 import com.nurseli.nrsfinanceportal.service.portfolio.ManualPortfolioNominalAnalysisCalculator;
+import com.nurseli.nrsfinanceportal.service.portfolio.ManualPortfolioRealReturnTimeseriesBuilder;
+import com.nurseli.nrsfinanceportal.service.portfolio.ManualPortfolioViewAssembler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -57,6 +61,9 @@ public class ManualPortfolioService {
     private final PortfolioSnapshotRecorder portfolioSnapshotRecorder;
     private final HistoricalManualPriceResolverService priceResolver;
     private final ManualPortfolioNominalAnalysisCalculator nominalAnalysisCalculator;
+    private final ManualPortfolioViewAssembler manualPortfolioViewAssembler;
+    private final ManualPortfolioCpiSupport cpiSupport;
+    private final ManualPortfolioRealReturnTimeseriesBuilder realReturnTimeseriesBuilder;
 
     @Transactional(readOnly = true)
     public ManualPriceResolveDto resolvePrice(AssetType type, String symbol, LocalDate date) {
@@ -272,9 +279,44 @@ public class ManualPortfolioService {
     }
 
     /**
-     * Aynı tarih örneklemesi ile (tüm portföyün en erken alımına göre) yalnızca seçilen tür veya sembole ait
-     * pozisyonların maliyet + piyasa değeri zaman serisi. Grafik üstüne karşılaştırma çizgisi için.
+     * Günlük reel K/Z: açık pozisyonların piyasa değeri − TÜFE ile taşınmış maliyet (nominal K/Z grafiği ile aynı mantık).
      */
+    @Transactional(readOnly = true)
+    public List<ManualPortfolioTimeseriesPointDto> timeseriesMineRealReturn(LocalDate from, LocalDate to) {
+        Long userId = currentUserResolver.getCurrentUserId();
+        List<ManualPortfolioPosition> posList = manualRepo.findByUserIdOrderByBuyDateAsc(userId);
+        return buildManualRealReturnTimeseries(posList, posList, from, to);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ManualPortfolioTimeseriesPointDto> timeseriesMineRealReturnSegment(
+            LocalDate from,
+            LocalDate to,
+            String mode,
+            String key
+    ) {
+        Long userId = currentUserResolver.getCurrentUserId();
+        List<ManualPortfolioPosition> posList = manualRepo.findByUserIdOrderByBuyDateAsc(userId);
+        if (posList.isEmpty()) {
+            return List.of();
+        }
+        List<ManualPortfolioPosition> segment = filterTimeseriesSegment(posList, mode, key);
+        if (segment.isEmpty()) {
+            return List.of();
+        }
+        return buildManualRealReturnTimeseries(posList, segment, from, to);
+    }
+
+    private List<ManualPortfolioTimeseriesPointDto> buildManualRealReturnTimeseries(
+            List<ManualPortfolioPosition> axisScope,
+            List<ManualPortfolioPosition> valueScope,
+            LocalDate from,
+            LocalDate to
+    ) {
+        CpiIndexLookup cpi = cpiSupport.loadForPositions(axisScope);
+        return realReturnTimeseriesBuilder.build(axisScope, valueScope, cpi, from, to);
+    }
+
     @Transactional(readOnly = true)
     public List<ManualPortfolioTimeseriesPointDto> timeseriesMineSegment(LocalDate from, LocalDate to, String mode, String key) {
         Long userId = currentUserResolver.getCurrentUserId();
@@ -1003,8 +1045,7 @@ public class ManualPortfolioService {
         ManualPortfolioPosition p = manualRepo.findByIdAndUser_Id(id, user.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Manuel pozisyon bulunamadi"));
 
-        ManualPortfolioNominalAnalysis a = nominalAnalysisCalculator.compute(p);
-        ManualPortfolioView view = ManualPortfolioView.from(p, a);
+        ManualPortfolioView view = manualPortfolioViewAssembler.toView(p);
 
         LocalDate today = LocalDate.now(TZ);
         List<ManualChartPoint> series = priceResolver.loadDailyCloseSeriesTry(p.getType(), p.getSymbol(), p.getBuyDate(), today);
@@ -1025,10 +1066,10 @@ public class ManualPortfolioService {
                     "SELL", p.getSellDate(), p.getSellPrice(),
                     p.getSellPrice().multiply(p.getQuantity()).setScale(8, RoundingMode.HALF_UP)));
         }
-        if (a.currentPrice() != null && a.currentPrice().signum() > 0) {
+        if (view.getCurrentPrice() != null && view.getCurrentPrice().signum() > 0) {
             markers.add(new ManualPortfolioAnalysisResponse.Marker(
-                    "TODAY", today, a.currentPrice(),
-                    a.currentPrice().multiply(p.getQuantity()).setScale(8, RoundingMode.HALF_UP)));
+                    "TODAY", today, view.getCurrentPrice(),
+                    view.getCurrentPrice().multiply(p.getQuantity()).setScale(8, RoundingMode.HALF_UP)));
         }
         markers.sort(Comparator.comparing(ManualPortfolioAnalysisResponse.Marker::getDate));
         return new ManualPortfolioAnalysisResponse(view, markers, chart);

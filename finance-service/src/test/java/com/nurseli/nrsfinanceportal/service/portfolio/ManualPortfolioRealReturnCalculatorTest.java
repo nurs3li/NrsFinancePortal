@@ -3,6 +3,8 @@ package com.nurseli.nrsfinanceportal.service.portfolio;
 import com.nurseli.nrsfinanceportal.common.dto.ManualPortfolioNominalAnalysis;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPortfolioPosition;
+import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPositionRealReturnCalculationMode;
+import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPositionRealReturnStatus;
 import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPositionStatus;
 import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPriceSource;
 import com.nurseli.nrsfinanceportal.domain.user.User;
@@ -64,10 +66,16 @@ class ManualPortfolioRealReturnCalculatorTest {
                         BigDecimal.ZERO, null, null, null, null, null, null, null, null, null, null, null));
 
         var result = calculator.compute(List.of(open), cpi, snap);
+        var pos = result.positions().getFirst();
 
         assertThat(result.realReturnAvailable()).isTrue();
         assertThat(result.realReturn()).isNotNull();
         assertThat(result.realReturn().compareTo(BigDecimal.ZERO)).isLessThan(0);
+        assertThat(pos.realReturnAvailable()).isTrue();
+        assertThat(pos.realReturnStatus()).isEqualTo(ManualPositionRealReturnStatus.LOST_TO_INFLATION);
+        assertThat(pos.calculationMode()).isEqualTo(ManualPositionRealReturnCalculationMode.OPEN_POSITION_MARK_TO_MARKET);
+        assertThat(pos.exitValue()).isEqualByComparingTo(new BigDecimal("100"));
+        assertThat(pos.cpiEndDate()).isEqualTo(LocalDate.of(2024, 6, 1));
     }
 
     @Test
@@ -91,7 +99,7 @@ class ManualPortfolioRealReturnCalculatorTest {
                 ));
         LatestPricingSnapshot snap = emptySnap();
 
-        when(marketDataClient.getPriceTry(any(), any(), any())).thenReturn(new BigDecimal("25"));
+        when(marketDataClient.getPriceTry(any(), any(), any())).thenReturn(new BigDecimal("999"));
         when(nominalAnalysisCalculator.computeWithCurrentPrice(eq(sold), any()))
                 .thenReturn(new ManualPortfolioNominalAnalysis(
                         new BigDecimal("10"), null, null, null, null,
@@ -99,10 +107,51 @@ class ManualPortfolioRealReturnCalculatorTest {
                         null, null, null, null, null, null, null));
 
         var result = calculator.compute(List.of(sold), cpi, snap);
+        var pos = result.positions().getFirst();
 
         assertThat(result.realReturnAvailable()).isTrue();
         assertThat(result.realReturn()).isNotNull();
         assertThat(result.realReturn().compareTo(BigDecimal.ZERO)).isGreaterThan(0);
+        assertThat(pos.exitValue()).isEqualByComparingTo(new BigDecimal("20"));
+        assertThat(pos.calculationMode()).isEqualTo(ManualPositionRealReturnCalculationMode.SOLD_POSITION);
+        assertThat(pos.calculationEndDate()).isEqualTo(LocalDate.of(2024, 6, 1));
+        assertThat(pos.realReturnStatus()).isEqualTo(ManualPositionRealReturnStatus.BEAT_INFLATION);
+    }
+
+    @Test
+    void nominalPositiveButRealNegativeWhenInflationOutpacesReturn() {
+        User u = userStub();
+        ManualPortfolioPosition sold = ManualPortfolioPosition.createNew(
+                u, AssetType.FX, "USDTRY", BigDecimal.ONE,
+                LocalDate.of(2024, 1, 1), new BigDecimal("100"),
+                ManualPriceSource.USER_INPUT, LocalDate.of(2024, 1, 1), true,
+                BigDecimal.ZERO,
+                ManualPositionStatus.SOLD,
+                LocalDate.of(2024, 6, 1), new BigDecimal("120"),
+                ManualPriceSource.USER_INPUT, LocalDate.of(2024, 6, 1), true,
+                BigDecimal.ZERO,
+                null
+        );
+        CpiIndexLookup cpi = cpiLookup(
+                Map.of(
+                        LocalDate.of(2024, 1, 1), new BigDecimal("100"),
+                        LocalDate.of(2024, 6, 1), new BigDecimal("250")
+                ));
+        when(marketDataClient.getPriceTry(any(), any(), any())).thenReturn(BigDecimal.TEN);
+        when(nominalAnalysisCalculator.computeWithCurrentPrice(eq(sold), any()))
+                .thenReturn(new ManualPortfolioNominalAnalysis(
+                        new BigDecimal("100"), null, null, null, null,
+                        new BigDecimal("120"), new BigDecimal("20"), new BigDecimal("20"),
+                        null, null, null, null, null, null, null));
+
+        var pos = calculator.compute(List.of(sold), cpi, emptySnap()).positions().getFirst();
+
+        assertThat(pos.nominalProfit()).isEqualByComparingTo(new BigDecimal("20"));
+        assertThat(pos.nominalReturnPct()).isEqualByComparingTo(new BigDecimal("20"));
+        assertThat(pos.realReturnAvailable()).isTrue();
+        assertThat(pos.realReturnPct()).isNotNull();
+        assertThat(pos.realReturnPct().compareTo(BigDecimal.ZERO)).isLessThan(0);
+        assertThat(pos.realReturnStatus()).isEqualTo(ManualPositionRealReturnStatus.LOST_TO_INFLATION);
     }
 
     @Test
@@ -115,9 +164,71 @@ class ManualPortfolioRealReturnCalculatorTest {
                         new BigDecimal("10"), new BigDecimal("10"), new BigDecimal("10"),
                         BigDecimal.ZERO, null, null, null, null, null, null, null, null, null, null, null));
         var result = calculator.compute(List.of(open), CpiIndexLookup.empty(), emptySnap());
+        var pos = result.positions().getFirst();
 
         assertThat(result.realReturnAvailable()).isFalse();
         assertThat(result.realReturn()).isNull();
+        assertThat(pos.realReturnAvailable()).isFalse();
+        assertThat(pos.realReturnStatus()).isEqualTo(ManualPositionRealReturnStatus.NO_CPI_DATA);
+        assertThat(pos.realProfit()).isNull();
+        assertThat(pos.inflationReturnPct()).isNull();
+    }
+
+    @Test
+    void summaryRealReturnEqualsSumOfPositionRealProfits() {
+        User u = userStub();
+        ManualPortfolioPosition open = ManualPortfolioPosition.createNew(
+                u, AssetType.FX, "USDTRY", BigDecimal.ONE,
+                LocalDate.of(2024, 1, 1), new BigDecimal("100"),
+                ManualPriceSource.USER_INPUT, LocalDate.of(2024, 1, 1), true,
+                BigDecimal.ZERO,
+                ManualPositionStatus.OPEN,
+                null, null, null, null, false, null, null
+        );
+        ManualPortfolioPosition sold = ManualPortfolioPosition.createNew(
+                u, AssetType.FX, "EURTRY", BigDecimal.ONE,
+                LocalDate.of(2024, 2, 1), new BigDecimal("50"),
+                ManualPriceSource.USER_INPUT, LocalDate.of(2024, 2, 1), true,
+                BigDecimal.ZERO,
+                ManualPositionStatus.SOLD,
+                LocalDate.of(2024, 5, 1), new BigDecimal("60"),
+                ManualPriceSource.USER_INPUT, LocalDate.of(2024, 5, 1), true,
+                BigDecimal.ZERO,
+                null
+        );
+        CpiIndexLookup cpi = cpiLookup(
+                Map.of(
+                        LocalDate.of(2024, 1, 1), new BigDecimal("100"),
+                        LocalDate.of(2024, 2, 1), new BigDecimal("105"),
+                        LocalDate.of(2024, 5, 1), new BigDecimal("120"),
+                        LocalDate.of(2024, 6, 1), new BigDecimal("130")
+                ));
+        when(marketDataClient.getPriceTry(any(), any(), any())).thenReturn(BigDecimal.ONE);
+        when(nominalAnalysisCalculator.computeWithCurrentPrice(eq(open), any()))
+                .thenReturn(new ManualPortfolioNominalAnalysis(
+                        new BigDecimal("100"), new BigDecimal("110"), new BigDecimal("110"),
+                        new BigDecimal("10"), null, null, null, null, null, null, null, null, null, null, null));
+        when(nominalAnalysisCalculator.computeWithCurrentPrice(eq(sold), any()))
+                .thenReturn(new ManualPortfolioNominalAnalysis(
+                        new BigDecimal("50"), null, null, null, null,
+                        new BigDecimal("60"), new BigDecimal("10"), null,
+                        null, null, null, null, null, null, null));
+
+        var result = calculator.compute(List.of(open, sold), cpi, emptySnap());
+
+        BigDecimal sumReal = result.positions().stream()
+                .filter(ManualPortfolioRealReturnCalculator.PositionRealReturn::realReturnAvailable)
+                .map(ManualPortfolioRealReturnCalculator.PositionRealReturn::realProfit)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        assertThat(result.realReturnAvailable()).isTrue();
+        assertThat(result.realReturn()).isEqualByComparingTo(sumReal);
+
+        BigDecimal totalExit = result.positions().stream()
+                .map(ManualPortfolioRealReturnCalculator.PositionRealReturn::exitValue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(result.realReturn()).isEqualByComparingTo(
+                totalExit.subtract(result.inflationAdjustedCost()));
     }
 
     private static ManualPortfolioPosition position(

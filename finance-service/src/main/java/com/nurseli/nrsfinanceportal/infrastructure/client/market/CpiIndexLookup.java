@@ -28,7 +28,7 @@ public final class CpiIndexLookup {
         return available;
     }
 
-    public Optional<BigDecimal> indexAtOrBefore(LocalDate date) {
+    public Optional<LocalDate> monthAtOrBefore(LocalDate date) {
         if (!available || date == null) {
             return Optional.empty();
         }
@@ -37,10 +37,20 @@ public final class CpiIndexLookup {
         if (entry == null || entry.getValue() == null || entry.getValue().signum() <= 0) {
             return Optional.empty();
         }
-        return Optional.of(entry.getValue());
+        return Optional.of(entry.getKey());
     }
 
-    public Optional<BigDecimal> latestIndex() {
+    public Optional<BigDecimal> indexAtOrBefore(LocalDate date) {
+        return monthAtOrBefore(date).flatMap(month -> {
+            BigDecimal v = indexByMonthStart.get(month);
+            if (v == null || v.signum() <= 0) {
+                return Optional.empty();
+            }
+            return Optional.of(v);
+        });
+    }
+
+    public Optional<LocalDate> latestMonth() {
         if (!available) {
             return Optional.empty();
         }
@@ -48,6 +58,11 @@ public final class CpiIndexLookup {
         if (last == null || last.getValue() == null || last.getValue().signum() <= 0) {
             return Optional.empty();
         }
-        return Optional.of(last.getValue());
+        return Optional.of(last.getKey());
+    }
+
+    public Optional<BigDecimal> latestIndex() {
+        return latestMonth().map(indexByMonthStart::get)
+                .filter(v -> v != null && v.signum() > 0);
     }
 }

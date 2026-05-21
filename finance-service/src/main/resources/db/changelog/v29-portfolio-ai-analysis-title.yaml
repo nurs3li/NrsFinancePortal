@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: v29-portfolio-ai-analysis-title
+      author: nurseli
+      changes:
+        - addColumn:
+            tableName: portfolio_ai_analysis
+            columns:
+              - column:
+                  name: title
+                  type: VARCHAR(120)

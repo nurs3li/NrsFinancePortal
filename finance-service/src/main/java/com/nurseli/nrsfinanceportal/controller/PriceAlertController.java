@@ -3,6 +3,7 @@ package com.nurseli.nrsfinanceportal.controller;
 import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.dto.pricealert.PriceAlertCreateRequest;
 import com.nurseli.nrsfinanceportal.dto.pricealert.PriceAlertDto;
+import com.nurseli.nrsfinanceportal.dto.pricealert.PriceAlertPageResponse;
 import com.nurseli.nrsfinanceportal.dto.pricealert.PriceAlertUpdateRequest;
 import com.nurseli.nrsfinanceportal.service.pricealert.PriceAlertService;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +21,14 @@ public class PriceAlertController {
 
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping
-    public ApiResponse<List<PriceAlertDto>> list() {
+    public ApiResponse<?> list(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false, defaultValue = "all") String filter) {
+        if (page != null) {
+            int resolvedSize = size != null ? size : 10;
+            return ApiResponse.success(priceAlertService.listPageForCurrentUser(page, resolvedSize, filter));
+        }
         return ApiResponse.success(priceAlertService.listForCurrentUser());
     }
 

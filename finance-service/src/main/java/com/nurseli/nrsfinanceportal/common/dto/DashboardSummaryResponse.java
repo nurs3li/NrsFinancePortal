@@ -9,9 +9,19 @@ import java.util.Map;
 public record DashboardSummaryResponse(
 
         PortfolioSummary portfolio,
-        BigDecimal totalPortfolioValueTry
+        BigDecimal totalPortfolioValueTry,
+        /** Spot / klasik portföy (kripto, döviz, hisse, fon, metal). */
+        TradingSegmentSummary spotTrading,
+        /** VİOP + tahvil / eurobond vadeli segmenti. */
+        TradingSegmentSummary futuresDerivatives
 
 ) {
+
+    public record TradingSegmentSummary(
+            BigDecimal totalCostTry,
+            BigDecimal totalPnlTry,
+            BigDecimal totalValueTry
+    ) {}
 
     public record PortfolioSummary(
             BigDecimal totalValueTry,

@@ -37,10 +37,30 @@ public class RegistrationEmailSender {
                 Bu işlemi siz yapmadıysanız bu e-postayı yok sayabilirsiniz.
                 """.formatted(code);
 
-        String payload = """
-                {"to":"%s","subject":"%s","body":"%s"}
-                """.formatted(escape(targetEmail), escape(subject), escape(body));
+        postEmail(baseUrl, new EmailSendPayload(targetEmail, subject, body));
+        log.info("[REGISTER_CODE] verification mail sent to={}", targetEmail);
+    }
 
+    public void sendEmailChangeVerificationCode(String targetEmail, String code) {
+        if (!tokenProvider.isConfigured()) {
+            throw new IllegalStateException("E-posta değişikliği için Keycloak admin konfigürasyonu eksik");
+        }
+        String baseUrl = notificationClientProperties.getBaseUrl();
+        String subject = "NRS Finance E-posta Değişikliği Doğrulama Kodu";
+        String body = """
+                Merhaba,
+                                
+                E-posta değişikliği doğrulama kodunuz: %s
+                                
+                Kod 60 saniye içinde girilmelidir.
+                Bu işlemi siz yapmadıysanız bu e-postayı yok sayabilirsiniz.
+                """.formatted(code);
+
+        postEmail(baseUrl, new EmailSendPayload(targetEmail, subject, body));
+        log.info("[PROFILE_EMAIL_CODE] verification mail sent to={}", targetEmail);
+    }
+
+    private void postEmail(String baseUrl, EmailSendPayload payload) {
         keycloakAdminWebClient
                 .post()
                 .uri(baseUrl + "/api/notifications/internal/email/send")
@@ -52,18 +72,29 @@ public class RegistrationEmailSender {
                         response.bodyToMono(String.class)
                                 .defaultIfEmpty("")
                                 .flatMap(msg -> Mono.error(new IllegalStateException(
-                                        "Doğrulama maili gönderilemedi " + response.statusCode() + ": " + msg))))
+                                        friendlyEmailFailure(response.statusCode().value(), msg)))))
                 .toBodilessEntity()
                 .timeout(TIMEOUT)
                 .block();
-        log.info("[REGISTER_CODE] verification mail sent to={}", targetEmail);
     }
 
-    private static String escape(String input) {
-        return input
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\r", "\\r")
-                .replace("\n", "\\n");
+    private static String friendlyEmailFailure(int status, String raw) {
+        if (raw != null) {
+            if (raw.contains("Google'a bağlanamıyor") || raw.contains("Gmail OAuth")) {
+                return "E-posta servisi şu an Google'a bağlanamıyor. Lütfen kısa süre sonra tekrar deneyin.";
+            }
+            int errIdx = raw.indexOf("\"error\"");
+            if (errIdx >= 0) {
+                int start = raw.indexOf(':', errIdx);
+                int q1 = raw.indexOf('"', start + 1);
+                int q2 = raw.indexOf('"', q1 + 1);
+                if (q1 >= 0 && q2 > q1) {
+                    return raw.substring(q1 + 1, q2);
+                }
+            }
+        }
+        return "Doğrulama maili gönderilemedi (HTTP " + status + ").";
     }
+
+    public record EmailSendPayload(String to, String subject, String body) {}
 }

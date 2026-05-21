@@ -52,6 +52,10 @@ public class MarketDataClient {
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<InflationHistoryBody>> CPI_HISTORY_ENVELOPE =
             new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<TefasFundPage>> TEFAS_PAGE_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<List<TefasHistoryPoint>>> TEFAS_HISTORY_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record InflationHistoryBody(String indicatorType, List<InflationHistoryRow> rows) {}
@@ -91,6 +95,36 @@ public class MarketDataClient {
             int totalPages,
             boolean hasNext,
             boolean hasPrevious) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record TefasFundRow(
+            String code,
+            String title,
+            String fundType,
+            Integer riskLevel,
+            boolean tefasListed,
+            Double price,
+            Double return1m,
+            Double return3m,
+            Double return6m,
+            Double return1y,
+            Double returnYtd,
+            Double return3y,
+            Double return5y,
+            String source) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record TefasFundPage(
+            List<TefasFundRow> items,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages,
+            boolean hasNext,
+            boolean hasPrevious) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record TefasHistoryPoint(java.time.LocalDate date, double price) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ViopLatestRow(
@@ -571,6 +605,81 @@ public class MarketDataClient {
             return new CpiIndexLookup(map);
         } catch (RuntimeException ex) {
             return CpiIndexLookup.empty();
+        }
+    }
+
+    public TefasFundPage getTefasFundPage(int page, int size, String sort, String dir, String search) {
+        try {
+            ApiEnvelope<TefasFundPage> envelope = marketDataWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/market/tefas/funds")
+                            .queryParam("page", page)
+                            .queryParam("size", size)
+                            .queryParam("sort", sort != null ? sort : "return1y")
+                            .queryParam("dir", dir != null ? dir : "desc")
+                            .queryParamIfPresent("search", java.util.Optional.ofNullable(search).filter(s -> !s.isBlank()))
+                            .build())
+                    .retrieve()
+                    .bodyToMono(TEFAS_PAGE_ENVELOPE)
+                    .timeout(REQUEST_TIMEOUT.plusSeconds(45))
+                    .onErrorReturn(new ApiEnvelope<>(false, null, null, null))
+                    .block(REQUEST_TIMEOUT.plusSeconds(50));
+            TefasFundPage body =
+                    envelope != null && Boolean.TRUE.equals(envelope.success()) ? envelope.data() : null;
+            return body != null ? body : emptyTefasPage();
+        } catch (RuntimeException ignored) {
+            return emptyTefasPage();
+        }
+    }
+
+    public List<TefasHistoryPoint> getTefasFundHistory(String code, int months) {
+        if (code == null || code.isBlank()) {
+            return List.of();
+        }
+        int safeMonths = Math.max(1, Math.min(months, 60));
+        try {
+            ApiEnvelope<List<TefasHistoryPoint>> envelope = marketDataWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/market/tefas/funds/{code}/history")
+                            .queryParam("months", safeMonths)
+                            .build(code.trim().toUpperCase()))
+                    .retrieve()
+                    .bodyToMono(TEFAS_HISTORY_ENVELOPE)
+                    .timeout(HISTORY_REQUEST_TIMEOUT)
+                    .onErrorReturn(new ApiEnvelope<>(false, null, null, null))
+                    .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(5));
+            List<TefasHistoryPoint> list =
+                    envelope != null && Boolean.TRUE.equals(envelope.success()) && envelope.data() != null
+                            ? envelope.data()
+                            : List.of();
+            return list;
+        } catch (RuntimeException ignored) {
+            return List.of();
+        }
+    }
+
+    private static TefasFundPage emptyTefasPage() {
+        return new TefasFundPage(List.of(), 0, 25, 0, 0, false, false);
+    }
+
+    /**
+     * Faiz &amp; enflasyon panel özeti — OpenAI context için kısa makro yükü.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> loadMacroPanelSummary() {
+        try {
+            String raw = marketDataWebClient.get()
+                    .uri("/api/market/macro/interest-inflation-panel")
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(REQUEST_TIMEOUT)
+                    .block(REQUEST_TIMEOUT.plusSeconds(5));
+            if (raw == null || raw.isBlank()) {
+                return Map.of();
+            }
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(raw, Map.class);
+        } catch (Exception ignored) {
+            return Map.of();
         }
     }
 }

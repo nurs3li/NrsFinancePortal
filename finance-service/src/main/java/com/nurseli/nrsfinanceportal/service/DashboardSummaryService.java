@@ -5,7 +5,11 @@ import com.nurseli.nrsfinanceportal.common.dto.PerformanceItemDto;
 import com.nurseli.nrsfinanceportal.common.dto.PortfolioPerformanceDto;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.domain.user.User;
+import com.nurseli.nrsfinanceportal.dto.bond.BondPositionSummaryDto;
+import com.nurseli.nrsfinanceportal.dto.viop.ViopPositionSummaryDto;
 import com.nurseli.nrsfinanceportal.repository.UserRepository;
+import com.nurseli.nrsfinanceportal.service.bond.ManualBondPositionService;
+import com.nurseli.nrsfinanceportal.service.viop.ManualViopPositionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +26,8 @@ import java.util.Map;
 public class DashboardSummaryService {
 
     private final PortfolioPerformanceService portfolioPerformanceService;
+    private final ManualViopPositionService viopPositionService;
+    private final ManualBondPositionService bondPositionService;
     private final UserRepository userRepository;
 
     public DashboardSummaryResponse getSummary(Long userId) {
@@ -33,13 +39,36 @@ public class DashboardSummaryService {
         PortfolioPerformanceDto performance = portfolioPerformanceService.performanceForUser(user);
         var portfolio = buildPortfolioSummary(performance);
 
-        return new DashboardSummaryResponse(
-                portfolio,
+        DashboardSummaryResponse.TradingSegmentSummary spot = new DashboardSummaryResponse.TradingSegmentSummary(
+                nz(performance.getTotalCost()),
+                nz(performance.getTotalPnl()),
                 nz(performance.getTotalCurrentValue())
         );
+
+        ViopPositionSummaryDto viop = viopPositionService.summaryForUser(user);
+        BondPositionSummaryDto bond = bondPositionService.summaryForUser(user);
+
+        BigDecimal futuresCost = nz(viop.totalInitialMargin()).add(nz(bond.totalNominalValue()));
+        BigDecimal futuresPnl = nz(viop.totalUnrealizedPnl()).add(nz(bond.totalPnl()));
+        BigDecimal viopNet = viop.netFinancialEffect() != null
+                ? viop.netFinancialEffect()
+                : nz(viop.totalInitialMargin()).add(nz(viop.totalUnrealizedPnl()));
+        BigDecimal futuresValue = nz(bond.totalCurrentValue()).add(viopNet).setScale(6, RoundingMode.HALF_UP);
+
+        DashboardSummaryResponse.TradingSegmentSummary futures = new DashboardSummaryResponse.TradingSegmentSummary(
+                futuresCost.setScale(6, RoundingMode.HALF_UP),
+                futuresPnl.setScale(6, RoundingMode.HALF_UP),
+                futuresValue
+        );
+
+        BigDecimal totalPortfolio = spot.totalValueTry().add(futures.totalValueTry()).setScale(6, RoundingMode.HALF_UP);
+
+        return new DashboardSummaryResponse(portfolio, totalPortfolio, spot, futures);
     }
 
     private static DashboardSummaryResponse emptySummary() {
+        var zeroSegment = new DashboardSummaryResponse.TradingSegmentSummary(
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
         return new DashboardSummaryResponse(
                 new DashboardSummaryResponse.PortfolioSummary(
                         BigDecimal.ZERO,
@@ -49,7 +78,9 @@ public class DashboardSummaryService {
                         BigDecimal.ZERO,
                         List.of()
                 ),
-                BigDecimal.ZERO
+                BigDecimal.ZERO,
+                zeroSegment,
+                zeroSegment
         );
     }
 

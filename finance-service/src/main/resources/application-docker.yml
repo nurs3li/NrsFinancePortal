@@ -89,6 +89,9 @@ app:
       realm: ${KEYCLOAK_ADMIN_REALM:nrs-finance}
       client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:}
       client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:}
+    password-grant:
+      client-id: ${KEYCLOAK_PASSWORD_GRANT_CLIENT_ID:nrs-frontend}
+      client-secret: ${KEYCLOAK_PASSWORD_GRANT_CLIENT_SECRET:}
     security:
       otp-enforcement-enabled: ${KEYCLOAK_SECURITY_OTP_ENFORCEMENT_ENABLED:false}
       # Docker: .env'de true yapın veya docker-compose varsayılanına güvenin (env satırı yoksa açık)
