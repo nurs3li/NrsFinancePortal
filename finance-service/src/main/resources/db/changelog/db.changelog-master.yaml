@@ -91,3 +91,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v31-user-profile-names.yaml
+
+  - include:
+      file: db/changelog/v32-manual-position-close-metadata.yaml

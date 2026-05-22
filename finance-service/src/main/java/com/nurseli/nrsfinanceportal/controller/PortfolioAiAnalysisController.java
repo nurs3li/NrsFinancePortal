@@ -65,6 +65,13 @@ public class PortfolioAiAnalysisController {
         return ApiResponse.success(null);
     }
 
+    @PostMapping("/analyses/{id}/email/me")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<Void> emailAnalysisReport(@PathVariable String id) {
+        portfolioAiAnalysisService.sendAnalysisReportEmail(id);
+        return ApiResponse.success(null);
+    }
+
     @GetMapping("/email-delivery/me")
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<PortfolioAiEmailDeliveryDto> emailDelivery() {

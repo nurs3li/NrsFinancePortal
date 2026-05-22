@@ -39,9 +39,13 @@ public class PositionHistoricalPriceResolverService {
         }
 
         String normalized = symbol.trim().toUpperCase();
-        ViopPriceAtRow row = tryViopPriceAt(normalized, requestedDate);
-        if (row == null && !normalized.startsWith("F_")) {
-            row = tryViopPriceAt("F_" + normalized, requestedDate);
+        String stripped = normalized.startsWith("F_") ? normalized.substring(2) : normalized;
+        ViopPriceAtRow row = tryViopPriceAt(stripped, requestedDate);
+        if (row == null && !normalized.equals(stripped)) {
+            row = tryViopPriceAt(normalized, requestedDate);
+        }
+        if (row == null && !stripped.isBlank()) {
+            row = tryViopPriceAt("F_" + stripped, requestedDate);
         }
         if (row == null) {
             return PositionHistoricalPriceResolveDto.notFound(

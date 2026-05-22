@@ -8,6 +8,8 @@ public record BondPositionSummaryDto(
         BigDecimal totalNominalValue,
         BigDecimal totalCurrentValue,
         BigDecimal totalPnl,
+        BigDecimal totalPricePnl,
+        BigDecimal totalCollectedCoupon,
         BigDecimal averageReturnPct,
         BigDecimal annualCouponEstimate,
         int expiringSoonCount,

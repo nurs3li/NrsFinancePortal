@@ -64,6 +64,22 @@ public class ManualBondPosition {
     @Column(name = "sell_date")
     private LocalDate sellDate;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "close_type", length = 20)
+    private BondCloseType closeType;
+
+    @Column(name = "close_fee", precision = 19, scale = 6)
+    private BigDecimal closeFee;
+
+    @Column(name = "collected_coupon_amount", precision = 19, scale = 6)
+    private BigDecimal collectedCouponAmount;
+
+    @Column(name = "realized_pnl", precision = 19, scale = 6)
+    private BigDecimal realizedPnl;
+
+    @Column(name = "realized_return_percent", precision = 10, scale = 4)
+    private BigDecimal realizedReturnPercent;
+
     @Column(name = "note", columnDefinition = "TEXT")
     private String note;
 
@@ -106,6 +122,11 @@ public class ManualBondPosition {
     public BondPositionStatus getStatus() { return status; }
     public BigDecimal getSellPrice() { return sellPrice; }
     public LocalDate getSellDate() { return sellDate; }
+    public BondCloseType getCloseType() { return closeType; }
+    public BigDecimal getCloseFee() { return closeFee; }
+    public BigDecimal getCollectedCouponAmount() { return collectedCouponAmount; }
+    public BigDecimal getRealizedPnl() { return realizedPnl; }
+    public BigDecimal getRealizedReturnPercent() { return realizedReturnPercent; }
     public String getNote() { return note; }
 
     public void setSymbol(String symbol) { this.symbol = symbol; }
@@ -122,6 +143,11 @@ public class ManualBondPosition {
     public void setStatus(BondPositionStatus status) { this.status = status; }
     public void setSellPrice(BigDecimal sellPrice) { this.sellPrice = sellPrice; }
     public void setSellDate(LocalDate sellDate) { this.sellDate = sellDate; }
+    public void setCloseType(BondCloseType closeType) { this.closeType = closeType; }
+    public void setCloseFee(BigDecimal closeFee) { this.closeFee = closeFee; }
+    public void setCollectedCouponAmount(BigDecimal collectedCouponAmount) { this.collectedCouponAmount = collectedCouponAmount; }
+    public void setRealizedPnl(BigDecimal realizedPnl) { this.realizedPnl = realizedPnl; }
+    public void setRealizedReturnPercent(BigDecimal realizedReturnPercent) { this.realizedReturnPercent = realizedReturnPercent; }
     public void setNote(String note) { this.note = note; }
 
     public static ManualBondPosition createNew(

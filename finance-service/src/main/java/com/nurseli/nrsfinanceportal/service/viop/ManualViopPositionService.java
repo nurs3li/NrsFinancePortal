@@ -144,9 +144,18 @@ public class ManualViopPositionService {
     @Transactional
     public ManualViopPositionDto close(Long id, ManualViopPositionCloseRequest request) {
         ManualViopPosition p = requireOwnedOpen(id);
+        ViopPositionCloseCalculator.Result calc = ViopPositionCloseCalculator.compute(
+                p, request.getClosePrice(), request.getFee());
         p.setClosePrice(request.getClosePrice());
         p.setCloseDate(request.getCloseDate());
         p.setCurrentPrice(request.getClosePrice());
+        p.setCloseFee(request.getFee());
+        p.setCloseReason(request.getCloseReason());
+        p.setRealizedPnl(calc.netPnl());
+        p.setRealizedReturnPercent(calc.returnPercent());
+        if (request.getNote() != null && !request.getNote().isBlank()) {
+            p.setNote(request.getNote().trim());
+        }
         p.setStatus(ViopPositionStatus.CLOSED);
         p = repository.save(p);
         return toDto(p, priceResolver.loadLatestPricesBySymbol(), LocalDate.now(TZ));
@@ -215,7 +224,11 @@ public class ManualViopPositionService {
                 p.getStatus(),
                 p.getClosePrice(),
                 p.getCloseDate(),
-                m.unrealizedPnl(),
+                p.getCloseFee(),
+                p.getCloseReason(),
+                p.getStatus() == ViopPositionStatus.CLOSED ? p.getRealizedPnl() : null,
+                p.getStatus() == ViopPositionStatus.CLOSED ? p.getRealizedReturnPercent() : null,
+                p.getStatus() == ViopPositionStatus.OPEN ? m.unrealizedPnl() : p.getRealizedPnl(),
                 m.riskExposure(),
                 m.netFinancialEffect(),
                 m.daysToExpiry(),

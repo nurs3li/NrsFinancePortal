@@ -67,6 +67,19 @@ public class ManualViopPosition {
     @Column(name = "close_date")
     private LocalDate closeDate;
 
+    @Column(name = "close_fee", precision = 19, scale = 6)
+    private BigDecimal closeFee;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "close_reason", length = 30)
+    private ViopCloseReason closeReason;
+
+    @Column(name = "realized_pnl", precision = 19, scale = 6)
+    private BigDecimal realizedPnl;
+
+    @Column(name = "realized_return_percent", precision = 10, scale = 4)
+    private BigDecimal realizedReturnPercent;
+
     @Column(name = "note", columnDefinition = "TEXT")
     private String note;
 
@@ -110,6 +123,10 @@ public class ManualViopPosition {
     public ViopPositionStatus getStatus() { return status; }
     public BigDecimal getClosePrice() { return closePrice; }
     public LocalDate getCloseDate() { return closeDate; }
+    public BigDecimal getCloseFee() { return closeFee; }
+    public ViopCloseReason getCloseReason() { return closeReason; }
+    public BigDecimal getRealizedPnl() { return realizedPnl; }
+    public BigDecimal getRealizedReturnPercent() { return realizedReturnPercent; }
     public String getNote() { return note; }
 
     public void setSymbol(String symbol) { this.symbol = symbol; }
@@ -127,6 +144,10 @@ public class ManualViopPosition {
     public void setStatus(ViopPositionStatus status) { this.status = status; }
     public void setClosePrice(BigDecimal closePrice) { this.closePrice = closePrice; }
     public void setCloseDate(LocalDate closeDate) { this.closeDate = closeDate; }
+    public void setCloseFee(BigDecimal closeFee) { this.closeFee = closeFee; }
+    public void setCloseReason(ViopCloseReason closeReason) { this.closeReason = closeReason; }
+    public void setRealizedPnl(BigDecimal realizedPnl) { this.realizedPnl = realizedPnl; }
+    public void setRealizedReturnPercent(BigDecimal realizedReturnPercent) { this.realizedReturnPercent = realizedReturnPercent; }
     public void setNote(String note) { this.note = note; }
 
     public static ManualViopPosition createNew(
