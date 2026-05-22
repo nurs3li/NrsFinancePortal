@@ -45,6 +45,7 @@ public class PortfolioAiAnalysisService {
     private final PortfolioAiMapper mapper;
     private final PortfolioAiModuleProperties moduleProperties;
     private final ObjectMapper objectMapper;
+    private final PortfolioAiReportEmailSender reportEmailSender;
 
     @Transactional(readOnly = true)
     public PortfolioAiUsageResponse usage() {
@@ -78,6 +79,21 @@ public class PortfolioAiAnalysisService {
         PortfolioAiAnalysisEntity entity = repository.findByIdAndUser_Id(id, userId)
                 .orElseThrow(() -> notFound());
         return mapper.toResponse(entity);
+    }
+
+    @Transactional(readOnly = true)
+    public void sendAnalysisReportEmail(String id) {
+        User user = currentUserResolver.getOrCreateCurrentUser();
+        String email = user.getEmail() != null ? user.getEmail().trim() : "";
+        if (email.isEmpty()) {
+            throw new ApiBusinessException(
+                    HttpStatus.BAD_REQUEST,
+                    ApiErrorCode.BAD_REQUEST,
+                    "Hesabınızda kayıtlı e-posta bulunamadı."
+            );
+        }
+        PortfolioAiAnalysisResponse response = getById(id);
+        reportEmailSender.sendReport(email, response);
     }
 
     @Transactional

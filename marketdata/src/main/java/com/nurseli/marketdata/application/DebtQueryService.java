@@ -47,19 +47,7 @@ public class DebtQueryService {
                 .collect(Collectors.toMap(
                         com.nurseli.marketdata.domain.debt.DebtSnapshot::getIsin,
                         s -> s,
-                        (left, right) -> {
-                            LocalDateTime leftAsOf = left.getAsOf() == null ? LocalDateTime.MIN : left.getAsOf();
-                            LocalDateTime rightAsOf = right.getAsOf() == null ? LocalDateTime.MIN : right.getAsOf();
-                            if (rightAsOf.isAfter(leftAsOf)) {
-                                return right;
-                            }
-                            if (leftAsOf.isAfter(rightAsOf)) {
-                                return left;
-                            }
-                            Long leftId = left.getId() == null ? Long.MIN_VALUE : left.getId();
-                            Long rightId = right.getId() == null ? Long.MIN_VALUE : right.getId();
-                            return rightId > leftId ? right : left;
-                        }
+                        DebtQueryService::mergeDebtSnapshots
                 ))
                 .values()
                 .stream()
@@ -114,6 +102,49 @@ public class DebtQueryService {
 
     private static String normIsin(String isin) {
         return isin == null ? "" : isin.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static com.nurseli.marketdata.domain.debt.DebtSnapshot mergeDebtSnapshots(
+            com.nurseli.marketdata.domain.debt.DebtSnapshot left,
+            com.nurseli.marketdata.domain.debt.DebtSnapshot right) {
+        com.nurseli.marketdata.domain.debt.DebtSnapshot newer = snapshotIsNewer(left, right) ? left : right;
+        com.nurseli.marketdata.domain.debt.DebtSnapshot older = newer == left ? right : left;
+        if (snapshotCouponRate(older) != null && snapshotCouponRate(newer) == null) {
+            newer.setYieldPct(older.getYieldPct());
+        }
+        if (older.getDirtyPrice() != null
+                && older.getDirtyPrice().signum() > 0
+                && (newer.getDirtyPrice() == null || newer.getDirtyPrice().signum() <= 0)) {
+            newer.setDirtyPrice(older.getDirtyPrice());
+        }
+        return newer;
+    }
+
+    private static boolean snapshotIsNewer(
+            com.nurseli.marketdata.domain.debt.DebtSnapshot left,
+            com.nurseli.marketdata.domain.debt.DebtSnapshot right) {
+        LocalDateTime leftAsOf = left.getAsOf() == null ? LocalDateTime.MIN : left.getAsOf();
+        LocalDateTime rightAsOf = right.getAsOf() == null ? LocalDateTime.MIN : right.getAsOf();
+        if (rightAsOf.isAfter(leftAsOf)) {
+            return false;
+        }
+        if (leftAsOf.isAfter(rightAsOf)) {
+            return true;
+        }
+        Long leftId = left.getId() == null ? Long.MIN_VALUE : left.getId();
+        Long rightId = right.getId() == null ? Long.MIN_VALUE : right.getId();
+        return leftId >= rightId;
+    }
+
+    private static BigDecimal snapshotCouponRate(com.nurseli.marketdata.domain.debt.DebtSnapshot s) {
+        if (s == null || s.getYieldPct() == null || s.getYieldPct().signum() <= 0) {
+            return null;
+        }
+        String source = s.getSource() == null ? "" : s.getSource().toUpperCase(Locale.ROOT);
+        if (source.contains("EVDS") && !source.contains("MVP")) {
+            return s.getYieldPct();
+        }
+        return null;
     }
 
     private DebtInstrumentResponse toInstrumentResponse(DebtInstrument i) {

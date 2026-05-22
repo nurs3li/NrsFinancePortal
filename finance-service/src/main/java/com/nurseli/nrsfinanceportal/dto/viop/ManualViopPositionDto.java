@@ -1,6 +1,7 @@
 package com.nurseli.nrsfinanceportal.dto.viop;
 
 import com.nurseli.nrsfinanceportal.domain.viop.ViopCategory;
+import com.nurseli.nrsfinanceportal.domain.viop.ViopCloseReason;
 import com.nurseli.nrsfinanceportal.domain.viop.ViopDirection;
 import com.nurseli.nrsfinanceportal.domain.viop.ViopPositionStatus;
 
@@ -24,6 +25,10 @@ public record ManualViopPositionDto(
         ViopPositionStatus status,
         BigDecimal closePrice,
         LocalDate closeDate,
+        BigDecimal closeFee,
+        ViopCloseReason closeReason,
+        BigDecimal realizedPnl,
+        BigDecimal realizedReturnPercent,
         BigDecimal unrealizedPnl,
         BigDecimal riskExposure,
         BigDecimal netFinancialEffect,

@@ -17,6 +17,9 @@ import type { TerminalListInstrumentVm } from '../../utils/marketTerminalListVm'
 import { fetchAllTerminalInstruments } from './viopBondMarket';
 import { fmtMoney } from './formatViopBond';
 import { ViopPositionAddModal } from './ViopPositionAddModal';
+import { CloseViopPositionModal } from './CloseViopPositionModal';
+import { ViopBondToast } from './ViopBondToast';
+import type { ManualViopPositionClosePayload } from '../../types/viopPosition';
 import { ViopPositionDetailDrawer } from './ViopPositionDetailDrawer';
 import { ViopPositionsSection } from './ViopPositionsSection';
 import { ViopAnalyticsSection } from './ViopAnalyticsSection';
@@ -42,6 +45,8 @@ export function ViopAnalysisTab({ tokens }: Props) {
         referencePrice?: number | null;
     } | null>(null);
     const [detailPosition, setDetailPosition] = useState<ManualViopPosition | null>(null);
+    const [closePosition, setClosePosition] = useState<ManualViopPosition | null>(null);
+    const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
     const { data: rows = [], isLoading: positionsLoading } = useQuery({
         queryKey: viopPositionKeys.list(),
@@ -72,9 +77,16 @@ export function ViopAnalysisTab({ tokens }: Props) {
     });
     const deleteMut = useMutation({ mutationFn: deleteViopPosition, onSuccess: invalidate });
     const closeMut = useMutation({
-        mutationFn: ({ id, price, date }: { id: number; price: number; date: string }) =>
-            closeViopPosition(id, { closePrice: price, closeDate: date }),
-        onSuccess: invalidate,
+        mutationFn: ({ id, payload }: { id: number; payload: ManualViopPositionClosePayload }) =>
+            closeViopPosition(id, payload),
+        onSuccess: () => {
+            invalidate();
+            setClosePosition(null);
+            setToast({
+                message: t('viopBond.closeSuccess', 'Pozisyon başarıyla kapatıldı.'),
+                variant: 'success',
+            });
+        },
     });
 
     const openPositions = useMemo(() => rows.filter((r) => r.status === 'OPEN'), [rows]);
@@ -105,17 +117,7 @@ export function ViopAnalysisTab({ tokens }: Props) {
     };
 
     const handleClose = (row: ManualViopPosition) => {
-        const priceStr = window.prompt(
-            t('viopBond.promptClosePrice', 'Kapanış fiyatı'),
-            String(row.currentPrice ?? row.entryPrice),
-        );
-        if (!priceStr) return;
-        const date = window.prompt(
-            t('viopBond.promptCloseDate', 'Kapanış tarihi (YYYY-MM-DD)'),
-            new Date().toISOString().slice(0, 10),
-        );
-        if (!date) return;
-        closeMut.mutate({ id: row.id, price: Number(priceStr), date });
+        setClosePosition(row);
     };
 
     const expiringSoon = summary?.expiringSoonCount ?? 0;
@@ -239,6 +241,32 @@ export function ViopAnalysisTab({ tokens }: Props) {
                 }
                 onPositionDetail={setDetailPosition}
             />
+
+            <CloseViopPositionModal
+                open={closePosition != null}
+                position={closePosition}
+                onClose={() => setClosePosition(null)}
+                onSubmit={async (payload) => {
+                    if (!closePosition) return;
+                    try {
+                        await closeMut.mutateAsync({ id: closePosition.id, payload });
+                    } catch (e) {
+                        setToast({
+                            message: readFinanceApiError(e).message,
+                            variant: 'error',
+                        });
+                        throw e;
+                    }
+                }}
+            />
+
+            {toast ? (
+                <ViopBondToast
+                    message={toast.message}
+                    variant={toast.variant}
+                    onDismiss={() => setToast(null)}
+                />
+            ) : null}
 
             <ViopPositionAddModal
                 open={modalOpen && (addInstrument != null || editRow != null)}

@@ -119,7 +119,10 @@ export function CombinedFinancialSummaryCards({
         {
             label: t('viopBond.kpiTotalPnl', 'Toplam K/Z'),
             value: loading ? '…' : fmtMoney(pnl, locale),
-            hint: t('viopBond.kpiTotalPnlHint', 'Tahvil fiyat K/Z + VİOP açık K/Z'),
+            hint: t(
+                'viopBond.kpiTotalPnlHint',
+                'Tahvil fiyat K/Z + tahsil edilen kupon + VİOP açık K/Z',
+            ),
             pnlClass: pctClass(pnl),
         },
         {

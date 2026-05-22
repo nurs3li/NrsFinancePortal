@@ -1,0 +1,73 @@
+databaseChangeLog:
+  - changeSet:
+      id: v22-bank-fx-latest
+      author: nurseli
+      changes:
+        - createTable:
+            tableName: bank_fx_latest
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: source
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: bank_code
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: bank_name
+                  type: VARCHAR(120)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: currency
+                  type: VARCHAR(8)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: buy_price
+                  type: DECIMAL(18, 6)
+              - column:
+                  name: sell_price
+                  type: DECIMAL(18, 6)
+              - column:
+                  name: change_pct
+                  type: DECIMAL(8, 4)
+              - column:
+                  name: quote_time_text
+                  type: VARCHAR(32)
+              - column:
+                  name: fetched_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+
+        - addUniqueConstraint:
+            tableName: bank_fx_latest
+            columnNames: source, bank_code, currency
+            constraintName: uq_bank_fx_latest_source_code_ccy
+
+        - createIndex:
+            tableName: bank_fx_latest
+            indexName: idx_bank_fx_latest_ccy_fetched
+            columns:
+              - column:
+                  name: source
+              - column:
+                  name: currency
+              - column:
+                  name: fetched_at
+                  descending: true

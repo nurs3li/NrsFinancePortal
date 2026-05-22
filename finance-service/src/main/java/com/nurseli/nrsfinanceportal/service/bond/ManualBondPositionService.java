@@ -57,7 +57,8 @@ public class ManualBondPositionService {
 
         BigDecimal totalNominal = BigDecimal.ZERO;
         BigDecimal totalCurrent = BigDecimal.ZERO;
-        BigDecimal totalPnl = BigDecimal.ZERO;
+        BigDecimal totalPricePnl = BigDecimal.ZERO;
+        BigDecimal totalCollectedCoupon = BigDecimal.ZERO;
         BigDecimal totalCoupon = BigDecimal.ZERO;
         BigDecimal returnSum = BigDecimal.ZERO;
         int returnCount = 0;
@@ -77,11 +78,14 @@ public class ManualBondPositionService {
             } else {
                 incomplete++;
             }
-            if (m.pnl() != null) {
-                totalPnl = totalPnl.add(m.pnl());
+            if (m.pricePnl() != null) {
+                totalPricePnl = totalPricePnl.add(m.pricePnl());
             }
-            if (m.returnPct() != null) {
-                returnSum = returnSum.add(m.returnPct());
+            if (m.collectedCoupon() != null) {
+                totalCollectedCoupon = totalCollectedCoupon.add(m.collectedCoupon());
+            }
+            if (m.totalReturnPercent() != null) {
+                returnSum = returnSum.add(m.totalReturnPercent());
                 returnCount++;
             }
             if (m.annualCoupon() != null) {
@@ -96,11 +100,15 @@ public class ManualBondPositionService {
                 ? returnSum.divide(BigDecimal.valueOf(returnCount), 4, RoundingMode.HALF_UP)
                 : null;
 
+        BigDecimal totalReturn = totalPricePnl.add(totalCollectedCoupon).setScale(6, RoundingMode.HALF_UP);
+
         return new BondPositionSummaryDto(
                 open.size(),
                 totalNominal.setScale(6, RoundingMode.HALF_UP),
                 totalCurrent.setScale(6, RoundingMode.HALF_UP),
-                totalPnl.setScale(6, RoundingMode.HALF_UP),
+                totalReturn,
+                totalPricePnl.setScale(6, RoundingMode.HALF_UP),
+                totalCollectedCoupon.setScale(6, RoundingMode.HALF_UP),
                 avgReturn,
                 totalCoupon.signum() > 0 ? totalCoupon.setScale(6, RoundingMode.HALF_UP) : null,
                 expiringSoon,
@@ -126,7 +134,7 @@ public class ManualBondPositionService {
                 request.getCurrentPrice(),
                 request.getMaturityDate(),
                 request.getCouponRate(),
-                request.getCouponFrequency() != null ? request.getCouponFrequency() : CouponFrequency.NONE,
+                resolveCouponFrequency(request.getCouponRate(), request.getCouponFrequency()),
                 trimOrNull(request.getNote())
         );
         p = repository.save(p);
@@ -148,7 +156,7 @@ public class ManualBondPositionService {
         p.setCurrentPrice(request.getCurrentPrice());
         p.setMaturityDate(request.getMaturityDate());
         p.setCouponRate(request.getCouponRate());
-        p.setCouponFrequency(request.getCouponFrequency() != null ? request.getCouponFrequency() : CouponFrequency.NONE);
+        p.setCouponFrequency(resolveCouponFrequency(request.getCouponRate(), request.getCouponFrequency()));
         p.setNote(trimOrNull(request.getNote()));
         p = repository.save(p);
         return toDto(p, LocalDate.now(TZ));
@@ -157,9 +165,22 @@ public class ManualBondPositionService {
     @Transactional
     public ManualBondPositionDto sell(Long id, ManualBondPositionSellRequest request) {
         ManualBondPosition p = requireOwnedOpen(id);
+        BondPositionCloseCalculator.Result calc = BondPositionCloseCalculator.compute(
+                p,
+                request.getSellPrice(),
+                request.getCollectedCouponAmount(),
+                request.getFee());
         p.setSellPrice(request.getSellPrice());
         p.setSellDate(request.getSellDate());
         p.setCurrentPrice(request.getSellPrice());
+        p.setCloseType(request.getCloseType());
+        p.setCloseFee(request.getFee());
+        p.setCollectedCouponAmount(request.getCollectedCouponAmount());
+        p.setRealizedPnl(calc.totalPnl());
+        p.setRealizedReturnPercent(calc.returnPercent());
+        if (request.getNote() != null && !request.getNote().isBlank()) {
+            p.setNote(request.getNote().trim());
+        }
         p.setStatus(BondPositionStatus.SOLD);
         p = repository.save(p);
         return toDto(p, LocalDate.now(TZ));
@@ -205,11 +226,23 @@ public class ManualBondPositionService {
                 p.getStatus(),
                 p.getSellPrice(),
                 p.getSellDate(),
+                p.getCloseType(),
+                p.getCloseFee(),
+                p.getCollectedCouponAmount(),
+                p.getStatus() == BondPositionStatus.SOLD ? p.getRealizedPnl() : null,
+                p.getStatus() == BondPositionStatus.SOLD ? p.getRealizedReturnPercent() : null,
                 m.buyValue(),
                 m.currentValue(),
-                m.pnl(),
-                m.returnPct(),
+                p.getStatus() == BondPositionStatus.SOLD ? p.getRealizedPnl() : m.pricePnl(),
+                m.pricePnl(),
+                p.getStatus() == BondPositionStatus.SOLD ? null : m.returnPct(),
                 m.annualCoupon(),
+                m.periodicCoupon(),
+                m.completedCouponPeriods(),
+                m.collectedCoupon(),
+                m.estimatedAccruedCoupon(),
+                p.getStatus() == BondPositionStatus.SOLD ? p.getRealizedPnl() : m.totalReturn(),
+                p.getStatus() == BondPositionStatus.SOLD ? p.getRealizedReturnPercent() : m.totalReturnPercent(),
                 m.daysToMaturity(),
                 p.getNote()
         );
@@ -217,6 +250,19 @@ public class ManualBondPositionService {
 
     private static String normalizeSymbol(String symbol) {
         return symbol.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static CouponFrequency resolveCouponFrequency(BigDecimal rate, CouponFrequency requested) {
+        if (rate != null && rate.signum() > 0) {
+            if (requested != null && requested != CouponFrequency.NONE) {
+                return requested;
+            }
+            return CouponFrequency.SEMI_ANNUAL;
+        }
+        if (requested != null) {
+            return requested;
+        }
+        return CouponFrequency.NONE;
     }
 
     private static void validateCoupon(BigDecimal rate) {

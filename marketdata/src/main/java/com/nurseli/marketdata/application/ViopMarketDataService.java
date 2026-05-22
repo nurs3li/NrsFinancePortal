@@ -10,8 +10,10 @@ import com.nurseli.marketdata.api.dto.ViopMarketSnapshotDto;
 import com.nurseli.marketdata.api.dto.ViopPriceAtResponse;
 import com.nurseli.marketdata.api.dto.ViopPricePoint;
 import com.nurseli.marketdata.config.MarketViopProperties;
+import com.nurseli.marketdata.domain.derivatives.DerivativeSnapshot;
 import com.nurseli.marketdata.domain.viop.ViopPriceHistoryEntity;
 import com.nurseli.marketdata.domain.viop.ViopSnapshotEntity;
+import com.nurseli.marketdata.repository.DerivativeSnapshotRepository;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopClient;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopHistoricalParser;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopSnapshotParser;
@@ -35,9 +37,13 @@ import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Stream;
 
 @Service
@@ -48,6 +54,7 @@ public class ViopMarketDataService {
     private static final String SOURCE_ISYATIRIM = "IS_YATIRIM";
     private static final String SOURCE_LABEL_PROVIDER = "İş Yatırım";
     private static final String SOURCE_LABEL_DB = "DB";
+    private static final String SOURCE_LABEL_DERIVATIVE_SNAPSHOT = "VIOP_SNAPSHOT_SERIES";
 
     private static final ObjectMapper REDIS_JSON = new ObjectMapper()
             .registerModule(new JavaTimeModule())
@@ -60,6 +67,7 @@ public class ViopMarketDataService {
     private final IsYatirimViopSnapshotParser snapshotParser;
     private final ViopPriceHistoryRepository priceHistoryRepository;
     private final ViopSnapshotRepository snapshotRepository;
+    private final DerivativeSnapshotRepository derivativeSnapshotRepository;
     private final ViopQueryService viopQueryService;
 
     public List<ViopMarketContractDto> listContracts(boolean includeExpired) {
@@ -231,7 +239,8 @@ public class ViopMarketDataService {
             long t0,
             String mode)
             throws Exception {
-        String raw = isYatirimViopClient.fetchHistorical(canonical, from, to, period);
+        String providerCode = providerEndeks(canonical);
+        String raw = isYatirimViopClient.fetchHistorical(providerCode, from, to, period);
         IsYatirimViopHistoricalParser.ParsedHistorical parsed = historicalParser.parse(raw);
         OffsetDateTime providerTs = parsed.providerTimestamp();
         LocalDateTime providerLocal =
@@ -291,6 +300,12 @@ public class ViopMarketDataService {
             return hit;
         }
 
+        Optional<ViopPriceAtResponse> fromSnapshots =
+                resolvePriceAtFromDerivativeSnapshots(canonical, requestedDate, zone);
+        if (fromSnapshots.isPresent()) {
+            return fromSnapshots.get();
+        }
+
         log.info("VIOP_PRICE_AT_NOT_FOUND contractCode={} requestedDate={}", canonical, requestedDate);
         return hit;
     }
@@ -300,46 +315,50 @@ public class ViopMarketDataService {
         LocalDateTime dayStart = requestedEcho;
         LocalDateTime dayEnd = requestedDate.plusDays(1).atStartOfDay(zone).minusNanos(1).toLocalDateTime();
 
-        List<ViopPriceHistoryEntity> onDay =
-                priceHistoryRepository.findByContractCodeAndPriceTimeBetweenOrderByPriceTimeAsc(
-                        canonical, dayStart, dayEnd);
-        if (!onDay.isEmpty()) {
-            ViopPriceHistoryEntity pick = onDay.get(onDay.size() - 1);
-            log.info(
-                    "VIOP_PRICE_AT_MATCH contractCode={} requestedDate={} matchType={} priceTime={}",
-                    canonical,
-                    requestedDate,
-                    ViopPriceMatchType.EXACT,
-                    pick.getPriceTime());
-            return new ViopPriceAtResponse(
-                    canonical,
-                    requestedEcho,
-                    pick.getPriceTime(),
-                    pick.getPrice(),
-                    ViopPriceMatchType.EXACT.name(),
-                    SOURCE_LABEL_DB,
-                    ViopDataQuality.OK.name());
-        }
+        for (String code : contractCodeAliases(canonical)) {
+            List<ViopPriceHistoryEntity> onDay =
+                    priceHistoryRepository.findByContractCodeAndPriceTimeBetweenOrderByPriceTimeAsc(
+                            code, dayStart, dayEnd);
+            if (!onDay.isEmpty()) {
+                ViopPriceHistoryEntity pick = onDay.get(onDay.size() - 1);
+                log.info(
+                        "VIOP_PRICE_AT_MATCH contractCode={} requestedDate={} matchType={} priceTime={} dbCode={}",
+                        canonical,
+                        requestedDate,
+                        ViopPriceMatchType.EXACT,
+                        pick.getPriceTime(),
+                        code);
+                return new ViopPriceAtResponse(
+                        canonical,
+                        requestedEcho,
+                        pick.getPriceTime(),
+                        pick.getPrice(),
+                        ViopPriceMatchType.EXACT.name(),
+                        SOURCE_LABEL_DB,
+                        ViopDataQuality.OK.name());
+            }
 
-        Optional<ViopPriceHistoryEntity> prev =
-                priceHistoryRepository.findTopByContractCodeAndPriceTimeLessThanOrderByPriceTimeDesc(
-                        canonical, dayStart);
-        if (prev.isPresent()) {
-            ViopPriceHistoryEntity p = prev.get();
-            log.info(
-                    "VIOP_PRICE_AT_MATCH contractCode={} requestedDate={} matchType={} priceTime={}",
-                    canonical,
-                    requestedDate,
-                    ViopPriceMatchType.PREVIOUS_AVAILABLE,
-                    p.getPriceTime());
-            return new ViopPriceAtResponse(
-                    canonical,
-                    requestedEcho,
-                    p.getPriceTime(),
-                    p.getPrice(),
-                    ViopPriceMatchType.PREVIOUS_AVAILABLE.name(),
-                    SOURCE_LABEL_DB,
-                    ViopDataQuality.OK.name());
+            Optional<ViopPriceHistoryEntity> prev =
+                    priceHistoryRepository.findTopByContractCodeAndPriceTimeLessThanOrderByPriceTimeDesc(
+                            code, dayStart);
+            if (prev.isPresent() && prev.get().getPrice() != null && prev.get().getPrice().signum() > 0) {
+                ViopPriceHistoryEntity p = prev.get();
+                log.info(
+                        "VIOP_PRICE_AT_MATCH contractCode={} requestedDate={} matchType={} priceTime={} dbCode={}",
+                        canonical,
+                        requestedDate,
+                        ViopPriceMatchType.PREVIOUS_AVAILABLE,
+                        p.getPriceTime(),
+                        code);
+                return new ViopPriceAtResponse(
+                        canonical,
+                        requestedEcho,
+                        p.getPriceTime(),
+                        p.getPrice(),
+                        ViopPriceMatchType.PREVIOUS_AVAILABLE.name(),
+                        SOURCE_LABEL_DB,
+                        ViopDataQuality.OK.name());
+            }
         }
 
         return new ViopPriceAtResponse(
@@ -350,6 +369,66 @@ public class ViopMarketDataService {
                 ViopPriceMatchType.NOT_FOUND.name(),
                 SOURCE_LABEL_DB,
                 ViopDataQuality.OK.name());
+    }
+
+    /**
+     * Terminal listesi / latest akışının kullandığı {@code derivative_snapshot} serisinden günlük kapanış.
+     * {@code mds_viop_price_history} henüz dolu değilken giriş fiyatı çözümü için yedek.
+     */
+    private Optional<ViopPriceAtResponse> resolvePriceAtFromDerivativeSnapshots(
+            String canonical, LocalDate requestedDate, ZoneId zone) {
+        Set<String> codes = contractCodeAliases(canonical);
+        LocalDateTime since = requestedDate.minusDays(120).atStartOfDay(zone).toLocalDateTime();
+        List<DerivativeSnapshot> rows = derivativeSnapshotRepository.findByContractCodeInAndAsOfSince(codes, since);
+        if (rows == null || rows.isEmpty()) {
+            return Optional.empty();
+        }
+        TreeMap<LocalDate, DerivativeSnapshot> dayLast = new TreeMap<>();
+        for (DerivativeSnapshot row : rows) {
+            if (row.getAsOf() == null || row.getPrice() == null || row.getPrice().signum() <= 0) {
+                continue;
+            }
+            LocalDate d = row.getAsOf().atZone(zone).toLocalDate();
+            dayLast.merge(d, row, (a, b) -> a.getAsOf().isBefore(b.getAsOf()) ? b : a);
+        }
+        if (dayLast.isEmpty()) {
+            return Optional.empty();
+        }
+        LocalDateTime requestedEcho = requestedDate.atStartOfDay(zone).toLocalDateTime();
+        DerivativeSnapshot exact = dayLast.get(requestedDate);
+        if (exact != null) {
+            log.info(
+                    "VIOP_PRICE_AT_SNAPSHOT_FALLBACK contractCode={} requestedDate={} matchType=EXACT asOf={}",
+                    canonical,
+                    requestedDate,
+                    exact.getAsOf());
+            return Optional.of(new ViopPriceAtResponse(
+                    canonical,
+                    requestedEcho,
+                    exact.getAsOf(),
+                    exact.getPrice(),
+                    ViopPriceMatchType.EXACT.name(),
+                    SOURCE_LABEL_DERIVATIVE_SNAPSHOT,
+                    ViopDataQuality.OK.name()));
+        }
+        Map.Entry<LocalDate, DerivativeSnapshot> prev = dayLast.lowerEntry(requestedDate);
+        if (prev != null && prev.getValue().getPrice() != null && prev.getValue().getPrice().signum() > 0) {
+            DerivativeSnapshot p = prev.getValue();
+            log.info(
+                    "VIOP_PRICE_AT_SNAPSHOT_FALLBACK contractCode={} requestedDate={} matchType=PREVIOUS_AVAILABLE asOf={}",
+                    canonical,
+                    requestedDate,
+                    p.getAsOf());
+            return Optional.of(new ViopPriceAtResponse(
+                    canonical,
+                    requestedEcho,
+                    p.getAsOf(),
+                    p.getPrice(),
+                    ViopPriceMatchType.PREVIOUS_AVAILABLE.name(),
+                    SOURCE_LABEL_DERIVATIVE_SNAPSHOT,
+                    ViopDataQuality.OK.name()));
+        }
+        return Optional.empty();
     }
 
     private void backfillHistoryForPriceAt(
@@ -1035,6 +1114,30 @@ public class ViopMarketDataService {
 
     private static String canonical(MarketViopProperties.IndexEntry e) {
         return e.getContractCode().trim().toUpperCase();
+    }
+
+    /** İş Yatırım {@code endeks} parametresi genelde {@code SISE0726}; DB anahtarı {@code F_SISE0726}. */
+    private static String providerEndeks(String canonical) {
+        if (canonical == null || canonical.isBlank()) {
+            return canonical;
+        }
+        String u = canonical.trim().toUpperCase();
+        return u.startsWith("F_") ? u.substring(2) : u;
+    }
+
+    private Set<String> contractCodeAliases(String canonical) {
+        LinkedHashSet<String> out = new LinkedHashSet<>();
+        if (canonical == null || canonical.isBlank()) {
+            return out;
+        }
+        String u = canonical.trim().toUpperCase();
+        out.add(u);
+        String stripped = u.startsWith("F_") ? u.substring(2) : u;
+        if (!stripped.isBlank()) {
+            out.add(stripped);
+            out.add("F_" + stripped);
+        }
+        return out;
     }
 
     private void ensureEnabled() {

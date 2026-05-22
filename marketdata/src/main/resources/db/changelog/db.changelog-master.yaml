@@ -43,3 +43,5 @@ databaseChangeLog:
       file: db/changelog/v20-tefas-fund-profile.yaml
   - include:
       file: db/changelog/v21-eurobond-instrument-price.yaml
+  - include:
+      file: db/changelog/v22-bank-fx-latest.yaml

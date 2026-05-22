@@ -16,7 +16,7 @@ class BondPositionMetricsCalculatorTest {
     private final BondPositionMetricsCalculator calculator = new BondPositionMetricsCalculator();
 
     @Test
-    void computesValueAndPnl() {
+    void computesValueAndPricePnl() {
         ManualBondPosition p = ManualBondPosition.createNew(
                 Mockito.mock(com.nurseli.nrsfinanceportal.domain.user.User.class),
                 "TR2034",
@@ -35,9 +35,34 @@ class BondPositionMetricsCalculatorTest {
         var m = calculator.compute(p, LocalDate.of(2026, 5, 19));
         assertThat(m.buyValue()).isEqualByComparingTo("95000");
         assertThat(m.currentValue()).isEqualByComparingTo("100000");
-        assertThat(m.pnl()).isEqualByComparingTo("5000");
-        assertThat(m.returnPct()).isEqualByComparingTo("5.2632");
+        assertThat(m.pricePnl()).isEqualByComparingTo("5000");
         assertThat(m.annualCoupon()).isEqualByComparingTo("8500");
+        assertThat(m.collectedCoupon()).isGreaterThan(BigDecimal.ZERO);
+        assertThat(m.totalReturn()).isGreaterThan(m.pricePnl());
+    }
+
+    @Test
+    void semiAnnualNineMonthsHoldingOneCouponPeriod() {
+        ManualBondPosition p = ManualBondPosition.createNew(
+                Mockito.mock(com.nurseli.nrsfinanceportal.domain.user.User.class),
+                "TRT170227K64",
+                "DİBS",
+                BondType.GOVERNMENT_BOND,
+                "TRY",
+                new BigDecimal("10000"),
+                new BigDecimal("100"),
+                LocalDate.of(2025, 8, 1),
+                new BigDecimal("100"),
+                LocalDate.of(2027, 2, 27),
+                new BigDecimal("17.2"),
+                CouponFrequency.SEMI_ANNUAL,
+                null
+        );
+        var m = calculator.compute(p, LocalDate.of(2026, 5, 1));
+        assertThat(m.periodicCoupon()).isEqualByComparingTo("860");
+        assertThat(m.completedCouponPeriods()).isEqualTo(1);
+        assertThat(m.collectedCoupon()).isEqualByComparingTo("860");
+        assertThat(m.estimatedAccruedCoupon()).isNotNull();
     }
 
     @Test
@@ -59,6 +84,6 @@ class BondPositionMetricsCalculatorTest {
         );
         var m = calculator.compute(p, LocalDate.now());
         assertThat(m.currentValue()).isNull();
-        assertThat(m.pnl()).isNull();
+        assertThat(m.pricePnl()).isNull();
     }
 }

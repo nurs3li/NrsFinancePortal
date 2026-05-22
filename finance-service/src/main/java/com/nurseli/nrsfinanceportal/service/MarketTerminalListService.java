@@ -268,11 +268,7 @@ public class MarketTerminalListService {
                 .collect(Collectors.toMap(
                         r -> norm(r.isin()),
                         Function.identity(),
-                        (a, b) -> {
-                            if (a.asOf() == null) return b;
-                            if (b.asOf() == null) return a;
-                            return b.asOf().isAfter(a.asOf()) ? b : a;
-                        },
+                        MarketTerminalListService::mergeDebtLatestRows,
                         LinkedHashMap::new))
                 .values()
                 .stream()
@@ -582,6 +578,41 @@ public class MarketTerminalListService {
         int safePage = Math.max(0, page);
         return new MarketTerminalListPageResponse(
                 items, safePage, safeSize, totalElements, totalPages, safePage + 1 < totalPages, safePage > 0);
+    }
+
+    private static MarketDataClient.DebtLatestRow mergeDebtLatestRows(
+            MarketDataClient.DebtLatestRow a,
+            MarketDataClient.DebtLatestRow b) {
+        MarketDataClient.DebtLatestRow newer = debtRowIsNewer(a, b) ? a : b;
+        MarketDataClient.DebtLatestRow older = newer == a ? b : a;
+        java.math.BigDecimal price = bd(newer.dirtyPrice()) > 0 ? newer.dirtyPrice() : older.dirtyPrice();
+        java.math.BigDecimal coupon = debtCouponRate(newer) != null ? debtCouponRate(newer) : debtCouponRate(older);
+        java.time.LocalDateTime asOf = newer.asOf() != null ? newer.asOf() : older.asOf();
+        return new MarketDataClient.DebtLatestRow(
+                newer.isin() != null ? newer.isin() : older.isin(),
+                price,
+                newer.yieldPct(),
+                coupon,
+                newer.maturityDate() != null ? newer.maturityDate() : older.maturityDate(),
+                newer.daysToMaturity() != null ? newer.daysToMaturity() : older.daysToMaturity(),
+                newer.synthetic(),
+                asOf,
+                newer.couponFrequencyPerYear() != null ? newer.couponFrequencyPerYear() : older.couponFrequencyPerYear(),
+                newer.couponFrequencyLabel() != null ? newer.couponFrequencyLabel() : older.couponFrequencyLabel(),
+                newer.couponFrequencySource() != null ? newer.couponFrequencySource() : older.couponFrequencySource());
+    }
+
+    private static boolean debtRowIsNewer(MarketDataClient.DebtLatestRow a, MarketDataClient.DebtLatestRow b) {
+        if (a.asOf() == null) return false;
+        if (b.asOf() == null) return true;
+        return a.asOf().isAfter(b.asOf());
+    }
+
+    private static java.math.BigDecimal debtCouponRate(MarketDataClient.DebtLatestRow r) {
+        if (r == null || r.couponRate() == null || r.couponRate().signum() <= 0) {
+            return null;
+        }
+        return r.couponRate();
     }
 
     private record Candidate(String symbol, double price, double changePercent, List<Double> spark, Double volume) {}

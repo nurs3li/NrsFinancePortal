@@ -1,4 +1,16 @@
+/*
+ * Tema değişkenleri ViopBondAnalysis.tsx (pageVars) ile runtime'da güncellenir.
+ * Aşağıdaki değerler light başlangıç + IDE (custom property) çözümlemesi içindir.
+ */
 .vb-page {
+    --tp-bg: #f1f5f9;
+    --tp-card: #ffffff;
+    --tp-border: #e2e8f0;
+    --tp-text: #0f172a;
+    --tp-muted: #64748b;
+    --vb-border: #e2e8f0;
+    --pf-text: #0f172a;
+
     display: flex;
     flex-direction: column;
     gap: 1rem;
@@ -1890,4 +1902,89 @@
     justify-content: flex-end;
     padding-top: 0.5rem;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vb-toast {
+    position: fixed;
+    bottom: 1.25rem;
+    right: 1rem;
+    left: 1rem;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    max-width: 420px;
+    margin-left: auto;
+}
+
+.vb-toast--success {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.45);
+    color: var(--pf-text, #e8ecf4);
+}
+
+.vb-toast--error {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    color: var(--pf-text, #e8ecf4);
+}
+
+.vb-toast-close {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.25rem;
+}
+
+.vb-field-label-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.vb-field-info {
+    position: relative;
+    display: inline-flex;
+    vertical-align: middle;
+}
+
+.vb-field-info-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    opacity: 0.65;
+    cursor: pointer;
+}
+
+.vb-field-info-btn:hover {
+    opacity: 1;
+}
+
+.vb-field-info-panel {
+    position: absolute;
+    z-index: 30;
+    left: 0;
+    top: calc(100% + 4px);
+    min-width: 200px;
+    max-width: min(280px, 70vw);
+    padding: 0.5rem 0.65rem;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--tp-card, #1a2030);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }

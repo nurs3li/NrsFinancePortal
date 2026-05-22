@@ -74,12 +74,13 @@ export function ViopBondAnalysis() {
         '--tp-text': tokens.text,
         '--tp-muted': tokens.textMuted,
         '--vb-border': tokens.border,
+        '--pf-text': tokens.text,
     } as CSSProperties;
 
     return (
         <div className="portfolio-page vb-page" style={pageVars}>
             <header className="vb-page-header">
-                <h1 className="vb-hero-title">{t('viopBond.title', 'VİOP & Tahvil Analizi')}</h1>
+                <h1 className="vb-hero-title">{t('viopBond.title', 'Vadeli Portföyüm')}</h1>
                 <p className="vb-hero-sub" style={{ color: tokens.textMuted }}>
                     {t(
                         'viopBond.subtitle',

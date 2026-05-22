@@ -506,9 +506,9 @@ public class MarketDataClient {
                             .build(code))
                     .retrieve()
                     .bodyToMono(ViopPriceAtRow.class)
-                    .timeout(REQUEST_TIMEOUT.plusSeconds(10))
+                    .timeout(HISTORY_REQUEST_TIMEOUT)
                     .onErrorReturn(null)
-                    .block(REQUEST_TIMEOUT.plusSeconds(12));
+                    .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(5));
             return java.util.Optional.ofNullable(row);
         } catch (RuntimeException ignored) {
             return java.util.Optional.empty();

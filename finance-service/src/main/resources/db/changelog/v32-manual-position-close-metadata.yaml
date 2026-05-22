@@ -1,0 +1,42 @@
+databaseChangeLog:
+  - changeSet:
+      id: v32-manual-viop-close-metadata
+      author: nurseli
+      changes:
+        - addColumn:
+            tableName: manual_viop_positions
+            columns:
+              - column:
+                  name: close_fee
+                  type: NUMERIC(19,6)
+              - column:
+                  name: close_reason
+                  type: VARCHAR(30)
+              - column:
+                  name: realized_pnl
+                  type: NUMERIC(19,6)
+              - column:
+                  name: realized_return_percent
+                  type: NUMERIC(10,4)
+  - changeSet:
+      id: v32-manual-bond-close-metadata
+      author: nurseli
+      changes:
+        - addColumn:
+            tableName: manual_bond_positions
+            columns:
+              - column:
+                  name: close_type
+                  type: VARCHAR(20)
+              - column:
+                  name: close_fee
+                  type: NUMERIC(19,6)
+              - column:
+                  name: collected_coupon_amount
+                  type: NUMERIC(19,6)
+              - column:
+                  name: realized_pnl
+                  type: NUMERIC(19,6)
+              - column:
+                  name: realized_return_percent
+                  type: NUMERIC(10,4)

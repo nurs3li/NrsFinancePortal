@@ -66,11 +66,27 @@ export function BondPositionDetailDrawer({ position, cpiYoY = null, tokens, onCl
                 {row(t('viopBond.colBuyPrice', 'Alış fiyatı'), fmtMoney(position.buyPrice, locale))}
                 {row(t('viopBond.colCurrentPrice', 'Güncel fiyat'), fmtMoney(position.currentPrice, locale))}
                 {row(
-                    t('viopBond.colPnl', 'Fiyat K/Z'),
-                    <span className={pnlClass(position.pnl)}>{fmtMoney(position.pnl, locale)}</span>,
+                    t('viopBond.colPricePnl', 'Fiyat K/Z'),
+                    <span className={pnlClass(position.pricePnl ?? position.pnl)}>
+                        {fmtMoney(position.pricePnl ?? position.pnl, locale)}
+                    </span>,
                 )}
                 {row(
-                    t('viopBond.colReturn', 'Nominal getiri'),
+                    t('viopBond.colCollectedCoupon', 'Tahmini tahsil edilen kupon'),
+                    fmtMoney(position.collectedCoupon, locale),
+                )}
+                {row(
+                    t('viopBond.colTotalReturn', 'Toplam getiri'),
+                    <span className={pnlClass(position.totalReturn)}>
+                        {fmtMoney(position.totalReturn, locale)}
+                    </span>,
+                )}
+                {row(
+                    t('viopBond.colTotalReturnPct', 'Toplam getiri %'),
+                    <span className={pctClass(position.totalReturnPercent)}>{fmtPct(position.totalReturnPercent, locale)}</span>,
+                )}
+                {row(
+                    t('viopBond.colReturn', 'Fiyat getiri %'),
                     <span className={pctClass(position.returnPct)}>{fmtPct(position.returnPct, locale)}</span>,
                 )}
                 {row(

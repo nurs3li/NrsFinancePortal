@@ -1493,7 +1493,7 @@ export function Portfolio() {
     if (loading) {
         return (
             <div className="portfolio-page" style={pageStyle}>
-                <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{t('portfolio.analysisTitle', 'Portföy analizi')}</h1>
+                <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{t('portfolio.analysisTitle', 'Spot Portföyüm')}</h1>
                 <p style={{ color: tokens.textMuted }}>{t('common.loading', 'Yükleniyor...')}</p>
             </div>
         );
@@ -1502,7 +1502,7 @@ export function Portfolio() {
     if (pageError) {
         return (
             <div className="portfolio-page" style={pageStyle}>
-                <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{t('portfolio.analysisTitle', 'Portföy analizi')}</h1>
+                <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{t('portfolio.analysisTitle', 'Spot Portföyüm')}</h1>
                 <p style={{ color: tokens.error }}>
                     {t('news.errorPrefix', 'Hata')}: {pageError}
                 </p>
@@ -1534,7 +1534,7 @@ export function Portfolio() {
         >
             <header className="pf-dash-header portfolio-fade-in">
                 <div className="pf-dash-header-text">
-                    <h1 className="pf-dash-title">{t('portfolio.analysisTitle', 'Portföy analizi')}</h1>
+                    <h1 className="pf-dash-title">{t('portfolio.analysisTitle', 'Spot Portföyüm')}</h1>
                     <p className="pf-dash-subtitle" style={{ color: tokens.textMuted }}>
                         {t(
                             'portfolio.heroSubtitleManual',

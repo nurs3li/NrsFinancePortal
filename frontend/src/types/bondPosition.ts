@@ -1,6 +1,7 @@
 export type BondType = 'GOVERNMENT_BOND' | 'TREASURY_BILL' | 'EUROBOND' | 'CORPORATE_BOND';
 export type CouponFrequency = 'NONE' | 'ANNUAL' | 'SEMI_ANNUAL' | 'QUARTERLY';
 export type BondPositionStatus = 'OPEN' | 'SOLD' | 'DELETED';
+export type BondCloseType = 'SALE' | 'REDEMPTION';
 
 export type ManualBondPosition = {
     id: number;
@@ -18,11 +19,23 @@ export type ManualBondPosition = {
     status: BondPositionStatus;
     sellPrice?: number | null;
     sellDate?: string | null;
+    closeType?: BondCloseType | null;
+    closeFee?: number | null;
+    collectedCouponAmount?: number | null;
+    realizedPnl?: number | null;
+    realizedReturnPercent?: number | null;
     buyValue?: number | null;
     currentValue?: number | null;
     pnl?: number | null;
+    pricePnl?: number | null;
     returnPct?: number | null;
     annualCoupon?: number | null;
+    periodicCoupon?: number | null;
+    completedCouponPeriods?: number | null;
+    collectedCoupon?: number | null;
+    estimatedAccruedCoupon?: number | null;
+    totalReturn?: number | null;
+    totalReturnPercent?: number | null;
     daysToMaturity?: number | null;
     note?: string | null;
 };
@@ -32,6 +45,8 @@ export type BondPositionSummary = {
     totalNominalValue: number;
     totalCurrentValue: number;
     totalPnl: number;
+    totalPricePnl?: number | null;
+    totalCollectedCoupon?: number | null;
     averageReturnPct?: number | null;
     annualCouponEstimate?: number | null;
     expiringSoonCount: number;
@@ -57,6 +72,10 @@ export type ManualBondPositionCreatePayload = {
 export type ManualBondPositionSellPayload = {
     sellPrice: number;
     sellDate: string;
+    closeType?: BondCloseType;
+    collectedCouponAmount?: number;
+    fee?: number;
+    note?: string;
 };
 
 export type ViopBondCombinedSummary = {

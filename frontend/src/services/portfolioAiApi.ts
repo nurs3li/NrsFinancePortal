@@ -456,6 +456,17 @@ export async function getPortfolioAiEmailDelivery(): Promise<PortfolioAiEmailDel
     }
 }
 
+export async function sendPortfolioAiAnalysisReportEmail(analysisId: string): Promise<void> {
+    try {
+        const res = await financeClient.post<ApiEnvelope<null>>(
+            `/api/portfolio/ai/analyses/${encodeURIComponent(analysisId)}/email/me`,
+        );
+        unwrapFinanceSuccess(res);
+    } catch (err) {
+        throwApiError(err);
+    }
+}
+
 export async function upsertPortfolioAiEmailDelivery(
     payload: PortfolioAiEmailDeliveryUpsert,
 ): Promise<PortfolioAiEmailDeliverySettings> {

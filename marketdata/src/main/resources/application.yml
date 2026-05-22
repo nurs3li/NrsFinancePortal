@@ -389,6 +389,18 @@ app:
     history-incremental-cron: ${ETF_HISTORY_INCREMENTAL_CRON:0 45 6 * * *}
     history-incremental-days: ${ETF_HISTORY_INCREMENTAL_DAYS:30}
   market:
+    bank-rates:
+      enabled: ${DOVIZBORSA_SCRAPER_ENABLED:true}
+      url: ${DOVIZBORSA_BANK_RATES_URL:https://dovizborsa.com/banka/}
+      cron: ${DOVIZBORSA_BANK_RATES_CRON:0 0 */2 * * *}
+      zone: ${DOVIZBORSA_BANK_RATES_ZONE:Europe/Istanbul}
+      stale-after-hours: ${DOVIZBORSA_BANK_RATES_STALE_HOURS:24}
+      user-agent: ${DOVIZBORSA_USER_AGENT:NrsFinancePortal/1.0}
+      connect-timeout-ms: ${DOVIZBORSA_CONNECT_TIMEOUT_MS:10000}
+      read-timeout-ms: ${DOVIZBORSA_READ_TIMEOUT_MS:20000}
+      scrape-on-startup: ${DOVIZBORSA_SCRAPE_ON_STARTUP:true}
+      startup-delay-ms: ${DOVIZBORSA_STARTUP_DELAY_MS:240000}
+      min-interval-between-scrapes-ms: ${DOVIZBORSA_MIN_SCRAPE_INTERVAL_MS:300000}
     fx:
       # TCMB ingest aralığı (ms). HTTP /doviz/latest canlı çekmez; DB + snapshot okur.
       scheduler-ms: 3600000

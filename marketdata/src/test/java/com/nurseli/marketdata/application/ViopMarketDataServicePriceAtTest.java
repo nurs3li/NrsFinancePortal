@@ -3,7 +3,9 @@ package com.nurseli.marketdata.application;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nurseli.marketdata.api.dto.ViopPriceAtResponse;
 import com.nurseli.marketdata.config.MarketViopProperties;
+import com.nurseli.marketdata.domain.derivatives.DerivativeSnapshot;
 import com.nurseli.marketdata.domain.viop.ViopPriceHistoryEntity;
+import com.nurseli.marketdata.repository.DerivativeSnapshotRepository;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopClient;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopHistoricalParser;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopSnapshotParser;
@@ -21,6 +23,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,6 +48,9 @@ class ViopMarketDataServicePriceAtTest {
     @Mock
     private ViopQueryService viopQueryService;
 
+    @Mock
+    private DerivativeSnapshotRepository derivativeSnapshotRepository;
+
     private ViopMarketDataService service;
 
     @BeforeEach
@@ -64,6 +70,18 @@ class ViopMarketDataServicePriceAtTest {
         e.setChartType("PRICE_SERIES");
         e.setEnabled(true);
         props.getWhitelist().getFx().add(e);
+        MarketViopProperties.IndexEntry eq = new MarketViopProperties.IndexEntry();
+        eq.setContractCode("F_SISE0726");
+        eq.setUnderlying("SISE");
+        eq.setDisplayName("SISE Pay Vadeli");
+        eq.setContractName("SISE Temmuz 2026 Vadeli");
+        eq.setMaturityMonth(7);
+        eq.setMaturityYear(2026);
+        eq.setAssetClass("EQUITY");
+        eq.setSegment("EQUITY_FUTURES");
+        eq.setChartType("PRICE_SERIES");
+        eq.setEnabled(true);
+        props.getWhitelist().getEquity().add(eq);
 
         service = new ViopMarketDataService(
                 props,
@@ -73,6 +91,7 @@ class ViopMarketDataServicePriceAtTest {
                 new IsYatirimViopSnapshotParser(new ObjectMapper()),
                 historyRepository,
                 snapshotRepository,
+                derivativeSnapshotRepository,
                 viopQueryService);
     }
 
@@ -129,10 +148,32 @@ class ViopMarketDataServicePriceAtTest {
                 .thenReturn(List.of());
         when(historyRepository.findTopByContractCodeAndPriceTimeLessThanOrderByPriceTimeDesc(anyString(), any()))
                 .thenReturn(Optional.empty());
+        when(derivativeSnapshotRepository.findByContractCodeInAndAsOfSince(any(), any()))
+                .thenReturn(List.of());
 
         ViopPriceAtResponse r = service.getPriceAt("F_USDTRY1226", day);
         assertThat(r.matchType()).isEqualTo(ViopPriceMatchType.NOT_FOUND.name());
         assertThat(r.price()).isNull();
+    }
+
+    @Test
+    void priceAtFallsBackToDerivativeSnapshotSeries() {
+        LocalDate day = LocalDate.of(2026, 3, 4);
+        when(historyRepository.findByContractCodeAndPriceTimeBetweenOrderByPriceTimeAsc(anyString(), any(), any()))
+                .thenReturn(List.of());
+        when(historyRepository.findTopByContractCodeAndPriceTimeLessThanOrderByPriceTimeDesc(anyString(), any()))
+                .thenReturn(Optional.empty());
+        DerivativeSnapshot snap = new DerivativeSnapshot();
+        snap.setContractCode("SISE0726");
+        snap.setAsOf(LocalDateTime.of(2026, 3, 4, 18, 0));
+        snap.setPrice(new BigDecimal("55.45"));
+        when(derivativeSnapshotRepository.findByContractCodeInAndAsOfSince(any(Set.class), any()))
+                .thenReturn(List.of(snap));
+
+        ViopPriceAtResponse r = service.getPriceAt("SISE0726", day);
+        assertThat(r.matchType()).isEqualTo(ViopPriceMatchType.EXACT.name());
+        assertThat(r.price()).isEqualByComparingTo(new BigDecimal("55.45"));
+        assertThat(r.source()).isEqualTo("VIOP_SNAPSHOT_SERIES");
     }
 
     private static ViopPriceHistoryEntity row(LocalDateTime t, String price) {

@@ -22,7 +22,9 @@
 
 ## iframe + Keycloak notu
 
-Portal ve Grafana farklı origin’deyse tarayıcı oturumu paylaşılmaz. Üretim için öneri: reverse proxy ile aynı site altında Grafana (`/grafana/`) ve Grafana’da Keycloak OIDC. Geliştirmede: deep link yeni sekmede veya Grafana’da sınırlı anonymous viewer (risk kabulüyle).
+Portal ve Grafana farklı origin’deyse tarayıcı oturumu paylaşılmaz. Üretim için öneri: reverse proxy ile aynı site altında Grafana (`/grafana/`) ve Grafana’da Keycloak OIDC.
+
+**Docker (local):** `docker-compose.yml` içinde Grafana için `GF_AUTH_ANONYMOUS_ENABLED=true` ve `Viewer` rolü açıktır; Audit Logs iframe’leri şifre sormadan yüklenir. Canlı ortamda bu ayarları kullanmayın.
 
 ## Log alanı
 

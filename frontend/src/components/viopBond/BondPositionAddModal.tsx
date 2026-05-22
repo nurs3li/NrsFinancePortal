@@ -12,9 +12,11 @@ import type { PositionHistoricalPriceResolve } from '../../types/historicalPrice
 import type { TerminalListInstrumentVm } from '../../utils/marketTerminalListVm';
 import { bondCurrencyFromInstrument, bondTypeFromInstrument } from './viopBondMarket';
 import { bondTypeLabel, couponFrequencyLabel } from './bondPositionLabels';
-import { computeBondLive } from './viopBondCalculations';
+import { inferBondCouponDefaults } from './bondCouponInference';
+import { computeBondPositionMetrics } from './viopBondCalculations';
 import { fmtLocaleDecimal, fmtMoney, fmtPct, parseLocaleDecimal } from './formatViopBond';
 import { HistoricalPriceResolveBanner } from './HistoricalPriceResolveBanner';
+import { VbFieldInfo } from './VbFieldInfo';
 
 type Props = {
     open: boolean;
@@ -83,14 +85,18 @@ export function BondPositionAddModal({
                   : '',
         );
         setMaturityDate(editPosition?.maturityDate ?? instrument?.maturityDate?.slice(0, 10) ?? '');
+        const couponDefaults = inferBondCouponDefaults({
+            couponRate: editPosition?.couponRate ?? instrument?.couponRate,
+            couponFrequencyPerYear: instrument?.couponFrequencyPerYear,
+            couponFrequency: editPosition?.couponFrequency ?? undefined,
+            bondType: editPosition?.bondType ?? bondTypeFromInstrument(sym, instrument?.displayName),
+        });
         setCouponRate(
-            editPosition?.couponRate != null
-                ? String(editPosition.couponRate)
-                : instrument?.couponRate != null
-                  ? String(instrument.couponRate)
-                  : '',
+            couponDefaults.couponRate != null && couponDefaults.couponRate > 0
+                ? String(couponDefaults.couponRate)
+                : '',
         );
-        setCouponFrequency(editPosition?.couponFrequency ?? 'NONE');
+        setCouponFrequency(couponDefaults.couponFrequency);
         setNote(editPosition?.note ?? '');
         setError(null);
         setPriceResolve(null);
@@ -99,16 +105,33 @@ export function BondPositionAddModal({
     const buyPriceNum = parseLocaleDecimal(buyPriceInput, locale) ?? 0;
     const nominalNum = parseLocaleDecimal(nominalValue, locale) ?? 0;
 
+    const couponRateNum = couponFrequency === 'NONE' ? 0 : couponRate ? Number(couponRate) : null;
+    const couponDisabled = couponFrequency === 'NONE';
+
     const live = useMemo(
         () =>
-            computeBondLive({
+            computeBondPositionMetrics({
                 nominalValue: nominalNum,
                 buyPrice: buyPriceNum,
                 currentPrice: effectiveCurrent,
-                couponRate: couponRate ? Number(couponRate) : null,
+                buyDate,
+                couponRate: couponRateNum,
+                couponFrequency,
             }),
-        [nominalNum, buyPriceNum, effectiveCurrent, couponRate],
+        [nominalNum, buyPriceNum, effectiveCurrent, buyDate, couponRateNum, couponFrequency],
     );
+
+    const summaryReady = nominalNum > 0 && buyPriceNum > 0;
+
+    const handleCouponFrequencyChange = (freq: CouponFrequency) => {
+        setCouponFrequency(freq);
+        if (freq === 'NONE') {
+            setCouponRate('0');
+        } else if (!couponRate || Number(couponRate) === 0) {
+            const fromInst = instrument?.couponRate ?? editPosition?.couponRate;
+            if (fromInst != null && fromInst > 0) setCouponRate(String(fromInst));
+        }
+    };
 
     const formatOnBlur = (value: string, setter: (v: string) => void) => {
         const n = parseLocaleDecimal(value, locale);
@@ -149,7 +172,7 @@ export function BondPositionAddModal({
                 buyDate,
                 currentPrice: effectiveCurrent ?? undefined,
                 maturityDate: maturityDate || undefined,
-                couponRate: couponRate ? Number(couponRate) : undefined,
+                couponRate: couponDisabled ? 0 : couponRateNum != null && couponRateNum > 0 ? couponRateNum : undefined,
                 couponFrequency,
                 note: note.trim() || undefined,
             });
@@ -258,7 +281,15 @@ export function BondPositionAddModal({
                             <h4>{t('viopBond.sectionPosition', 'Pozisyon Bilgileri')}</h4>
                             <div className="vb-form-fields">
                                 <label className="vb-field">
-                                    {t('viopBond.colNominal', 'Nominal değer')}
+                                    <span className="vb-field-label-row">
+                                        {t('viopBond.colNominal', 'Nominal değer')}
+                                        <VbFieldInfo
+                                            text={t(
+                                                'viopBond.tipNominal',
+                                                'Tahvilin vade sonunda geri ödenecek ana para tutarıdır.',
+                                            )}
+                                        />
+                                    </span>
                                     <input
                                         type="text"
                                         inputMode="decimal"
@@ -282,7 +313,15 @@ export function BondPositionAddModal({
                                     />
                                 </label>
                                 <label className="vb-field vb-field--full">
-                                    {t('viopBond.colBuyPrice', 'Alış fiyatı (100)')}
+                                    <span className="vb-field-label-row">
+                                        {t('viopBond.colBuyPrice', 'Alış fiyatı (100)')}
+                                        <VbFieldInfo
+                                            text={t(
+                                                'viopBond.tipBuyPrice100',
+                                                'Tahvil fiyatları genellikle 100 nominal değer üzerinden gösterilir. 95 iskontolu, 105 primli fiyat anlamına gelir.',
+                                            )}
+                                        />
+                                    </span>
                                     <div className="vb-field-actions">
                                         <input
                                             type="text"
@@ -319,20 +358,37 @@ export function BondPositionAddModal({
                                     </label>
                                 ) : null}
                                 <label className="vb-field">
-                                    {t('viopBond.colCouponRate', 'Kupon oranı %')}
+                                    <span className="vb-field-label-row">
+                                        {t('viopBond.colCouponRate', 'Kupon oranı %')}
+                                        <VbFieldInfo
+                                            text={t(
+                                                'viopBond.tipCouponRate',
+                                                'Tahvilin yıllık faiz ödeme oranıdır. Kupon oranı piyasa getirisiyle aynı şey değildir.',
+                                            )}
+                                        />
+                                    </span>
                                     <input
                                         type="number"
                                         min="0"
                                         step="any"
                                         value={couponRate}
+                                        disabled={couponDisabled}
                                         onChange={(e) => setCouponRate(e.target.value)}
                                     />
                                 </label>
                                 <label className="vb-field">
-                                    {t('viopBond.colCouponFreq', 'Kupon sıklığı')}
+                                    <span className="vb-field-label-row">
+                                        {t('viopBond.colCouponFreq', 'Kupon sıklığı')}
+                                        <VbFieldInfo
+                                            text={t(
+                                                'viopBond.tipCouponFreq',
+                                                'Tahvilin yılda kaç kez kupon ödemesi yaptığını gösterir. EVDS’de kupon oranı bulunan DİBS’ler için varsayılan 6 ayda birdir.',
+                                            )}
+                                        />
+                                    </span>
                                     <select
                                         value={couponFrequency}
-                                        onChange={(e) => setCouponFrequency(e.target.value as CouponFrequency)}
+                                        onChange={(e) => handleCouponFrequencyChange(e.target.value as CouponFrequency)}
                                     >
                                         {FREQUENCIES.map((f) => (
                                             <option key={f} value={f}>
@@ -350,28 +406,97 @@ export function BondPositionAddModal({
 
                         <section className="vb-modal-section vb-live-summary">
                             <h4>{t('viopBond.sectionLive', 'Canlı Hesap Özeti')}</h4>
-                            <div className="vb-live-row">
-                                <span>{t('viopBond.colBuyValue', 'Alış değeri')}</span>
-                                <strong>{fmtMoney(live.buyValue, locale)}</strong>
-                            </div>
-                            <div className="vb-live-row">
-                                <span>{t('viopBond.colValue', 'Güncel değer')}</span>
-                                <strong>{fmtMoney(live.currentValue, locale)}</strong>
-                            </div>
-                            <div className="vb-live-row">
-                                <span>{t('viopBond.colPnl', 'Fiyat K/Z')}</span>
-                                <strong className={live.pnl != null && live.pnl >= 0 ? 'vb-pos' : 'vb-neg'}>
-                                    {fmtMoney(live.pnl, locale)}
-                                </strong>
-                            </div>
-                            <div className="vb-live-row">
-                                <span>{t('viopBond.colReturn', 'Getiri')}</span>
-                                <strong>{fmtPct(live.returnPct, locale)}</strong>
-                            </div>
-                            <div className="vb-live-row">
-                                <span>{t('viopBond.bondCoupon', 'Yıllık kupon')}</span>
-                                <strong>{fmtMoney(live.annualCoupon, locale)}</strong>
-                            </div>
+                            {!summaryReady ? (
+                                <p className="vb-muted-sm">
+                                    {t(
+                                        'viopBond.summaryEmpty',
+                                        'Nominal değer ve alış fiyatı girildiğinde tahvil hesap özeti burada görünecek.',
+                                    )}
+                                </p>
+                            ) : (
+                                <>
+                                    <div className="vb-live-row">
+                                        <span>{t('viopBond.colBuyValue', 'Alış değeri')}</span>
+                                        <strong>{fmtMoney(live.buyValue, locale)}</strong>
+                                    </div>
+                                    <div className="vb-live-row">
+                                        <span>{t('viopBond.colValue', 'Güncel değer')}</span>
+                                        <strong>{fmtMoney(live.currentValue, locale)}</strong>
+                                    </div>
+                                    <div className="vb-live-row">
+                                        <span className="vb-field-label-row">
+                                            {t('viopBond.colPricePnl', 'Fiyat K/Z')}
+                                            <VbFieldInfo
+                                                text={t(
+                                                    'viopBond.tipPricePnl',
+                                                    'Alış fiyatı ile güncel fiyat arasındaki değer değişimidir. Kupon geliri bu kaleme dahil değildir.',
+                                                )}
+                                            />
+                                        </span>
+                                        <strong
+                                            className={
+                                                live.pricePnl != null && live.pricePnl >= 0 ? 'vb-pos' : 'vb-neg'
+                                            }
+                                        >
+                                            {fmtMoney(live.pricePnl, locale)}
+                                        </strong>
+                                    </div>
+                                    <div className="vb-live-row">
+                                        <span className="vb-field-label-row">
+                                            {t('viopBond.colCollectedCoupon', 'Tahmini tahsil edilen kupon')}
+                                            <VbFieldInfo
+                                                text={t(
+                                                    'viopBond.tipCollectedCoupon',
+                                                    'Alış tarihinden bugüne tamamlanan kupon dönemleri için yaklaşık hesap. Gerçek ödeme takvimi yoksa tahminidir.',
+                                                )}
+                                            />
+                                        </span>
+                                        <strong>{fmtMoney(live.collectedCoupon, locale)}</strong>
+                                    </div>
+                                    {live.estimatedAccruedCoupon != null && live.estimatedAccruedCoupon > 0 ? (
+                                        <div className="vb-live-row">
+                                            <span>{t('viopBond.colAccruedCoupon', 'Tahmini birikmiş kupon')}</span>
+                                            <strong>{fmtMoney(live.estimatedAccruedCoupon, locale)}</strong>
+                                        </div>
+                                    ) : null}
+                                    {live.periodicCoupon != null && couponFrequency !== 'NONE' ? (
+                                        <div className="vb-live-row vb-live-meta">
+                                            <span>
+                                                {t('viopBond.bondCoupon', 'Yıllık kupon')}:{' '}
+                                                {fmtMoney(live.annualCoupon, locale)} ·{' '}
+                                                {couponFrequency === 'SEMI_ANNUAL'
+                                                    ? t('viopBond.semiAnnualCoupon', '6 aylık kupon')
+                                                    : t('viopBond.periodicCoupon', 'Dönemsel kupon')}
+                                                : {fmtMoney(live.periodicCoupon, locale)}
+                                            </span>
+                                        </div>
+                                    ) : null}
+                                    <div className="vb-live-row">
+                                        <span className="vb-field-label-row">
+                                            {t('viopBond.colTotalReturn', 'Toplam getiri')}
+                                            <VbFieldInfo
+                                                text={t(
+                                                    'viopBond.tipTotalReturn',
+                                                    'Fiyat K/Z ve tahsil edilen kupon gelirinin toplamıdır. Birikmiş kupon ayrıca eklenmez.',
+                                                )}
+                                            />
+                                        </span>
+                                        <strong
+                                            className={
+                                                live.totalReturn != null && live.totalReturn >= 0
+                                                    ? 'vb-pos'
+                                                    : 'vb-neg'
+                                            }
+                                        >
+                                            {fmtMoney(live.totalReturn, locale)}
+                                        </strong>
+                                    </div>
+                                    <div className="vb-live-row">
+                                        <span>{t('viopBond.colTotalReturnPct', 'Toplam getiri %')}</span>
+                                        <strong>{fmtPct(live.totalReturnPercent, locale)}</strong>
+                                    </div>
+                                </>
+                            )}
                         </section>
                     </div>
 
