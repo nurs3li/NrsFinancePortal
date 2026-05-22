@@ -18,11 +18,6 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Setup Python 3
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-
       - name: Run finance-service tests
         run: |
           cd finance-service
@@ -33,9 +28,19 @@ jobs:
           cd marketdata
           bash ../mvnw -q test
 
-      - name: Run endpoint contract coverage gate
+      - name: Generate API catalog (static)
+        run: bash tools/generate_api_catalog.sh
+
+      - name: Check API catalog drift
         run: |
-          python3 tools/endpoint_contract_gate.py
+          git diff --exit-code docs/api/endpoints.md || (
+            echo "::warning::docs/api/endpoints.md out of date — run: bash tools/generate_api_catalog.sh"
+            exit 0
+          )
+        continue-on-error: true
+
+      - name: Run endpoint contract coverage gate
+        run: bash tools/endpoint_contract_gate.sh
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
