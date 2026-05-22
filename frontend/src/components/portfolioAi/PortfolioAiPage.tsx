@@ -13,6 +13,7 @@ import {
     getLatestPortfolioAiAnalysis,
     getPortfolioContextSnapshot,
     requestCurrentPortfolioAiAnalysis,
+    sendPortfolioAiAnalysisReportEmail,
 } from '../../services/portfolioAiApi';
 import { readFinanceApiError } from '../../services/manualPortfolioApi';
 import type {
@@ -52,6 +53,8 @@ export function PortfolioAiPage() {
     const [displayResult, setDisplayResult] = useState<AiAnalysisResult | null>(null);
     const [viewingHistoryId, setViewingHistoryId] = useState<string | null>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [successMsg, setSuccessMsg] = useState<string | null>(null);
+    const [emailFlowPending, setEmailFlowPending] = useState(false);
     const [titleError, setTitleError] = useState<string | null>(null);
     const [analysisTitle, setAnalysisTitle] = useState('');
     const [pfType, setPfType] = useState<PortfolioAnalysisType>('GENERAL');
@@ -142,6 +145,7 @@ export function PortfolioAiPage() {
             setDisplayResult(r);
             setViewingHistoryId(null);
             setErrorMsg(null);
+            setSuccessMsg(null);
             setSelectedSymbol(null);
             void refetchHistory();
             void refetchLatest();
@@ -221,7 +225,76 @@ export function PortfolioAiPage() {
         }
         setTitleError(null);
         setErrorMsg(null);
+        setSuccessMsg(null);
         portfolioMutation.mutate(portfolioPayload());
+    };
+
+    const handleEmailAnalyze = async () => {
+        const trimmed = analysisTitle.trim();
+        if (!trimmed) {
+            setTitleError(t('portfolioAi.titleRequired', 'Başlık zorunludur.'));
+            return;
+        }
+        setTitleError(null);
+        setErrorMsg(null);
+        setSuccessMsg(null);
+        setEmailFlowPending(true);
+        try {
+            const result = await requestCurrentPortfolioAiAnalysis(portfolioPayload());
+            setDisplayResult(result);
+            setViewingHistoryId(null);
+            setSelectedSymbol(null);
+            void refetchHistory();
+            void refetchLatest();
+            await sendPortfolioAiAnalysisReportEmail(result.id);
+            setSuccessMsg(
+                t(
+                    'portfolioAi.emailAnalyzeSent',
+                    'AI analizi tamamlandı ve rapor e-posta adresinize gönderildi.',
+                ),
+            );
+        } catch (err) {
+            const { message } = readFinanceApiError(err);
+            const timedOut = axios.isAxiosError(err) && err.code === 'ECONNABORTED';
+            if (timedOut) {
+                setErrorMsg(
+                    t(
+                        'portfolioAi.analysisTimeout',
+                        'Analiz beklenenden uzun sürdü (zaman aşımı). Birkaç saniye sonra sayfayı yenileyin; sonuç kaydedilmiş olabilir.',
+                    ),
+                );
+                const { data: latest } = await refetchLatest();
+                if (latest?.kind === 'PORTFOLIO') {
+                    setDisplayResult(latest);
+                    try {
+                        await sendPortfolioAiAnalysisReportEmail(latest.id);
+                        setSuccessMsg(
+                            t(
+                                'portfolioAi.emailAnalyzeSent',
+                                'AI analizi tamamlandı ve rapor e-posta adresinize gönderildi.',
+                            ),
+                        );
+                        setErrorMsg(null);
+                    } catch (emailErr) {
+                        const em = readFinanceApiError(emailErr).message;
+                        setErrorMsg(
+                            em ||
+                                t(
+                                    'portfolioAi.emailAnalyzeFailed',
+                                    'Analiz kaydedildi ancak e-posta gönderilemedi.',
+                                ),
+                        );
+                    }
+                }
+                return;
+            }
+            setErrorMsg(
+                message ||
+                    t('portfolioAi.emailAnalyzeFailed', 'Analiz veya e-posta gönderimi başarısız oldu.'),
+            );
+        } finally {
+            setEmailFlowPending(false);
+        }
     };
 
     const handleDeleteHistory = (id: string, title: string) => {
@@ -251,9 +324,17 @@ export function PortfolioAiPage() {
                         t={t}
                         locale={locale}
                         portfolioResult={portfolioResult}
+                        emailFlowPending={emailFlowPending || portfolioMutation.isPending}
+                        onEmailAnalyze={() => void handleEmailAnalyze()}
                     />
                 </div>
             </header>
+
+            {successMsg ? (
+                <p className="pf-ai-success-banner" role="status">
+                    {successMsg}
+                </p>
+            ) : null}
 
             <div className="pf-ai-dashboard">
                 <div className="pf-ai-dashboard__row pf-ai-dashboard__row--top">
@@ -279,7 +360,7 @@ export function PortfolioAiPage() {
                         setIncMacro={setIncMacro}
                         incInflation={incInflation}
                         setIncInflation={setIncInflation}
-                        pending={portfolioMutation.isPending}
+                        pending={portfolioMutation.isPending || emailFlowPending}
                         errorMsg={errorMsg}
                         onAnalyze={handleAnalyze}
                     />

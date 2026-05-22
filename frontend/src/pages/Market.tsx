@@ -6594,7 +6594,7 @@ export function Market() {
                                 })()}
                                 <div style={{ marginTop: 10 }}>
                                     <button type="button" className="terminal-btn active" onClick={() => navigate('/portfolio')}>
-                                        {t('nav.portfolio', 'Portföy Analizi')}
+                                        {t('nav.portfolio', 'Spot Portföyüm')}
                                     </button>
                                 </div>
                                 <div style={{ marginTop: 12 }}>
@@ -6729,7 +6729,7 @@ export function Market() {
                                 </div>
                                 <div style={{ marginTop: 10 }}>
                                     <button type="button" className="terminal-btn active" onClick={() => navigate('/portfolio')}>
-                                        {t('nav.portfolio', 'Portföy Analizi')}
+                                        {t('nav.portfolio', 'Spot Portföyüm')}
                                     </button>
                                 </div>
                                 <div style={{ marginTop: 12 }}>

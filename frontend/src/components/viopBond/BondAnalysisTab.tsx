@@ -18,6 +18,9 @@ import type { TerminalListInstrumentVm } from '../../utils/marketTerminalListVm'
 import { fetchAllTerminalInstruments } from './viopBondMarket';
 import { fmtMoney } from './formatViopBond';
 import { BondPositionAddModal } from './BondPositionAddModal';
+import { CloseFixedIncomePositionModal } from './CloseFixedIncomePositionModal';
+import { ViopBondToast } from './ViopBondToast';
+import type { ManualBondPositionSellPayload } from '../../types/bondPosition';
 import { BondPositionDetailDrawer } from './BondPositionDetailDrawer';
 import { BondPositionsSection } from './BondPositionsSection';
 import { BondAnalyticsSection } from './BondAnalyticsSection';
@@ -47,6 +50,8 @@ export function BondAnalysisTab({ tokens }: Props) {
         referencePrice?: number | null;
     } | null>(null);
     const [detailPosition, setDetailPosition] = useState<ManualBondPosition | null>(null);
+    const [closePosition, setClosePosition] = useState<ManualBondPosition | null>(null);
+    const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
     const { data: rows = [], isLoading: positionsLoading } = useQuery({
         queryKey: bondPositionKeys.list(),
@@ -86,9 +91,16 @@ export function BondAnalysisTab({ tokens }: Props) {
     });
     const deleteMut = useMutation({ mutationFn: deleteBondPosition, onSuccess: invalidate });
     const sellMut = useMutation({
-        mutationFn: ({ id, price, date }: { id: number; price: number; date: string }) =>
-            sellBondPosition(id, { sellPrice: price, sellDate: date }),
-        onSuccess: invalidate,
+        mutationFn: ({ id, payload }: { id: number; payload: ManualBondPositionSellPayload }) =>
+            sellBondPosition(id, payload),
+        onSuccess: () => {
+            invalidate();
+            setClosePosition(null);
+            setToast({
+                message: t('viopBond.closeSuccess', 'Pozisyon başarıyla kapatıldı.'),
+                variant: 'success',
+            });
+        },
     });
 
     const openPositions = useMemo(() => rows.filter((r) => r.status === 'OPEN'), [rows]);
@@ -122,14 +134,7 @@ export function BondAnalysisTab({ tokens }: Props) {
     };
 
     const handleSell = (row: ManualBondPosition) => {
-        const priceStr = window.prompt(
-            t('viopBond.promptSellPrice', 'Satış fiyatı'),
-            String(row.currentPrice ?? row.buyPrice),
-        );
-        if (!priceStr) return;
-        const date = window.prompt(t('viopBond.promptSellDate', 'Satış tarihi'), new Date().toISOString().slice(0, 10));
-        if (!date) return;
-        sellMut.mutate({ id: row.id, price: Number(priceStr), date });
+        setClosePosition(row);
     };
 
     const tabKpis = [
@@ -137,11 +142,26 @@ export function BondAnalysisTab({ tokens }: Props) {
         { label: t('viopBond.bondNominal', 'Toplam Nominal'), value: fmtMoney(summary?.totalNominalValue, locale) },
         { label: t('viopBond.bondCurrent', 'Güncel Değer'), value: fmtMoney(summary?.totalCurrentValue, locale) },
         {
-            label: t('viopBond.bondPnl', 'Fiyat K/Z'),
+            label: t('viopBond.bondPricePnl', 'Fiyat K/Z'),
+            value: fmtMoney(summary?.totalPricePnl ?? summary?.totalPnl, locale),
+            hint: t('viopBond.bondPricePnlHint', 'Sadece fiyat değişiminden gelen K/Z'),
+            pos: (summary?.totalPricePnl ?? summary?.totalPnl ?? 0) >= 0,
+        },
+        {
+            label: t('viopBond.bondCouponIncome', 'Kupon geliri'),
+            value: fmtMoney(summary?.totalCollectedCoupon, locale),
+            hint: t('viopBond.bondCouponIncomeHint', 'Tahmini tahsil edilmiş kupon toplamı'),
+        },
+        {
+            label: t('viopBond.bondTotalReturn', 'Toplam getiri'),
             value: fmtMoney(summary?.totalPnl, locale),
+            hint: t(
+                'viopBond.bondTotalReturnHint',
+                'Fiyat K/Z + tahsil edilen kupon. Üst karttaki toplam K/Z bu kalemi de içerir.',
+            ),
             pos: (summary?.totalPnl ?? 0) >= 0,
         },
-        { label: t('viopBond.bondCoupon', 'Yıllık Kupon'), value: fmtMoney(summary?.annualCouponEstimate, locale) },
+        { label: t('viopBond.bondCoupon', 'Yıllık kupon (tahmini)'), value: fmtMoney(summary?.annualCouponEstimate, locale) },
         {
             label: t('viopBond.bondExpiring', 'Yaklaşan Vade'),
             value:
@@ -224,6 +244,32 @@ export function BondAnalysisTab({ tokens }: Props) {
                     })
                 }
             />
+
+            <CloseFixedIncomePositionModal
+                open={closePosition != null}
+                position={closePosition}
+                onClose={() => setClosePosition(null)}
+                onSubmit={async (payload) => {
+                    if (!closePosition) return;
+                    try {
+                        await sellMut.mutateAsync({ id: closePosition.id, payload });
+                    } catch (e) {
+                        setToast({
+                            message: readFinanceApiError(e).message,
+                            variant: 'error',
+                        });
+                        throw e;
+                    }
+                }}
+            />
+
+            {toast ? (
+                <ViopBondToast
+                    message={toast.message}
+                    variant={toast.variant}
+                    onDismiss={() => setToast(null)}
+                />
+            ) : null}
 
             <BondPositionAddModal
                 open={modalOpen}

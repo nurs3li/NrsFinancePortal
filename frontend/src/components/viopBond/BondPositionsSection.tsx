@@ -134,7 +134,9 @@ export function BondPositionsSection({
                     </div>
                     <div>
                         <span style={{ color: tokens.textMuted }}>{t('viopBond.colPnl', 'K/Z')}</span>
-                        <div className={pnlClass(row.pnl)}>{fmtMoney(row.pnl, locale)}</div>
+                        <div className={pnlClass(row.totalReturn ?? row.pnl)}>
+                            {fmtMoney(row.totalReturn ?? row.pnl, locale)}
+                        </div>
                     </div>
                     <div>
                         <span style={{ color: tokens.textMuted }}>{t('viopBond.colReturn', 'Getiri')}</span>
@@ -251,8 +253,20 @@ export function BondPositionsSection({
                                             <td>{row.currency}</td>
                                             <td>{fmtMoney(row.nominalValue, locale)}</td>
                                             <td>{fmtMoney(row.currentValue, locale)}</td>
-                                            <td className={pnlClass(row.pnl)}>{fmtMoney(row.pnl, locale)}</td>
-                                            <td className={pctClass(row.returnPct)}>{fmtPct(row.returnPct, locale)}</td>
+                                            <td className={pnlClass(row.totalReturn ?? row.pnl)}>
+                                                {fmtMoney(row.totalReturn ?? row.pnl, locale)}
+                                                {(row.collectedCoupon ?? 0) > 0 ? (
+                                                    <div className="vb-cell-sub">
+                                                        {t('viopBond.colPricePnl', 'Fiyat')}:{' '}
+                                                        {fmtMoney(row.pricePnl ?? row.pnl, locale)} ·{' '}
+                                                        {t('viopBond.couponShort', 'Kupon')}:{' '}
+                                                        {fmtMoney(row.collectedCoupon, locale)}
+                                                    </div>
+                                                ) : null}
+                                            </td>
+                                            <td className={pctClass(row.totalReturnPercent ?? row.returnPct)}>
+                                                {fmtPct(row.totalReturnPercent ?? row.returnPct, locale)}
+                                            </td>
                                             <td className={pctClass(real)} title={cpiYoY != null ? `TÜFE YoY ${cpiYoY}%` : ''}>
                                                 {real != null ? fmtPct(real, locale) : '—'}
                                             </td>

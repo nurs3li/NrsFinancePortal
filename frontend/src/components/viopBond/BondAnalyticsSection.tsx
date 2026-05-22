@@ -44,9 +44,13 @@ export function BondAnalyticsSection({
         return openPositions.map((r) => {
             let value = 0;
             if (chartMode === 'value') value = Math.abs(Number(r.currentValue ?? 0));
-            else if (chartMode === 'pnl') value = Math.abs(Number(r.pnl ?? 0));
-            else value = Math.abs(Number(r.annualCoupon ?? r.couponRate ?? 0));
-            return { name: r.symbol, value, signed: Number(r.pnl ?? 0) };
+            else if (chartMode === 'pnl') value = Math.abs(Number(r.pricePnl ?? r.pnl ?? 0));
+            else value = Math.abs(Number(r.collectedCoupon ?? r.annualCoupon ?? 0));
+            return {
+                name: r.symbol,
+                value,
+                signed: Number(chartMode === 'pnl' ? (r.pricePnl ?? r.pnl ?? 0) : (r.totalReturn ?? r.pnl ?? 0)),
+            };
         });
     }, [openPositions, chartMode]);
 

@@ -77,11 +77,22 @@ export function classifyViopContract(contractCode: string): AssetClass {
     return 'FUTURES_EQUITY';
 }
 
+/** Yerli devlet tahvil/bono ISIN: TRT…, TRD… veya TR + vade kodu (Eurobond değil). */
+export function isDomesticGovernmentBondIsin(isin: string | undefined | null): boolean {
+    const s = String(isin ?? '').toUpperCase();
+    return s.startsWith('TRT') || s.startsWith('TRD') || /^TR[A-Z0-9]\d{6}/.test(s);
+}
+
 export function classifyDebtInstrument(name: string | undefined, issuer: string | undefined, isin: string): AssetClass {
     const n = String(name ?? '').toUpperCase();
     const i = String(issuer ?? '').toUpperCase();
     const s = String(isin ?? '').toUpperCase();
-    if (n.includes('EUROBOND') || i.includes('EUROBOND') || s.includes('XS')) return 'BOND_EUROBOND';
+
+    if (isDomesticGovernmentBondIsin(s)) {
+        return 'BOND_GOV';
+    }
+
+    if (n.includes('EUROBOND') || i.includes('EUROBOND') || s.startsWith('XS')) return 'BOND_EUROBOND';
     if (
         s.startsWith('US900') ||
         n.includes('TÜRKİYE') ||
@@ -102,10 +113,6 @@ export function classifyDebtInstrument(name: string | undefined, issuer: string 
         n.includes('GOVERNMENT') ||
         n.includes('CUMHURIYET')
     ) {
-        return 'BOND_GOV';
-    }
-    // Yerli devlet tahvil/bono ISIN: TRT…, TRD… veya TR + vade kodu
-    if (s.startsWith('TRT') || s.startsWith('TRD') || /^TR[A-Z0-9]\d{6}/.test(s)) {
         return 'BOND_GOV';
     }
     return 'BOND_CORP';

@@ -1,0 +1,445 @@
+/*
+ * Tema renkleri BankRatesPage.tsx (pageStyle) ile runtime'da güncellenir.
+ * Aşağıdaki değerler light başlangıç + IDE (custom property) çözümlemesi içindir.
+ */
+.bank-rates-dashboard {
+    --br-bg: #f1f5f9;
+    --br-card: #ffffff;
+    --br-border: #e2e8f0;
+    --br-text: #0f172a;
+    --br-muted: #64748b;
+    --br-accent: #1d4ed8;
+
+    padding: 1.25rem 1.5rem 2.5rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    color: var(--br-text);
+    background: var(--br-bg);
+    min-height: 100%;
+}
+
+.br-dash-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.br-dash-header__title h1 {
+    margin: 0;
+    font-size: 1.65rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.br-dash-header__info {
+    opacity: 0.5;
+}
+
+.br-dash-header__sub {
+    margin: 0.35rem 0 0;
+    font-size: 0.875rem;
+    color: var(--br-muted);
+    max-width: 520px;
+}
+
+.br-dash-header__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.br-dash-header__time {
+    font-size: 0.8rem;
+    color: var(--br-muted);
+}
+
+.br-dash-header__time.is-stale {
+    color: #f59e0b;
+}
+
+.br-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem 1.5rem;
+    margin-bottom: 1.25rem;
+    padding: 1rem 1.1rem;
+    border-radius: 12px;
+    border: 1px solid var(--br-border);
+    background: var(--br-card);
+}
+
+.br-controls__label {
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--br-muted);
+    margin-bottom: 0.35rem;
+}
+
+.br-seg {
+    display: inline-flex;
+    border-radius: 8px;
+    border: 1px solid var(--br-border);
+    overflow: hidden;
+}
+
+.br-seg__btn {
+    padding: 0.4rem 0.85rem;
+    border: none;
+    background: transparent;
+    color: var(--br-text);
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.br-seg__btn.is-on {
+    background: color-mix(in srgb, var(--br-accent) 22%, transparent);
+    color: var(--br-accent);
+}
+
+.br-select {
+    padding: 0.45rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--br-border);
+    background: var(--br-bg);
+    color: var(--br-text);
+    font-size: 0.85rem;
+    min-width: 180px;
+}
+
+.br-controls__notice {
+    flex: 1 1 220px;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--br-muted);
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--br-accent) 8%, var(--br-card));
+    border: 1px solid color-mix(in srgb, var(--br-accent) 25%, var(--br-border));
+}
+
+.br-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.9rem;
+    border-radius: 8px;
+    border: 1px solid var(--br-border);
+    background: var(--br-card);
+    color: var(--br-text);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.br-btn--primary {
+    background: var(--br-accent);
+    border-color: var(--br-accent);
+    color: #fff;
+}
+
+.br-btn--ghost:hover {
+    border-color: var(--br-accent);
+}
+
+.br-btn--icon {
+    padding: 0.45rem;
+}
+
+.br-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.br-spin {
+    animation: br-spin 0.8s linear infinite;
+}
+
+@keyframes br-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* KPI strip */
+.br-kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+@media (max-width: 1100px) {
+    .br-kpi-strip {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.br-kpi-card {
+    border-radius: 12px;
+    border: 1px solid var(--br-border);
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.br-kpi-card--highlight {
+    border-color: color-mix(in srgb, var(--br-accent) 40%, var(--br-border));
+}
+
+.br-kpi-card__label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--br-muted);
+}
+
+.br-kpi-card__head {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-top: 0.15rem;
+}
+
+.br-kpi-card__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.br-kpi-card__bank {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.br-kpi-card__value {
+    font-size: 1.1rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.br-kpi-card__value--pos {
+    color: #22c55e;
+}
+
+.br-kpi-card__value--neg {
+    color: #f43f5e;
+}
+
+.br-kpi-card__dual {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.8rem;
+}
+
+.br-kpi-card__hint {
+    font-size: 0.75rem;
+}
+
+/* Card grid */
+.br-card-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.85rem;
+    margin-bottom: 1.25rem;
+}
+
+@media (max-width: 1200px) {
+    .br-card-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .br-card-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.br-bank-card {
+    position: relative;
+    border-radius: 14px;
+    border: 1px solid var(--br-border);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.br-bank-card__head {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.br-logo {
+    flex-shrink: 0;
+    border-radius: 10px;
+    object-fit: contain;
+}
+
+.br-logo--md {
+    width: 40px;
+    height: 40px;
+}
+
+.br-logo--sm {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+}
+
+.br-logo--img {
+    background: #fff;
+    padding: 4px;
+}
+
+.br-logo--fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.75rem;
+    color: #fff;
+}
+
+.br-bank-card__name {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.br-bank-card__code {
+    font-size: 0.7rem;
+    font-family: ui-monospace, monospace;
+}
+
+.br-bank-card__rates {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.br-bank-card__rates span {
+    display: block;
+    font-size: 0.7rem;
+}
+
+.br-bank-card__rates strong {
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.br-bank-card__spread {
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--br-border);
+    font-size: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.br-bank-card__spread strong {
+    color: #f59e0b;
+    font-size: 0.85rem;
+}
+
+.br-trend--up {
+    color: #22c55e;
+    margin-left: auto;
+}
+
+.br-trend--down {
+    color: #ef4444;
+    margin-left: auto;
+}
+
+.br-table-panel {
+    border-radius: 14px;
+    border: 1px solid var(--br-border);
+    padding: 1rem;
+    min-width: 0;
+}
+
+.br-table-panel__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.br-table-panel__head h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.br-table-wrap {
+    overflow-x: auto;
+}
+
+.br-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.br-table th,
+.br-table td {
+    padding: 0.55rem 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--br-border);
+    white-space: nowrap;
+}
+
+.br-table th {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--br-muted);
+}
+
+.br-table-bank {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.br-num--pos {
+    color: #22c55e;
+}
+
+.br-num--neg {
+    color: #f43f5e;
+}
+
+.br-table-pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.br-empty {
+    text-align: center;
+    padding: 3rem;
+    color: var(--br-muted);
+}

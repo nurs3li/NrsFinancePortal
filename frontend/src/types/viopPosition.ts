@@ -1,6 +1,7 @@
 export type ViopCategory = 'FX' | 'INDEX' | 'COMMODITY' | 'EQUITY';
 export type ViopDirection = 'LONG' | 'SHORT';
 export type ViopPositionStatus = 'OPEN' | 'CLOSED' | 'DELETED';
+export type ViopCloseReason = 'MANUAL_CLOSE' | 'TAKE_PROFIT' | 'STOP_LOSS' | 'EXPIRY';
 
 export type ManualViopPosition = {
     id: number;
@@ -19,6 +20,10 @@ export type ManualViopPosition = {
     status: ViopPositionStatus;
     closePrice?: number | null;
     closeDate?: string | null;
+    closeFee?: number | null;
+    closeReason?: ViopCloseReason | null;
+    realizedPnl?: number | null;
+    realizedReturnPercent?: number | null;
     unrealizedPnl?: number | null;
     riskExposure?: number | null;
     netFinancialEffect?: number | null;
@@ -57,4 +62,7 @@ export type ManualViopPositionCreatePayload = {
 export type ManualViopPositionClosePayload = {
     closePrice: number;
     closeDate: string;
+    fee?: number;
+    closeReason?: ViopCloseReason;
+    note?: string;
 };

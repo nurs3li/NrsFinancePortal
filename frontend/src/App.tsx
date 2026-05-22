@@ -14,6 +14,7 @@ import { News } from './pages/News';
 import { Market } from './pages/Market';
 import { MarketMacroPage } from './pages/MarketMacroPage';
 import { MarketHeatmap } from './pages/MarketHeatmap';
+import { BankRatesPage } from './pages/BankRatesPage';
 import { Portfolio } from './pages/Portfolio';
 import { PortfolioAiAnalysis } from './pages/PortfolioAiAnalysis';
 import { Simulation } from './pages/Simulation';
@@ -78,6 +79,14 @@ function App() {
                                     element={
                                         <ProtectedRoute>
                                             <MarketMacroPage />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/market/bank-rates"
+                                    element={
+                                        <ProtectedRoute>
+                                            <BankRatesPage />
                                         </ProtectedRoute>
                                     }
                                 />

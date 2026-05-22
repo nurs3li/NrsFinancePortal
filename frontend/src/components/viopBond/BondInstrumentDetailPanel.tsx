@@ -151,7 +151,9 @@ export function BondInstrumentDetailPanel({
                           {row(t('viopBond.colCurrentPrice', 'Güncel fiyat'), fmtMoney(matchedPosition.currentPrice, locale))}
                           {row(
                               t('viopBond.colPnl', 'Fiyat K/Z'),
-                              <span className={pnlClass(matchedPosition.pnl)}>{fmtMoney(matchedPosition.pnl, locale)}</span>,
+                              <span className={pnlClass(matchedPosition.totalReturn ?? matchedPosition.pnl)}>
+                                  {fmtMoney(matchedPosition.totalReturn ?? matchedPosition.pnl, locale)}
+                              </span>,
                           )}
                           {row(
                               t('viopBond.colReturn', 'Nominal getiri'),
