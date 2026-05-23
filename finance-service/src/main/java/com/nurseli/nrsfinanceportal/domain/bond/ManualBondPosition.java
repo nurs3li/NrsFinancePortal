@@ -7,6 +7,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 
+/**
+ * Manuel tahvil/eurobond pozisyonu entity; nominal, kupon, vade, alış/satış
+ * ve realize PnL alanlarını içerir.
+ */
 @Entity
 @Table(name = "manual_bond_positions")
 public class ManualBondPosition {

@@ -2,8 +2,8 @@ package com.nurseli.marketdata.application;
 
 import com.nurseli.marketdata.domain.derivatives.DerivativeContract;
 import com.nurseli.marketdata.domain.derivatives.DerivativeSnapshot;
-import com.nurseli.marketdata.repository.DerivativeContractRepository;
-import com.nurseli.marketdata.repository.DerivativeSnapshotRepository;
+import com.nurseli.marketdata.infrastructure.persistence.DerivativeContractRepository;
+import com.nurseli.marketdata.infrastructure.persistence.DerivativeSnapshotRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

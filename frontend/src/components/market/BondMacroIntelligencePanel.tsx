@@ -1451,7 +1451,7 @@ export function BondMacroIntelligencePanel({ tokens }: Props) {
         >
             <div style={{ padding: '12px 14px 10px' }}>
                 <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: tokens.text }}>
-                    {t('market.bondMacroPanelTitle', 'Faiz & Enflasyon Paneli / Macro Intelligence')}
+                    {t('market.bondMacroPanelTitle', 'Makro Finans Paneli')}
                 </h3>
                 <p style={{ margin: '6px 0 0', fontSize: 11, color: tokens.textMuted, lineHeight: 1.35 }}>
                     {t(

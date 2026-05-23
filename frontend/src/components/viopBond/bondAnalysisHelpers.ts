@@ -60,10 +60,20 @@ export function bondRiskTag(
     return parts.length ? parts.join(' · ') : t('viopBond.riskBalanced', 'Dengeli');
 }
 
+/** @deprecated Tahvil reel getiri backend `periodRealReturnPercent` kullanır. */
 export function approxRealReturnPct(nominalReturnPct: number | null | undefined, cpiYoY: number | null): number | null {
     if (nominalReturnPct == null || !Number.isFinite(nominalReturnPct)) return null;
     if (cpiYoY == null || !Number.isFinite(cpiYoY)) return null;
     return nominalReturnPct - cpiYoY;
+}
+
+export function bondPeriodRealReturnPercent(position: {
+    periodRealReturnAvailable?: boolean | null;
+    periodRealReturnPercent?: number | null;
+}): number | null {
+    if (position.periodRealReturnAvailable !== true) return null;
+    const v = position.periodRealReturnPercent;
+    return v != null && Number.isFinite(Number(v)) ? Number(v) : null;
 }
 
 export function buildCombinedRiskReasons(

@@ -9,7 +9,7 @@ import com.nurseli.marketdata.infrastructure.bist.BistProviderError;
 import com.nurseli.marketdata.infrastructure.bist.BistProviderResult;
 import com.nurseli.marketdata.infrastructure.bist.BistProviderSource;
 import com.nurseli.marketdata.infrastructure.bist.BistSymbolCatalog;
-import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
+import com.nurseli.marketdata.infrastructure.persistence.MarketPriceHistoryRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

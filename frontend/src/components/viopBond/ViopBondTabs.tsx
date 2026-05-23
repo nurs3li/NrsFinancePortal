@@ -23,7 +23,7 @@ export function ViopBondTabs({ active, onChange, viopLabel, bondLabel, tokens }:
     };
 
     const bondHelp = {
-        title: t('viopBond.bondHowToRead', 'Tahvil & eurobond nasıl okunur?'),
+        title: t('viopBond.bondHowToRead', 'Tahvil & bono nasıl okunur?'),
         body: t(
             'viopBond.bondHowToReadBody',
             'Kupon oranı ile piyasa getirisi (yield) aynı şey değildir. Güncel değer nominal × fiyat/100 ile hesaplanır. Fiyat K/Z, alış ile güncel fiyat farkından oluşur. Reel getiri, TÜFE verisi varsa nominal getiriden enflasyon etkisi arındırılarak gösterilir.',

@@ -2,7 +2,7 @@ package com.nurseli.marketdata.config;
 
 import com.nurseli.marketdata.application.eurobond.EurobondEvdsIngestService;
 import com.nurseli.marketdata.application.eurobond.EurobondInstrumentIngestService;
-import com.nurseli.marketdata.repository.EurobondWeeklyObservationRepository;
+import com.nurseli.marketdata.infrastructure.persistence.EurobondWeeklyObservationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(prefix = "app.market.eurobonds.evds.backfill", name = "startup-enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(prefix = "market.bootstrap", name = "orchestrate-startup", havingValue = "false")
 public class EurobondEvdsStartupBackfill {
 
     private final EurobondEvdsProperties properties;

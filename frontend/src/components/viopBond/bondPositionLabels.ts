@@ -7,7 +7,7 @@ export function bondTypeLabel(type: BondType, t: (k: string, d: string) => strin
         case 'TREASURY_BILL':
             return t('viopBond.bondTypeBill', 'Hazine Bonosu');
         case 'EUROBOND':
-            return t('viopBond.bondTypeEuro', 'Eurobond');
+            return t('viopBond.bondTypeGov', 'Devlet Tahvili');
         case 'CORPORATE_BOND':
         default:
             return t('viopBond.bondTypeCorp', 'Özel Sektör Tahvili');

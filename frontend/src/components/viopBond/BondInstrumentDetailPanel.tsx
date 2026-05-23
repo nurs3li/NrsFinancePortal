@@ -4,19 +4,19 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import type { ManualBondPosition } from '../../types/bondPosition';
 import type { TerminalListInstrumentVm } from '../../utils/marketTerminalListVm';
 import {
-    approxRealReturnPct,
+    bondPeriodRealReturnPercent,
     bondRiskTag,
     displayBondType,
     maturityBucket,
     maturityBucketLabel,
 } from './bondAnalysisHelpers';
+import { bondRealReturnMissingTitle } from './BondRealReturnHeader';
 import { fmtDate, fmtMoney, fmtPct } from './formatViopBond';
 import { pctClass, pnlClass } from './vbTabShared';
 
 type Props = {
     instrument: TerminalListInstrumentVm;
     matchedPosition: ManualBondPosition | null;
-    cpiYoY: number | null;
     tokens: { border: string; bgCard: string; textMuted: string; text?: string };
     onAddPosition: () => void;
     onSetAlert: () => void;
@@ -26,7 +26,6 @@ type Props = {
 export function BondInstrumentDetailPanel({
     instrument,
     matchedPosition,
-    cpiYoY,
     tokens,
     onAddPosition,
     onSetAlert,
@@ -38,7 +37,7 @@ export function BondInstrumentDetailPanel({
     const days = instrument.daysToMaturity;
     const bucket = maturityBucket(days);
     const yieldPct = instrument.yieldToMaturity;
-    const realReturn = matchedPosition ? approxRealReturnPct(matchedPosition.returnPct, cpiYoY) : null;
+    const realReturn = matchedPosition ? bondPeriodRealReturnPercent(matchedPosition) : null;
 
     const section = (title: string, children: ReactNode) => (
         <div className="vb-detail-section">
@@ -156,21 +155,22 @@ export function BondInstrumentDetailPanel({
                               </span>,
                           )}
                           {row(
-                              t('viopBond.colReturn', 'Nominal getiri'),
-                              <span className={pctClass(matchedPosition.returnPct)}>
-                                  {fmtPct(matchedPosition.returnPct, locale)}
+                              t('viopBond.colReturn', 'Nom. getiri'),
+                              <span className={pctClass(matchedPosition.totalReturnPercent ?? matchedPosition.returnPct)}>
+                                  {fmtPct(matchedPosition.totalReturnPercent ?? matchedPosition.returnPct, locale)}
                               </span>,
                           )}
                           {row(
-                              t('viopBond.colRealReturn', 'Reel getiri'),
+                              t('viopBond.colRealReturnPeriod', 'Dönemsel reel getiri'),
                               realReturn != null ? (
                                   <span className={pctClass(realReturn)}>{fmtPct(realReturn, locale)}</span>
                               ) : (
-                                  <span title={t('viopBond.realMissing', 'TÜFE verisi yok')}>—</span>
+                                  <span title={bondRealReturnMissingTitle(t)}>—</span>
                               ),
-                              cpiYoY != null
-                                  ? t('viopBond.realHint', 'Nominal getiri − TÜFE YoY ({cpi}%)').replace('{cpi}', String(cpiYoY.toFixed(1)))
-                                  : undefined,
+                              t(
+                                  'viopBond.colRealReturnTooltip',
+                                  'Reel getiri, nominal getirinin enflasyondan arındırılmış halidir. Tahvil pozisyonlarında bu hesaplama, pozisyonun alış tarihinden bugüne kadar gerçekleşen TÜFE değişimiyle yapılır. Yıllık TÜFE doğrudan çıkarılmaz.',
+                              ),
                           )}
                           {row(
                               t('viopBond.annualCouponEst', 'Yıllık kupon tahmini'),

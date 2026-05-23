@@ -6,8 +6,8 @@ import com.nurseli.marketdata.api.dto.TefasFundRowDto;
 import com.nurseli.marketdata.config.TefasProperties;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.domain.tefas.TefasFundProfile;
-import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
-import com.nurseli.marketdata.repository.TefasFundProfileRepository;
+import com.nurseli.marketdata.infrastructure.persistence.MarketPriceHistoryRepository;
+import com.nurseli.marketdata.infrastructure.persistence.TefasFundProfileRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +19,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.NavigableMap;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -120,10 +122,15 @@ public class TefasFundService {
         }
         Map<String, TefasFundProfile> profiles = profileRepository.findByCodeIn(symbols).stream()
                 .collect(Collectors.toMap(TefasFundProfile::getCode, Function.identity(), (a, b) -> a));
+        Map<String, NavigableMap<LocalDate, Double>> priceByDay = loadTefasDailyPrices(symbols, 14);
         List<TefasFundRowDto> out = new ArrayList<>(symbols.size());
         for (String code : symbols) {
             TefasFundProfile profile = profiles.get(code);
-            Double price = latestPrice(code);
+            NavigableMap<LocalDate, Double> series = priceByDay.get(code);
+            Double price = latestFromSeries(series);
+            if (price == null) {
+                price = latestPrice(code);
+            }
             out.add(new TefasFundRowDto(
                     code,
                     profile != null ? profile.getTitle() : code,
@@ -131,6 +138,8 @@ public class TefasFundService {
                     profile != null ? profile.getRiskLevel() : null,
                     profile == null || profile.getTefasListed() == null || profile.getTefasListed(),
                     price,
+                    returnPctFromSeries(series, 1),
+                    returnPctFromSeries(series, 7),
                     profile != null ? profile.getReturn1m() : null,
                     profile != null ? profile.getReturn3m() : null,
                     profile != null ? profile.getReturn6m() : null,
@@ -141,6 +150,60 @@ public class TefasFundService {
                     TefasFundIngestService.SOURCE_TEFAS));
         }
         return out;
+    }
+
+    private Map<String, NavigableMap<LocalDate, Double>> loadTefasDailyPrices(List<String> symbols, int lookbackDays) {
+        if (symbols == null || symbols.isEmpty()) {
+            return Map.of();
+        }
+        LocalDate end = LocalDate.now().plusDays(1);
+        LocalDate start = end.minusDays(Math.max(lookbackDays, 2));
+        List<MarketPriceHistory> rows = priceRepository.findBySymbolsAndSourceAndTimestampRange(
+                symbols, TefasFundIngestService.SOURCE_TEFAS, start.atStartOfDay(), end.atStartOfDay());
+        Map<String, NavigableMap<LocalDate, Double>> out = new java.util.HashMap<>();
+        for (MarketPriceHistory row : rows) {
+            if (row.getTimestamp() == null) {
+                continue;
+            }
+            double px = mid(row);
+            if (px <= 0) {
+                continue;
+            }
+            LocalDate day = row.getTimestamp().toLocalDate();
+            out.computeIfAbsent(row.getSymbol(), k -> new TreeMap<>()).put(day, px);
+        }
+        return out;
+    }
+
+    private static Double latestFromSeries(NavigableMap<LocalDate, Double> series) {
+        if (series == null || series.isEmpty()) {
+            return null;
+        }
+        return series.lastEntry().getValue();
+    }
+
+    /**
+     * Pay değeri serisinden getiri % — 1G: önceki iş günü, 1H: ~7 takvim günü önceki kapanış.
+     */
+    private static Double returnPctFromSeries(NavigableMap<LocalDate, Double> series, int calendarDaysBack) {
+        if (series == null || series.size() < 2) {
+            return null;
+        }
+        Map.Entry<LocalDate, Double> lastEntry = series.lastEntry();
+        double last = lastEntry.getValue();
+        if (!(last > 0)) {
+            return null;
+        }
+        Map.Entry<LocalDate, Double> refEntry;
+        if (calendarDaysBack <= 1) {
+            refEntry = series.lowerEntry(lastEntry.getKey());
+        } else {
+            refEntry = series.floorEntry(lastEntry.getKey().minusDays(calendarDaysBack));
+        }
+        if (refEntry == null || refEntry.getValue() <= 0) {
+            return null;
+        }
+        return ((last - refEntry.getValue()) / refEntry.getValue()) * 100.0;
     }
 
     private double mid(MarketPriceHistory row) {
@@ -170,6 +233,8 @@ public class TefasFundService {
                             Comparator.comparing(f -> nullSafe(f.fundType()), String.CASE_INSENSITIVE_ORDER);
                     case "risk", "risklevel" -> Comparator.comparing(f -> f.riskLevel() != null ? f.riskLevel() : -1);
                     case "price" -> Comparator.comparing(f -> f.price() != null ? f.price() : 0.0);
+                    case "return1d", "pctday", "getiri1g" -> Comparator.comparing(f -> nz(f.return1d()));
+                    case "return1w", "pctweek", "getiri1h" -> Comparator.comparing(f -> nz(f.return1w()));
                     case "return1m", "pctmonth", "getiri1a" -> Comparator.comparing(f -> nz(f.return1m()));
                     case "return3m", "getiri3a" -> Comparator.comparing(f -> nz(f.return3m()));
                     case "return6m", "getiri6a" -> Comparator.comparing(f -> nz(f.return6m()));

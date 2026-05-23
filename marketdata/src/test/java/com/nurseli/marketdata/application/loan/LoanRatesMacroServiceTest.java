@@ -21,6 +21,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -35,7 +36,7 @@ class LoanRatesMacroServiceTest {
     @Mock
     private LoanRatesPersistenceService loanRatesPersistenceService;
     @Mock
-    private com.nurseli.marketdata.repository.LoanRateWeeklyObservationRepository loanRateWeeklyObservationRepository;
+    private com.nurseli.marketdata.infrastructure.persistence.LoanRateWeeklyObservationRepository loanRateWeeklyObservationRepository;
 
     @InjectMocks
     private LoanRatesMacroService service;
@@ -67,7 +68,7 @@ class LoanRatesMacroServiceTest {
         assertEquals(0, new BigDecimal("61.55").compareTo(
                 r.items().stream().filter(i -> "CONSUMER_TRY".equals(i.type())).findFirst().orElseThrow().value()
         ));
-        verify(loanRatesPersistenceService).upsert(eq("TP_KTF10"), eq(LoanRateSubtype.CONSUMER_TRY), eq(LocalDate.of(2026, 5, 8)), eq(new BigDecimal("61.55")));
+        verify(loanRatesPersistenceService).upsertAll(anyList());
     }
 
     @Test

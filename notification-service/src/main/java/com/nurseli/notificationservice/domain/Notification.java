@@ -5,6 +5,10 @@ import lombok.*;
 
 import java.time.Instant;
 
+/**
+ * Uygulama içi bildirim kaydını temsil eder; kullanıcıya gösterilen başlık, gövde ve okunma durumu
+ * {@code nrs_notification.notifications} tablosunda saklanır.
+ */
 @Entity
 @Table(name = "notifications", schema = "nrs_notification")
 @Getter
@@ -49,6 +53,10 @@ public class Notification {
     @Column(name = "last_occurred_at")
     private Instant lastOccurredAt;
 
+    /**
+     * {@code createdAt} — Kayıt oluşturulurken {@code createdAt} ve {@code lastOccurredAt} alanlarını
+     * doldurur; değer verilmemişse şu anki zamanı kullanır.
+     */
     @PrePersist
     void createdAt() {
         if (createdAt == null) {

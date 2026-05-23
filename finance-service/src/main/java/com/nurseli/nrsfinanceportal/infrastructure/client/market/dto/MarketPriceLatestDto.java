@@ -5,6 +5,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * Market data güncel fiyat DTO.
+ */
 /** market-data-service {@code MarketPriceLatestResponse} ile uyumlu (döviz dahil). */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record MarketPriceLatestDto(

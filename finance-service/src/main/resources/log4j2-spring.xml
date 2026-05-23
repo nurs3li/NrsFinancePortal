@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="WARN" monitorInterval="30" packages="com.nurseli.nrsfinanceportal.logging">
+<Configuration status="WARN" monitorInterval="30" packages="com.nurseli.nrsfinanceportal.infrastructure.logging">
     <Properties>
         <Property name="LOG_PATTERN">{"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}","level":"%p","service":"${SERVICE_NAME}","correlationId":"%X{correlationId:-}","traceId":"%X{trace_id:-}","spanId":"%X{span_id:-}","thread":"%t","logger":"%c{1.}","message":"%enc{%m}{JSON}"}%n</Property>
         <Property name="SERVICE_NAME">finance-service</Property>
-        <Property name="KAFKA_BOOTSTRAP">${env:KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}</Property>
+        <!-- Canonical: SPRING_KAFKA_BOOTSTRAP_SERVERS (compose). KAFKA_BOOTSTRAP_SERVERS: deprecated alias. -->
+        <Property name="KAFKA_BOOTSTRAP">${env:SPRING_KAFKA_BOOTSTRAP_SERVERS:-${env:KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}}</Property>
     </Properties>
 
     <Appenders>

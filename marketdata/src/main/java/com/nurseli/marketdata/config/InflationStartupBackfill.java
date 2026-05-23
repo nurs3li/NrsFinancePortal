@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(prefix = "market.inflation.backfill", name = "startup-enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "market.bootstrap", name = "orchestrate-startup", havingValue = "false")
 public class InflationStartupBackfill {
 
     private final InflationBackfillProperties inflationBackfillProperties;

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import { financeClient } from '../api/client';
+import { financeClient, readFinanceBinaryErrorMessage } from '../api/client';
 import { NrsBrandLockup } from '../components/NrsBrandLockup';
 import { LandingHeroCarousel } from '../components/landing/LandingHeroCarousel';
 import { LandingFeaturesFlip } from '../components/landing/LandingFeaturesFlip';
@@ -43,17 +43,26 @@ function parseOAuthErrorsFromLocation(): string | null {
 }
 
 export function LandingPage() {
-    const { login, ready } = useAuth();
+    const { loginWithCredentials, ready, isAuthenticated, role } = useAuth();
+    const navigate = useNavigate();
     const { lang, setLang, t } = useLanguage();
     const [searchParams, setSearchParams] = useSearchParams();
     const [langOpen, setLangOpen] = useState(false);
     const [panelOpen, setPanelOpen] = useState(false);
     const [panelTab, setPanelTab] = useState<'register' | 'signin'>('signin');
     const [loginError, setLoginError] = useState<string | null>(null);
+    const [loginBusy, setLoginBusy] = useState(false);
+    const [loginUsername, setLoginUsername] = useState('');
+    const [loginPassword, setLoginPassword] = useState('');
+    const [loginOtp, setLoginOtp] = useState('');
+    const [loginRemember, setLoginRemember] = useState(false);
+    const [loginOtpStep, setLoginOtpStep] = useState(false);
     const [registerBusy, setRegisterBusy] = useState(false);
     const [registerMessage, setRegisterMessage] = useState<string | null>(null);
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [email, setEmail] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -63,6 +72,14 @@ export function LandingPage() {
     const trailId = useRef(0);
 
     const suspendedBanner = useMemo(() => searchParams.get('suspended'), [searchParams]);
+    const signinBanner = useMemo(() => searchParams.get('signin'), [searchParams]);
+
+    useEffect(() => {
+        if (signinBanner === '1') {
+            setPanelOpen(true);
+            setPanelTab('signin');
+        }
+    }, [signinBanner]);
 
     useEffect(() => {
         const fromOAuth = parseOAuthErrorsFromLocation();
@@ -115,9 +132,53 @@ export function LandingPage() {
         setPanelTab(tab);
         setPanelOpen(true);
         setLoginError(null);
+        setLoginOtpStep(false);
+        setLoginOtp('');
         setRegisterError(null);
         setRegisterMessage(null);
     }, []);
+
+    useEffect(() => {
+        if (!ready || !isAuthenticated) return;
+        const dest = role === 'ADMIN' ? '/market' : '/dashboard';
+        navigate(dest, { replace: true });
+    }, [ready, isAuthenticated, role, navigate]);
+
+    const submitLogin = async () => {
+        setLoginError(null);
+        if (!loginUsername.trim() || !loginPassword) {
+            setLoginError(t('landing.loginFillRequired', 'Kullanıcı adı ve şifre zorunludur.'));
+            return;
+        }
+        if (loginOtpStep && !loginOtp.trim()) {
+            setLoginError(t('landing.loginOtpRequired', 'Doğrulama kodunu girin.'));
+            return;
+        }
+        setLoginBusy(true);
+        try {
+            const result = await loginWithCredentials({
+                usernameOrEmail: loginUsername.trim(),
+                password: loginPassword,
+                otp: loginOtpStep ? loginOtp.trim() : undefined,
+                rememberMe: loginRemember,
+            });
+            if (result.otpRequired) {
+                setLoginOtpStep(true);
+                setLoginError(result.message ?? t('landing.loginOtpHint', 'İki aşamalı doğrulama kodunu girin.'));
+                return;
+            }
+            setPanelOpen(false);
+        } catch (err: unknown) {
+            const msg = readFinanceBinaryErrorMessage(err) ?? t('landing.loginFailed', 'Giriş başarısız.');
+            setLoginError(msg);
+            if (loginOtpStep && /şifre/i.test(msg)) {
+                setLoginOtpStep(false);
+                setLoginOtp('');
+            }
+        } finally {
+            setLoginBusy(false);
+        }
+    };
 
     const requestRegisterCode = async () => {
         setRegisterError(null);
@@ -142,7 +203,7 @@ export function LandingPage() {
     const completeRegistration = async () => {
         setRegisterError(null);
         setRegisterMessage(null);
-        if (!email.trim() || !username.trim() || !password || !code.trim()) {
+        if (!email.trim() || !firstName.trim() || !lastName.trim() || !username.trim() || !password || !code.trim()) {
             setRegisterError(t('landing.registerFillAll', 'Lütfen tüm alanları doldurun.'));
             return;
         }
@@ -155,6 +216,8 @@ export function LandingPage() {
             const res = await financeClient.post('/api/public/register/complete', {
                 email,
                 username,
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
                 password,
                 code,
             });
@@ -307,15 +370,68 @@ export function LandingPage() {
                         <p style={{ fontSize: '0.85rem', color: 'var(--landing-silver-muted)', margin: 0 }}>
                             {t(
                                 'landing.signinIntro',
-                                'Kurumsal giriş Keycloak üzerinden yapılır. Rolünüze göre OTP istenebilir.'
+                                'İki aşamalı doğrulama yalnızca Hesap Ayarlarından etkinleştirdiyseniz istenir.'
                             )}
                         </p>
                         {loginError ? <div className="landing-alert">{loginError}</div> : null}
-                        <p style={{ fontSize: '0.8rem', color: 'var(--landing-silver-muted)' }}>
-                            {t('landing.signinNote', '“Beni hatırla” ve şifre politikaları Keycloak oturum ekranında yönetilir.')}
-                        </p>
-                        <button type="button" className="landing-btn-primary" style={{ marginTop: '0.5rem' }} onClick={() => login()}>
-                            {t('landing.signinKeycloak', 'Keycloak ile giriş')}
+                        <label htmlFor="login-user">{t('landing.loginUsername', 'Kullanıcı adı veya e-posta')}</label>
+                        <input
+                            id="login-user"
+                            value={loginUsername}
+                            onChange={(e) => setLoginUsername(e.target.value)}
+                            autoComplete="username"
+                            disabled={loginOtpStep}
+                        />
+                        <label htmlFor="login-pass">{t('landing.password', 'Şifre')}</label>
+                        <input
+                            id="login-pass"
+                            type="password"
+                            value={loginPassword}
+                            onChange={(e) => setLoginPassword(e.target.value)}
+                            autoComplete="current-password"
+                            disabled={loginOtpStep}
+                        />
+                        {loginOtpStep ? (
+                            <>
+                                <label htmlFor="login-otp">{t('landing.loginOtp', 'İki aşamalı doğrulama kodu')}</label>
+                                <input
+                                    id="login-otp"
+                                    value={loginOtp}
+                                    onChange={(e) => setLoginOtp(e.target.value)}
+                                    autoComplete="one-time-code"
+                                    inputMode="numeric"
+                                    maxLength={6}
+                                />
+                                <button
+                                    type="button"
+                                    className="landing-btn-ghost"
+                                    style={{ alignSelf: 'flex-start', fontSize: '0.8rem' }}
+                                    onClick={() => {
+                                        setLoginOtpStep(false);
+                                        setLoginOtp('');
+                                        setLoginError(null);
+                                    }}
+                                >
+                                    {t('landing.loginBackToPassword', 'Şifreyi değiştir / geri dön')}
+                                </button>
+                            </>
+                        ) : null}
+                        <label className="landing-checkbox-row">
+                            <input
+                                type="checkbox"
+                                checked={loginRemember}
+                                onChange={(e) => setLoginRemember(e.target.checked)}
+                            />
+                            <span>{t('landing.rememberMe', 'Beni hatırla')}</span>
+                        </label>
+                        <button
+                            type="button"
+                            className="landing-btn-primary"
+                            style={{ marginTop: '0.5rem' }}
+                            disabled={loginBusy}
+                            onClick={() => void submitLogin()}
+                        >
+                            {loginBusy ? '…' : loginOtpStep ? t('landing.loginSubmitOtp', 'Doğrula ve giriş yap') : t('landing.loginSubmit', 'Giriş yap')}
                         </button>
                     </div>
                 ) : (
@@ -325,6 +441,26 @@ export function LandingPage() {
                         <button type="button" className="landing-btn-ghost" disabled={registerBusy} onClick={requestRegisterCode}>
                             {registerBusy ? '…' : t('landing.sendCode', 'Doğrulama kodu gönder')}
                         </button>
+                        <div className="landing-form-row">
+                            <div>
+                                <label htmlFor="reg-first">{t('landing.firstName', 'Ad')}</label>
+                                <input
+                                    id="reg-first"
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    autoComplete="given-name"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="reg-last">{t('landing.lastName', 'Soyad')}</label>
+                                <input
+                                    id="reg-last"
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    autoComplete="family-name"
+                                />
+                            </div>
+                        </div>
                         <label htmlFor="reg-user">{t('landing.username', 'Kullanıcı adı')}</label>
                         <input id="reg-user" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
                         <label htmlFor="reg-pass">{t('landing.password', 'Şifre')}</label>

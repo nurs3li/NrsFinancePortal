@@ -8,9 +8,11 @@ import com.nurseli.marketdata.config.ViopQueryProperties;
 import com.nurseli.marketdata.domain.derivatives.DerivativeContract;
 import com.nurseli.marketdata.domain.derivatives.DerivativeSnapshot;
 import com.nurseli.marketdata.domain.derivatives.OpenInterestSnapshot;
-import com.nurseli.marketdata.repository.DerivativeContractRepository;
-import com.nurseli.marketdata.repository.DerivativeSnapshotRepository;
-import com.nurseli.marketdata.repository.OpenInterestSnapshotRepository;
+import com.nurseli.marketdata.domain.viop.ViopSnapshotEntity;
+import com.nurseli.marketdata.infrastructure.persistence.DerivativeContractRepository;
+import com.nurseli.marketdata.infrastructure.persistence.DerivativeSnapshotRepository;
+import com.nurseli.marketdata.infrastructure.persistence.OpenInterestSnapshotRepository;
+import com.nurseli.marketdata.infrastructure.persistence.ViopSnapshotRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -46,6 +49,7 @@ public class ViopQueryService {
     private final DerivativeContractRepository contractRepository;
     private final DerivativeSnapshotRepository snapshotRepository;
     private final OpenInterestSnapshotRepository openInterestSnapshotRepository;
+    private final ViopSnapshotRepository viopSnapshotRepository;
     private final ViopContractParser viopContractParser;
     private final ViopQueryProperties queryProperties;
     private final MarketViopProperties marketViopProperties;
@@ -177,9 +181,128 @@ public class ViopQueryService {
                         contractIndex))
                 .toList();
         if (rows.isEmpty()) {
+            rows = latestFromMdsViopSnapshots(latestOiIndex, contractIndex);
+            if (!rows.isEmpty()) {
+                log.info("[VIOP] latest() fallback from mds_viop_snapshot count={}", rows.size());
+            }
+        }
+        if (rows.isEmpty()) {
             log.info("[VIOP] latest() returned empty list (no fresh snapshots)");
         }
         return rows;
+    }
+
+    /** derivative_snapshot boşken İş Yatırım snapshot tablosundan (mds_viop_snapshot) liste üretir. */
+    private List<ViopSnapshotResponse> latestFromMdsViopSnapshots(
+            Map<String, OpenInterestSnapshot> latestOiIndex,
+            Map<String, DerivativeContract> contractIndex) {
+        Set<String> allowed = allowedNormalizedCodes();
+        List<ViopSnapshotResponse> out = new ArrayList<>();
+        for (ViopContractResponse contract : contracts()) {
+            if (!isWhitelisted(contract.contractCode(), allowed)) {
+                continue;
+            }
+            String normalized = viopContractParser.normalizeContractCode(contract.contractCode());
+            Optional<ViopSnapshotEntity> entityOpt = findLatestMdsSnapshot(normalized);
+            if (entityOpt.isEmpty()) {
+                continue;
+            }
+            ViopSnapshotEntity entity = entityOpt.get();
+            if (entity.getLast() == null || entity.getLast().compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            out.add(toSnapshotResponseFromMds(entity, latestOiIndex, contractIndex));
+        }
+        return out;
+    }
+
+    private Optional<ViopSnapshotEntity> findLatestMdsSnapshot(String normalizedCode) {
+        if (normalizedCode == null || normalizedCode.isBlank()) {
+            return Optional.empty();
+        }
+        Optional<ViopSnapshotEntity> direct =
+                viopSnapshotRepository.findTopByContractCodeOrderByUpdateDateDesc(normalizedCode);
+        if (direct.isPresent()) {
+            return direct;
+        }
+        if (normalizedCode.startsWith("F_")) {
+            return viopSnapshotRepository.findTopByContractCodeOrderByUpdateDateDesc(normalizedCode.substring(2));
+        }
+        return viopSnapshotRepository.findTopByContractCodeOrderByUpdateDateDesc("F_" + normalizedCode);
+    }
+
+    private ViopSnapshotResponse toSnapshotResponseFromMds(
+            ViopSnapshotEntity entity,
+            Map<String, OpenInterestSnapshot> latestOiIndex,
+            Map<String, DerivativeContract> contractIndex) {
+        String code = viopContractParser.normalizeContractCode(entity.getContractCode());
+        OpenInterestSnapshot latestOi = lookupLatestOi(code, latestOiIndex);
+        Long oi = latestOi != null ? latestOi.getOpenInterest() : 0L;
+        Long dailyVolume = entity.getVolume() != null
+                ? entity.getVolume().longValue()
+                : (latestOi != null ? latestOi.getDailyVolume() : null);
+        BigDecimal price = entity.getLast();
+        BigDecimal spot = entity.getSettlement() != null && entity.getSettlement().signum() > 0
+                ? entity.getSettlement()
+                : price;
+        LocalDateTime asOf = entity.getUpdateDate() != null ? entity.getUpdateDate() : LocalDateTime.now();
+        String source = entity.getSource() != null && !entity.getSource().isBlank() ? entity.getSource() : "IS_YATIRIM";
+        BigDecimal pct1d = entity.getChangePercent();
+        BigDecimal pct7d = pctVersusReference(price, entity.getWeekClose());
+        BigDecimal pct30d = pctVersusReference(price, entity.getMonthClose());
+        BigDecimal pct365d = pctVersusReference(price, entity.getYearClose());
+        Optional<DerivativeContract> contractOpt = lookupContract(code, contractIndex);
+        String expiry = contractOpt.map(DerivativeContract::getExpiry).orElse(null);
+        String contractMonth = expiryToContractMonth(expiry);
+        BigDecimal safeSpot = spot.signum() == 0 ? BigDecimal.ONE : spot;
+        BigDecimal basis = price.subtract(safeSpot);
+        BigDecimal annualized = basis.divide(safeSpot, 6, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("36500"))
+                .divide(new BigDecimal("30"), 4, RoundingMode.HALF_UP);
+        String regime = basis.signum() >= 0 && oi > 0 ? "PRICE_UP_OI_UP" : "NEUTRAL";
+        BigDecimal marginRequirement = entity.getInitialMargin() != null
+                ? entity.getInitialMargin()
+                : price.multiply(new BigDecimal("0.12")).setScale(4, RoundingMode.HALF_UP);
+        String longShortIndicator = basis.signum() > 0 ? "LONG" : basis.signum() < 0 ? "SHORT" : "NEUTRAL";
+        Integer daysToExpiry = calculateDaysToExpiry(expiry);
+        return new ViopSnapshotResponse(
+                code,
+                expiry,
+                contractMonth,
+                price,
+                safeSpot,
+                basis,
+                annualized,
+                marginRequirement,
+                longShortIndicator,
+                oi,
+                dailyVolume,
+                regime,
+                source,
+                asOf,
+                daysToExpiry,
+                "OK",
+                source,
+                null,
+                pct1d != null ? pct1d : contractOpt.map(DerivativeContract::getViopListPctChange1d).orElse(null),
+                pct7d != null ? pct7d : contractOpt.map(DerivativeContract::getViopListPctChange7d).orElse(null),
+                pct30d != null ? pct30d : contractOpt.map(DerivativeContract::getViopListPctChange30d).orElse(null),
+                pct365d != null ? pct365d : contractOpt.map(DerivativeContract::getViopListPctChange365d).orElse(null),
+                pct1d,
+                pct1d,
+                pct1d != null && pct1d.signum() >= 0 ? "UP" : "DOWN",
+                List.of()
+        );
+    }
+
+    private static BigDecimal pctVersusReference(BigDecimal last, BigDecimal reference) {
+        if (last == null || reference == null || reference.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        return last.subtract(reference)
+                .divide(reference, 6, RoundingMode.HALF_UP)
+                .multiply(new BigDecimal("100"))
+                .setScale(4, RoundingMode.HALF_UP);
     }
 
     public List<ViopSnapshotResponse> history(String contract, int days) {

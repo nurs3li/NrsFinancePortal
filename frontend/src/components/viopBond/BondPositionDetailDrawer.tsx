@@ -1,19 +1,19 @@
 import type { ReactNode } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import type { ManualBondPosition } from '../../types/bondPosition';
-import { approxRealReturnPct, maturityBucket, maturityBucketLabel } from './bondAnalysisHelpers';
+import { bondPeriodRealReturnPercent, maturityBucket, maturityBucketLabel } from './bondAnalysisHelpers';
+import { bondRealReturnMissingTitle } from './BondRealReturnHeader';
 import { bondTypeLabel } from './bondPositionLabels';
 import { fmtDate, fmtMoney, fmtPct } from './formatViopBond';
 import { pctClass, pnlClass } from './vbTabShared';
 
 type Props = {
     position: ManualBondPosition | null;
-    cpiYoY?: number | null;
     tokens: { border: string; bgCard: string; textMuted: string };
     onClose?: () => void;
 };
 
-export function BondPositionDetailDrawer({ position, cpiYoY = null, tokens, onClose }: Props) {
+export function BondPositionDetailDrawer({ position, tokens, onClose }: Props) {
     const { t, lang } = useLanguage();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
 
@@ -27,7 +27,7 @@ export function BondPositionDetailDrawer({ position, cpiYoY = null, tokens, onCl
         );
     }
 
-    const realReturn = approxRealReturnPct(position.returnPct, cpiYoY);
+    const realReturn = bondPeriodRealReturnPercent(position);
     const bucket = maturityBucket(position.daysToMaturity);
     const statusLabel =
         position.status === 'OPEN'
@@ -90,11 +90,11 @@ export function BondPositionDetailDrawer({ position, cpiYoY = null, tokens, onCl
                     <span className={pctClass(position.returnPct)}>{fmtPct(position.returnPct, locale)}</span>,
                 )}
                 {row(
-                    t('viopBond.colRealReturn', 'Reel getiri'),
+                    t('viopBond.colRealReturnPeriod', 'Dönemsel reel getiri'),
                     realReturn != null ? (
                         <span className={pctClass(realReturn)}>{fmtPct(realReturn, locale)}</span>
                     ) : (
-                        <span title={t('viopBond.realMissing', 'TÜFE verisi yok')}>—</span>
+                        <span title={bondRealReturnMissingTitle(t)}>—</span>
                     ),
                 )}
                 {row(

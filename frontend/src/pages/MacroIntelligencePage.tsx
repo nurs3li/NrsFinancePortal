@@ -45,7 +45,7 @@ export function MacroIntelligencePage() {
         <InfoTermProvider tokens={chartTokens}>
             <div className="macro-intelligence-page" style={{ background: tokens.bg, color: tokens.text }}>
                 <MacroPageHeader
-                    title={t('nav.marketMacro', 'Faiz & Enflasyon Paneli')}
+                    title={t('nav.marketMacro', 'Makro Finans Paneli')}
                     subtitle={t(
                         'market.bondMacroPageLead',
                         'Enflasyon, TCMB politika faizi, TL mevduat, kredi faizleri, tahvil/bono ve eurobond (EVDS) verilerini finansal okuryazarlık odağıyla inceleyin.',

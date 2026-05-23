@@ -8,21 +8,40 @@ import { formatViopUnderlyingDisplay, resolveViopExpiry, viopUnderlyingCode } fr
 import { resolveViopHistoricalPrice } from '../../services/viopPositionApi';
 import type { PositionHistoricalPriceResolve } from '../../types/historicalPriceResolve';
 import { computeViopLive } from './viopBondCalculations';
-import { fmtLocaleDecimal, fmtMoney, parseLocaleDecimal } from './formatViopBond';
+import { fmtLeverageX, fmtLocaleDecimal, fmtMoney, fmtRatioPercent, parseLocaleDecimal } from './formatViopBond';
 import { HistoricalPriceResolveBanner } from './HistoricalPriceResolveBanner';
 import { viopCategoryFor } from '../../constants/ViopWhitelist';
+import { useViopFxRates } from '../../hooks/useViopFxRates';
+import {
+    calculateViopPositionMetrics,
+    findSimilarOpenViopPosition,
+    getViopContractCurrency,
+    mergeViopPositionQuantities,
+} from '../../utils/viopPositionMetrics';
 
 type Props = {
     open: boolean;
     onClose: () => void;
     instrument: TerminalListInstrumentVm | null;
     editPosition?: ManualViopPosition | null;
-    onSubmit: (payload: ManualViopPositionCreatePayload) => Promise<void>;
+    openPositions?: ManualViopPosition[];
+    onSubmit: (
+        payload: ManualViopPositionCreatePayload,
+        action?: 'create' | 'merge',
+        mergeId?: number,
+    ) => Promise<void>;
 };
 
 const DEFAULT_MULTIPLIER = 1;
 
-export function ViopPositionAddModal({ open, onClose, instrument, editPosition, onSubmit }: Props) {
+export function ViopPositionAddModal({
+    open,
+    onClose,
+    instrument,
+    editPosition,
+    openPositions = [],
+    onSubmit,
+}: Props) {
     const { t, lang } = useLanguage();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
 
@@ -38,6 +57,10 @@ export function ViopPositionAddModal({ open, onClose, instrument, editPosition, 
     const [marginAutoFilled, setMarginAutoFilled] = useState(false);
     const [priceResolve, setPriceResolve] = useState<PositionHistoricalPriceResolve | null>(null);
     const [resolvingPrice, setResolvingPrice] = useState(false);
+    const [duplicateTarget, setDuplicateTarget] = useState<ManualViopPosition | null>(null);
+    const [pendingPayload, setPendingPayload] = useState<ManualViopPositionCreatePayload | null>(null);
+
+    const { data: fxRates } = useViopFxRates(open);
 
     const symbol = instrument?.symbol ?? editPosition?.symbol ?? '';
     const displayName = instrument?.displayName ?? editPosition?.displayName ?? symbol;
@@ -124,17 +147,44 @@ export function ViopPositionAddModal({ open, onClose, instrument, editPosition, 
     const initialMarginNum = parseLocaleDecimal(initialMarginInput, locale) ?? 0;
     const contractCountNum = Number(contractCount) || 0;
 
+    const quoteCurrency = getViopContractCurrency(symbol, viopUnderlyingCode(symbol), cat ?? undefined);
+
+    const liveInput = useMemo(
+        () => ({
+            symbol,
+            underlyingSymbol: viopUnderlyingCode(symbol),
+            viopCategory: viopCategoryToBackend(cat ?? 'COMMODITY'),
+            direction,
+            entryPrice: entryPriceNum,
+            currentPrice: effectiveCurrent,
+            contractMultiplier,
+            contractCount: contractCountNum,
+            initialMargin: initialMarginNum,
+        }),
+        [
+            symbol,
+            cat,
+            direction,
+            entryPriceNum,
+            effectiveCurrent,
+            contractMultiplier,
+            contractCountNum,
+            initialMarginNum,
+        ],
+    );
+
+    const liveMetrics = useMemo(
+        () => calculateViopPositionMetrics(liveInput, fxRates ?? { usdTry: null, eurTry: null }),
+        [liveInput, fxRates],
+    );
+
     const live = useMemo(
         () =>
             computeViopLive({
-                direction,
-                entryPrice: entryPriceNum,
-                currentPrice: effectiveCurrent,
-                contractMultiplier,
-                contractCount: contractCountNum,
-                initialMargin: initialMarginNum,
+                ...liveInput,
+                fxRates: fxRates ?? { usdTry: null, eurTry: null },
             }),
-        [direction, entryPriceNum, effectiveCurrent, contractMultiplier, contractCountNum, initialMarginNum],
+        [liveInput, fxRates],
     );
 
     const formatOnBlur = (value: string, setter: (v: string) => void) => {
@@ -144,32 +194,69 @@ export function ViopPositionAddModal({ open, onClose, instrument, editPosition, 
 
     if (!open) return null;
 
-    const handleSubmit = async (e: FormEvent) => {
-        e.preventDefault();
+    const buildPayload = (): ManualViopPositionCreatePayload => ({
+        symbol: symbol.trim().toUpperCase(),
+        displayName: displayName.trim() || undefined,
+        viopCategory: editPosition?.viopCategory ?? viopCategoryToBackend(cat),
+        underlyingSymbol: viopUnderlyingCode(symbol),
+        direction,
+        contractCount: contractCountNum,
+        entryPrice: entryPriceNum,
+        entryDate,
+        currentPrice: effectiveCurrent ?? undefined,
+        contractMultiplier,
+        initialMargin: initialMarginNum > 0 ? initialMarginNum : undefined,
+        expiryDate: expiryResolved?.expiryDate,
+        note: note.trim() || undefined,
+    });
+
+    const savePayload = async (payload: ManualViopPositionCreatePayload, action: 'create' | 'merge' = 'create', mergeId?: number) => {
         setSaving(true);
         setError(null);
         try {
-            await onSubmit({
-                symbol: symbol.trim().toUpperCase(),
-                displayName: displayName.trim() || undefined,
-                viopCategory: editPosition?.viopCategory ?? viopCategoryToBackend(cat),
-                underlyingSymbol: viopUnderlyingCode(symbol),
-                direction,
-                contractCount: contractCountNum,
-                entryPrice: entryPriceNum,
-                entryDate,
-                currentPrice: effectiveCurrent ?? undefined,
-                contractMultiplier,
-                initialMargin: initialMarginNum > 0 ? initialMarginNum : undefined,
-                expiryDate: expiryResolved?.expiryDate,
-                note: note.trim() || undefined,
-            });
+            await onSubmit(payload, action, mergeId);
+            setDuplicateTarget(null);
+            setPendingPayload(null);
             onClose();
         } catch (err) {
             setError(err instanceof Error ? err.message : t('viopBond.saveFailed', 'Kayıt başarısız'));
         } finally {
             setSaving(false);
         }
+    };
+
+    const handleSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        const payload = buildPayload();
+        if (!editPosition) {
+            const similar = findSimilarOpenViopPosition(openPositions, payload);
+            if (similar) {
+                setDuplicateTarget(similar);
+                setPendingPayload(payload);
+                return;
+            }
+        }
+        await savePayload(payload, 'create');
+    };
+
+    const handleMergeIntoExisting = async () => {
+        if (!duplicateTarget || !pendingPayload) return;
+        const merged = mergeViopPositionQuantities(
+            duplicateTarget,
+            pendingPayload.contractCount,
+            pendingPayload.entryPrice,
+        );
+        await savePayload(
+            {
+                ...pendingPayload,
+                contractCount: merged.contractCount,
+                entryPrice: merged.entryPrice,
+                initialMargin:
+                    (duplicateTarget.initialMargin ?? 0) + (pendingPayload.initialMargin ?? 0) || undefined,
+            },
+            'merge',
+            duplicateTarget.id,
+        );
     };
 
     const longLabel = t('viopBond.directionLong', 'LONG — fiyat yükselirse kâr');
@@ -190,6 +277,49 @@ export function ViopPositionAddModal({ open, onClose, instrument, editPosition, 
                 </div>
 
                 <form onSubmit={handleSubmit} className="vb-modal-body">
+                    {duplicateTarget && pendingPayload ? (
+                        <div className="vb-duplicate-prompt" role="alert">
+                            <p>
+                                {t(
+                                    'viopBond.duplicatePositionWarn',
+                                    'Aynı kontrat ve aynı yön için benzer bir açık pozisyonunuz var. Yeni pozisyon olarak mı eklemek istiyorsunuz, mevcut pozisyona adet eklemek mi istiyorsunuz?',
+                                )}
+                            </p>
+                            <p className="vb-cell-sub">
+                                {duplicateTarget.symbol} · {duplicateTarget.direction} ·{' '}
+                                {duplicateTarget.contractCount} {t('viopBond.contracts', 'adet')}
+                            </p>
+                            <div className="vb-duplicate-prompt__actions">
+                                <button
+                                    type="button"
+                                    className="pf-dash-btn"
+                                    disabled={saving}
+                                    onClick={() => void savePayload(pendingPayload, 'create')}
+                                >
+                                    {t('viopBond.duplicateAsNew', 'Yeni pozisyon olarak ekle')}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="pf-dash-btn pf-dash-btn--primary"
+                                    disabled={saving}
+                                    onClick={() => void handleMergeIntoExisting()}
+                                >
+                                    {t('viopBond.duplicateMerge', 'Mevcut pozisyona ekle')}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="pf-dash-btn"
+                                    disabled={saving}
+                                    onClick={() => {
+                                        setDuplicateTarget(null);
+                                        setPendingPayload(null);
+                                    }}
+                                >
+                                    {t('viopBond.cancel', 'İptal')}
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
                     <div className="vb-modal-grid">
                         <section className="vb-modal-section">
                             <h4>{t('viopBond.sectionContract', 'Kontrat Bilgileri')}</h4>
@@ -382,30 +512,58 @@ export function ViopPositionAddModal({ open, onClose, instrument, editPosition, 
                         <section className="vb-modal-section vb-live-summary">
                             <h4>{t('viopBond.sectionLive', 'Canlı Hesap Özeti')}</h4>
                             <div className="vb-live-row">
-                                <span>{t('viopBond.colPnl', 'Tahmini K/Z')}</span>
+                                <span>{t('viopBond.colPnl', 'Tahmini K/Z (TRY)')}</span>
                                 <strong className={live.unrealizedPnl != null && live.unrealizedPnl >= 0 ? 'vb-pos' : 'vb-neg'}>
-                                    {fmtMoney(live.unrealizedPnl, locale)}
+                                    {fmtMoney(live.unrealizedPnl, locale)} ₺
                                 </strong>
                             </div>
                             <div className="vb-live-row vb-live-row--stack">
                                 <div className="vb-live-row-top">
-                                    <span>{t('viopBond.colExposure', 'Risk maruziyeti')}</span>
-                                    <strong>{fmtMoney(live.riskExposure, locale)}</strong>
+                                    <span>{t('viopBond.colExposure', 'Risk maruziyeti (TRY)')}</span>
+                                    <strong>
+                                        {live.riskExposure != null
+                                            ? `${fmtMoney(live.riskExposure, locale)} ₺`
+                                            : '—'}
+                                    </strong>
                                 </div>
-                                <p className="vb-live-hint">
-                                    {t(
-                                        'viopBond.riskExposureHint',
-                                        'Risk maruziyeti kontratın nominal büyüklüğüdür; toplam finansal varlığa doğrudan eklenmez.',
-                                    )}
-                                </p>
+                                {liveMetrics.missingFxRate ? (
+                                    <p className="vb-warn vb-live-hint">
+                                        {t('viopBond.exposureTryMissing', 'Kur verisi eksik — TRY karşılığı hesaplanamadı')}
+                                    </p>
+                                ) : (
+                                    <p className="vb-live-hint">
+                                        {t(
+                                            'viopBond.riskExposureHint',
+                                            'Risk maruziyeti kontratın nominal büyüklüğüdür (TRY karşılığı).',
+                                        )}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="vb-live-row">
+                                <span>
+                                    {marginAutoFilled
+                                        ? t('viopBond.estimatedMargin', 'Tahmini teminat')
+                                        : t('viopBond.colMargin', 'Teminat')}
+                                </span>
+                                <strong>{fmtMoney(initialMarginNum, locale)} ₺</strong>
+                            </div>
+                            <div className="vb-live-row">
+                                <span>{t('viopBond.colLeverage', 'Kaldıraç')}</span>
+                                <strong>{fmtLeverageX(liveMetrics.leverage, locale)}</strong>
+                            </div>
+                            <div className="vb-live-row">
+                                <span>{t('viopBond.colPnlMargin', 'K/Z / Teminat')}</span>
+                                <strong>{fmtRatioPercent(liveMetrics.pnlToMarginRatio, locale)}</strong>
                             </div>
                             <div className="vb-live-row">
                                 <span>{t('viopBond.netEffect', 'Net finansal etki')}</span>
-                                <strong>{fmtMoney(live.netFinancialEffect, locale)}</strong>
+                                <strong>{fmtMoney(live.netFinancialEffect, locale)} ₺</strong>
                             </div>
                             <div className="vb-live-meta">
                                 <span>
-                                    {t('viopBond.liveMeta', 'Çarpan')}: {fmtLocaleDecimal(contractMultiplier, locale, 0)} ·{' '}
+                                    {t('viopBond.colCurrency', 'PB')}: {quoteCurrency} ·{' '}
+                                    {t('viopBond.liveMeta', 'Çarpan')}:{' '}
+                                    {fmtLocaleDecimal(contractMultiplier, locale, 0)} ·{' '}
                                     {t('viopBond.colCount', 'Adet')}: {contractCount || '—'}
                                 </span>
                             </div>

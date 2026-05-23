@@ -1,5 +1,8 @@
 package com.nurseli.nrsfinanceportal.domain.portfolio;
 
+/**
+ * Reel getiri hesaplama modu.
+ */
 public enum ManualPositionRealReturnCalculationMode {
     OPEN_POSITION_MARK_TO_MARKET,
     SOLD_POSITION

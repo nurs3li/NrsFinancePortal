@@ -10,7 +10,7 @@ const macroEducationEn = {
     'macro.edu.label.formula': 'Formula',
     'macro.edu.label.example': 'Example',
     'macro.edu.label.whyItMatters': 'Why it matters',
-    'macro.edu.pageIntro.title': 'What is the Rates & Inflation panel?',
+    'macro.edu.pageIntro.title': 'What is the Macro Finance Panel?',
     'macro.edu.pageIntro.short': 'A panel that presents macro indicators with a financial literacy focus.',
     'macro.edu.pageIntro.detail':
         'This page shows inflation, CBRT policy rate, deposit and loan rates, and bond/eurobond statistics together. The goal is not a raw data dump but understanding relationships between indicators.',

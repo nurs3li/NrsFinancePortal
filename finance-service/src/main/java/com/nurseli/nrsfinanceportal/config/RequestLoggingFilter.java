@@ -11,12 +11,17 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 
 /**
- * Her HTTP isteği için: method, URI, status, duration loglar.
+ * HTTP istek/yanıt özet loglama filter'ı.
  */
+/**
+ * Her HTTP isteÄŸi iÃ§in: method, URI, status, duration loglar.
+ */
+@Slf4j
 @Component
 @Order(1)
 public class RequestLoggingFilter implements Filter {
@@ -24,6 +29,9 @@ public class RequestLoggingFilter implements Filter {
     private static final Logger log = LogManager.getLogger(RequestLoggingFilter.class);
 
     @Override
+    /**
+ * HTTP method, path, status ve süreyi structured log olarak yazar.
+ */
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
         if (!(request instanceof HttpServletRequest httpRequest) || !(response instanceof HttpServletResponse httpResponse)) {

@@ -40,8 +40,8 @@ export function buildLayoutNavItems({ isAdmin, t }: BuildNavArgs): LayoutNavItem
             {
                 key: 'marketMacro',
                 to: '/market/macro',
-                label: t('nav.marketMacro', 'Faiz & Enflasyon Paneli'),
-                mobileLabel: t('nav.marketMacroShort', 'Faiz'),
+                label: t('nav.marketMacro', 'Makro Finans Paneli'),
+                mobileLabel: t('nav.marketMacroShort', 'Makro'),
                 icon: Landmark,
                 show: true,
             },
@@ -131,8 +131,8 @@ export function buildLayoutNavItems({ isAdmin, t }: BuildNavArgs): LayoutNavItem
         {
             key: 'marketMacro',
             to: '/market/macro',
-            label: t('nav.marketMacro', 'Faiz & Enflasyon Paneli'),
-            mobileLabel: t('nav.marketMacroShort', 'Faiz'),
+            label: t('nav.marketMacro', 'Makro Finans Paneli'),
+            mobileLabel: t('nav.marketMacroShort', 'Makro'),
             icon: Landmark,
             show: true,
         },

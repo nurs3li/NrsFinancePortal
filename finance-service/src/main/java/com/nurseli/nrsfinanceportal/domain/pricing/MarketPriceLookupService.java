@@ -7,6 +7,9 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 
+/**
+ * Market data servisinden fiyat çeken PriceLookupService uygulaması.
+ */
 @Service
 @RequiredArgsConstructor
 public class MarketPriceLookupService implements PriceLookupService {
@@ -14,6 +17,9 @@ public class MarketPriceLookupService implements PriceLookupService {
     private final MarketDataClient marketDataClient;
 
     @Override
+    /**
+ * MarketDataClient üzerinden güncel TRY fiyatını çözümler.
+ */
     public BigDecimal getTryPrice(AssetType type, String symbol) {
 
         String normalizedSymbol = SymbolNormalizer.normalize(type, symbol);

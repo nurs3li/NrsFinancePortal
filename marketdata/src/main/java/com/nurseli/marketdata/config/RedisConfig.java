@@ -51,7 +51,8 @@ public class RedisConfig {
                 // Batch/indicators: ingest aralığından bağımsız tazelik; uzun süreli Redis girişleri "grafik geçmişte kaldı" hissi yaratıyordu.
                 "market:batch", config.entryTtl(marketSeriesTtl),
                 "market:indicators", config.entryTtl(marketSeriesTtl),
-                "market:macro:inflation", config.entryTtl(inflationTtl)
+                "market:macro:inflation", config.entryTtl(inflationTtl),
+                "market:macro:interest-inflation-panel", config.entryTtl(Duration.ofMinutes(15))
         );
 
         return RedisCacheManager.builder(connectionFactory)

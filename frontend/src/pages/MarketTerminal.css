@@ -265,18 +265,27 @@
 
 /* VİOP / tahvil: standart üç sütun — sol liste, orta hero+grafik, sağ içgörü */
 .terminal-grid--market-unified,
-.terminal-grid--viop-unified {
+.terminal-grid--viop-unified,
+.terminal-grid--bond-unified {
     align-items: stretch;
 }
 
 .terminal-grid--market-unified .terminal-card.terminal-left-panel,
-.terminal-grid--viop-unified .terminal-card.terminal-left-panel {
+.terminal-grid--viop-unified .terminal-card.terminal-left-panel,
+.terminal-grid--bond-unified .terminal-card.terminal-left-panel {
     grid-column: 1;
     grid-row: 1 / -1;
     align-self: stretch;
     min-height: 0;
     margin-bottom: 0;
     max-height: none;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 16px !important;
+    border: 1px solid var(--terminal-border) !important;
+    background: var(--terminal-card-bg) !important;
+    box-shadow: 0 6px 14px rgba(2, 6, 23, 0.2);
 }
 
 .terminal-grid--market-unified .terminal-hero,
@@ -287,7 +296,8 @@
 }
 
 .terminal-grid--market-unified .terminal-center-stack,
-.terminal-grid--viop-unified .terminal-center-stack {
+.terminal-grid--viop-unified .terminal-center-stack,
+.terminal-grid--bond-unified .terminal-center-stack {
     grid-column: 2;
     grid-row: 2;
     min-width: 0;
@@ -295,10 +305,69 @@
 }
 
 .terminal-grid--market-unified .terminal-right-panel,
-.terminal-grid--viop-unified .terminal-right-panel {
+.terminal-grid--viop-unified .terminal-right-panel,
+.terminal-grid--bond-unified .terminal-right-panel {
     grid-column: 3;
     grid-row: 1 / -1;
     align-self: stretch;
+}
+
+.terminal-grid--bond-unified .terminal-center-stack {
+    grid-row: 1;
+}
+
+.terminal-right-panel--bond {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: 0;
+}
+
+.terminal-right-panel--bond .terminal-right-panel-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.terminal-bond-right-summary {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.terminal-bond-right-summary__grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+.terminal-bond-right-summary__note h4 {
+    margin: 0 0 6px;
+    font-size: 13px;
+}
+
+.terminal-bond-right-summary .terminal-mini-card {
+    margin-bottom: 0;
+}
+
+.terminal-bond-right-summary .terminal-mini-card h4 {
+    margin: 0 0 8px;
+    font-size: 13px;
+}
+
+.terminal-right-panel__insights-head {
+    flex-shrink: 0;
+}
+
+@media (min-width: 400px) {
+    .terminal-bond-right-summary__grid {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 .terminal-viop-summary-dl {
@@ -1896,6 +1965,69 @@
 
 .terminal-data-table--tefas {
     font-size: 12px;
+    min-width: 1040px;
+}
+
+/* Trend sütunu yok; genel picker nth-child(9) trend genişliği 1A sütununa binmesin */
+.terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(9),
+.terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(9) {
+    width: 6.5%;
+    min-width: 44px;
+    max-width: 72px;
+    text-align: right;
+    vertical-align: middle;
+    padding-left: 2px;
+    padding-right: 2px;
+    box-sizing: border-box;
+}
+
+.terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(n + 10),
+.terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(n + 10) {
+    width: 6.5%;
+    min-width: 44px;
+    max-width: 72px;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
+}
+
+.terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(n + 7),
+.terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(n + 7) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* TEFAS: 1★ 2⇄ 3fon 4tür 5risk 6fiyat 7–13 getiri (Gün…5Y) — standart picker nth-child ile hizayı ayır */
+.terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(3),
+.terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(3) {
+    width: 16%;
+    min-width: 100px;
+}
+
+.terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(4),
+.terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(4) {
+    width: 9%;
+    min-width: 72px;
+}
+
+.terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(5),
+.terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(5) {
+    width: 5%;
+    min-width: 44px;
+}
+
+.terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(6),
+.terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(6) {
+    width: 10%;
+    min-width: 68px;
+}
+
+.terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(n + 7),
+.terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(n + 7) {
+    width: 6.5%;
+    min-width: 44px;
+    max-width: 72px;
 }
 
 .terminal-data-table--tefas .tefas-fund-code {
@@ -2439,12 +2571,14 @@
     }
 
     .terminal-grid--market-unified,
-    .terminal-grid--viop-unified {
+    .terminal-grid--viop-unified,
+    .terminal-grid--bond-unified {
         grid-template-columns: minmax(320px, 440px) minmax(0, 1fr) minmax(320px, 420px);
     }
 
     .terminal-grid--market-unified .terminal-card.terminal-left-panel,
-    .terminal-grid--viop-unified .terminal-card.terminal-left-panel {
+    .terminal-grid--viop-unified .terminal-card.terminal-left-panel,
+    .terminal-grid--bond-unified .terminal-card.terminal-left-panel {
         grid-column: 1;
         grid-row: 1 / -1;
         align-self: stretch;
@@ -2462,8 +2596,14 @@
         grid-row: 2;
     }
 
+    .terminal-grid--bond-unified .terminal-center-stack {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
     .terminal-grid--market-unified .terminal-right-panel,
-    .terminal-grid--viop-unified .terminal-right-panel {
+    .terminal-grid--viop-unified .terminal-right-panel,
+    .terminal-grid--bond-unified .terminal-right-panel {
         grid-column: 3;
         grid-row: 1 / -1;
         align-self: stretch;
@@ -3832,9 +3972,30 @@
     .terminal-spot-unified .terminal-right-panel,
     .terminal-grid--market-unified .terminal-hero,
     .terminal-grid--market-unified .terminal-center-stack,
-    .terminal-grid--market-unified .terminal-right-panel {
+    .terminal-grid--market-unified .terminal-right-panel,
+    .terminal-grid--bond-unified .terminal-card.terminal-left-panel,
+    .terminal-grid--bond-unified .terminal-center-stack,
+    .terminal-grid--bond-unified .terminal-right-panel {
         grid-column: 1;
         grid-row: auto;
+    }
+
+    .terminal-grid--bond-unified .terminal-card.terminal-left-panel {
+        order: 1;
+    }
+
+    .terminal-grid--bond-unified .terminal-center-stack {
+        order: 2;
+    }
+
+    .terminal-grid--bond-unified .terminal-right-panel {
+        order: 3;
+        height: auto !important;
+        max-height: none !important;
+    }
+
+    .terminal-bond-right-summary__grid {
+        grid-template-columns: 1fr;
     }
 
     .terminal-center-stack {

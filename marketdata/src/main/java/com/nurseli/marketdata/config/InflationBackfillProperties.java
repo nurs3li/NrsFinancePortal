@@ -11,7 +11,7 @@ import java.time.LocalDate;
 @Data
 public class InflationBackfillProperties {
     private boolean enabled = false;
-    private LocalDate from = LocalDate.of(2003, 1, 1);
+    private LocalDate from = LocalDate.of(2020, 1, 1);
     /** Uygulama ayağa kalkınca bir kez EVDS → DB doldurma (idempotent). */
     private boolean startupEnabled = false;
 }

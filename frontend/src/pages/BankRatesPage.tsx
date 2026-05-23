@@ -69,7 +69,7 @@ export function BankRatesPage() {
                 <div className="br-dash-header__title">
                     <h1>
                         {t('bankRates.title', 'Banka Kurları')}
-                        <Info size={16} className="br-dash-header__info" title={t('bankRates.subtitle', '')} />
+                        <Info size={16} className="br-dash-header__info" aria-label={t('bankRates.subtitle', '')} />
                     </h1>
                     <p className="br-dash-header__sub">
                         {t(

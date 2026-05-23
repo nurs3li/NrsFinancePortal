@@ -7,6 +7,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+/**
+ * OpenSearch ve Tempo RestClient bean'leri.
+ */
 @Configuration
 @EnableConfigurationProperties(ObservabilityProperties.class)
 public class ObservabilityConfiguration {
@@ -22,6 +25,9 @@ public class ObservabilityConfiguration {
 
     @Bean
     @Qualifier("opensearchHttp")
+    /**
+ * OpenSearch audit log sorguları için RestClient bean.
+ */
     public RestClient openSearchRestClient(ObservabilityProperties props) {
         String base = trimSlash(props.getOpenSearch().getBaseUrl());
         JdkClientHttpRequestFactory rf = new JdkClientHttpRequestFactory();
@@ -34,6 +40,9 @@ public class ObservabilityConfiguration {
 
     @Bean
     @Qualifier("tempoHttp")
+    /**
+ * Tempo trace API sorguları için RestClient bean.
+ */
     public RestClient tempoRestClient(ObservabilityProperties props) {
         String base = trimSlash(props.getTempo().getBaseUrl());
         JdkClientHttpRequestFactory rf = new JdkClientHttpRequestFactory();

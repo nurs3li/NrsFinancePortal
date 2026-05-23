@@ -66,8 +66,8 @@ export function CloseFixedIncomePositionModal({ open, position, onClose, onSubmi
     const [priceResolve, setPriceResolve] = useState<PositionHistoricalPriceResolve | null>(null);
     const [resolvingPrice, setResolvingPrice] = useState(false);
 
-    const isEurobond = position?.bondType === 'EUROBOND';
     const currency = position?.currency ?? 'TRY';
+    const showDirtyPriceHint = currency !== 'TRY';
 
     useEffect(() => {
         if (!open || !position) return;
@@ -130,12 +130,14 @@ export function CloseFixedIncomePositionModal({ open, position, onClose, onSubmi
         try {
             const res = await resolveBondHistoricalPrice(position.symbol, closeDate);
             setPriceResolve(res);
-            if (res.found && res.price != null) {
+            if (res.matchType !== 'NOT_FOUND' && res.price != null) {
                 setClosePriceInput(fmtLocaleDecimal(res.price, locale));
             }
         } catch {
             setPriceResolve({
-                found: false,
+                symbol: position.symbol,
+                requestedDate: closeDate,
+                matchType: 'NOT_FOUND',
                 price: null,
                 source: null,
                 message: t('viopBond.priceResolveFailed', 'Fiyat bulunamadı'),
@@ -183,10 +185,9 @@ export function CloseFixedIncomePositionModal({ open, position, onClose, onSubmi
         }
     };
 
-    const priceLabel =
-        isEurobond
-            ? `${t('viopBond.colClosePrice', 'Kapanış fiyatı')} (${t('viopBond.priceDirtyLabel', 'Kirli fiyat')}, 100 nominal)`
-            : `${t('viopBond.colClosePrice', 'Kapanış fiyatı')} (100 nominal üzerinden)`;
+    const priceLabel = showDirtyPriceHint
+        ? `${t('viopBond.colClosePrice', 'Kapanış fiyatı')} (${t('viopBond.priceDirtyLabel', 'Kirli fiyat')}, 100 nominal)`
+        : `${t('viopBond.colClosePrice', 'Kapanış fiyatı')} (100 nominal üzerinden)`;
 
     return (
         <div className="vb-modal-backdrop" onClick={onClose} role="presentation">
@@ -227,7 +228,7 @@ export function CloseFixedIncomePositionModal({ open, position, onClose, onSubmi
                                     <span>{t('viopBond.colCurrentPrice', 'Güncel fiyat')}</span>
                                     <strong>
                                         {fmtLocaleDecimal(position.currentPrice, locale)}
-                                        {isEurobond ? (
+                                        {showDirtyPriceHint ? (
                                             <span className="vb-tag-default"> ({t('viopBond.priceDirtyLabel', 'Kirli fiyat')})</span>
                                         ) : null}
                                     </strong>

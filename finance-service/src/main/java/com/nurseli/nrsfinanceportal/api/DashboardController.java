@@ -1,0 +1,35 @@
+package com.nurseli.nrsfinanceportal.api;
+
+import com.nurseli.nrsfinanceportal.api.dto.DashboardSummaryResponse;
+import com.nurseli.nrsfinanceportal.application.CurrentUserResolver;
+import com.nurseli.nrsfinanceportal.application.DashboardSummaryService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
+
+/**
+ * Oturum açmış kullanıcı için dashboard özet endpoint'lerini sunar.
+ */
+@RestController
+@RequestMapping("/api/dashboard")
+@RequiredArgsConstructor
+public class DashboardController {
+
+    private final DashboardSummaryService dashboardSummaryService;
+    private final CurrentUserResolver currentUserResolver;
+
+    /**
+     * {@code summary} — Giriş yapmış kullanıcının portfolio ve piyasa özet DTO'sunu döner.
+     */
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @GetMapping("/summary")
+
+    public DashboardSummaryResponse summary() {
+
+        Long userId = currentUserResolver
+                .getOrCreateCurrentUser()
+                .getId();
+
+        return dashboardSummaryService.getSummary(userId);
+    }
+}

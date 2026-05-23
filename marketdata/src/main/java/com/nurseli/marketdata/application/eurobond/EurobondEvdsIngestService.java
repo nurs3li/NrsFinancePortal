@@ -6,7 +6,7 @@ import com.nurseli.marketdata.config.EvdsProperties;
 import com.nurseli.marketdata.domain.eurobond.EurobondWeeklyObservation;
 import com.nurseli.marketdata.infrastructure.evds.EvdsDebtClient;
 import com.nurseli.marketdata.infrastructure.evds.EvdsSeriesPoint;
-import com.nurseli.marketdata.repository.EurobondWeeklyObservationRepository;
+import com.nurseli.marketdata.infrastructure.persistence.EurobondWeeklyObservationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

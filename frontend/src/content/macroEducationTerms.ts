@@ -12,7 +12,7 @@ export type MacroTermId = keyof typeof macroEducationTerms;
 
 export const macroEducationTerms = {
     pageIntro: {
-        title: 'Faiz & Enflasyon Paneli Nedir?',
+        title: 'Makro Finans Paneli Nedir?',
         short: 'Makro göstergeleri finansal okuryazarlık odağıyla sunan panel.',
         detail:
             'Bu sayfa enflasyon, TCMB politika faizi, mevduat ve kredi faizleri ile tahvil/eurobond istatistiklerini bir arada gösterir. Amaç ham veri listesi değil; göstergeler arası ilişkiyi anlamaktır.',

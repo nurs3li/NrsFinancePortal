@@ -1,5 +1,12 @@
 import axios from 'axios';
+import { applyKeycloakTokens } from '../auth/applyKeycloakTokens';
 import keycloak from '../auth/keycloak';
+import {
+    isPublicAuthRequest,
+    notifyAuthExpired,
+    redirectToPortalSignIn,
+} from '../auth/portalSession';
+import { loginResponseToTokens, portalRefreshToken } from '../services/authApi';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8085';
 const marketApiUrl = import.meta.env.VITE_MARKET_API_URL || 'http://localhost:8083';
@@ -16,8 +23,6 @@ type EnvelopeLike = {
 function unwrapEnvelopePayload(payload: unknown): unknown {
     if (!payload || typeof payload !== 'object') return payload;
     const maybe = payload as EnvelopeLike;
-    // Only unwrap successful envelopes. On failures, preserve the full envelope
-    // so callers can read errors instead of receiving null data.
     if (maybe.success === true && 'data' in maybe && 'errors' in maybe) {
         return maybe.data;
     }
@@ -58,8 +63,6 @@ export function readFinanceBinaryErrorMessage(err: unknown): string | undefined 
     return undefined;
 }
 
-let loginRedirectInFlight = false;
-
 function getPreferredAppLang(): string {
     if (typeof window === 'undefined') return 'tr';
     const fromApp = window.localStorage.getItem('app.lang');
@@ -69,44 +72,59 @@ function getPreferredAppLang(): string {
     return 'tr';
 }
 
-async function handleAuthErrorWithSingleRetry(err: any): Promise<any> {
-    const status = err?.response?.status;
-    const originalRequest = err?.config as (Record<string, any> & { headers?: Record<string, any> }) | undefined;
+let authRecoveryInFlight = false;
+
+async function handleAuthErrorWithSingleRetry(err: unknown): Promise<never> {
+    const ax = err as {
+        response?: { status?: number };
+        config?: Record<string, unknown> & { headers?: Record<string, string>; url?: string };
+    };
+    const status = ax?.response?.status;
+    const originalRequest = ax?.config;
     if (status !== 401 || !originalRequest) {
         return Promise.reject(err);
     }
 
+    const requestUrl = String(originalRequest.url ?? '');
+    if (isPublicAuthRequest(requestUrl)) {
+        return Promise.reject(err);
+    }
+
     if (originalRequest.__retriedAfterRefresh) {
-        if (!loginRedirectInFlight && keycloak.authenticated) {
-            loginRedirectInFlight = true;
-            setTimeout(() => {
-                loginRedirectInFlight = false;
-            }, 10_000);
-            keycloak.login({ locale: getPreferredAppLang(), prompt: 'login' });
+        if (!authRecoveryInFlight) {
+            authRecoveryInFlight = true;
+            notifyAuthExpired('session');
+            redirectToPortalSignIn({ signin: '1' });
+            window.setTimeout(() => {
+                authRecoveryInFlight = false;
+            }, 5000);
         }
         return Promise.reject(err);
     }
 
-    if (keycloak.authenticated) {
+    if (keycloak.authenticated && keycloak.refreshToken) {
         try {
-            await keycloak.updateToken(30);
-            if (keycloak.token) {
+            const data = await portalRefreshToken(keycloak.refreshToken);
+            const tokens = loginResponseToTokens(data);
+            if (tokens?.accessToken) {
+                applyKeycloakTokens(tokens);
                 originalRequest.__retriedAfterRefresh = true;
                 originalRequest.headers = originalRequest.headers ?? {};
-                originalRequest.headers.Authorization = `Bearer ${keycloak.token}`;
-                return axios.request(originalRequest);
+                originalRequest.headers.Authorization = `Bearer ${tokens.accessToken}`;
+                return axios.request(originalRequest) as never;
             }
         } catch {
-            // Token yenileme başarısızsa aşağıdaki tek-seferlik login yönlendirmesine düş.
+            /* refresh başarısız → portal giriş */
         }
     }
 
-    if (!loginRedirectInFlight) {
-        loginRedirectInFlight = true;
-        setTimeout(() => {
-            loginRedirectInFlight = false;
-        }, 10_000);
-        keycloak.login({ locale: getPreferredAppLang(), prompt: 'login' });
+    if (!authRecoveryInFlight) {
+        authRecoveryInFlight = true;
+        notifyAuthExpired('session');
+        redirectToPortalSignIn({ signin: '1' });
+        window.setTimeout(() => {
+            authRecoveryInFlight = false;
+        }, 5000);
     }
     return Promise.reject(err);
 }
@@ -143,7 +161,8 @@ financeClient.interceptors.response.use(
             typeof errs === 'object' &&
             errs.error === 'USER_LOGIN_SUSPENDED'
         ) {
-            await keycloak.logout({ redirectUri: `${window.location.origin}/?suspended=1` });
+            notifyAuthExpired('suspended');
+            redirectToPortalSignIn({ suspended: '1' });
             return Promise.reject(err);
         }
         return handleAuthErrorWithSingleRetry(err);
@@ -167,8 +186,6 @@ marketClient.interceptors.request.use((config) => {
         config.method?.toLowerCase() === 'get' &&
         (requestPath.startsWith('/api/news') || requestPath.startsWith('/api/market/'));
 
-    // Public market/news read endpoint'lerinde Bearer göndermeyelim:
-    // geçersiz/expired token bazı ortamlarda permitAll endpoint'i bile 401'e düşürebiliyor.
     if (!isPublicMarketRead && keycloak.authenticated && keycloak.token) {
         config.headers.Authorization = `Bearer ${keycloak.token}`;
     }

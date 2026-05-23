@@ -10,7 +10,7 @@ type Props = {
     tokens: { bgCard: string; border: string };
 };
 
-const BOND_TYPES: BondType[] = ['GOVERNMENT_BOND', 'TREASURY_BILL', 'EUROBOND', 'CORPORATE_BOND'];
+const BOND_TYPES: BondType[] = ['GOVERNMENT_BOND', 'TREASURY_BILL', 'CORPORATE_BOND'];
 const CURRENCIES = ['TRY', 'USD', 'EUR'];
 const FREQUENCIES: CouponFrequency[] = ['NONE', 'ANNUAL', 'SEMI_ANNUAL', 'QUARTERLY'];
 

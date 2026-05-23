@@ -5,6 +5,9 @@ import jakarta.persistence.*;
 
 import java.time.Instant;
 
+/**
+ * AI analiz e-posta teslimat tercihleri entity; sıklık ve son gönderim zamanı.
+ */
 @Entity
 @Table(name = "portfolio_ai_email_delivery")
 public class PortfolioAiEmailDeliveryEntity {

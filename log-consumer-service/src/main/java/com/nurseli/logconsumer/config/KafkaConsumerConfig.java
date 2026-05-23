@@ -1,7 +1,7 @@
 package com.nurseli.logconsumer.config;
 
-import com.nurseli.logconsumer.event.TransactionCreatedEvent;
-import com.nurseli.logconsumer.event.TransactionReversedEvent;
+import com.nurseli.logconsumer.application.event.TransactionCreatedEvent;
+import com.nurseli.logconsumer.application.event.TransactionReversedEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,14 +15,19 @@ import org.springframework.kafka.support.serializer.JsonDeserializer;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Kafka {@link ConsumerFactory} ve {@link ConcurrentKafkaListenerContainerFactory} bean tanımları;
+ * transaction event'leri ve application log JSON payload'ları için ayrı deserializer yapılandırır.
+ */
 @Configuration
 public class KafkaConsumerConfig {
 
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
-    /* ================= CREATED ================= */
-
+    /**
+     * {@code createdConsumerFactory} — {@link TransactionCreatedEvent} için JSON deserializer'lı consumer factory.
+     */
     @Bean
     public ConsumerFactory<String, TransactionCreatedEvent> createdConsumerFactory() {
 
@@ -34,6 +39,9 @@ public class KafkaConsumerConfig {
         return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), deserializer);
     }
 
+    /**
+     * {@code createdKafkaListenerContainerFactory} — created topic listener'ı için container factory.
+     */
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, TransactionCreatedEvent> createdKafkaListenerContainerFactory() {
 
@@ -44,8 +52,9 @@ public class KafkaConsumerConfig {
         return factory;
     }
 
-    /* ================= REVERSED ================= */
-
+    /**
+     * {@code reversedConsumerFactory} — {@link TransactionReversedEvent} için JSON deserializer'lı consumer factory.
+     */
     @Bean
     public ConsumerFactory<String, TransactionReversedEvent> reversedConsumerFactory() {
 
@@ -57,6 +66,9 @@ public class KafkaConsumerConfig {
         return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), deserializer);
     }
 
+    /**
+     * {@code reversedKafkaListenerContainerFactory} — reversed topic listener'ı için container factory.
+     */
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, TransactionReversedEvent> reversedKafkaListenerContainerFactory() {
 
@@ -67,14 +79,18 @@ public class KafkaConsumerConfig {
         return factory;
     }
 
-    /* ================= APPLICATION LOGS (String - JSON payload) ================= */
-
+    /**
+     * {@code applicationLogsConsumerFactory} — Ham JSON string payload için String deserializer'lı consumer factory.
+     */
     @Bean
     public ConsumerFactory<String, String> applicationLogsConsumerFactory() {
         Map<String, Object> props = baseProps("log-consumer-application-logs");
         return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), new StringDeserializer());
     }
 
+    /**
+     * {@code applicationLogsKafkaListenerContainerFactory} — application-logs topic listener'ı için container factory.
+     */
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, String> applicationLogsKafkaListenerContainerFactory() {
         ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
@@ -82,8 +98,9 @@ public class KafkaConsumerConfig {
         return factory;
     }
 
-    /* ================= COMMON ================= */
-
+    /**
+     * {@code baseProps} — Ortak Kafka consumer özelliklerini (bootstrap, groupId, offset, auto-commit) üretir.
+     */
     private Map<String, Object> baseProps(String groupId) {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);

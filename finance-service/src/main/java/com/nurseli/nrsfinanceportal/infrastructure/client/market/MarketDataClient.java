@@ -12,6 +12,7 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -26,12 +27,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Market data HTTP client; güncel ve geçmiş fiyat ile CPI endeks sorguları.
+ */
 @Component
 @RequiredArgsConstructor
 public class MarketDataClient {
 
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(18);
     private static final Duration HISTORY_REQUEST_TIMEOUT = Duration.ofSeconds(60);
+    /** Makro panel soğuk EVDS (politika + fonlama) için finance tarafında daha uzun bekleme. */
+    private static final Duration MACRO_PANEL_TIMEOUT = Duration.ofSeconds(90);
 
     private record ApiEnvelope<T>(Boolean success, T data, Object errors, Object meta) {}
 
@@ -55,6 +61,10 @@ public class MarketDataClient {
     private static final ParameterizedTypeReference<ApiEnvelope<TefasFundPage>> TEFAS_PAGE_ENVELOPE =
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<List<TefasHistoryPoint>>> TEFAS_HISTORY_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<ViopPriceAtRow>> VIOP_PRICE_AT_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<ViopHistoryResponseRow>> VIOP_HISTORY_ENVELOPE =
             new ParameterizedTypeReference<>() {};
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -104,6 +114,8 @@ public class MarketDataClient {
             Integer riskLevel,
             boolean tefasListed,
             Double price,
+            Double return1d,
+            Double return1w,
             Double return1m,
             Double return3m,
             Double return6m,
@@ -173,6 +185,14 @@ public class MarketDataClient {
             String source,
             String dataQuality) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ViopHistoryPointRow(Instant time, BigDecimal price) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ViopHistoryResponseRow(String contractCode, List<ViopHistoryPointRow> points) {}
+
+    private static final ZoneId VIOP_ZONE = ZoneId.of("Europe/Istanbul");
+
     private final WebClient marketDataWebClient;
 
     /**
@@ -219,26 +239,44 @@ public class MarketDataClient {
         return emptyMap(latest);
     }
 
+    /**
+     * Güncel döviz latest fiyat haritasını döner.
+     */
     public Map<String, MarketPriceLatestDto> getLatestDoviz() {
         return blockLatest("/api/market/doviz/latest", LATEST_MAP);
     }
 
+    /**
+     * Güncel metal latest fiyat haritasını döner.
+     */
     public Map<String, MarketPriceLatestDto> getLatestMetals() {
         return blockLatest("/api/market/metals/latest", LATEST_MAP);
     }
 
+    /**
+     * Güncel kripto latest fiyat haritasını döner.
+     */
     public Map<String, MarketPriceLatestDto> getLatestCrypto() {
         return blockLatest("/api/market/crypto/latest", LATEST_MAP);
     }
 
+    /**
+     * Güncel fon latest fiyat haritasını döner.
+     */
     public Map<String, MarketPriceLatestDto> getLatestFunds() {
         return blockLatest("/api/market/funds/latest", LATEST_MAP);
     }
 
+    /**
+     * Güncel hisse latest fiyat haritasını döner.
+     */
     public Map<String, MarketPriceLatestDto> getLatestEquity() {
         return blockLatest("/api/market/equity/latest", LATEST_MAP);
     }
 
+    /**
+     * Varlık tipi ve sembol için TRY fiyatını çözümler (snapshot ile veya yüklemeden).
+     */
     public BigDecimal getPriceTry(AssetType type, String symbol) {
         return getPriceTry(type, symbol, loadLatestPricing());
     }
@@ -286,6 +324,9 @@ public class MarketDataClient {
         return v == null ? BigDecimal.ZERO : v;
     }
 
+    /**
+     * Sembol için son N gün market history DTO listesi getirir.
+     */
     public List<MarketPriceHistoryDto> getHistory(AssetType type, String symbol, int days) {
         String uri = switch (type) {
             case FX -> "/api/market/doviz/history?symbol={symbol}&days={days}";
@@ -347,6 +388,9 @@ public class MarketDataClient {
         return list != null ? list : List.of();
     }
 
+    /**
+     * BIST latest satır listesini market-data'dan çeker.
+     */
     public List<BistLatestRow> getBistLatestRows() {
         try {
             List<BistLatestRow> rows = marketDataWebClient.get()
@@ -362,6 +406,9 @@ public class MarketDataClient {
         }
     }
 
+    /**
+     * BIST sembolü için güncel mid TRY fiyatı döner.
+     */
     public BigDecimal getBistLatestMidTry(String symbol) {
         if (symbol == null || symbol.isBlank()) {
             return BigDecimal.ZERO;
@@ -392,6 +439,9 @@ public class MarketDataClient {
         }
     }
 
+    /**
+     * Çoklu BIST sembol history'sini harita olarak döner.
+     */
     public Map<String, List<MarketPriceHistoryDto>> getBistBatchHistoryMapped(String symbolsCsv, LocalDate from, LocalDate to) {
         if (symbolsCsv == null || symbolsCsv.isBlank() || from == null || to == null) {
             return Map.of();
@@ -453,6 +503,9 @@ public class MarketDataClient {
         }
     }
 
+    /**
+     * Sayfalanmış BIST latest listesi getirir.
+     */
     public BistLatestPage getBistLatestPage(
             int page, int size, String sort, String dir, String filter, String search) {
         try {
@@ -482,10 +535,16 @@ public class MarketDataClient {
         return new BistLatestPage(List.of(), 0, 5, 0, 0, false, false);
     }
 
+    /**
+     * VİOP latest kontrat satırlarını listeler.
+     */
     public List<ViopLatestRow> getViopLatestRows() {
         return blockListEnvelope("/api/market/viop/latest", VIOP_LATEST_ENVELOPE, REQUEST_TIMEOUT.plusSeconds(10));
     }
 
+    /**
+     * Borç/tahvil latest satırlarını listeler.
+     */
     public List<DebtLatestRow> getDebtLatestRows() {
         return blockListEnvelope("/api/market/debt/latest", DEBT_LATEST_ENVELOPE, REQUEST_TIMEOUT.plusSeconds(2));
     }
@@ -497,24 +556,119 @@ public class MarketDataClient {
         if (contractCode == null || contractCode.isBlank() || date == null) {
             return java.util.Optional.empty();
         }
-        String code = contractCode.trim().toUpperCase();
+        for (String code : viopContractCodeVariants(contractCode)) {
+            java.util.Optional<ViopPriceAtRow> hit = fetchViopPriceAt(code, date);
+            if (hit.isPresent()) {
+                return hit;
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    /**
+     * {@code price-at} bulamazsa: o günün saatlik history serisinden gün içindeki son geçerli barı döner.
+     */
+    public java.util.Optional<ViopPriceAtRow> findViopPriceOnCalendarDay(String contractCode, LocalDate date) {
+        if (contractCode == null || contractCode.isBlank() || date == null) {
+            return java.util.Optional.empty();
+        }
+        for (String code : viopContractCodeVariants(contractCode)) {
+            java.util.Optional<ViopPriceAtRow> hit = fetchViopLastBarOnCalendarDay(code, date);
+            if (hit.isPresent()) {
+                return hit;
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    private java.util.Optional<ViopPriceAtRow> fetchViopPriceAt(String contractCode, LocalDate date) {
         try {
-            ViopPriceAtRow row = marketDataWebClient.get()
+            ApiEnvelope<ViopPriceAtRow> envelope = marketDataWebClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/api/market/viop/contracts/{code}/price-at")
                             .queryParam("date", date.toString())
-                            .build(code))
+                            .build(contractCode))
                     .retrieve()
-                    .bodyToMono(ViopPriceAtRow.class)
+                    .bodyToMono(VIOP_PRICE_AT_ENVELOPE)
                     .timeout(HISTORY_REQUEST_TIMEOUT)
-                    .onErrorReturn(null)
+                    .onErrorReturn(new ApiEnvelope<>(false, null, null, null))
                     .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(5));
-            return java.util.Optional.ofNullable(row);
+            ViopPriceAtRow row = unwrapEnvelopeData(envelope);
+            if (row == null || row.matchType() == null) {
+                return java.util.Optional.empty();
+            }
+            String mt = row.matchType().trim().toUpperCase();
+            if ("NOT_FOUND".equals(mt) || row.price() == null || row.price().signum() <= 0) {
+                return java.util.Optional.empty();
+            }
+            return java.util.Optional.of(row);
         } catch (RuntimeException ignored) {
             return java.util.Optional.empty();
         }
     }
 
+    private java.util.Optional<ViopPriceAtRow> fetchViopLastBarOnCalendarDay(String contractCode, LocalDate date) {
+        LocalDateTime from = date.atStartOfDay();
+        LocalDateTime to = date.plusDays(1).atStartOfDay();
+        try {
+            ApiEnvelope<ViopHistoryResponseRow> envelope = marketDataWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/market/viop/contracts/{code}/history")
+                            .queryParam("from", from.toString())
+                            .queryParam("to", to.toString())
+                            .queryParam("period", 60)
+                            .build(contractCode))
+                    .retrieve()
+                    .bodyToMono(VIOP_HISTORY_ENVELOPE)
+                    .timeout(HISTORY_REQUEST_TIMEOUT)
+                    .onErrorReturn(new ApiEnvelope<>(false, null, null, null))
+                    .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(5));
+            ViopHistoryResponseRow hist = unwrapEnvelopeData(envelope);
+            if (hist == null || hist.points() == null || hist.points().isEmpty()) {
+                return java.util.Optional.empty();
+            }
+            return hist.points().stream()
+                    .filter(p -> p != null && p.time() != null && p.price() != null && p.price().signum() > 0)
+                    .filter(p -> p.time().atZone(VIOP_ZONE).toLocalDate().equals(date))
+                    .max(Comparator.comparing(ViopHistoryPointRow::time))
+                    .map(p -> new ViopPriceAtRow(
+                            contractCode,
+                            from,
+                            p.time().atZone(VIOP_ZONE).toLocalDateTime(),
+                            p.price(),
+                            "EXACT",
+                            "VIOP_HISTORY",
+                            "OK"));
+        } catch (RuntimeException ignored) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    private static List<String> viopContractCodeVariants(String contractCode) {
+        if (contractCode == null || contractCode.isBlank()) {
+            return List.of();
+        }
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        String u = contractCode.trim().toUpperCase();
+        out.add(u);
+        String stripped = u.startsWith("F_") ? u.substring(2) : u;
+        if (!stripped.isBlank()) {
+            out.add(stripped);
+            out.add("F_" + stripped);
+        }
+        return List.copyOf(out);
+    }
+
+    private static <T> T unwrapEnvelopeData(ApiEnvelope<T> envelope) {
+        if (envelope == null || !Boolean.TRUE.equals(envelope.success())) {
+            return null;
+        }
+        return envelope.data();
+    }
+
+    /**
+     * ISIN için borç history serisi getirir.
+     */
     public List<DebtHistoryRow> getDebtHistory(String isin, int days) {
         if (isin == null || isin.isBlank()) {
             return List.of();
@@ -608,6 +762,9 @@ public class MarketDataClient {
         }
     }
 
+    /**
+     * TEFAS fon listesini sayfalı getirir.
+     */
     public TefasFundPage getTefasFundPage(int page, int size, String sort, String dir, String search) {
         try {
             ApiEnvelope<TefasFundPage> envelope = marketDataWebClient.get()
@@ -632,6 +789,9 @@ public class MarketDataClient {
         }
     }
 
+    /**
+     * TEFAS fon kodu için aylık history getirir.
+     */
     public List<TefasHistoryPoint> getTefasFundHistory(String code, int months) {
         if (code == null || code.isBlank()) {
             return List.of();
@@ -666,14 +826,17 @@ public class MarketDataClient {
      * Faiz &amp; enflasyon panel özeti — OpenAI context için kısa makro yükü.
      */
     @SuppressWarnings("unchecked")
+    /**
+ * Makro panel özet verisini market-data'dan yükler.
+ */
     public Map<String, Object> loadMacroPanelSummary() {
         try {
             String raw = marketDataWebClient.get()
                     .uri("/api/market/macro/interest-inflation-panel")
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(REQUEST_TIMEOUT)
-                    .block(REQUEST_TIMEOUT.plusSeconds(5));
+                    .timeout(MACRO_PANEL_TIMEOUT)
+                    .block(MACRO_PANEL_TIMEOUT.plusSeconds(5));
             if (raw == null || raw.isBlank()) {
                 return Map.of();
             }

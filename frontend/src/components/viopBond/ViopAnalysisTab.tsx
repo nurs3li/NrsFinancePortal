@@ -15,7 +15,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import type { ManualViopPosition, ManualViopPositionCreatePayload } from '../../types/viopPosition';
 import type { TerminalListInstrumentVm } from '../../utils/marketTerminalListVm';
 import { fetchAllTerminalInstruments } from './viopBondMarket';
-import { fmtMoney } from './formatViopBond';
+import { fmtLeverageX, fmtMoney, fmtRatioPercent } from './formatViopBond';
 import { ViopPositionAddModal } from './ViopPositionAddModal';
 import { CloseViopPositionModal } from './CloseViopPositionModal';
 import { ViopBondToast } from './ViopBondToast';
@@ -121,6 +121,7 @@ export function ViopAnalysisTab({ tokens }: Props) {
     };
 
     const expiringSoon = summary?.expiringSoonCount ?? 0;
+    const hasMissingFx = summary?.hasMissingFxRate ?? false;
 
     const tabKpis: {
         label: string;
@@ -137,7 +138,15 @@ export function ViopAnalysisTab({ tokens }: Props) {
         {
             label: t('viopBond.viopMargin', 'Toplam Teminat'),
             value: fmtMoney(summary?.totalInitialMargin, locale),
-            hint: t('viopBond.kpiViopMarginHint', 'Pozisyonlar için ayrılan teminat'),
+            hint: `${t('viopBond.kpiViopMarginHint', 'Pozisyonlar için ayrılan teminat')}${
+                summary?.marginRatio != null
+                    ? ` · ${t('viopBond.marginRatioShort', 'Teminat oranı')}: ${fmtRatioPercent(summary.marginRatio, locale)}`
+                    : ''
+            }`,
+            title: t(
+                'viopBond.marginRatioTooltip',
+                'Teminat oranı, toplam sözleşme büyüklüğünün ne kadarının teminat olarak ayrıldığını gösterir.',
+            ),
         },
         {
             label: t('viopBond.viopPnl', 'Açık K/Z'),
@@ -147,11 +156,34 @@ export function ViopAnalysisTab({ tokens }: Props) {
         },
         {
             label: t('viopBond.viopRisk', 'Risk Maruziyeti'),
-            value: fmtMoney(summary?.totalRiskExposure, locale),
-            hint: t('viopBond.kpiViopExposureHint', 'Kaldıraçlı sözleşme büyüklüğü'),
+            value: `${fmtMoney(summary?.totalRiskExposure, locale)} ₺`,
+            hint: hasMissingFx
+                ? t(
+                      'viopBond.kpiViopExposureFxWarn',
+                      'TRY karşılığı · Bazı pozisyonlar için kur eksik',
+                  )
+                : t('viopBond.kpiViopExposureTryHint', 'TRY karşılığı · Kaldıraçlı sözleşme büyüklüğü'),
             title: t(
                 'viopBond.exposureTooltip',
-                'Maruziyet portföy değeri değildir; sözleşmenin kaldıraçlı nominal büyüklüğünü gösterir.',
+                'Maruziyet portföy değeri değildir; sözleşmenin kaldıraçlı nominal büyüklüğünü gösterir. USD/EUR kontratlar USDTRY ile çevrilir.',
+            ),
+        },
+        {
+            label: t('viopBond.viopLeverage', 'Kaldıraç Etkisi'),
+            value: fmtLeverageX(summary?.portfolioLeverage, locale),
+            hint: t('viopBond.kpiViopLeverageHint', 'Teminata göre taşınan sözleşme büyüklüğü'),
+            title: t(
+                'viopBond.leverageTooltip',
+                'Kaldıraç etkisi, yatırılan teminatın kaç katı büyüklüğünde fiyat riskine maruz kalındığını gösterir.',
+            ),
+        },
+        {
+            label: t('viopBond.viopPnlToMargin', 'K/Z / Teminat'),
+            value: fmtRatioPercent(summary?.pnlToMarginRatio, locale),
+            hint: t('viopBond.kpiViopPnlMarginHint', 'Açık K/Z’nin teminata oranı'),
+            title: t(
+                'viopBond.pnlMarginTooltip',
+                'VİOP’ta kâr/zararın teminata oranı, pozisyonun teminat üzerindeki etkisini gösterir.',
             ),
         },
         {
@@ -277,9 +309,12 @@ export function ViopAnalysisTab({ tokens }: Props) {
                 }}
                 instrument={addInstrument}
                 editPosition={editRow}
-                onSubmit={async (payload) => {
+                openPositions={openPositions}
+                onSubmit={async (payload, action = 'create', mergeId) => {
                     try {
-                        if (editRow) {
+                        if (action === 'merge' && mergeId != null) {
+                            await updateMut.mutateAsync({ id: mergeId, payload });
+                        } else if (editRow) {
                             await updateMut.mutateAsync({ id: editRow.id, payload });
                         } else {
                             await createMut.mutateAsync(payload);

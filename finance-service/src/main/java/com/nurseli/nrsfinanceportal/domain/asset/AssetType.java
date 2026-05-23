@@ -1,5 +1,6 @@
 package com.nurseli.nrsfinanceportal.domain.asset;
 
+/** Portföy ve fiyat alarmı varlık türü (FX, CRYPTO, STOCK, BIST, METAL, FUND, VIOP, BOND). */
 public enum AssetType {
     FX,        // USD, EUR
     CRYPTO,    // BTC, ETH

@@ -31,29 +31,13 @@ class FxProviderFacadeTest {
     }
 
     @Test
-    void tcmbFailBankOkShouldReturnFallback() {
+    void tcmbFailEvdsOkShouldReturnFallback() {
         ProviderRegistry registry = Mockito.mock(ProviderRegistry.class);
         MarketPriceQueryService queryService = Mockito.mock(MarketPriceQueryService.class);
         FxProvider tcmb = provider("TCMB", Map.of());
-        FxProvider bank = provider("BANK", Map.of("USDTRY", row("BANK")));
+        FxProvider evds = provider("EVDS", Map.of("USDTRY", row("EVDS")));
         Mockito.when(registry.fxCanonical()).thenReturn(tcmb);
-        Mockito.when(registry.fxFallbackOrder()).thenReturn(List.of(bank));
-
-        FxProviderFacade facade = new FxProviderFacade(registry, queryService, new SimpleMeterRegistry());
-        MarketPriceLatestResponse response = facade.getLatest("USDTRY");
-
-        assertEquals(PriceQuality.FALLBACK, response.quality());
-        assertEquals("BANK", response.source());
-    }
-
-    @Test
-    void fallbackProviderCanExposeActualSource() {
-        ProviderRegistry registry = Mockito.mock(ProviderRegistry.class);
-        MarketPriceQueryService queryService = Mockito.mock(MarketPriceQueryService.class);
-        FxProvider tcmb = provider("TCMB", Map.of());
-        FxProvider bankProxyEvds = provider("BANK", Map.of("USDTRY", row("EVDS")));
-        Mockito.when(registry.fxCanonical()).thenReturn(tcmb);
-        Mockito.when(registry.fxFallbackOrder()).thenReturn(List.of(bankProxyEvds));
+        Mockito.when(registry.fxFallbackOrder()).thenReturn(List.of(evds));
 
         FxProviderFacade facade = new FxProviderFacade(registry, queryService, new SimpleMeterRegistry());
         MarketPriceLatestResponse response = facade.getLatest("USDTRY");
@@ -67,9 +51,9 @@ class FxProviderFacadeTest {
         ProviderRegistry registry = Mockito.mock(ProviderRegistry.class);
         MarketPriceQueryService queryService = Mockito.mock(MarketPriceQueryService.class);
         FxProvider tcmb = provider("TCMB", Map.of());
-        FxProvider bank = provider("BANK", Map.of());
+        FxProvider evds = provider("EVDS", Map.of());
         Mockito.when(registry.fxCanonical()).thenReturn(tcmb);
-        Mockito.when(registry.fxFallbackOrder()).thenReturn(List.of(bank));
+        Mockito.when(registry.fxFallbackOrder()).thenReturn(List.of(evds));
         Mockito.when(queryService.getLatestOrThrow("USDTRY")).thenReturn(row("DB"));
 
         FxProviderFacade facade = new FxProviderFacade(registry, queryService, new SimpleMeterRegistry());

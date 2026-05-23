@@ -5,6 +5,9 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
+ * Keycloak admin server/realm/client özellikleri.
+ */
+/**
  * Realm'de kullanıcıyı disable/enable etmek için confidential client + service account.
  * Keycloak Admin Console: Client oluştur → Client authentication ON, Service accounts ON →
  * service account kullanıcısına realm-management → manage-users (veya daha dar) ata.

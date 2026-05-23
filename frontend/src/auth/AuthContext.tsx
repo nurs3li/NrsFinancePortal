@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import keycloak from './keycloak';
+import { applyKeycloakTokens } from './applyKeycloakTokens';
+import { clearPortalSession, PORTAL_AUTH_EXPIRED_EVENT } from './portalSession';
 import { financeClient } from '../api/client';
 import { effectiveRoleFromRealmRoles, readRealmRolesFromTokenParsed } from './jwtRoleUtils';
-import { useLanguage } from '../i18n/LanguageContext';
+import { loginResponseToTokens, portalLogin, portalRefreshToken, type LoginRequest } from '../services/authApi';
 import { useTheme } from '../theme/ThemeContext';
 
 export type UserRole = 'USER' | 'ADMIN';
@@ -21,7 +23,7 @@ type AuthContextType = {
     /** JWT realm_access önceliği; uygulama rolleri yoksa /api/users/me */
     role: UserRole | null;
     jwtRealmRoles: string[];
-    login: () => void;
+    loginWithCredentials: (body: LoginRequest) => Promise<{ otpRequired: boolean; message?: string | null }>;
     logout: () => void;
     ready: boolean;
     refetchUser: () => Promise<void>;
@@ -37,7 +39,6 @@ function parseRole(r: string | undefined): UserRole | null {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-    const { t } = useLanguage();
     const { tokens, theme } = useTheme();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [token, setToken] = useState<string | null>(null);
@@ -51,16 +52,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (keycloak.token) setToken(keycloak.token);
     }, []);
 
-    const login = useCallback(() => {
-        // Force credential chooser instead of silently reusing stale SSO user.
-        keycloak.login({ locale: 'tr', prompt: 'login' });
-    }, []);
+    const loginWithCredentials = useCallback(
+        async (body: LoginRequest) => {
+            const data = await portalLogin(body);
+            if (data.otpRequired) {
+                return { otpRequired: true, message: data.message ?? null };
+            }
+            const tokens = loginResponseToTokens(data);
+            if (!tokens?.accessToken) {
+                throw new Error('Giriş yanıtında token yok');
+            }
+            applyKeycloakTokens(tokens);
+            setIsAuthenticated(true);
+            setToken(tokens.accessToken);
+            syncRolesFromKeycloak();
+            try {
+                const res = await financeClient.get('/api/users/me');
+                const raw = res.data?.data ?? res.data;
+                if (raw?.id != null && raw?.role) {
+                    const apiRole = parseRole(raw.role);
+                    setUser({
+                        id: raw.id,
+                        username: raw.username ?? '',
+                        email: raw.email ?? '',
+                        role: apiRole ?? 'USER',
+                    });
+                }
+            } catch {
+                if (data.userId != null && data.role) {
+                    setUser({
+                        id: data.userId,
+                        username: data.username ?? '',
+                        email: data.email ?? '',
+                        role: parseRole(data.role) ?? 'USER',
+                    });
+                }
+            }
+            return { otpRequired: false };
+        },
+        [syncRolesFromKeycloak]
+    );
 
     const logout = useCallback(() => {
-        // End Keycloak SSO session and return to landing (/).
-        keycloak.logout({ redirectUri: `${window.location.origin}/` });
+        clearPortalSession();
+        setIsAuthenticated(false);
+        setToken(null);
         setUser(null);
         setJwtRealmRoles([]);
+        window.location.replace('/');
     }, []);
 
     const dismissPermissionFlash = useCallback(() => setPermissionFlash(null), []);
@@ -103,6 +142,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [jwtRealmRoles, user]);
 
     useEffect(() => {
+        const onExpired = () => {
+            setIsAuthenticated(false);
+            setToken(null);
+            setUser(null);
+            setJwtRealmRoles([]);
+        };
+        window.addEventListener(PORTAL_AUTH_EXPIRED_EVENT, onExpired);
+        return () => window.removeEventListener(PORTAL_AUTH_EXPIRED_EVENT, onExpired);
+    }, []);
+
+    useEffect(() => {
         keycloak
             .init({
                 onLoad: 'check-sso',
@@ -130,13 +180,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [syncRolesFromKeycloak]);
 
     useEffect(() => {
-        if (!keycloak.authenticated) return;
-        const updateToken = () => {
-            keycloak.updateToken(70).then((refreshed) => {
-                if (refreshed) syncRolesFromKeycloak();
-            }).catch(() => keycloak.login());
+        if (!keycloak.authenticated || !keycloak.refreshToken) return;
+        const updateToken = async () => {
+            try {
+                const data = await portalRefreshToken(keycloak.refreshToken!);
+                const tokens = loginResponseToTokens(data);
+                if (!tokens?.accessToken) {
+                    throw new Error('refresh failed');
+                }
+                applyKeycloakTokens(tokens);
+                syncRolesFromKeycloak();
+            } catch {
+                clearPortalSession();
+                setIsAuthenticated(false);
+                setToken(null);
+                setUser(null);
+                setJwtRealmRoles([]);
+            }
         };
-        const interval = setInterval(updateToken, 60000);
+        const interval = setInterval(() => void updateToken(), 60000);
         return () => clearInterval(interval);
     }, [isAuthenticated, syncRolesFromKeycloak]);
 
@@ -161,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 user,
                 role,
                 jwtRealmRoles,
-                login,
+                loginWithCredentials,
                 logout,
                 ready,
                 refetchUser,
@@ -202,7 +264,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                             fontSize: '0.8rem',
                         }}
                     >
-                        {t('common.ok', 'Tamam')}
+                        Tamam
                     </button>
                 </div>
             )}

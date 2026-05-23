@@ -7,6 +7,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 
+/**
+ * Manuel VİOP pozisyonu entity; kontrat, yön, giriş/kapanış fiyatları
+ * ve realize PnL alanlarını içerir.
+ */
 @Entity
 @Table(name = "manual_viop_positions")
 public class ManualViopPosition {

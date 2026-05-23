@@ -22,4 +22,19 @@ public class EtfProperties {
 
     /** FundPriceIngestService.ingestHistory için pencere (gün). */
     private int historyIncrementalDays = 30;
+
+    /**
+     * Finnhub ücretsiz planda günlük mum (candle) dönmeyen ETF'ler — doğrudan Yahoo history.
+     * Örnek: IWM, GLD. Boş bırakılırsa çalışma anında öğrenilen semboller kullanılır.
+     */
+    private List<String> historyYahooOnlySymbols = new ArrayList<>(List.of("IWM", "GLD"));
+
+    /**
+     * true: ETF geçmiş (candle) yalnızca Yahoo — Finnhub free planda SPY/QQQ/IWM/… mum vermez.
+     * Günlük anlık fiyat ({@code ingestForDate}) hâlâ Finnhub quote kullanabilir.
+     */
+    private boolean historyUseYahooOnly = true;
+
+    /** DB son tarih bu kadar gün içindeyse startup/cron history atlanır. */
+    private int historySkipIfFreshWithinDays = 3;
 }

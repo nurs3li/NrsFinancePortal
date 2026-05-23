@@ -6,7 +6,7 @@ import com.nurseli.marketdata.config.BistProperties;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.infrastructure.bist.BistDataQuality;
 import com.nurseli.marketdata.infrastructure.bist.BistSymbolCatalog;
-import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
+import com.nurseli.marketdata.infrastructure.persistence.MarketPriceHistoryRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

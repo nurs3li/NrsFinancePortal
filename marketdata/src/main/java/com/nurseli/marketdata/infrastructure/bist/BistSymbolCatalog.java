@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Sabit BIST hisse kataloğu (20 sembol). Okuma/yazma dışında değişmez.
+ * Sabit BIST hisse kataloğu. Okuma/yazma dışında değişmez; yeni semboller buraya eklenir.
  */
 @Component
 public class BistSymbolCatalog {
@@ -38,7 +38,10 @@ public class BistSymbolCatalog {
                 m("ENKAI", "Enka İnşaat", "İnşaat"),
                 m("PETKM", "Petkim", "Petrokimya"),
                 m("KOZAL", "Koza Altın", "Madencilik"),
-                m("PGSUS", "Pegasus", "Ulaştırma")
+                m("PGSUS", "Pegasus", "Ulaştırma"),
+                m("VESBE", "Vestel Elektronik", "Tüketici elektroniği"),
+                m("KARSN", "Karsan Otomotiv", "Otomotiv"),
+                m("ZOREN", "Zorlu Enerji", "Enerji")
         );
         this.all = List.copyOf(built);
         Map<String, BistSymbolMetadata> map = new HashMap<>(built.size() * 2);

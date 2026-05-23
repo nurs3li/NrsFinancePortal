@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(name = "market.deposit-rates.enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "market.bootstrap", name = "orchestrate-startup", havingValue = "false")
 public class DepositRatesStartupBackfill {
 
     private final DepositRatesProperties depositRatesProperties;

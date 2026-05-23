@@ -144,7 +144,6 @@ JSON
   echo ""
   echo "**Intentional non-envelope**"
   echo ""
-  echo "- \`GET /api/fund-requests/receipts/{receiptId}\` — binary stream"
   echo "- \`/health/**\`, \`/internal/**\` (service-internal)"
   echo ""
 } >>"$ENDPOINTS_MD"

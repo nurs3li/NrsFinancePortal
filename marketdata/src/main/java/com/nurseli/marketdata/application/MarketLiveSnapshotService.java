@@ -8,8 +8,8 @@ import com.nurseli.marketdata.api.dto.MarketPriceLatestResponse;
 import com.nurseli.marketdata.api.dto.ViopSnapshotResponse;
 import com.nurseli.marketdata.domain.price.CryptoDailyCandle;
 import com.nurseli.marketdata.domain.price.FxDailyCandle;
-import com.nurseli.marketdata.repository.CryptoDailyCandleRepository;
-import com.nurseli.marketdata.repository.FxDailyCandleRepository;
+import com.nurseli.marketdata.infrastructure.persistence.CryptoDailyCandleRepository;
+import com.nurseli.marketdata.infrastructure.persistence.FxDailyCandleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

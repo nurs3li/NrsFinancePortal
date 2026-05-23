@@ -1,6 +1,6 @@
 package com.nurseli.marketdata.config;
 
-import com.nurseli.marketdata.realtime.MarketLiveWebSocketHandler;
+import com.nurseli.marketdata.api.realtime.MarketLiveWebSocketHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;

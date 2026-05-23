@@ -909,7 +909,9 @@ export function Dashboard() {
                             </p>
                         ) : (
                             starredPageAssets.map((asset) => {
-                                const logoUrl = getDynamicLogoUrl(asset.code, asset.marketType);
+                                const logoUrl = getDynamicLogoUrl(asset.code, asset.marketType, {
+                                    equitySubmarket: asset.marketType === 'EQUITY' ? 'US' : undefined,
+                                });
                                 const fallback = getFallbackIcon(asset.marketType);
                                 return (
                                     <StarredAssetRow

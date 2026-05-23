@@ -1,7 +1,7 @@
 package com.nurseli.marketdata.application.debt;
 
 import com.nurseli.marketdata.domain.debt.DebtInstrument;
-import com.nurseli.marketdata.repository.DebtInstrumentRepository;
+import com.nurseli.marketdata.infrastructure.persistence.DebtInstrumentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

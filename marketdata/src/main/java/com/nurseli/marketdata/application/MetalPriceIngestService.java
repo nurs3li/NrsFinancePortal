@@ -2,7 +2,7 @@ package com.nurseli.marketdata.application;
 
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.infrastructure.coingecko.CoinGeckoMetalClient;
-import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
+import com.nurseli.marketdata.infrastructure.persistence.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;

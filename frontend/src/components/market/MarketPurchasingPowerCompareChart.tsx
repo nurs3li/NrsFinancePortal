@@ -15,6 +15,7 @@ import { chartGridStroke, chartTooltipContentStyle } from '../../lib/chartTheme'
 import type { PurchasingPowerData } from '../../hooks/usePurchasingPowerData';
 
 type Props = {
+    unitLabel: string;
     data: PurchasingPowerData;
     tokens: { bgCard: string; border: string; text: string; textMuted: string };
 };
@@ -23,7 +24,7 @@ function fmtTry(locale: string, v: number) {
     return new Intl.NumberFormat(locale, { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(v);
 }
 
-function MarketPurchasingPowerCompareChartImpl({ data, tokens }: Props) {
+function MarketPurchasingPowerCompareChartImpl({ unitLabel, data, tokens }: Props) {
     const { t, lang } = useLanguage();
     const { theme } = useTheme();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
@@ -34,13 +35,15 @@ function MarketPurchasingPowerCompareChartImpl({ data, tokens }: Props) {
     return (
         <div className="terminal-card terminal-macro-chart-card terminal-pp-compare-chart" style={{ borderColor: tokens.border }}>
             <h3 className="terminal-macro-card__title" style={{ color: tokens.text }}>
-                {t('market.ppChartTitle', '1 lot — varlık vs enflasyon vs mevduat')}
+                {t('market.ppChartTitleUnit', '{unit} — varlık vs enflasyon vs mevduat').replace('{unit}', unitLabel)}
             </h3>
             <p className="terminal-macro-card__muted" style={{ color: tokens.textMuted, margin: '0 0 10px' }}>
                 {t(
-                    'market.ppChartSubtitleLot',
-                    'Referans tarihte 1 lot alım maliyeti ({cost}); turuncu satın alma gücü (günlük TÜFE), yeşil mevduat günlük bileşik faiz.',
-                ).replace('{cost}', lotCost != null ? fmtTryStable(lotCost) : '—')}
+                    'market.ppChartSubtitleUnit',
+                    'Referans tarihte {unit} alım maliyeti ({cost}); turuncu satın alma gücü (günlük TÜFE), yeşil mevduat günlük bileşik faiz.',
+                )
+                    .replace('{unit}', unitLabel)
+                    .replace('{cost}', lotCost != null ? fmtTryStable(lotCost) : '—')}
             </p>
             {loading ? (
                 <div className="terminal-chart-empty">{t('market.loading', 'Yükleniyor...')}</div>
@@ -67,7 +70,7 @@ function MarketPurchasingPowerCompareChartImpl({ data, tokens }: Props) {
                         <Line
                             type="monotone"
                             dataKey="assetTry"
-                            name={t('market.ppLineAsset', '1 lot varlık (TRY)')}
+                            name={t('market.ppLineAssetUnit', '{unit} varlık (TRY)').replace('{unit}', unitLabel)}
                             stroke="#38bdf8"
                             dot={false}
                             strokeWidth={2.5}

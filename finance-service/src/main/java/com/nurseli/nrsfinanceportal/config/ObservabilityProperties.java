@@ -3,6 +3,9 @@ package com.nurseli.nrsfinanceportal.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * app.observability.* yapılandırma özellikleri.
+ */
 @ConfigurationProperties(prefix = "app.observability")
 @Data
 public class ObservabilityProperties {

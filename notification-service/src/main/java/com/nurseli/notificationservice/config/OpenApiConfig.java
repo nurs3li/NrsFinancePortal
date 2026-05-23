@@ -10,11 +10,17 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Swagger/OpenAPI 3 dokümantasyonu ve JWT Bearer security scheme tanımı.
+ */
 @Configuration
 public class OpenApiConfig {
 
     private static final String BEARER_SCHEME = "bearerAuth";
 
+    /**
+     * {@code notificationServiceOpenApi} — API metadata ve {@code bearerAuth} security scheme bean'i.
+     */
     @Bean
     public OpenAPI notificationServiceOpenApi() {
         return new OpenAPI()

@@ -4,6 +4,9 @@ import jakarta.persistence.*;
 
 import java.time.Instant;
 
+/**
+ * Kullanıcının yıldızladığı varlık entity; marketType ve symbol ile benzersiz takip.
+ */
 @Entity
 @Table(
         name = "user_starred_asset",

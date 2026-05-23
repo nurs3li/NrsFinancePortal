@@ -2,6 +2,7 @@ import type { MarketCategory } from '../components/market/marketTypes';
 import { formatAssetLabel, type MarketKind } from '../lib/assetBranding';
 import { getPreciousMetalDisplayMeta } from '../constants/preciousMetalsUsd';
 import type { MarketTerminalListItem } from '../services/marketTerminalListApi';
+import { enrichBistInstrumentHorizons } from './bistInstrumentHorizons';
 
 export type TerminalListInstrumentVm = {
     symbol: string;
@@ -36,6 +37,8 @@ export type TerminalListInstrumentVm = {
     listSubtitle?: string;
     fundSubmarket?: string;
     fundRiskLevel?: number;
+    fundReturn3m?: number;
+    fundReturn6m?: number;
     fundReturn3y?: number;
     fundReturn5y?: number;
 };
@@ -135,9 +138,9 @@ export function terminalListItemToVm(item: MarketTerminalListItem): TerminalList
             (item.displayName && item.displayName.trim()) ||
             (item.name && item.name.trim()) ||
             symbol;
-        return {
+        const base = {
             symbol,
-            category: 'EQUITY',
+            category: 'EQUITY' as const,
             displayName,
             price,
             changePercent,
@@ -156,6 +159,27 @@ export function terminalListItemToVm(item: MarketTerminalListItem): TerminalList
             pctMonth: item.pctMonth,
             pctYear: item.pctYear,
             longShort: item.trend === 'UP' ? 'LONG' : 'SHORT',
+        };
+        const enriched = enrichBistInstrumentHorizons(
+            {
+                symbol,
+                sparkline: spark.length >= 2 ? spark : base.sparkline,
+                pctDay: item.pctDay,
+                pctWeek: item.pctWeek,
+                pctMonth: item.pctMonth,
+                pctYear: item.pctYear,
+                changePercent,
+                dailyChangePercent,
+            },
+            spark,
+        );
+        return {
+            ...base,
+            sparkline: enriched.sparkline,
+            pctDay: enriched.pctDay,
+            pctWeek: enriched.pctWeek,
+            pctMonth: enriched.pctMonth,
+            pctYear: enriched.pctYear,
         };
     }
 
@@ -181,6 +205,8 @@ export function terminalListItemToVm(item: MarketTerminalListItem): TerminalList
             listSubtitle: item.sector ?? undefined,
             fundSubmarket: 'TR',
             fundRiskLevel: item.fundRiskLevel ?? undefined,
+            fundReturn3m: item.fundReturn3m ?? undefined,
+            fundReturn6m: item.fundReturn6m ?? undefined,
             fundReturn3y: item.fundReturn3y ?? undefined,
             fundReturn5y: item.fundReturn5y ?? undefined,
             sparkline: [],

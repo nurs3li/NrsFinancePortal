@@ -8,6 +8,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 
+/**
+ * Manuel portföy pozisyonu entity; varlık tipi, miktar, alış/satış fiyat kaynağı
+ * ve pozisyon durumunu tutar.
+ */
 @Entity
 @Table(name = "manual_portfolio_positions")
 public class ManualPortfolioPosition {

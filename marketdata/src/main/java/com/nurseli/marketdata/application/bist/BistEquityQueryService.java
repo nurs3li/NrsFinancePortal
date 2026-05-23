@@ -11,7 +11,7 @@ import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.infrastructure.bist.BistDataQuality;
 import com.nurseli.marketdata.infrastructure.bist.BistSymbolCatalog;
 import com.nurseli.marketdata.infrastructure.bist.BistSymbolMetadata;
-import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
+import com.nurseli.marketdata.infrastructure.persistence.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -316,7 +316,20 @@ public class BistEquityQueryService {
                 marketPriceHistoryRepository.findTopBySymbolAndSourceOrderByTimestampDesc(
                         symbol, BistEquityDailyConstants.HISTORY_SOURCE);
         if (latest.isEmpty()) {
-            return false;
+            int lookbackDays = Math.max(7, bistProperties.getSeedLookbackDays());
+            LocalDate ingestFrom = effectiveTo.minusDays(lookbackDays);
+            try {
+                log.info(
+                        "[BIST_DAILY_QUERY] initial ingest symbol={} from={} to={}",
+                        symbol,
+                        ingestFrom,
+                        effectiveTo);
+                bistEquityIngestService.ingestHistory(symbol, ingestFrom, effectiveTo);
+                return true;
+            } catch (Exception ex) {
+                log.warn("[BIST_DAILY_QUERY] initial ingest failed symbol={} reason={}", symbol, ex.getMessage());
+                return false;
+            }
         }
         LocalDate lastDay = latest.get().getTimestamp().toLocalDate();
         // isBefore(cutoff) tek başına yeterli değil: lastDay == cutoff (ör. bugün-3) eski sayılmalı.

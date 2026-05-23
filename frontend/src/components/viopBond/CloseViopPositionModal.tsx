@@ -108,11 +108,18 @@ export function CloseViopPositionModal({ open, position, onClose, onSubmit }: Pr
         try {
             const res = await resolveViopHistoricalPrice(position.symbol, closeDate);
             setPriceResolve(res);
-            if (res.found && res.price != null) {
+            if (res.matchType !== 'NOT_FOUND' && res.price != null) {
                 setClosePriceInput(fmtLocaleDecimal(res.price, locale));
             }
         } catch {
-            setPriceResolve({ found: false, price: null, source: null, message: t('viopBond.priceResolveFailed', 'Fiyat bulunamadı') });
+            setPriceResolve({
+                symbol: position.symbol,
+                requestedDate: closeDate,
+                matchType: 'NOT_FOUND',
+                price: null,
+                source: null,
+                message: t('viopBond.priceResolveFailed', 'Fiyat bulunamadı'),
+            });
         } finally {
             setResolvingPrice(false);
         }

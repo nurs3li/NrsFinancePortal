@@ -3,7 +3,7 @@ import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useAuth } from '../auth/AuthContext';
-import { Eye, Settings, UserPlus, X, Ban, UserCheck } from 'lucide-react';
+import { Eye, Settings, UserPlus, X, Ban, UserCheck, Trash2 } from 'lucide-react';
 
 type UserRow = { id: number; username: string; email: string; role: string; loginSuspended?: boolean };
 
@@ -102,6 +102,33 @@ export function AdminUsersAndAccounts() {
                     t('admin.suspendFailed', 'Askıya alma başarısız');
                 setError(String(msg));
                 void reloadUsers().catch(() => undefined);
+            })
+            .finally(() => setActionLoading(null));
+    };
+
+    const handleDeleteUser = (userId: number, username: string) => {
+        if (
+            !window.confirm(
+                t(
+                    'admin.deleteUserConfirm',
+                    'Bu kullanıcı Keycloak ve portal veritabanından kalıcı olarak silinecek. Emin misiniz?'
+                ) + ` (${username})`
+            )
+        ) {
+            return;
+        }
+        setActionLoading(`d:${userId}`);
+        financeClient
+            .delete(`/api/admin/users/${userId}`)
+            .then(() => reloadUsers())
+            .catch((err) => {
+                const msg =
+                    err.response?.data?.errors?.message ??
+                    err.response?.data?.errors?.error ??
+                    err.response?.data?.message ??
+                    err.message ??
+                    t('admin.deleteUserFailed', 'Kullanıcı silinemedi');
+                setError(String(msg));
             })
             .finally(() => setActionLoading(null));
     };
@@ -228,6 +255,7 @@ export function AdminUsersAndAccounts() {
                             <th style={thStyle}>{t('admin.colRole', 'Yetki (Keycloak + DB)')}</th>
                             <th style={thStyle}>{t('admin.userLoginColumn', 'Giriş (Keycloak)')}</th>
                             <th style={thStyle}>{t('admin.colInspection', 'İnceleme')}</th>
+                            <th style={thStyle}>{t('admin.colActions', 'İşlemler')}</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -348,6 +376,26 @@ export function AdminUsersAndAccounts() {
                                         <Eye size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
                                         {t('admin.inspectBtn', 'İncele')}
                                     </button>
+                                </td>
+                                <td style={tdStyle}>
+                                    {u.role === 'ADMIN' || u.id === currentUser?.id ? (
+                                        <span style={{ ...mutedStyle, fontSize: '0.8rem' }}>—</span>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            style={{
+                                                ...btnStyle,
+                                                marginRight: 0,
+                                                borderColor: tokens.error,
+                                                color: tokens.error,
+                                            }}
+                                            disabled={actionLoading != null}
+                                            onClick={() => handleDeleteUser(u.id, u.username ?? String(u.id))}
+                                        >
+                                            <Trash2 size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                                            {t('admin.deleteUser', 'Kullanıcıyı sil')}
+                                        </button>
+                                    )}
                                 </td>
                             </tr>
                         ))}

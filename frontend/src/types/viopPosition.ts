@@ -29,6 +29,13 @@ export type ManualViopPosition = {
     netFinancialEffect?: number | null;
     daysToExpiry?: number | null;
     note?: string | null;
+    quoteCurrency?: string | null;
+    riskExposureNative?: number | null;
+    unrealizedPnlNative?: number | null;
+    leverage?: number | null;
+    marginRatio?: number | null;
+    pnlToMarginRatio?: number | null;
+    missingFxRate?: boolean;
 };
 
 export type ViopPositionSummary = {
@@ -41,6 +48,10 @@ export type ViopPositionSummary = {
     expiringSoonCount: number;
     netFinancialEffect: number;
     incompleteDataCount: number;
+    portfolioLeverage?: number | null;
+    marginRatio?: number | null;
+    pnlToMarginRatio?: number | null;
+    hasMissingFxRate?: boolean;
 };
 
 export type ManualViopPositionCreatePayload = {

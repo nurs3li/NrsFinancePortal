@@ -6,6 +6,11 @@ import DOMPurify from 'dompurify';
 import { useSearchParams } from 'react-router-dom';
 import './News.css';
 
+type NewsMediaItem = {
+    url: string;
+    caption: string | null;
+};
+
 type NewsItem = {
     id: number;
     title: string;
@@ -48,6 +53,8 @@ export function News() {
     const [category, setCategory] = useState('');
     const [pageNum, setPageNum] = useState(0);
     const [selected, setSelected] = useState<NewsItem | null>(null);
+    const [detailMedia, setDetailMedia] = useState<NewsMediaItem[]>([]);
+    const [mediaLoading, setMediaLoading] = useState(false);
     const [detailLoading, setDetailLoading] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -130,8 +137,13 @@ export function News() {
             setSelected(optimisticItem);
         }
         setDetailLoading(true);
-        marketClient
-            .get<NewsItem>(`/api/news/${id}`)
+        setMediaLoading(true);
+        setDetailMedia([]);
+
+        const detailReq = marketClient.get<NewsItem>(`/api/news/${id}`);
+        const mediaReq = marketClient.get<NewsMediaItem[]>(`/api/news/${id}/media`).catch(() => ({ data: [] as NewsMediaItem[] }));
+
+        detailReq
             .then((res) => setSelected(res.data))
             .catch(() => {
                 // Detay açılamazsa liste deneyimini bozma.
@@ -140,6 +152,10 @@ export function News() {
                 setDetailLoading(false);
                 requestAnimationFrame(() => scrollDetailIntoView());
             });
+
+        mediaReq
+            .then((res) => setDetailMedia(Array.isArray(res.data) ? res.data : []))
+            .finally(() => setMediaLoading(false));
     };
 
     useEffect(() => {
@@ -155,6 +171,36 @@ export function News() {
 
     const displayTitle = (item: NewsItem) =>
         preferTurkish && item.titleTr ? item.titleTr : item.title;
+
+    const renderDetailMedia = () => {
+        if (mediaLoading) {
+            return <p className="news-page__muted news-detail-media__status">{t('news.mediaLoading', 'Görseller yükleniyor…')}</p>;
+        }
+        if (detailMedia.length === 0 || !selected) {
+            return null;
+        }
+        return (
+            <div className="news-detail-media" aria-label={t('news.mediaGallery', 'Haber görselleri')}>
+                {detailMedia.map((item) => (
+                    <figure key={item.url} className="news-detail-media__item">
+                        <a href={item.url} target="_blank" rel="noreferrer noopener">
+                            <img
+                                src={item.url}
+                                alt={item.caption ?? displayTitle(selected)}
+                                loading="lazy"
+                                decoding="async"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                }}
+                            />
+                        </a>
+                        {item.caption ? <figcaption className="news-detail-media__caption">{item.caption}</figcaption> : null}
+                    </figure>
+                ))}
+            </div>
+        );
+    };
 
     const renderDetailBody = () => {
         if (detailLoading) {
@@ -178,6 +224,11 @@ export function News() {
             );
         }
         if (selected) {
+            const bodySource =
+                (preferTurkish ? selected.contentTr : null) ?? selected.content ?? selected.summary;
+            const hasBody = Boolean(bodySource?.trim());
+            const showEmptyContent = !hasBody && !mediaLoading && detailMedia.length === 0;
+
             return (
                 <div className="news-detail-card">
                     <h2 className="news-detail-card__title">{displayTitle(selected)}</h2>
@@ -190,14 +241,15 @@ export function News() {
                             {new Date(selected.publishedAt).toLocaleString(uiLocale)}
                         </span>
                     </div>
-                    <div
-                        className="content-container"
-                        dangerouslySetInnerHTML={{
-                            __html: extractReadableNewsBody(
-                                (preferTurkish ? selected.contentTr : null) ?? selected.content ?? selected.summary
-                            ),
-                        }}
-                    />
+                    {hasBody || showEmptyContent ? (
+                        <div
+                            className="content-container"
+                            dangerouslySetInnerHTML={{
+                                __html: extractReadableNewsBody(bodySource),
+                            }}
+                        />
+                    ) : null}
+                    {renderDetailMedia()}
                     {selected.url && (
                         <a href={selected.url} target="_blank" rel="noreferrer" className="news-source-button">
                             {t('news.goToSource', 'Kaynağa git')}

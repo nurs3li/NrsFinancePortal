@@ -6,7 +6,7 @@ import com.nurseli.marketdata.infrastructure.bist.BistEquityDailyPrice;
 import com.nurseli.marketdata.infrastructure.bist.BistEquityMarketProvider;
 import com.nurseli.marketdata.infrastructure.bist.BistProviderResult;
 import com.nurseli.marketdata.infrastructure.bist.BistSymbolCatalog;
-import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
+import com.nurseli.marketdata.infrastructure.persistence.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

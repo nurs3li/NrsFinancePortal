@@ -1,5 +1,6 @@
 package com.nurseli.notificationservice.config;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -8,11 +9,20 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 
+/**
+ * OAuth2 Resource Server JWT güvenlik zinciri: public actuator/swagger, korumalı {@code /api/notifications/**}.
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
 
+    private final ApiSecurityErrorHandler apiSecurityErrorHandler;
+
+    /**
+     * {@code filterChain} — CORS, CSRF devre dışı, endpoint yetkilendirme ve JWT resource server yapılandırması.
+     */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -29,6 +39,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/notifications/**").authenticated()
                         .anyRequest().denyAll()
                 )
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(apiSecurityErrorHandler)
+                        .accessDeniedHandler(apiSecurityErrorHandler))
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
         return http.build();
     }

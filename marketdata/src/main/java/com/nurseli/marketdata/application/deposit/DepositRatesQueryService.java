@@ -5,7 +5,7 @@ import com.nurseli.marketdata.api.dto.deposit.DepositRateLatestRowDto;
 import com.nurseli.marketdata.api.dto.deposit.DepositRateSeriesMetaDto;
 import com.nurseli.marketdata.config.DepositRatesProperties;
 import com.nurseli.marketdata.domain.deposit.DepositRateObservation;
-import com.nurseli.marketdata.repository.DepositRateObservationRepository;
+import com.nurseli.marketdata.infrastructure.persistence.DepositRateObservationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

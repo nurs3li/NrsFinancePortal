@@ -4,6 +4,10 @@ import jakarta.persistence.*;
 
 import java.time.Instant;
 
+/**
+ * Uygulama kullanıcısı JPA entity; Keycloak {@code keycloakUserId}, rol, e-posta doğrulama
+ * ve login askıya alma ({@code loginSuspended}) alanlarını tutar.
+ */
 @Entity
 @Table(
         name = "users",

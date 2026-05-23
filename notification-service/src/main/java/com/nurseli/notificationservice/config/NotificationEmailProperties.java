@@ -14,8 +14,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class NotificationEmailProperties {
 
     /**
-     * true: finance-service /internal/users yanıtında emailVerified zorunlu (eski davranış).
-     * false: yalnızca e-posta adresi dolu olması yeterli.
+     * {@code requireFinanceEmailVerified} — {@code true}: finance-service {@code /internal/users} yanıtında
+     * {@code emailVerified} zorunlu (eski davranış). {@code false}: yalnızca e-posta adresi dolu olması yeterli.
      */
     private boolean requireFinanceEmailVerified = true;
 }

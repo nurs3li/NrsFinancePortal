@@ -9,12 +9,18 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
+ * Keycloak JWT realm_access rollerini Spring authority'ye çevirir.
+ */
+/**
  * Keycloak JWT'deki realm_access.roles listesini Spring Security GrantedAuthority'ye çevirir.
  * Roller sadece realm roles (client içinde rol yok).
  */
 public class KeycloakJwtGrantedAuthoritiesConverter implements Converter<Jwt, Collection<GrantedAuthority>> {
 
     @Override
+    /**
+ * Keycloak realm_access rollerini Spring Security authority formatına çevirir.
+ */
     public Collection<GrantedAuthority> convert(Jwt jwt) {
         return extractRealmRoles(jwt);
     }

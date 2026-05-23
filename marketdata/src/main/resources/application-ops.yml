@@ -1,0 +1,3 @@
+# Ops-only endpoints: BackfillController, ProviderHealthController (@Profile("ops")).
+# Local: SPRING_PROFILES_ACTIVE=docker,ops (see docker-compose market-data-service).
+# Production: enable only when internal backfill/health tooling is required.

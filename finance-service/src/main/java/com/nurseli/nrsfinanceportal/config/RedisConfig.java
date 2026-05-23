@@ -8,8 +8,15 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
+/**
+ * RedisTemplate JSON value serializer yapılandırması.
+ */
 @Configuration
 public class RedisConfig {
+
+    /**
+ * String key, JSON value RedisTemplate bean'i oluÅŸturur.
+ */
 
     @Bean
     public RedisTemplate<String, Object> redisTemplate(
@@ -20,11 +27,11 @@ public class RedisConfig {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // 🔑 KEY: String
+        // ğŸ”‘ KEY: String
         template.setKeySerializer(new StringRedisSerializer());
         template.setHashKeySerializer(new StringRedisSerializer());
 
-        // 🔑 VALUE: JSON (UnifiedTimelineDto dahil)
+        // ğŸ”‘ VALUE: JSON (UnifiedTimelineDto dahil)
         GenericJackson2JsonRedisSerializer serializer =
                 new GenericJackson2JsonRedisSerializer(objectMapper);
 

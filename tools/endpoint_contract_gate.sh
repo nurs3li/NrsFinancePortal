@@ -5,7 +5,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ARTIFACT_DIR="$ROOT/artifacts/verification/ci-contract-gate"
 THRESHOLD=95
-EXCEPTION='/api/fund-requests/receipts/{receiptId}'
 
 # shellcheck source=tools/lib/api-scan.sh
 source "$ROOT/tools/lib/api-scan.sh"
@@ -22,9 +21,6 @@ sort -u "$TMP" | awk -F'\t' '{print $3}' | sort -u >"${TMP}.paths"
 
 total_api=$(wc -l <"${TMP}.paths" | tr -d ' ')
 in_scope=$total_api
-if grep -qxF "$EXCEPTION" "${TMP}.paths" 2>/dev/null; then
-  in_scope=$((total_api - 1))
-fi
 compliant=$in_scope
 if [[ "$in_scope" -gt 0 ]]; then
   coverage_pct=$(awk -v c="$compliant" -v i="$in_scope" 'BEGIN{printf "%.2f", (c/i)*100}')
@@ -43,7 +39,7 @@ cat >"$ARTIFACT_DIR/endpoint-coverage.json" <<EOF
   "coverage_pct": $coverage_pct,
   "threshold_pct": $THRESHOLD,
   "pass": $pass,
-  "intentional_exceptions": ["$EXCEPTION"]
+  "intentional_exceptions": []
 }
 EOF
 
@@ -58,9 +54,6 @@ Human-readable API catalog: [docs/api/endpoints.md](../../docs/api/endpoints.md)
 - coverage_pct: $coverage_pct
 - threshold_pct: $THRESHOLD
 - pass: $pass
-
-## Intentional Exceptions
-- \`$EXCEPTION\`
 EOF
 
 echo "[contract-gate] total=$total_api in_scope=$in_scope compliant=$compliant"

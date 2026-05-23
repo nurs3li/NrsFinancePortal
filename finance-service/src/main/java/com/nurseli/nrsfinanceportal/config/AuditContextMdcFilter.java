@@ -1,6 +1,6 @@
 package com.nurseli.nrsfinanceportal.config;
 
-import com.nurseli.nrsfinanceportal.repository.UserRepository;
+import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -62,15 +62,9 @@ public class AuditContextMdcFilter extends OncePerRequestFilter {
         if (uri == null) return "OTHER";
         if (uri.contains("/api/public/register")) return "REGISTRATION";
         if (uri.contains("/api/admin/")) return "ADMIN";
-        if (uri.contains("/api/trades")) return "TRADE";
-        if (uri.contains("/api/fund-requests")) return "FUND_REQUEST";
         if (uri.contains("/api/users/me") && ("PATCH".equals(method) || "PUT".equals(method))) return "PROFILE";
         if (uri.contains("/api/users/")) return "USER_ADMIN";
         if (uri.contains("/api/portfolio")) return "PORTFOLIO";
-        if (uri.contains("/api/tasks")) return "RISK_OPS";
-        if (uri.contains("/api/timeline")) return "TIMELINE";
-        if (uri.contains("/api/balance")) return "BALANCE";
-        if (uri.contains("/api/transactions")) return "TRANSACTION";
         if (uri.contains("/api/market/terminal")) return "MARKET";
         if (uri.startsWith("/api/")) return "API";
         return "OTHER";

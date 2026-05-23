@@ -15,7 +15,7 @@ export function MacroPageHeader({ title, subtitle, lastUpdated, tokens }: Props)
             <div className="macro-hero__top">
                 <h1 className="macro-hero__title" style={{ color: tokens.text }}>
                     {title}
-                    <InfoButton termId="pageIntro" ariaLabel="Faiz ve enflasyon paneli hakkında bilgi" />
+                    <InfoButton termId="pageIntro" ariaLabel="Makro finans paneli hakkında bilgi" />
                 </h1>
                 {lastUpdated ? (
                     <p className="macro-hero__updated" style={{ color: tokens.textMuted }}>

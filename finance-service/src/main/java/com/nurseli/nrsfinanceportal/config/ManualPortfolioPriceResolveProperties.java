@@ -4,6 +4,9 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+/**
+ * Manuel portföy fiyat çözümleme özellikleri.
+ */
 @Data
 @Component
 @ConfigurationProperties(prefix = "app.manual-portfolio.price-resolve")
