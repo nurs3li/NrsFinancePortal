@@ -20,7 +20,7 @@ public class MarketOverviewController {
      * {@code overview} — Piyasa özet response DTO'sunu döner.
      */
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    @GetMapping("/api/market/overview")
+    @GetMapping({"/api/v1/market/overview", "/api/market/overview"})
     public MarketOverviewResponse overview() {
         return service.getOverview();
     }

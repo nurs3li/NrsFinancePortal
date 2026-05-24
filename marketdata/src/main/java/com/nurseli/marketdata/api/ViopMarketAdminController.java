@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDateTime;
 
 @RestController
-@RequestMapping("/api/admin/market/viop")
+@RequestMapping({"/api/v1/admin/market/viop", "/api/admin/market/viop"})
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN','OPS')")
 public class ViopMarketAdminController {

@@ -54,28 +54,31 @@ public class RateLimitFilter implements Filter {
         }
 
         String path = httpRequest.getRequestURI();
+        String legacyPath = ApiPaths.legacyFromRequest(path);
         String method = httpRequest.getMethod();
 
         // 1) Dashboard/oturum için kritik GET endpoint'lerini rate-limit dışı bırak
-        if ("GET".equals(method) && (path.equals("/api/dashboard/summary") || DASHBOARD_READ_PATHS.contains(path))) {
+        if ("GET".equals(method) && (ApiPaths.matchesLegacyOrV1(path, "/api/dashboard/summary")
+                || DASHBOARD_READ_PATHS.stream().anyMatch(p -> ApiPaths.matchesLegacyOrV1(path, p)))) {
             chain.doFilter(request, response);
             return;
         }
 
         // 1b) Portföy snapshot / manuel zaman serisi okuma — dashboard yüklemede 429 önlemek için GET muaf
-        if ("GET".equals(method) && (path.startsWith("/api/portfolio/snapshots") || path.startsWith("/api/portfolio/manual/timeseries"))) {
+        if ("GET".equals(method) && (ApiPaths.startsWithLegacyOrV1(path, "/api/portfolio/snapshots")
+                || ApiPaths.startsWithLegacyOrV1(path, "/api/portfolio/manual/timeseries"))) {
             chain.doFilter(request, response);
             return;
         }
 
         // 1c) Portföy AI — uzun süren analiz + test sırasında Redis IP limiti 429 üretmesin
-        if (path.startsWith("/api/portfolio/ai/")) {
+        if (ApiPaths.startsWithLegacyOrV1(path, "/api/portfolio/ai/")) {
             chain.doFilter(request, response);
             return;
         }
 
         // 2) /api dışındaki istekleri zaten sınırlamıyoruz
-        if (!path.startsWith("/api/")) {
+        if (!legacyPath.startsWith("/api/")) {
             chain.doFilter(request, response);
             return;
         }

@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/market/tefas")
+@RequestMapping({"/api/v1/market/tefas", "/api/market/tefas"})
 @RequiredArgsConstructor
 public class TefasFundController {
 

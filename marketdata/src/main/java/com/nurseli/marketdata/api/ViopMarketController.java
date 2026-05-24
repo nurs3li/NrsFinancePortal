@@ -24,7 +24,7 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/market/viop")
+@RequestMapping({"/api/v1/market/viop", "/api/market/viop"})
 @RequiredArgsConstructor
 public class ViopMarketController {
     private final ViopQueryService viopQueryService;

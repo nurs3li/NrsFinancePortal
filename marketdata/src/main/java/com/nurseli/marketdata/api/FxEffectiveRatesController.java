@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
  * heatmap ve latest price akışlarını değiştirmez.
  */
 @RestController
-@RequestMapping("/api/market/fx")
+@RequestMapping({"/api/v1/market/fx", "/api/market/fx"})
 @RequiredArgsConstructor
 @Slf4j
 public class FxEffectiveRatesController {

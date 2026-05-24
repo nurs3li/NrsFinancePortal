@@ -16,7 +16,7 @@ import java.time.LocalDate;
 import java.util.Set;
 
 @RestController
-@RequestMapping("/api/market/macro/loan-rates")
+@RequestMapping({"/api/v1/market/macro/loan-rates", "/api/market/macro/loan-rates"})
 @RequiredArgsConstructor
 public class LoanRatesMarketController {
 

@@ -18,7 +18,7 @@ import java.util.List;
  * Kullanıcı manuel tahvil pozisyonları için CRUD ve fiyat çözümleme endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/me/bond-positions")
+@RequestMapping({"/api/v1/me/bond-positions", "/api/me/bond-positions"})
 @RequiredArgsConstructor
 public class ManualBondPositionController {
 

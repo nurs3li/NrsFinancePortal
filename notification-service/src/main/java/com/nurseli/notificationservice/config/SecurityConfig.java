@@ -9,6 +9,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 
+import com.nurseli.notificationservice.config.ApiPaths;
+
 /**
  * OAuth2 Resource Server JWT güvenlik zinciri: public actuator/swagger, korumalı {@code /api/notifications/**}.
  */
@@ -36,7 +38,10 @@ public class SecurityConfig {
                                 "/swagger-ui/**"
                         ).permitAll()
                         .requestMatchers(req -> "OPTIONS".equalsIgnoreCase(req.getMethod())).permitAll()
-                        .requestMatchers("/api/notifications/**").authenticated()
+                        .requestMatchers(
+                                ApiPaths.v1FromLegacy("/api/notifications/**"),
+                                "/api/notifications/**"
+                        ).authenticated()
                         .anyRequest().denyAll()
                 )
                 .exceptionHandling(ex -> ex

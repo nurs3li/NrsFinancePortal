@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 
 @RestController
-@RequestMapping("/api/admin/market/metals/isyatirim")
+@RequestMapping({"/api/v1/admin/market/metals/isyatirim", "/api/admin/market/metals/isyatirim"})
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN','OPS')")
 public class IsyatirimMetalAdminController {

@@ -20,7 +20,7 @@ public class MarketTerminalFxController {
      * {@code usdTryRate} — Güncel USD/TRY kuru response DTO'sunu döner.
      */
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    @GetMapping("/api/market/terminal/usd-try-rate")
+    @GetMapping({"/api/v1/market/terminal/usd-try-rate", "/api/market/terminal/usd-try-rate"})
     public UsdTryRateResponse usdTryRate() {
         return marketTerminalFxService.usdTryRate();
     }

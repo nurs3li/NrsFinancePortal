@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 
 @RestController
-@RequestMapping("/api/admin/market/deposit-rates")
+@RequestMapping({"/api/v1/admin/market/deposit-rates", "/api/admin/market/deposit-rates"})
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN','OPS')")
 public class DepositRatesAdminController {

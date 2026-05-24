@@ -1,14 +1,10 @@
 import keycloak from './keycloak';
+import { isPublicAuthPath } from '../api/apiVersion';
 
 export const PORTAL_AUTH_EXPIRED_EVENT = 'portal:auth-expired';
 
 export function isPublicAuthRequest(url: string | undefined): boolean {
-    const path = String(url ?? '');
-    return (
-        path.includes('/api/public/login') ||
-        path.includes('/api/public/register') ||
-        path.includes('/api/public/token/refresh')
-    );
+    return isPublicAuthPath(String(url ?? ''));
 }
 
 /** Keycloak redirect olmadan oturumu temizler. */

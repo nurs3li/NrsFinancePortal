@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
  * Kullanıcının terminalde yıldızladığı varlık seçimlerini okuma ve güncelleme endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/me/starred-assets")
+@RequestMapping({"/api/v1/me/starred-assets", "/api/me/starred-assets"})
 @RequiredArgsConstructor
 public class UserStarredAssetController {
 

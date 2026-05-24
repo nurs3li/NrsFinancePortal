@@ -19,7 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
  * Admin kullanıcı inceleme ekranı için profil ve dashboard özet endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/admin/users")
+@RequestMapping({"/api/v1/admin/users", "/api/admin/users"})
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminUserInspectionController {

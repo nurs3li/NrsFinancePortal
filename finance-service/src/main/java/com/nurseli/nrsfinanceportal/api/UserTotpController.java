@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Kullanıcı TOTP (iki aşamalı doğrulama) kurulum ve yönetim endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/users/me/totp")
+@RequestMapping({"/api/v1/users/me/totp", "/api/users/me/totp"})
 @RequiredArgsConstructor
 public class UserTotpController {
 

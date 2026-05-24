@@ -18,7 +18,7 @@ import java.util.List;
  * Kullanıcı manuel VİOP pozisyonları için CRUD ve fiyat çözümleme endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/me/viop-positions")
+@RequestMapping({"/api/v1/me/viop-positions", "/api/me/viop-positions"})
 @RequiredArgsConstructor
 public class ManualViopPositionController {
 

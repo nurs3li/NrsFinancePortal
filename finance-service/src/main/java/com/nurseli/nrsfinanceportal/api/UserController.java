@@ -14,7 +14,7 @@ import java.util.List;
  * Kullanıcı listeleme ve oturum açmış kullanıcı bilgisi endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping({"/api/v1/users", "/api/users"})
 public class UserController {
 
     private final UserService userService;

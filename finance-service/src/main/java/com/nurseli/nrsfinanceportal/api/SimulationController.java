@@ -17,7 +17,7 @@ import java.time.LocalDate;
  * Geçmiş tarihli yatırım senaryosu (what-if) simülasyon endpoint'ini sunar.
  */
 @RestController
-@RequestMapping("/api/simulation")
+@RequestMapping({"/api/v1/simulation", "/api/simulation"})
 @RequiredArgsConstructor
 public class SimulationController {
 

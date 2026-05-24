@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Kullanıcı giriş askıya alma, kaldırma ve kalıcı silme admin endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/admin/users")
+@RequestMapping({"/api/v1/admin/users", "/api/admin/users"})
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminUserSuspensionController {

@@ -21,7 +21,7 @@ public class MarketTerminalListController {
      * {@code list} — Kategori, alt piyasa, filtre, sıralama ve arama ile sayfalı terminal listesi döner.
      */
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    @GetMapping("/api/market/terminal/list")
+    @GetMapping({"/api/v1/market/terminal/list", "/api/market/terminal/list"})
     public MarketTerminalListPageResponse list(
             @RequestParam String category,
             @RequestParam(required = false) String equitySubmarket,
