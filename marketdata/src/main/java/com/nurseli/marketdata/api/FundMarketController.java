@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/market/funds")
+@RequestMapping({"/api/v1/market/funds", "/api/market/funds"})
 @RequiredArgsConstructor
 public class FundMarketController {
     private final ProviderRegistry providerRegistry;

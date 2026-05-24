@@ -27,7 +27,7 @@ import java.util.List;
  * BIST Türk hissesi günlük (İş Yatırım HisseTekil) okuma uçları — intraday {@code /api/market/equity} ile ayrıdır.
  */
 @RestController
-@RequestMapping("/api/market/equities/bist")
+@RequestMapping({"/api/v1/market/equities/bist", "/api/market/equities/bist"})
 @RequiredArgsConstructor
 public class BistEquityController {
 

@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/market/metals")
+@RequestMapping({"/api/v1/market/metals", "/api/market/metals"})
 @RequiredArgsConstructor
 public class MetalMarketController {
 

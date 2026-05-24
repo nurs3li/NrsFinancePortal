@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
  * Portfolio AI analizi, geçmiş, e-posta raporu ve teslimat tercihi endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/portfolio/ai")
+@RequestMapping({"/api/v1/portfolio/ai", "/api/portfolio/ai"})
 @RequiredArgsConstructor
 public class PortfolioAiAnalysisController {
 

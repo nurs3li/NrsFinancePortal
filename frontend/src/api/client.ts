@@ -7,6 +7,7 @@ import {
     redirectToPortalSignIn,
 } from '../auth/portalSession';
 import { loginResponseToTokens, portalRefreshToken } from '../services/authApi';
+import { isPublicMarketReadPath, withApiVersion } from './apiVersion';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8085';
 const marketApiUrl = import.meta.env.VITE_MARKET_API_URL || 'http://localhost:8083';
@@ -136,6 +137,7 @@ export const financeClient = axios.create({
 });
 
 financeClient.interceptors.request.use((config) => {
+    config.url = withApiVersion(config.url);
     config.headers = config.headers ?? {};
     const lang = getPreferredAppLang();
     if (lang) config.headers['Accept-Language'] = lang;
@@ -176,6 +178,7 @@ export const marketClient = axios.create({
 });
 
 marketClient.interceptors.request.use((config) => {
+    config.url = withApiVersion(config.url);
     const requestPath = String(config.url ?? '');
     config.headers = config.headers ?? {};
     const lang = getPreferredAppLang();
@@ -183,8 +186,7 @@ marketClient.interceptors.request.use((config) => {
         config.headers['Accept-Language'] = lang;
     }
     const isPublicMarketRead =
-        config.method?.toLowerCase() === 'get' &&
-        (requestPath.startsWith('/api/news') || requestPath.startsWith('/api/market/'));
+        config.method?.toLowerCase() === 'get' && isPublicMarketReadPath(requestPath);
 
     if (!isPublicMarketRead && keycloak.authenticated && keycloak.token) {
         config.headers.Authorization = `Bearer ${keycloak.token}`;
@@ -205,6 +207,7 @@ export const notificationClient = axios.create({
 });
 
 notificationClient.interceptors.request.use((config) => {
+    config.url = withApiVersion(config.url);
     config.headers = config.headers ?? {};
     const lang = getPreferredAppLang();
     if (lang) config.headers['Accept-Language'] = lang;

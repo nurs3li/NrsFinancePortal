@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Oturum açmış kullanıcının profil, e-posta ve şifre yönetimi endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/users/me")
+@RequestMapping({"/api/v1/users/me", "/api/users/me"})
 @RequiredArgsConstructor
 public class UserProfileController {
 

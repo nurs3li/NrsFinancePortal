@@ -11,7 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
  * Oturum açmış kullanıcı için dashboard özet endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/dashboard")
+@RequestMapping({"/api/v1/dashboard", "/api/dashboard"})
 @RequiredArgsConstructor
 public class DashboardController {
 
@@ -19,7 +19,7 @@ public class DashboardController {
     private final CurrentUserResolver currentUserResolver;
 
     /**
-     * {@code summary} — Giriş yapmış kullanıcının portfolio ve piyasa özet DTO'sunu döner.
+     * {@code summary} — Giqriş yapmış kullanıcının portfolio ve piyasa özet DTO'sunu döner.
      */
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @GetMapping("/summary")

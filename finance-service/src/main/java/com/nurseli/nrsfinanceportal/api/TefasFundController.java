@@ -23,7 +23,7 @@ public class TefasFundController {
      * {@code history} — Fon kodu ve ay sayısı ile TEFAS geçmiş fiyat noktalarını döner.
      */
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    @GetMapping("/api/market/tefas/funds/{code}/history")
+    @GetMapping({"/api/v1/market/tefas/funds/{code}/history", "/api/market/tefas/funds/{code}/history"})
     public List<TefasHistoryPoint> history(
             @PathVariable String code,
             @RequestParam(defaultValue = "12") int months) {

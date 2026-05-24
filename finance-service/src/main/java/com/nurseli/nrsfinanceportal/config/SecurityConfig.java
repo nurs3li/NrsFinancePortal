@@ -11,6 +11,7 @@ import org.springframework.security.oauth2.server.resource.web.authentication.Be
 import org.springframework.security.web.SecurityFilterChain;
 
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
+import com.nurseli.nrsfinanceportal.config.ApiPaths;
 
 /**
  * Spring Security filter chain; JWT resource server, CORS ve frozen-user kontrolÃƒÂ¼.
@@ -58,9 +59,13 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
+                                ApiPaths.v1FromLegacy("/api/public/register/**"),
                                 "/api/public/register/**",
+                                ApiPaths.v1FromLegacy("/api/public/login"),
                                 "/api/public/login",
+                                ApiPaths.v1FromLegacy("/api/public/login/**"),
                                 "/api/public/login/**",
+                                ApiPaths.v1FromLegacy("/api/public/token/**"),
                                 "/api/public/token/**"
                         ).permitAll()
                         .requestMatchers(req -> "OPTIONS".equalsIgnoreCase(req.getMethod())).permitAll()

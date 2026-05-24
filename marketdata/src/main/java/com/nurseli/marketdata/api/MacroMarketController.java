@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/market/macro")
+@RequestMapping({"/api/v1/market/macro", "/api/market/macro"})
 @RequiredArgsConstructor
 public class MacroMarketController {
 

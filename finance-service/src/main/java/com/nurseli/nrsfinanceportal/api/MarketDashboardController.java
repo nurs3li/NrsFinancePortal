@@ -20,7 +20,7 @@ public class MarketDashboardController {
      * {@code dashboard} — Hisse, fon, FX ve kripto özetlerini içeren dashboard DTO'sunu döner.
      */
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    @GetMapping("/api/market/dashboard")
+    @GetMapping({"/api/v1/market/dashboard", "/api/market/dashboard"})
     public MarketDashboardResponse dashboard() {
         return service.buildDashboard();
     }

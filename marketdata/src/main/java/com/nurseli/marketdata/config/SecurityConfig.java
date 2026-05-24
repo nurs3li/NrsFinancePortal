@@ -10,6 +10,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
+import com.nurseli.marketdata.config.ApiPaths;
+
 @Configuration
 @EnableMethodSecurity(prePostEnabled = true)
 @RequiredArgsConstructor
@@ -40,17 +42,20 @@ public class SecurityConfig {
                         ).permitAll()
                         // Piyasa ve haber okuma endpoint'leri frontend için public read-mode.
                         .requestMatchers(HttpMethod.GET,
-                                "/api/news/**",
-                                "/api/market/**",
+                                ApiPaths.v1FromLegacy("/api/news/**"), "/api/news/**",
+                                ApiPaths.v1FromLegacy("/api/market/**"), "/api/market/**",
+                                ApiPaths.v1FromLegacy("/api/market/eurobonds/instruments/seed-sync"),
                                 "/api/market/eurobonds/instruments/seed-sync",
-                                "/api/funds/**",
-                                "/api/fund/**",
-                                "/api/viop/**",
-                                "/api/debt/**"
+                                ApiPaths.v1FromLegacy("/api/funds/**"), "/api/funds/**",
+                                ApiPaths.v1FromLegacy("/api/fund/**"), "/api/fund/**",
+                                ApiPaths.v1FromLegacy("/api/viop/**"), "/api/viop/**",
+                                ApiPaths.v1FromLegacy("/api/debt/**"), "/api/debt/**"
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/market/backfill/bist-daily").permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/market/backfill/isyatirim-metals-usd").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/admin/**").hasAnyRole("ADMIN", "OPS")
+                        .requestMatchers(HttpMethod.POST,
+                                ApiPaths.v1FromLegacy("/api/admin/**"), "/api/admin/**")
+                                .hasAnyRole("ADMIN", "OPS")
                         .requestMatchers(req -> "OPTIONS".equalsIgnoreCase(req.getMethod())).permitAll()
                         .requestMatchers("/internal/**").hasAnyRole("ADMIN", "OPS")
                         .anyRequest().authenticated()

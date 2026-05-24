@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.YearMonth;
 
 @RestController
-@RequestMapping("/api/market/macro/inflation")
+@RequestMapping({"/api/v1/market/macro/inflation", "/api/market/macro/inflation"})
 @RequiredArgsConstructor
 public class InflationMacroController {
 

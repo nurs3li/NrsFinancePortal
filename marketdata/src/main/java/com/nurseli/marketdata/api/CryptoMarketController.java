@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/market/crypto")
+@RequestMapping({"/api/v1/market/crypto", "/api/market/crypto"})
 @RequiredArgsConstructor
 public class CryptoMarketController {
 

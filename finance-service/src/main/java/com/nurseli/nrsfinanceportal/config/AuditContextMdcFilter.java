@@ -60,13 +60,14 @@ public class AuditContextMdcFilter extends OncePerRequestFilter {
 
     private static String resolveActionType(String uri, String method) {
         if (uri == null) return "OTHER";
-        if (uri.contains("/api/public/register")) return "REGISTRATION";
-        if (uri.contains("/api/admin/")) return "ADMIN";
-        if (uri.contains("/api/users/me") && ("PATCH".equals(method) || "PUT".equals(method))) return "PROFILE";
-        if (uri.contains("/api/users/")) return "USER_ADMIN";
-        if (uri.contains("/api/portfolio")) return "PORTFOLIO";
-        if (uri.contains("/api/market/terminal")) return "MARKET";
-        if (uri.startsWith("/api/")) return "API";
+        String path = ApiPaths.legacyFromRequest(uri);
+        if (path.contains("/api/public/register")) return "REGISTRATION";
+        if (path.contains("/api/admin/")) return "ADMIN";
+        if (path.contains("/api/users/me") && ("PATCH".equals(method) || "PUT".equals(method))) return "PROFILE";
+        if (path.contains("/api/users/")) return "USER_ADMIN";
+        if (path.contains("/api/portfolio")) return "PORTFOLIO";
+        if (path.contains("/api/market/terminal")) return "MARKET";
+        if (path.startsWith("/api/")) return "API";
         return "OTHER";
     }
 

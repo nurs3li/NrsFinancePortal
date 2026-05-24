@@ -16,7 +16,7 @@ import java.util.List;
  * Kullanıcı portfolio değer snapshot geçmişi sorgu endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/portfolio/snapshots")
+@RequestMapping({"/api/v1/portfolio/snapshots", "/api/portfolio/snapshots"})
 @RequiredArgsConstructor
 public class PortfolioSnapshotController {
 

@@ -17,7 +17,7 @@ import java.time.temporal.ChronoUnit;
  * OpenSearch üzerindeki merkezi audit log kayıtları için admin sorgu endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/admin/audit")
+@RequestMapping({"/api/v1/admin/audit", "/api/admin/audit"})
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminAuditLogController {

@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Tempo trace özeti ve Grafana Explore deep-link endpoint'lerini admin rolü için sunar.
  */
 @RestController
-@RequestMapping("/api/admin/observability")
+@RequestMapping({"/api/v1/admin/observability", "/api/admin/observability"})
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminObservabilityController {

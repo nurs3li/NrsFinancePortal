@@ -16,7 +16,7 @@ import java.util.List;
  * Kullanıcı fiyat alarmı CRUD ve sayfalı listeleme endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/me/price-alerts")
+@RequestMapping({"/api/v1/me/price-alerts", "/api/me/price-alerts"})
 @RequiredArgsConstructor
 public class PriceAlertController {
 

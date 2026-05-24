@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/market/debt")
+@RequestMapping({"/api/v1/market/debt", "/api/market/debt"})
 @RequiredArgsConstructor
 public class DebtMarketController {
     private final DebtQueryService debtQueryService;

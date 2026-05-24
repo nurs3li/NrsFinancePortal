@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
  * VİOP ve tahvil pozisyonlarının birleşik analiz özeti endpoint'ini sunar.
  */
 @RestController
-@RequestMapping("/api/me/viop-bond-analysis")
+@RequestMapping({"/api/v1/me/viop-bond-analysis", "/api/me/viop-bond-analysis"})
 @RequiredArgsConstructor
 public class ViopBondAnalysisController {
 

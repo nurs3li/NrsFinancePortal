@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
  * BIST günlük (HisseTekil) manuel backfill — {@code BistEquityMarketAdminController} intraday/OneEndeks ile karıştırılmamalıdır.
  */
 @RestController
-@RequestMapping("/api/admin/market/equities/bist")
+@RequestMapping({"/api/v1/admin/market/equities/bist", "/api/admin/market/equities/bist"})
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN','OPS')")
 public class BistEquityAdminController {

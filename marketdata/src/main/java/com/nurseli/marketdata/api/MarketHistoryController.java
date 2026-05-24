@@ -11,7 +11,7 @@ import com.nurseli.marketdata.api.dto.MarketIndicatorsResponse;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/market")
+@RequestMapping({"/api/v1/market", "/api/market"})
 @RequiredArgsConstructor
 public class MarketHistoryController {
 

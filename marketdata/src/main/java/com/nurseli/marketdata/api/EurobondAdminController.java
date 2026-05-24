@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 
 @RestController
-@RequestMapping("/api/admin/market/eurobonds/evds")
+@RequestMapping({"/api/v1/admin/market/eurobonds/evds", "/api/admin/market/eurobonds/evds"})
 @ConditionalOnEurobondEvds
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN','OPS')")

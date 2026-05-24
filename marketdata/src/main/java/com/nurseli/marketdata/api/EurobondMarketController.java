@@ -20,7 +20,7 @@ import java.util.Arrays;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/market/eurobonds")
+@RequestMapping({"/api/v1/market/eurobonds", "/api/market/eurobonds"})
 @ConditionalOnEurobondEvds
 @RequiredArgsConstructor
 public class EurobondMarketController {

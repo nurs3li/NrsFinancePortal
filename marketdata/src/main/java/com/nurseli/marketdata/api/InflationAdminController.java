@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 
 @RestController
-@RequestMapping("/api/admin/market/inflation")
+@RequestMapping({"/api/v1/admin/market/inflation", "/api/admin/market/inflation"})
 @RequiredArgsConstructor
 @PreAuthorize("hasAnyRole('ADMIN','OPS')")
 public class InflationAdminController {

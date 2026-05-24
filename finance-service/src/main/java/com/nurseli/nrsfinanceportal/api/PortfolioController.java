@@ -29,7 +29,7 @@ import java.util.List;
  * Manuel portfolio pozisyonları, zaman serileri, içgörüler ve birleşik portfolio görünümü endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/portfolio")
+@RequestMapping({"/api/v1/portfolio", "/api/portfolio"})
 @RequiredArgsConstructor
 public class PortfolioController {
 

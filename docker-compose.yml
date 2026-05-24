@@ -496,6 +496,7 @@ services:
       CHOKIDAR_USEPOLLING: "true"
       npm_config_update_notifier: "false"
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8085}
+      VITE_API_VERSION: ${VITE_API_VERSION:-v1}
       VITE_MARKET_API_URL: ${VITE_MARKET_API_URL:-http://localhost:8083}
       VITE_NOTIFICATION_API_URL: ${VITE_NOTIFICATION_API_URL:-http://localhost:8089}
       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-http://localhost:8081}

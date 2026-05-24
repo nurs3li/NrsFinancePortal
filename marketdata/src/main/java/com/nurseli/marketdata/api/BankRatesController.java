@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/market/bank-rates")
+@RequestMapping({"/api/v1/market/bank-rates", "/api/market/bank-rates"})
 @RequiredArgsConstructor
 public class BankRatesController {
 

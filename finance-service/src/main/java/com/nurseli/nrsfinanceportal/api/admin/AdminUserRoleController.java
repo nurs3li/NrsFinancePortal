@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
  * Keycloak realm rol ataması için admin endpoint'lerini sunar.
  */
 @RestController
-@RequestMapping("/api/admin/users")
+@RequestMapping({"/api/v1/admin/users", "/api/admin/users"})
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminUserRoleController {
