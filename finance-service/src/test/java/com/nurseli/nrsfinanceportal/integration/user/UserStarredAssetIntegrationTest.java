@@ -31,11 +31,13 @@ class UserStarredAssetIntegrationTest extends FinanceIntegrationTestBase {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.selected.length()").value(2));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.selected.length()").value(2));
 
         mockMvc.perform(get("/api/me/starred-assets").with(integrationUserJwt()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.selected[?(@.symbol == 'THYAO')]").exists());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.selected[?(@.symbol == 'THYAO')]").exists());
 
         assertThat(starredAssetRepository.findByUserIdOrderByPositionAsc(testUser.getId())).isNotEmpty();
     }
