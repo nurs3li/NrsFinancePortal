@@ -1,0 +1,62 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  task:
+    scheduling:
+      enabled: false
+  cache:
+    type: none
+  data:
+    redis:
+      timeout: 3s
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://integration-test/realms/test
+
+market:
+  bootstrap:
+    orchestrate-startup: false
+    metals-startup-enabled: false
+  evds:
+    enabled: true
+    apiKey: integration-test-key
+  inflation:
+    backfill:
+      enabled: false
+      startup-enabled: false
+    cpi:
+      persist-enabled: true
+      scheduler-enabled: false
+    ppi:
+      persist-enabled: true
+      scheduler-enabled: false
+  deposit-rates:
+    enabled: true
+    scheduler-enabled: false
+    backfill:
+      enabled: false
+  bist:
+    enabled: false
+    seed-on-start: false
+    scheduler-enabled: false
+    scheduler-zone: Europe/Istanbul
+    daily-ingest-cron: "0 0 0 * * *"
+    daily-ingest-cron-close: "0 0 0 * * *"
+
+app:
+  translation:
+    enabled: false
+  market:
+    bank-rates:
+      scrape-on-startup: false
+    viop:
+      scheduler:
+        enabled: false
+  equity:
+    scheduler-enabled: false
