@@ -13,6 +13,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -133,11 +134,17 @@ public abstract class FinanceIntegrationTestBase {
     }
 
     private static RequestPostProcessor jwtFor(String sub, String email, String username, List<String> roles) {
-        return SecurityMockMvcRequestPostProcessors.jwt().jwt(token -> token
-                .subject(sub)
-                .claim("email", email)
-                .claim("preferred_username", username)
-                .claim("email_verified", true)
-                .claim("realm_access", Map.of("roles", roles)));
+        var authorities = roles.stream()
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                .toArray(SimpleGrantedAuthority[]::new);
+
+        return SecurityMockMvcRequestPostProcessors.jwt()
+                .authorities(authorities)
+                .jwt(token -> token
+                        .subject(sub)
+                        .claim("email", email)
+                        .claim("preferred_username", username)
+                        .claim("email_verified", true)
+                        .claim("realm_access", Map.of("roles", roles)));
     }
 }

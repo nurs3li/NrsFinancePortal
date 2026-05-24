@@ -13,7 +13,7 @@ class InternalUserApiIntegrationTest extends FinanceIntegrationTestBase {
     void bySub_returnsUserInfoForExistingKeycloakId() throws Exception {
         mockMvc.perform(get("/internal/users/by-sub/{sub}", TEST_KEYCLOAK_SUB).with(integrationUserJwt()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.keycloakUserId").value(TEST_KEYCLOAK_SUB))
+                .andExpect(jsonPath("$.sub").value(TEST_KEYCLOAK_SUB))
                 .andExpect(jsonPath("$.email").value(TEST_EMAIL));
     }
 
