@@ -2,7 +2,7 @@ package com.nurseli.marketdata.application.inflation;
 
 import com.nurseli.marketdata.domain.inflation.InflationIndicatorType;
 import com.nurseli.marketdata.domain.inflation.InflationIndexMonthlyEntity;
-import com.nurseli.marketdata.repository.InflationIndexMonthlyRepository;
+import com.nurseli.marketdata.infrastructure.persistence.InflationIndexMonthlyRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

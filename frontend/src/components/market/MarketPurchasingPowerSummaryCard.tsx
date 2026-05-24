@@ -5,6 +5,7 @@ import type { PurchasingPowerData } from '../../hooks/usePurchasingPowerData';
 type Props = {
     symbol: string;
     displayName?: string;
+    unitLabel: string;
     data: PurchasingPowerData;
     tokens: { bgCard: string; border: string; text: string; textMuted: string };
 };
@@ -25,7 +26,7 @@ function fmtAnchorDate(locale: string, ymd: string) {
     return new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'long', year: 'numeric' }).format(dt);
 }
 
-function MarketPurchasingPowerSummaryCardImpl({ symbol, displayName, data, tokens }: Props) {
+function MarketPurchasingPowerSummaryCardImpl({ symbol, displayName, unitLabel, data, tokens }: Props) {
     const { t, lang } = useLanguage();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
     const { snapshot, loading, anchorDate } = data;
@@ -39,7 +40,7 @@ function MarketPurchasingPowerSummaryCardImpl({ symbol, displayName, data, token
             style={{ borderColor: tokens.border, background: tokens.bgCard }}
         >
             <h3 className="terminal-macro-card__title" style={{ color: tokens.text }}>
-                {t('market.ppSummaryTitle', '1 lot — TL karşılaştırma özeti')}
+                {t('market.ppSummaryTitleUnit', '{unit} — TL karşılaştırma özeti').replace('{unit}', unitLabel)}
             </h3>
             <p className="terminal-macro-card__muted" style={{ color: tokens.textMuted, marginBottom: 4 }}>
                 {label}
@@ -59,13 +60,13 @@ function MarketPurchasingPowerSummaryCardImpl({ symbol, displayName, data, token
                 <dl className="terminal-pp-summary-grid">
                     <div>
                         <dt style={{ color: tokens.textMuted }}>
-                            {t('market.ppLotCost', 'Seçilen tarihte 1 lot (TRY)')}
+                            {t('market.ppUnitCostAtDate', 'Seçilen tarihte {unit} (TRY)').replace('{unit}', unitLabel)}
                         </dt>
                         <dd style={{ color: tokens.text }}>{fmtTry(locale, snapshot.lotCostTry)}</dd>
                     </div>
                     <div>
                         <dt style={{ color: tokens.textMuted }}>
-                            {t('market.ppAssetToday', 'Bugün 1 lot varlık (TRY)')}
+                            {t('market.ppUnitToday', 'Bugün {unit} (TRY)').replace('{unit}', unitLabel)}
                         </dt>
                         <dd style={{ color: tokens.text }}>{fmtTry(locale, snapshot.assetTryToday)}</dd>
                     </div>

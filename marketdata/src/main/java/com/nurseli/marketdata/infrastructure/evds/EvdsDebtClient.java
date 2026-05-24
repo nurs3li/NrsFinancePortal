@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nurseli.marketdata.config.EvdsProperties;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -27,11 +28,13 @@ public class EvdsDebtClient {
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final EvdsProperties evdsProperties;
+    private final EvdsRequestThrottle evdsRequestThrottle;
 
-    public EvdsDebtClient(EvdsProperties evdsProperties) {
+    public EvdsDebtClient(EvdsProperties evdsProperties, EvdsRequestThrottle evdsRequestThrottle) {
         this.webClient = WebClient.builder().baseUrl(evdsProperties.getBaseUrl()).build();
         this.objectMapper = new ObjectMapper();
         this.evdsProperties = evdsProperties;
+        this.evdsRequestThrottle = evdsRequestThrottle;
     }
 
     public List<EvdsDebtRow> fetchLatest() {
@@ -100,10 +103,21 @@ public class EvdsDebtClient {
             return List.of();
         }
         String normalizedSeries = normalizeSeriesCode(seriesCode);
+        evdsRequestThrottle.awaitTurn("series:" + normalizedSeries);
         String json = webClient.get()
                 .uri(buildSeriesUri(normalizedSeries, startInclusive, endInclusive))
                 .header("key", apiKey)
                 .retrieve()
+                .onStatus(HttpStatusCode::isError, response -> {
+                    log.warn(
+                            "[EVDS_SERIES] http {} series={} range={}..{}",
+                            response.statusCode().value(),
+                            normalizedSeries,
+                            startInclusive,
+                            endInclusive
+                    );
+                    return response.releaseBody().then(Mono.empty());
+                })
                 .bodyToMono(String.class)
                 .timeout(java.time.Duration.ofMillis(evdsProperties.getTimeoutMs()))
                 .retryWhen(Retry.max(2))
@@ -118,6 +132,7 @@ public class EvdsDebtClient {
                     );
                     return Mono.empty();
                 })
+                .defaultIfEmpty("")
                 .block();
         if (json == null || json.isBlank()) {
             log.warn(
@@ -130,6 +145,7 @@ public class EvdsDebtClient {
             return List.of();
         }
         List<EvdsSeriesPoint> parsed = parseAllPoints(json);
+        parsed.removeIf(p -> p == null || p.asOf() == null);
         parsed.sort(Comparator.comparing(EvdsSeriesPoint::asOf));
         return dedupeByCalendarDayKeepLast(parsed);
     }
@@ -149,10 +165,21 @@ public class EvdsDebtClient {
         LocalDate end = LocalDate.now();
         int lookbackDays = Math.max(3, limit);
         LocalDate start = end.minusDays(lookbackDays);
+        evdsRequestThrottle.awaitTurn("recent:" + normalizedSeries);
         String json = webClient.get()
                 .uri(buildSeriesUri(normalizedSeries, start, end))
                 .header("key", evdsProperties.getApiKey())
                 .retrieve()
+                .onStatus(HttpStatusCode::isError, response -> {
+                    log.warn(
+                            "[EVDS_DEBT] http {} series={} range={}..{}",
+                            response.statusCode().value(),
+                            normalizedSeries,
+                            start,
+                            end
+                    );
+                    return response.releaseBody().then(Mono.empty());
+                })
                 .bodyToMono(String.class)
                 .timeout(java.time.Duration.ofMillis(evdsProperties.getTimeoutMs()))
                 .retryWhen(Retry.max(2))
@@ -160,6 +187,7 @@ public class EvdsDebtClient {
                     log.warn("[EVDS_DEBT] fetch failed for series {}: {}", normalizedSeries, ex.getMessage());
                     return Mono.empty();
                 })
+                .defaultIfEmpty("")
                 .block();
         if (json == null || json.isBlank()) {
             return List.of();

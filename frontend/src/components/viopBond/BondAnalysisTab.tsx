@@ -10,7 +10,6 @@ import {
     sellBondPosition,
     updateBondPosition,
 } from '../../services/bondPositionApi';
-import { fetchInflationLatest } from '../../services/marketDataService';
 import { readFinanceApiError } from '../../services/manualPortfolioApi';
 import { useLanguage } from '../../i18n/LanguageContext';
 import type { ManualBondPosition, ManualBondPositionCreatePayload } from '../../types/bondPosition';
@@ -69,14 +68,6 @@ export function BondAnalysisTab({ tokens }: Props) {
         staleTime: 60_000,
     });
 
-    const { data: inflation } = useQuery({
-        queryKey: ['macro', 'inflation', 'latest'],
-        queryFn: ({ signal }) => fetchInflationLatest(signal),
-        staleTime: 300_000,
-    });
-
-    const cpiYoY = inflation?.cpi?.annualChangePercent ?? null;
-
     const invalidate = () => {
         void queryClient.invalidateQueries({ queryKey: bondPositionKeys.all });
         void queryClient.invalidateQueries({ queryKey: viopPositionKeys.all });
@@ -114,9 +105,7 @@ export function BondAnalysisTab({ tokens }: Props) {
         const nearest = [...openPositions]
             .filter((p) => p.daysToMaturity != null)
             .sort((a, b) => (a.daysToMaturity ?? 9999) - (b.daysToMaturity ?? 9999))[0];
-        const euroCount = openPositions.filter((p) => p.bondType === 'EUROBOND').length;
-        const euroPct = Math.round((euroCount / openPositions.length) * 100);
-        return { byNominal: byNominal[0], best: byReturn[0], nearest, euroPct, euroCount };
+        return { byNominal: byNominal[0], best: byReturn[0], nearest };
     }, [openPositions]);
 
     const openAdd = (inst: TerminalListInstrumentVm) => {
@@ -198,7 +187,6 @@ export function BondAnalysisTab({ tokens }: Props) {
             <BondPositionsSection
                 rows={rows}
                 loading={positionsLoading}
-                cpiYoY={cpiYoY}
                 tokens={tokens}
                 onManualAdd={openManual}
                 onEdit={(row) => {
@@ -231,7 +219,6 @@ export function BondAnalysisTab({ tokens }: Props) {
                 rows={marketRows}
                 loading={marketLoading}
                 positions={rows}
-                cpiYoY={cpiYoY}
                 tokens={tokens}
                 selectedSymbol={selectedMarketSymbol}
                 onSelect={setSelectedMarketSymbol}
@@ -300,7 +287,6 @@ export function BondAnalysisTab({ tokens }: Props) {
                     <div className="vb-detail-drawer-mobile vb-detail-overlay" onClick={(e) => e.stopPropagation()}>
                         <BondPositionDetailDrawer
                             position={detailPosition}
-                            cpiYoY={cpiYoY}
                             tokens={tokens}
                             onClose={() => setDetailPosition(null)}
                         />

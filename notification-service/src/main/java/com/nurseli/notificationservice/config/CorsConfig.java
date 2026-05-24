@@ -8,9 +8,15 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * Frontend geliştirme origin'leri için CORS policy bean'i tanımlar.
+ */
 @Configuration
 public class CorsConfig {
 
+    /**
+     * {@code corsConfigurationSource} — Yerel Vite/React origin'lerine credential'lı CORS izni verir.
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();

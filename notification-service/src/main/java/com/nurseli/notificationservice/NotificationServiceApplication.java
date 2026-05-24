@@ -10,21 +10,31 @@ import org.springframework.data.web.config.EnableSpringDataWebSupport.PageSerial
 
 import java.util.TimeZone;
 
+/**
+ * Notification-service Spring Boot uygulama giriş noktası.
+ * <p>
+ * Spring Data 3.3+ ile {@code PageImpl} ham JSON'a serialize edildiğinde kararsız sayılır ve WARN
+ * üretir. {@code VIA_DTO} modu cevap shape'ini stabilize eder:
+ * {@code { content, page: { size, number, totalElements, totalPages } }}.
+ * Frontend (Trade, AdminTasks, Notifications) bu yapıya göre güncellendi;
+ * top-level totalPages/totalElements yerine {@code page.*} alanları kullanılır.
+ */
 @SpringBootApplication
 @EnableConfigurationProperties(NotificationEmailProperties.class)
-// Spring Data 3.3+: PageImpl'i ham JSON'a serialize etmek "kararsiz" sayiliyor ve WARN
-// uretiyor. VIA_DTO modu ile cevap shape'i stabilize edilir: { content, page: { size,
-// number, totalElements, totalPages } }. Frontend (Trade, AdminTasks, Notifications)
-// bu yeni yapiya gore guncellendi -- top-level totalPages/totalElements yerine
-// page.* alanlari kullaniliyor.
 @EnableSpringDataWebSupport(pageSerializationMode = PageSerializationMode.VIA_DTO)
 public class NotificationServiceApplication {
 
+	/**
+	 * {@code init} — Varsayılan JVM zaman dilimini Europe/Istanbul olarak ayarlar.
+	 */
 	@PostConstruct
 	public void init() {
 		TimeZone.setDefault(TimeZone.getTimeZone("Europe/Istanbul"));
 	}
 
+	/**
+	 * {@code main} — Uygulamayı başlatır.
+	 */
 	public static void main(String[] args) {
 		SpringApplication.run(NotificationServiceApplication.class, args);
 	}

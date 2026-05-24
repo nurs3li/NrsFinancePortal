@@ -15,6 +15,9 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 import java.util.Set;
 
+/**
+ * Keycloak JWKS üzerinden JWT decoder bean.
+ */
 @Configuration
 @Profile("docker")
 public class JwtDecoderConfig {
@@ -28,6 +31,9 @@ public class JwtDecoderConfig {
 
     @Bean
     @Primary
+    /**
+ * Docker profilinde çoklu issuer destekli JWKS JwtDecoder bean.
+ */
     public JwtDecoder jwtDecoder() {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(JWKS_URI).build();
         OAuth2TokenValidator<Jwt> issuerValidator = jwt -> {

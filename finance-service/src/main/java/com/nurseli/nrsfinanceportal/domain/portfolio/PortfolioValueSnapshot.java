@@ -6,6 +6,9 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
 
+/**
+ * Portföy toplam değer anlık görüntüsü entity; snapshot tarihi ve tetikleyici tipini saklar.
+ */
 @Entity
 @Table(name = "portfolio_value_snapshots")
 public class PortfolioValueSnapshot {

@@ -44,3 +44,10 @@ build/
 **/application-local.yml
 
 # VIOP: artifacts/viop/ altındaki CSV ve yardımcı .py dosyaları ingest için repoda izlenir; bu yolu ignore etmeyin.
+
+# Postgres pg_dump yedekleri (scripts/ops/Backup-NrsMarketDb.ps1)
+backups/
+
+# Python
+__pycache__/
+*.pyc

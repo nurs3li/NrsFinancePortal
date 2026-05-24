@@ -42,7 +42,8 @@ export function computeTerminalTimeScaleLayout(
     barSpacing = Math.max(1.25, Math.min(48, barSpacing));
     const minBarSpacing = Math.max(0.5, Math.min(8, barSpacing * 0.4));
     const fewBars = n <= 6;
-    const longHorizon = range === '1Y' || range === '2Y' || range === '6M' || range === '3M' || range === '1M';
+    const longHorizon =
+        range === '1Y' || range === '2Y' || range === '6M' || range === '3M' || range === '1M' || range === '1W';
     const rightOffset = fewBars ? 6 : longHorizon ? 3 : 5;
     return { barSpacing, minBarSpacing, rightOffset };
 }

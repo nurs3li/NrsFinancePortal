@@ -3,7 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import { financeClient } from '../api/client';
+import { financeClient, readFinanceBinaryErrorMessage } from '../api/client';
 
 function decodeOAuthHint(raw: string | null): string | null {
     if (!raw) return null;
@@ -42,18 +42,26 @@ function parseOAuthErrorsFromLocation(): string | null {
 }
 
 export function Login() {
-    const { isAuthenticated, login, ready, role } = useAuth();
+    const { isAuthenticated, loginWithCredentials, ready, role } = useAuth();
     const { tokens } = useTheme();
     const { t } = useLanguage();
     const navigate = useNavigate();
     const location = useLocation();
     const [searchParams, setSearchParams] = useSearchParams();
     const [loginError, setLoginError] = useState<string | null>(null);
+    const [loginBusy, setLoginBusy] = useState(false);
+    const [loginUsername, setLoginUsername] = useState('');
+    const [loginPassword, setLoginPassword] = useState('');
+    const [loginOtp, setLoginOtp] = useState('');
+    const [loginRemember, setLoginRemember] = useState(false);
+    const [loginOtpStep, setLoginOtpStep] = useState(false);
     const [registerMode, setRegisterMode] = useState(false);
     const [registerBusy, setRegisterBusy] = useState(false);
     const [registerMessage, setRegisterMessage] = useState<string | null>(null);
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [email, setEmail] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -109,10 +117,40 @@ export function Login() {
         }
     };
 
+    const submitLogin = async () => {
+        setLoginError(null);
+        if (!loginUsername.trim() || !loginPassword) {
+            setLoginError(t('landing.loginFillRequired', 'Kullanıcı adı ve şifre zorunludur.'));
+            return;
+        }
+        if (loginOtpStep && !loginOtp.trim()) {
+            setLoginError(t('landing.loginOtpRequired', 'Doğrulama kodunu girin.'));
+            return;
+        }
+        setLoginBusy(true);
+        try {
+            const result = await loginWithCredentials({
+                usernameOrEmail: loginUsername.trim(),
+                password: loginPassword,
+                otp: loginOtpStep ? loginOtp.trim() : undefined,
+                rememberMe: loginRemember,
+            });
+            if (result.otpRequired) {
+                setLoginOtpStep(true);
+                setLoginError(result.message ?? t('landing.loginOtpHint', 'İki aşamalı doğrulama kodunu girin.'));
+                return;
+            }
+        } catch (err: unknown) {
+            setLoginError(readFinanceBinaryErrorMessage(err) ?? t('landing.loginFailed', 'Giriş başarısız.'));
+        } finally {
+            setLoginBusy(false);
+        }
+    };
+
     const completeRegistration = async () => {
         setRegisterError(null);
         setRegisterMessage(null);
-        if (!email.trim() || !username.trim() || !password || !code.trim()) {
+        if (!email.trim() || !firstName.trim() || !lastName.trim() || !username.trim() || !password || !code.trim()) {
             setRegisterError('Lütfen tüm alanları doldurun.');
             return;
         }
@@ -125,6 +163,8 @@ export function Login() {
             const res = await financeClient.post('/api/public/register/complete', {
                 email,
                 username,
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
                 password,
                 code,
             });
@@ -162,7 +202,7 @@ export function Login() {
         >
             <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: 8 }}>{t('login.title', 'Giriş')}</h1>
             <p style={{ fontSize: '0.9375rem', color: tokens.textMuted, marginBottom: 24 }}>
-                {t('login.subtitle', 'Finans portalına erişmek için Keycloak ile giriş yapın veya yeni hesap oluşturun.')}
+                {t('login.subtitle', 'Finans portalına giriş yapın veya yeni hesap oluşturun.')}
             </p>
             {loginError && (
                 <div
@@ -181,23 +221,57 @@ export function Login() {
                     {loginError}
                 </div>
             )}
-            <button
-                type="button"
-                onClick={login}
-                style={{
-                    width: '100%',
-                    padding: '12px 24px',
-                    fontSize: '0.9375rem',
-                    fontWeight: 600,
-                    background: tokens.accentGradient,
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                }}
-            >
-                {t('login.keycloak', 'Keycloak ile Giriş')}
-            </button>
+            <div style={{ textAlign: 'left', display: 'grid', gap: 8, marginBottom: 16 }}>
+                <input
+                    value={loginUsername}
+                    onChange={(e) => setLoginUsername(e.target.value)}
+                    placeholder={t('landing.loginUsername', 'Kullanıcı adı veya e-posta')}
+                    autoComplete="username"
+                    disabled={loginOtpStep}
+                    style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg, color: tokens.text }}
+                />
+                <input
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder={t('landing.password', 'Şifre')}
+                    type="password"
+                    autoComplete="current-password"
+                    style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg, color: tokens.text }}
+                />
+                {loginOtpStep ? (
+                    <input
+                        value={loginOtp}
+                        onChange={(e) => setLoginOtp(e.target.value)}
+                        placeholder={t('landing.loginOtp', 'İki aşamalı doğrulama kodu')}
+                        autoComplete="one-time-code"
+                        inputMode="numeric"
+                        maxLength={6}
+                        style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg, color: tokens.text }}
+                    />
+                ) : null}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.875rem', color: tokens.textMuted }}>
+                    <input type="checkbox" checked={loginRemember} onChange={(e) => setLoginRemember(e.target.checked)} />
+                    {t('landing.rememberMe', 'Beni hatırla')}
+                </label>
+                <button
+                    type="button"
+                    disabled={loginBusy}
+                    onClick={() => void submitLogin()}
+                    style={{
+                        width: '100%',
+                        padding: '12px 24px',
+                        fontSize: '0.9375rem',
+                        fontWeight: 600,
+                        background: tokens.accentGradient,
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                    }}
+                >
+                    {loginBusy ? '…' : loginOtpStep ? t('landing.loginSubmitOtp', 'Doğrula ve giriş yap') : t('landing.loginSubmit', 'Giriş yap')}
+                </button>
+            </div>
             <p style={{ fontSize: '0.875rem', color: tokens.textMuted, marginTop: 16 }}>
                 {t('login.noAccount', 'Hesabınız yok mu?')}
             </p>
@@ -228,6 +302,22 @@ export function Login() {
                     <button type="button" disabled={registerBusy} onClick={requestRegisterCode} style={{ padding: '10px 12px', borderRadius: 8, border: `1px solid ${tokens.accent}`, background: 'transparent', color: tokens.accent, cursor: 'pointer' }}>
                         {registerBusy ? 'Gönderiliyor...' : 'Doğrulama kodu gönder'}
                     </button>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <input
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            placeholder={t('landing.firstName', 'Ad')}
+                            autoComplete="given-name"
+                            style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg }}
+                        />
+                        <input
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            placeholder={t('landing.lastName', 'Soyad')}
+                            autoComplete="family-name"
+                            style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg }}
+                        />
+                    </div>
                     <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Kullanıcı adı" style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg }} />
                     <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Şifre" type="password" style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg }} />
                     <input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Şifre (tekrar)" type="password" style={{ padding: 10, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bg }} />

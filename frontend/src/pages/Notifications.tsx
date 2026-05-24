@@ -4,7 +4,6 @@ import {
     Bell,
     CheckCircle2,
     ShieldAlert,
-    Info,
     ChevronRight,
     X,
 } from 'lucide-react';
@@ -12,7 +11,10 @@ import { notificationClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { useLanguage } from '../i18n/LanguageContext';
-import { portfolioInsightNotificationTypeLabel } from '../utils/portfolioInsightNotifications';
+import {
+    isPortfolioInsightNotificationType,
+    portfolioInsightNotificationTypeLabel,
+} from '../utils/portfolioInsightNotifications';
 import {
     isPriceAlertNotificationType,
     priceAlertNotificationTypeLabel,
@@ -56,56 +58,39 @@ type PageResponse = {
 
 type FilterTab = 'ALL' | 'UNREAD';
 
-/**
- * Bildirim turune gore kategori cikariyoruz; mikro ikon ve renk kodu bu bilgiden uretilir.
- * Backend her notification icin tek bir `type` string'i tutuyor (orn. USER_REGISTERED,
- * SUSPICIOUS_TXN, FUND_REQUEST_APPROVED ...) — burada anahtar kelimelerle gruplayip
- * UI'da tutarli bir renk-anlam haritasi sunuyoruz.
- */
-type NotifCategory = 'APPROVAL' | 'SECURITY' | 'REVIEW' | 'INFO';
+/** Aktif bildirim tipleri için ikon rengi. */
+type NotifCategory = 'APPROVAL' | 'SECURITY' | 'INFO';
 
 function classifyNotification(type: string): NotifCategory {
     const t = (type ?? '').toUpperCase();
-    if (t === 'REAL_RETURN_NEGATIVE' || t === 'PORTFOLIO_CONCENTRATION_RISK') {
+    if (t === 'REAL_RETURN_NEGATIVE' || t === 'PORTFOLIO_CONCENTRATION_RISK' || t.startsWith('PRICE_ALERT')) {
         return 'SECURITY';
     }
-    if (t === 'REAL_RETURN_POSITIVE') {
+    if (t === 'REAL_RETURN_POSITIVE' || t === 'PORTFOLIO_EVALUATION_REPORT') {
         return 'APPROVAL';
-    }
-    if (
-        t.includes('APPROVED') ||
-        t.includes('APPROVAL') ||
-        t.includes('SUCCESS') ||
-        t.includes('COMPLETED') ||
-        t.includes('CONFIRM') ||
-        t.includes('ONAY')
-    ) {
-        return 'APPROVAL';
-    }
-    if (
-        t.includes('SUSPICIOUS') ||
-        t.includes('SECURITY') ||
-        t.includes('RISK') ||
-        t.includes('REJECT') ||
-        t.includes('FAIL') ||
-        t.includes('FRAUD') ||
-        t.includes('BLOCK') ||
-        t.includes('FROZEN') ||
-        t.includes('GUVENL')
-    ) {
-        return 'SECURITY';
-    }
-    if (
-        t.includes('REVIEW') ||
-        t.includes('PENDING') ||
-        t.includes('REGISTERED') ||
-        t.includes('REQUEST') ||
-        t.includes('TASK') ||
-        t.includes('INCELE')
-    ) {
-        return 'REVIEW';
     }
     return 'INFO';
+}
+
+function notificationTypeLabel(type: string, t: (key: string, fallback?: string) => string): string {
+    if (isPriceAlertNotificationType(type)) {
+        return priceAlertNotificationTypeLabel(type, t);
+    }
+    if (isPortfolioInsightNotificationType(type)) {
+        return portfolioInsightNotificationTypeLabel(type, t);
+    }
+    switch ((type ?? '').toUpperCase()) {
+        case 'USER_REGISTERED':
+            return t('notifications.typeUserRegistered', 'Kayıt');
+        case 'USER_LOGIN_SUSPENDED':
+            return t('notifications.typeLoginSuspended', 'Giriş askıya alındı');
+        case 'USER_LOGIN_UNSUSPENDED':
+            return t('notifications.typeLoginUnsuspended', 'Giriş askısı kaldırıldı');
+        case 'SYSTEM_ERROR':
+            return t('notifications.typeSystemError', 'Sistem');
+        default:
+            return type;
+    }
 }
 
 function categoryColor(category: NotifCategory): string {
@@ -114,8 +99,6 @@ function categoryColor(category: NotifCategory): string {
             return '#22c55e';
         case 'SECURITY':
             return '#ef4444';
-        case 'REVIEW':
-            return '#38bdf8';
         default:
             return '#c0c0c0';
     }
@@ -127,8 +110,6 @@ function CategoryIcon({ category, size = 16 }: { category: NotifCategory; size?:
             return <CheckCircle2 size={size} aria-hidden />;
         case 'SECURITY':
             return <ShieldAlert size={size} aria-hidden />;
-        case 'REVIEW':
-            return <Info size={size} aria-hidden />;
         default:
             return <Bell size={size} aria-hidden />;
     }
@@ -329,9 +310,7 @@ export function Notifications() {
                                                 <div className="notif-item__title">{n.title}</div>
                                                 <div className="notif-item__meta">
                                                     <span className="notif-item__type-chip">
-                                                        {isPriceAlertNotificationType(n.type)
-                                                            ? priceAlertNotificationTypeLabel(n.type, t)
-                                                            : portfolioInsightNotificationTypeLabel(n.type, t)}
+                                                        {notificationTypeLabel(n.type, t)}
                                                     </span>
                                                     <span className="notif-item__date">
                                                         {new Date(occurredAt).toLocaleString(locale, {
@@ -425,7 +404,7 @@ function NotificationDetailModal({ item, locale, onClose, t }: NotificationDetai
                             {item.title}
                         </h2>
                         <div className="notif-modal__subtitle">
-                            <span className="notif-item__type-chip">{item.type}</span>
+                            <span className="notif-item__type-chip">{notificationTypeLabel(item.type, t)}</span>
                             <span>·</span>
                             <span>{new Date(occurredAt).toLocaleString(locale)}</span>
                             {item.occurrenceCount > 1 ? (

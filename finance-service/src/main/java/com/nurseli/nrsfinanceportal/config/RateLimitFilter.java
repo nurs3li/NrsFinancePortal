@@ -18,8 +18,8 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * /api/* isteklerini IP başına dakikada N ile sınırlar.
- * Aşan isteklere 429 Too Many Requests döner.
+ * Redis tabanlı istek hız sınırlama filter'ı; /api/* isteklerini IP başına dakikada N ile sınırlar.
+ * Limit aşıldığında 429 Too Many Requests döner.
  */
 @Slf4j
 @Component
@@ -30,14 +30,16 @@ public class RateLimitFilter implements Filter {
     private static final String RATE_LIMIT_KEY_PREFIX = "ratelimit:ip:";
     private static final Set<String> DASHBOARD_READ_PATHS = Set.of(
             "/api/users/me",
-            "/api/me/starred-assets",
-            "/api/transactions/me/range"
+            "/api/me/starred-assets"
     );
 
     private final StringRedisTemplate redisTemplate;
     private final RateLimitProperties properties;
 
     @Override
+    /**
+ * IP başına Redis sayaç ile rate limit uygular; dashboard read path'leri muaf tutulabilir.
+ */
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
 
@@ -72,16 +74,7 @@ public class RateLimitFilter implements Filter {
             return;
         }
 
-        // 2) FM / Admin için sadece "okuma" GET isteklerini rate-limit dışı bırak
-        if ("GET".equals(method)
-                && (path.startsWith("/api/tasks")                 // /api/tasks/me, /api/tasks/{id}
-                || path.startsWith("/api/admin/tasks")        // admin görev listesi/detayı
-                || path.startsWith("/api/admin/accounts"))) { // admin hesap listesi
-            chain.doFilter(request, response);
-            return;
-        }
-
-        // 3) /api dışındaki istekleri zaten sınırlamıyoruz
+        // 2) /api dışındaki istekleri zaten sınırlamıyoruz
         if (!path.startsWith("/api/")) {
             chain.doFilter(request, response);
             return;

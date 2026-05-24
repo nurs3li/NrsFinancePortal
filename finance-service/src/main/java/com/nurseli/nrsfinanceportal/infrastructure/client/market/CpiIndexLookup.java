@@ -8,7 +8,7 @@ import java.util.Optional;
 import java.util.TreeMap;
 
 /**
- * Aylık TÜFE endeks seviyesi — tarih için en yakın önceki resmi ay.
+ * Aylık TÜFE endeks seviyesi; tarih için en yakın önceki resmi ay CPI çarpanını hesaplar.
  */
 public final class CpiIndexLookup {
 
@@ -20,14 +20,23 @@ public final class CpiIndexLookup {
         this.available = !this.indexByMonthStart.isEmpty();
     }
 
+    /**
+     * Boş CPI lookup örneği döner.
+     */
     public static CpiIndexLookup empty() {
         return new CpiIndexLookup(new TreeMap<>());
     }
 
+    /**
+     * Endeks verisi yüklü mü kontrol eder.
+     */
     public boolean isAvailable() {
         return available;
     }
 
+    /**
+     * Tarih için en yakın önceki resmi ayı döner.
+     */
     public Optional<LocalDate> monthAtOrBefore(LocalDate date) {
         if (!available || date == null) {
             return Optional.empty();
@@ -40,6 +49,9 @@ public final class CpiIndexLookup {
         return Optional.of(entry.getKey());
     }
 
+    /**
+     * Tarih için endeks değerini döner.
+     */
     public Optional<BigDecimal> indexAtOrBefore(LocalDate date) {
         return monthAtOrBefore(date).flatMap(month -> {
             BigDecimal v = indexByMonthStart.get(month);
@@ -50,6 +62,9 @@ public final class CpiIndexLookup {
         });
     }
 
+    /**
+     * Serideki en güncel resmi ayı döner.
+     */
     public Optional<LocalDate> latestMonth() {
         if (!available) {
             return Optional.empty();
@@ -61,6 +76,9 @@ public final class CpiIndexLookup {
         return Optional.of(last.getKey());
     }
 
+    /**
+     * Serideki en güncel endeks değerini döner.
+     */
     public Optional<BigDecimal> latestIndex() {
         return latestMonth().map(indexByMonthStart::get)
                 .filter(v -> v != null && v.signum() > 0);

@@ -12,7 +12,7 @@ import {
 import { createPortal } from 'react-dom';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AxiosResponse } from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { financeClient, marketClient } from '../api/client';
 import {
     getBistBatchHistory,
@@ -27,6 +27,7 @@ import {
     CHART_RANGE_SEQUENCE as TERMINAL_CHART_RANGE_SEQUENCE,
     type ChartRangeId,
     RANGE_TO_DAYS,
+    snapMarketHistoryDays,
 } from '../components/market/heatmapRange';
 import { heatmapSectorLabel } from '../components/market/heatmapSectorLabels';
 import { useTheme } from '../theme/ThemeContext';
@@ -46,7 +47,10 @@ import { MarketCompareLwChart } from '../components/market/MarketCompareLwChart'
 import { MarketMacroInfoCard } from '../components/market/MarketMacroInfoCard';
 import { MarketPurchasingPowerSummaryLive } from '../components/market/MarketPurchasingPowerSummaryLive';
 import { MarketPurchasingPowerCompareChart } from '../components/market/MarketPurchasingPowerCompareChart';
+import { MarketPreciousMetalSummaryCard } from '../components/market/MarketPreciousMetalSummaryCard';
+import { MarketPreciousMetalCompareChart } from '../components/market/MarketPreciousMetalCompareChart';
 import { usePurchasingPowerData } from '../hooks/usePurchasingPowerData';
+import { usePreciousMetalComparisonData } from '../hooks/usePreciousMetalComparisonData';
 import {
     fetchMarketTerminalList,
     MARKET_LIST_PAGE_SIZE,
@@ -57,10 +61,16 @@ import {
     mapTerminalSortToTefas,
     tefasMonthsForChartRange,
 } from '../services/tefasFundApi';
-import { buildTefasTreemapTiles, tefasHeatmapSortForRange } from '../utils/tefasHeatmap';
+import {
+    buildTefasTreemapTiles,
+    tefasHeatmapSortForRange,
+    tefasReturnPctForChartRange,
+} from '../utils/tefasHeatmap';
+import { enrichBistInstrumentHorizons } from '../utils/bistInstrumentHorizons';
 import { terminalListItemToVm } from '../utils/marketTerminalListVm';
 import { istanbulTodayYmd } from '../components/simulation/simDates';
 import { clampPpAnchorYmd, firstYmdFromCandles, lastYmdFromCandles } from '../utils/marketPurchasingPower';
+import { resolvePurchasingPowerUnitLabel } from '../utils/purchasingPowerUnitLabel';
 import {
     ChartCandlestick,
     ChartLine,
@@ -84,10 +94,13 @@ import { debtHasStructuredYieldData, pickStructuredYieldDecimal } from '../utils
 import { cryptoMeta, etfMeta, fxMeta, getBondMeta, instrumentMeta } from '../utils/instrumentMeta';
 import { isViopWhitelisted, viopCategoryFor, type ViopCategory } from '../constants/ViopWhitelist';
 import {
+    defaultMetalSymbolForSubmarket,
     getPreciousMetalDisplayMeta,
     isPreciousMetalAllowlisted,
     isUsdPerOunceMetalSymbol,
-    PRECIOUS_METAL_SYMBOLS,
+    type MetalsSubmarket,
+    preciousMetalSymbolsForSubmarket,
+    symbolMatchesMetalsSubmarket,
     PRECIOUS_USD_OZ_DESCRIPTION,
 } from '../constants/preciousMetalsUsd';
 import './MarketTerminal.css';
@@ -133,6 +146,20 @@ type MarketInstrument = {
         basis?: number;
         yield?: number;
     };
+    /** Terminal listesi spark kapanışları (BIST horizon hesabı) */
+    sparkline?: number[];
+    /** TEFAS / BIST terminal listesi — hero / VM eşlemesi */
+    pctDay?: number | null;
+    pctWeek?: number | null;
+    pctMonth?: number | null;
+    pctYear?: number | null;
+    fundSubmarket?: FundSubmarket;
+    fundRiskLevel?: number;
+    fundReturn3m?: number;
+    fundReturn6m?: number;
+    fundReturn3y?: number;
+    fundReturn5y?: number;
+    listSubtitle?: string;
 };
 type InstrumentType = 'STOCK' | 'BOND' | 'FUTURES';
 type InstrumentVm = MarketInstrument & {
@@ -157,12 +184,14 @@ type InstrumentVm = MarketInstrument & {
     longShort?: 'LONG' | 'SHORT' | 'NÖTR';
     fundSubmarket?: FundSubmarket;
     fundRiskLevel?: number;
+    fundReturn3m?: number;
+    fundReturn6m?: number;
     fundReturn3y?: number;
     fundReturn5y?: number;
 };
 
 /** Piyasa seçici tablosu: Fiyat ve horizon % sütunları için sıralama anahtarı */
-type PickerListSortKey = 'price' | 'pctDay' | 'pctWeek' | 'pctMonth' | 'pctYear';
+type PickerListSortKey = 'price' | 'pctDay' | 'pctWeek' | 'pctMonth' | 'pctYear' | 'fundReturn3m' | 'fundReturn6m';
 
 type IndicatorPoint = { t: string; value: number };
 type IndicatorsResponse = {
@@ -798,6 +827,24 @@ function resolveViopContractSymbol(
     return hit ? normalizeSymbolKey(hit.contractCode) : k;
 }
 
+/** VIOP geçmiş/snapshot için geçerli kontrat kodu; bilinmeyen liste satırlarında null. */
+function resolveViopHistoryContract(
+    symbol: string,
+    contractBySymbol: Record<string, ViopContract>,
+    snapshotBySymbol: Record<string, ViopContractSnapshotApi>,
+): string | null {
+    const k = normalizeSymbolKey(symbol);
+    if (!k) return null;
+    const resolved = normalizeSymbolKey(resolveViopContractSymbol(symbol, contractBySymbol));
+    if (resolved && contractBySymbol[resolved]) {
+        return resolved;
+    }
+    if (snapshotBySymbol[k]) {
+        return k;
+    }
+    return null;
+}
+
 function findInstrumentVmBySymbol(
     vms: { symbol: string; category: MarketCategory }[],
     symbol: string,
@@ -820,7 +867,7 @@ function metalsHistoryQueryParams(rawSymbol: string, days: number): Record<strin
     const sym = normalizeSymbolKey(rawSymbol);
     const apiSym = sym === 'ALTIN_TRY' ? 'XAU_TRY' : sym;
     if (apiSym === 'XAU_TRY') {
-        return { symbol: apiSym, days };
+        return { symbol: apiSym, days: snapMarketHistoryDays(days) };
     }
     if (isUsdPerOunceMetalSymbol(apiSym)) {
         const now = new Date();
@@ -924,6 +971,21 @@ function tefasRiskLevelDisplay(risk: number | undefined | null): string {
 }
 
 /** Grafik aralığı: dahili `1D` vb. — Türkçe kısa etiket (UI). */
+/** TEFAS pay değeri grafiği: seçilen aralığa göre son N günlük günlük mumlar (1G ≈ 2 iş günü). */
+function sliceCandlesToChartRange<T extends { time: string }>(candles: T[], range: ChartRangeId): T[] {
+    if (candles.length < 2) return candles;
+    const sorted = [...candles].sort((a, b) => String(a.time).localeCompare(String(b.time)));
+    if (range === '1D') {
+        return sorted.slice(-2);
+    }
+    const calDays = RANGE_TO_DAYS[range] ?? 30;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - calDays);
+    const ymd = cutoff.toISOString().slice(0, 10);
+    const filtered = sorted.filter((c) => String(c.time).slice(0, 10) >= ymd);
+    return filtered.length >= 2 ? filtered : sorted.slice(-Math.min(calDays + 2, sorted.length));
+}
+
 function chartRangeUiShortLabel(r: ChartRangeId): string {
     const m: Record<ChartRangeId, string> = {
         '1D': '1G',
@@ -989,11 +1051,20 @@ function canPickerCompareRow(
     selected: InstrumentVm | null,
     activeCategory: MarketCategory,
     equitySubmarket: EquitySubmarket,
+    metalsSubmarket: MetalsSubmarket,
 ): boolean {
     if (!selected?.symbol || row.symbol === selected.symbol) return false;
     if (row.category !== activeCategory || selected.category !== activeCategory) return false;
     if (activeCategory === 'EQUITY') {
         if (rowIsBistEquityVm(row) !== (equitySubmarket === 'BIST')) return false;
+    }
+    if (activeCategory === 'METALS') {
+        if (
+            !symbolMatchesMetalsSubmarket(row.symbol, metalsSubmarket) ||
+            !symbolMatchesMetalsSubmarket(selected.symbol, metalsSubmarket)
+        ) {
+            return false;
+        }
     }
     if (activeCategory === 'FUTURES') {
         const cr = viopCategoryFor(row.symbol);
@@ -1098,7 +1169,8 @@ function spotSparkHorizonPct(
 ): number | null {
     if (!TREND_SELECTABLE_CATEGORIES.has(category)) return null;
     const calDays = RANGE_TO_DAYS[chartRange];
-    const assumedCalendarSpan = category === 'EQUITY' ? RANGE_TO_DAYS['2Y'] : 90;
+    const assumedCalendarSpan =
+        category === 'EQUITY' || category === 'METALS' ? RANGE_TO_DAYS['2Y'] : 90;
     const mapped = approxPctByCalendarSpan(spark, calDays, assumedCalendarSpan);
     if (mapped != null && Math.abs(mapped) > 1e-6) return mapped;
     const win = Math.min(calDays, Math.max(2, spark.length));
@@ -1167,6 +1239,12 @@ function dailyChangePercentForListedAsset(
         if (spark1 != null && Math.abs(spark1) > 1e-6) return spark1;
         return resolvedChangePercent;
     }
+    if (category === 'METALS') {
+        if (spark1 != null && Math.abs(spark1) > 1e-6) return spark1;
+        const t = tileChange != null ? Number(tileChange) : Number.NaN;
+        if (Number.isFinite(t) && Math.abs(t) > 1e-6) return t;
+        return resolvedChangePercent;
+    }
     if (spark1 != null && Math.abs(spark1) > 1e-6) return spark1;
     const t = tileChange != null ? Number(tileChange) : Number.NaN;
     if (Number.isFinite(t) && Math.abs(t) > 1e-6) return t;
@@ -1183,9 +1261,25 @@ function dailyChangePercentForListedAsset(
  *    `approxPctByCalendarSpan` (takvim günü oranı), sonra kısa seri yedekleri.
  */
 function effectiveChangePercent(
-    row: { sparkline: number[]; changePercent: number; dailyChangePercent?: number; category: MarketCategory },
+    row: {
+        sparkline: number[];
+        changePercent: number;
+        dailyChangePercent?: number;
+        category: MarketCategory;
+        fundSubmarket?: FundSubmarket;
+        exchange?: string;
+        pctDay?: number | null;
+        pctWeek?: number | null;
+        pctMonth?: number | null;
+        pctYear?: number | null;
+        fundReturn3m?: number;
+        fundReturn6m?: number;
+    },
     chartRange: ChartRangeId,
 ): number {
+    if (row.category === 'FUNDS' && rowIsTefasFundVm(row)) {
+        return tefasReturnPctForChartRange(row, chartRange);
+    }
     if (!TREND_SELECTABLE_CATEGORIES.has(row.category)) {
         return row.changePercent;
     }
@@ -1330,6 +1424,7 @@ export function Market() {
     const { t, lang } = useLanguage();
     const numberLocale = lang === 'en' ? 'en-US' : 'tr-TR';
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [activeCategory, setActiveCategory] = useState<MarketCategory>('EQUITY');
     const [showUsdInTry, setShowUsdInTry] = useState(false);
     const [selectedSymbol, setSelectedSymbol] = useState<string>('');
@@ -1339,6 +1434,7 @@ export function Market() {
     const [range, setRange] = useState<ChartRangeId>('1M');
     const [equitySubmarket, setEquitySubmarket] = useState<EquitySubmarket>('US');
     const [fundSubmarket, setFundSubmarket] = useState<FundSubmarket>('TR');
+    const [metalsSubmarket, setMetalsSubmarket] = useState<MetalsSubmarket>('GRAM');
     const isTefasFundsView = activeCategory === 'FUNDS' && fundSubmarket === 'TR';
     const isBondInstrumentsView = activeCategory === 'BOND';
     /** Hisse / kripto / FX / metaller / fonlar (ısı haritası + makro kartlar). */
@@ -1348,14 +1444,15 @@ export function Market() {
         activeCategory === 'FX' ||
         activeCategory === 'METALS' ||
         activeCategory === 'FUNDS';
-    /** Tüm spot benzeri kategoriler + VİOP/tahvil: sol sütunlu terminal grid (ısı haritası hariç). */
-    const isSpotTerminalLayout =
-        isSpotMarketCategory || activeCategory === 'FUTURES' || activeCategory === 'BOND';
+    /** Hisse / kripto / FX / metaller / fonlar + VİOP: sol sütunda liste (+ spot’ta makro). Tahvil ayrı grid. */
+    const isSpotTerminalLayout = isSpotMarketCategory || activeCategory === 'FUTURES';
+    const isBondTerminalLayout = isBondInstrumentsView;
     const showMarketHeatmap = isSpotMarketCategory;
     /** Açılır piyasa listesinde gezilen kategori / alt pazar; grafik `activeCategory` ile ayrılır — chip’e basınca hero değişmez. */
     const [pickerCategory, setPickerCategory] = useState<MarketCategory>('EQUITY');
     const [pickerEquitySubmarket, setPickerEquitySubmarket] = useState<EquitySubmarket>('US');
     const [pickerFundSubmarket, setPickerFundSubmarket] = useState<FundSubmarket>('TR');
+    const [pickerMetalsSubmarket, setPickerMetalsSubmarket] = useState<MetalsSubmarket>('GRAM');
     const isTefasFundsPicker = pickerCategory === 'FUNDS' && pickerFundSubmarket === 'TR';
     const [bistRange, setBistRange] = useState<ChartRangeId>('1M');
     const trendChartRange: ChartRangeId =
@@ -1368,10 +1465,45 @@ export function Market() {
     /** Karşılaştırma grafiği: zaman aralığının başlangıç günü (crosshair ile değişmez). */
     const [ppChartAnchor, setPpChartAnchor] = useState('');
     const ppAnchorBoundsRef = useRef({ first: '', last: '', today: '' });
-    const ppCrosshairHandlerRef = useRef<((dateYmd: string) => void) | null>(null);
     const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down'>>({});
     const prevPricesRef = useRef<Record<string, number>>({});
     const prevTerminalCategoryRef = useRef<MarketCategory>(activeCategory);
+
+    /** Detaylı ısı haritası / dış link: ?type=METALS&symbol=…&metalsSubmarket=GRAM|OUNCE */
+    useEffect(() => {
+        const type = searchParams.get('type')?.trim().toUpperCase();
+        const symbol = searchParams.get('symbol')?.trim();
+        const sub = searchParams.get('metalsSubmarket')?.trim().toUpperCase();
+        if (type === 'METALS' && (sub === 'GRAM' || sub === 'OUNCE')) {
+            const metalsSub = sub as MetalsSubmarket;
+            setActiveCategory('METALS');
+            setPickerCategory('METALS');
+            setMetalsSubmarket(metalsSub);
+            setPickerMetalsSubmarket(metalsSub);
+        } else if (
+            type === 'EQUITY' ||
+            type === 'CRYPTO' ||
+            type === 'FX' ||
+            type === 'METALS' ||
+            type === 'FUNDS' ||
+            type === 'FUTURES' ||
+            type === 'BOND'
+        ) {
+            setActiveCategory(type as MarketCategory);
+            setPickerCategory(type as MarketCategory);
+        }
+        if (symbol) {
+            setSelectedSymbol(symbol);
+        }
+        if (type || symbol || sub) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('type');
+            next.delete('symbol');
+            next.delete('metalsSubmarket');
+            next.delete('days');
+            setSearchParams(next, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
 
     /** Faiz paneli CTA → Piyasalar Tahvil sekmesi (sessionStorage, tek seferlik). */
     useEffect(() => {
@@ -1512,6 +1644,7 @@ export function Market() {
             setPickerCategory(activeCategory);
             setPickerEquitySubmarket(equitySubmarket);
             setPickerFundSubmarket(fundSubmarket);
+            setPickerMetalsSubmarket(metalsSubmarket);
             leftMarketPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             return;
         }
@@ -1520,15 +1653,16 @@ export function Market() {
                 setPickerCategory(activeCategory);
                 setPickerEquitySubmarket(equitySubmarket);
                 setPickerFundSubmarket(fundSubmarket);
+                setPickerMetalsSubmarket(metalsSubmarket);
             }
             return !wasOpen;
         });
-    }, [activeCategory, equitySubmarket, fundSubmarket, isSpotTerminalLayout]);
+    }, [activeCategory, equitySubmarket, fundSubmarket, metalsSubmarket, isSpotTerminalLayout]);
 
     useEffect(() => {
         setInstrumentListOpen(false);
         setMarketListQuickFilter('ALL');
-    }, [activeCategory, equitySubmarket, fundSubmarket]);
+    }, [activeCategory, equitySubmarket, fundSubmarket, metalsSubmarket]);
 
     /** Spot terminal: sol liste sekmeleri grafikle aynı kategori/alt pazarı göstersin. */
     useEffect(() => {
@@ -1536,7 +1670,8 @@ export function Market() {
         setPickerCategory(activeCategory);
         setPickerEquitySubmarket(equitySubmarket);
         setPickerFundSubmarket(fundSubmarket);
-    }, [isSpotTerminalLayout, activeCategory, equitySubmarket, fundSubmarket]);
+        setPickerMetalsSubmarket(metalsSubmarket);
+    }, [isSpotTerminalLayout, activeCategory, equitySubmarket, fundSubmarket, metalsSubmarket]);
 
     useEffect(() => {
         if (activeCategory !== 'FUNDS') return;
@@ -1594,7 +1729,8 @@ export function Market() {
     const pickerMatchesChart =
         pickerCategory === activeCategory &&
         (activeCategory !== 'EQUITY' || pickerEquitySubmarket === equitySubmarket) &&
-        (activeCategory !== 'FUNDS' || pickerFundSubmarket === fundSubmarket);
+        (activeCategory !== 'FUNDS' || pickerFundSubmarket === fundSubmarket) &&
+        (activeCategory !== 'METALS' || pickerMetalsSubmarket === metalsSubmarket);
 
     /** Grafik ve batch istekleri seçili `range` ile aynı kalır (VİOP/tahvil 1G dahil). */
     const dataRangeForChart: ChartRangeId = range;
@@ -1641,6 +1777,7 @@ export function Market() {
             pickerCategory,
             pickerEquitySubmarket,
             pickerFundSubmarket,
+            pickerMetalsSubmarket,
             marketListPage,
             marketListQuickFilter,
             searchTerm,
@@ -1675,6 +1812,7 @@ export function Market() {
             if (pk[3] !== pickerCategory) return undefined;
             if (pickerCategory === 'EQUITY' && pk[4] !== pickerEquitySubmarket) return undefined;
             if (pickerCategory === 'FUNDS' && pk[5] !== pickerFundSubmarket) return undefined;
+            if (pickerCategory === 'METALS' && pk[6] !== pickerMetalsSubmarket) return undefined;
             return previousData;
         },
         staleTime:
@@ -1685,7 +1823,7 @@ export function Market() {
                   : 8_000,
     });
 
-    const TEFAS_HEATMAP_PAGE_SIZE = 48;
+    const TEFAS_HEATMAP_PAGE_SIZE = 100;
 
     const { data: tefasHeatmapPage } = useQuery({
         queryKey: ['market', 'tefas', 'heatmap', range, fundSubmarket],
@@ -1707,12 +1845,34 @@ export function Market() {
         refetchInterval: 180_000,
     });
 
+    const pickerTerminalListPage = useMemo(() => {
+        if (!terminalListPageData) return terminalListPageData;
+        if (pickerCategory !== 'METALS') return terminalListPageData;
+        const filtered = terminalListPageData.items.filter((row) =>
+            symbolMatchesMetalsSubmarket(row.symbol, pickerMetalsSubmarket),
+        );
+        const size = terminalListPageData.size || MARKET_LIST_PAGE_SIZE;
+        const total = filtered.length;
+        const totalPages = Math.max(1, Math.ceil(total / size));
+        const page = Math.min(marketListPage, totalPages - 1);
+        const from = page * size;
+        return {
+            ...terminalListPageData,
+            items: filtered.slice(from, from + size),
+            page,
+            totalElements: total,
+            totalPages,
+            hasNext: page < totalPages - 1,
+            hasPrevious: page > 0,
+        };
+    }, [terminalListPageData, pickerCategory, pickerMetalsSubmarket, marketListPage]);
+
     /** Dashboard beklenmeden ilk satırdan sembol seç — grafik istekleri hemen başlasın. */
     const bootstrapSymbolFromList = useMemo(() => {
         if (!pickerMatchesChart) return '';
-        const first = terminalListPageData?.items?.[0]?.symbol;
+        const first = pickerTerminalListPage?.items?.[0]?.symbol;
         return first ? normalizeSymbolKey(first) : '';
-    }, [pickerMatchesChart, terminalListPageData]);
+    }, [pickerMatchesChart, pickerTerminalListPage]);
 
     useEffect(() => {
         if (activeCategory === 'FUTURES' || activeCategory === 'BOND') return;
@@ -1726,6 +1886,7 @@ export function Market() {
         pickerCategory,
         pickerEquitySubmarket,
         pickerFundSubmarket,
+        pickerMetalsSubmarket,
         marketListQuickFilter,
         searchTerm,
         terminalListSortKey,
@@ -1955,10 +2116,11 @@ export function Market() {
         };
         add(selectedSymbol);
         if (pickerCategory === 'FUTURES') {
+            viopContracts.forEach((c) => add(c.contractCode));
             (terminalListPageData?.items ?? []).forEach((r) => add(r.symbol));
         }
         return [...keys];
-    }, [needViopTerminalData, selectedSymbol, pickerCategory, terminalListPageData]);
+    }, [needViopTerminalData, selectedSymbol, pickerCategory, terminalListPageData, viopContracts]);
 
     const viopSnapshotQueries = useQueries({
         queries: viopSnapshotSymbols.map((sym) => ({
@@ -2085,7 +2247,12 @@ export function Market() {
     });
 
     const buildInstruments = useCallback(
-        (cat: MarketCategory, eqSub: EquitySubmarket, fundSub: FundSubmarket): MarketInstrument[] => {
+        (
+            cat: MarketCategory,
+            eqSub: EquitySubmarket,
+            fundSub: FundSubmarket,
+            metalsSub: MetalsSubmarket,
+        ): MarketInstrument[] => {
         if (cat === 'FUTURES') {
             if (pickerMatchesChart && (terminalListPageData?.items?.length ?? 0) > 0) {
                 return terminalListPageData!.items
@@ -2136,19 +2303,33 @@ export function Market() {
             if (pickerMatchesChart && (terminalListPageData?.items?.length ?? 0) > 0) {
                 return terminalListPageData!.items
                     .filter((row) => row.category === 'FUNDS' && row.fundSubmarket === 'TR')
-                    .map((row) => ({
-                        symbol: normalizeSymbolKey(row.symbol),
-                        category: 'FUNDS' as const,
-                        displayName: row.displayName ?? row.name ?? row.symbol,
-                        price: row.price,
-                        changePercent: row.changePercent,
-                        dailyChangePercent: row.dailyChangePercent ?? row.changePercent,
-                        trend: row.trend,
-                        currency: row.currency ?? 'TRY',
-                        marketRegion: row.marketRegion ?? 'TR',
-                        exchange: row.exchange ?? 'TEFAS',
-                        sector: row.sector ?? undefined,
-                    }));
+                    .map((row) => {
+                        const vm = terminalListItemToVm(row);
+                        return {
+                            symbol: normalizeSymbolKey(vm.symbol),
+                            category: 'FUNDS' as const,
+                            displayName: vm.displayName,
+                            price: vm.price,
+                            changePercent: vm.changePercent,
+                            dailyChangePercent: vm.dailyChangePercent ?? vm.pctDay ?? vm.changePercent,
+                            trend: vm.trend,
+                            currency: vm.currency ?? 'TRY',
+                            marketRegion: vm.marketRegion ?? 'TR',
+                            exchange: vm.exchange ?? 'TEFAS',
+                            sector: vm.sector ?? undefined,
+                            pctDay: vm.pctDay,
+                            pctWeek: vm.pctWeek,
+                            pctMonth: vm.pctMonth,
+                            pctYear: vm.pctYear,
+                            fundSubmarket: 'TR' as const,
+                            fundRiskLevel: vm.fundRiskLevel,
+                            fundReturn3m: vm.fundReturn3m,
+                            fundReturn6m: vm.fundReturn6m,
+                            fundReturn3y: vm.fundReturn3y,
+                            fundReturn5y: vm.fundReturn5y,
+                            listSubtitle: vm.listSubtitle,
+                        };
+                    });
             }
             return [];
         }
@@ -2197,6 +2378,44 @@ export function Market() {
                 .sort((a, b) => b.price - a.price);
         }
         if (cat === 'EQUITY' && eqSub === 'BIST') {
+            if (pickerMatchesChart && (terminalListPageData?.items?.length ?? 0) > 0) {
+                return terminalListPageData!.items
+                    .filter((row) => row.category === 'EQUITY' && row.equitySubmarket === 'BIST')
+                    .map((row) => {
+                        const vm = terminalListItemToVm(row);
+                        const enriched = enrichBistInstrumentHorizons({
+                            symbol: normalizeSymbolKey(vm.symbol),
+                            sparkline: vm.sparkline,
+                            pctDay: vm.pctDay,
+                            pctWeek: vm.pctWeek,
+                            pctMonth: vm.pctMonth,
+                            pctYear: vm.pctYear,
+                            changePercent: vm.changePercent,
+                            dailyChangePercent: vm.dailyChangePercent,
+                        });
+                        return {
+                            symbol: normalizeSymbolKey(vm.symbol),
+                            category: 'EQUITY' as const,
+                            displayName: vm.displayName,
+                            name: vm.displayName,
+                            price: vm.price,
+                            changePercent: vm.changePercent,
+                            dailyChangePercent: vm.dailyChangePercent ?? enriched.pctDay ?? vm.changePercent,
+                            trend: vm.trend,
+                            volume: vm.volume ?? null,
+                            currency: vm.currency ?? 'TRY',
+                            marketRegion: vm.marketRegion ?? 'TR',
+                            exchange: vm.exchange ?? 'BIST',
+                            sector: vm.sector ?? undefined,
+                            source: vm.source ?? undefined,
+                            pctDay: enriched.pctDay,
+                            pctWeek: enriched.pctWeek,
+                            pctMonth: enriched.pctMonth,
+                            pctYear: enriched.pctYear,
+                            sparkline: enriched.sparkline,
+                        } as MarketInstrument;
+                    });
+            }
             const out: MarketInstrument[] = [];
             for (const r of bistLatest) {
                 const symbol = normalizeSymbolKey(String(r.symbol ?? ''));
@@ -2253,7 +2472,7 @@ export function Market() {
 
         if (cat === 'METALS') {
             const lm = latestMap as Record<string, LatestPriceRow | undefined>;
-            for (const rawSymbol of PRECIOUS_METAL_SYMBOLS) {
+            for (const rawSymbol of preciousMetalSymbolsForSubmarket(metalsSub)) {
                 const row = lm[rawSymbol];
                 if (!row || row.status === 'NO_DATA') continue;
                 const symbol = normalizeSymbolKey(rawSymbol);
@@ -2393,9 +2612,16 @@ export function Market() {
     );
 
     const instruments = useMemo(
-        () => buildInstruments(activeCategory, equitySubmarket, fundSubmarket),
-        [buildInstruments, activeCategory, equitySubmarket, fundSubmarket]
+        () => buildInstruments(activeCategory, equitySubmarket, fundSubmarket, metalsSubmarket),
+        [buildInstruments, activeCategory, equitySubmarket, fundSubmarket, metalsSubmarket]
     );
+
+    useEffect(() => {
+        if (activeCategory !== 'METALS') return;
+        if (symbolMatchesMetalsSubmarket(selectedSymbol, metalsSubmarket)) return;
+        setSelectedSymbol(defaultMetalSymbolForSubmarket(metalsSubmarket));
+        setCompareSymbols([]);
+    }, [activeCategory, metalsSubmarket, selectedSymbol]);
     useEffect(() => {
         if (activeCategory === 'FUTURES' || activeCategory === 'BOND') {
             const stillExists = instruments.some((i) =>
@@ -2403,20 +2629,46 @@ export function Market() {
                     ? viopSymbolKeysEquivalent(i.symbol, selectedSymbol)
                     : normalizeSymbolKey(i.symbol) === normalizeSymbolKey(selectedSymbol),
             );
+            const pickDefault = () => {
+                if (activeCategory === 'FUTURES') {
+                    return (
+                        instruments.find(
+                            (i) =>
+                                resolveViopHistoryContract(
+                                    i.symbol,
+                                    viopContractBySymbol,
+                                    viopSnapshotBySymbol,
+                                ) != null,
+                        ) ?? instruments[0]
+                    );
+                }
+                return instruments[0];
+            };
             if (pickerMatchesChart && bootstrapSymbolFromList) {
                 if (!selectedSymbol || !stillExists) {
-                    setSelectedSymbol(bootstrapSymbolFromList);
+                    const next = bootstrapSymbolFromList;
+                    setSelectedSymbol((prev) =>
+                        normalizeSymbolKey(prev) === normalizeSymbolKey(next) ? prev : next,
+                    );
                 }
                 return;
             }
             if (!instruments.length) return;
-            if (!selectedSymbol || !stillExists) setSelectedSymbol(instruments[0].symbol);
+            if (!selectedSymbol || !stillExists) {
+                const next = pickDefault().symbol;
+                setSelectedSymbol((prev) =>
+                    normalizeSymbolKey(prev) === normalizeSymbolKey(next) ? prev : next,
+                );
+            }
             return;
         }
         if (!instruments.length) return;
         const stillExists = instruments.some((i) => i.symbol === selectedSymbol);
-        if (!selectedSymbol || !stillExists) setSelectedSymbol(instruments[0].symbol);
-    }, [instruments, selectedSymbol, activeCategory, pickerMatchesChart, bootstrapSymbolFromList]);
+        if (!selectedSymbol || !stillExists) {
+            const next = instruments[0].symbol;
+            setSelectedSymbol((prev) => (prev === next ? prev : next));
+        }
+    }, [instruments, selectedSymbol, activeCategory, pickerMatchesChart, bootstrapSymbolFromList, viopContractBySymbol, viopSnapshotBySymbol]);
 
     useEffect(() => {
         setCompareSymbols([]);
@@ -2424,6 +2676,7 @@ export function Market() {
         setSearchTerm('');
         setIsDetailPanelOpen(false);
         setShowUsdInTry(false);
+        setSelectedSymbol('');
     }, [activeCategory]);
 
     useEffect(() => {
@@ -2451,7 +2704,7 @@ export function Market() {
             if (valid.length === prev.length && valid.every((s, i) => s === prev[i])) return prev;
             return valid;
         });
-    }, [activeCategory, selectedSymbol, instruments]);
+    }, [activeCategory, instruments]);
 
     useEffect(() => {
         if (!isDetailPanelOpen) return;
@@ -2490,10 +2743,11 @@ export function Market() {
         prevTerminalCategoryRef.current = activeCategory;
     }, [activeCategory]);
 
-    const days =
+    const rawChartDays =
         activeCategory === 'EQUITY' && equitySubmarket === 'BIST'
             ? bistMainChartDays
             : RANGE_TO_DAYS[dataRangeForChart];
+    const days = snapMarketHistoryDays(rawChartDays);
     /** Tahvil grafiği: DB’de tarih filtreli sorgu; 2Y için üst sınır performans. */
     const bondHistoryDays =
         activeCategory === 'BOND' ? Math.min(RANGE_TO_DAYS[dataRangeForChart], 400) : days;
@@ -2517,7 +2771,27 @@ export function Market() {
                 : normalizeSymbolKey(selectedSymbol) || selectedSymbol
             : selectedSymbol;
 
+    const selectedSymbolReady = useMemo(() => {
+        if (!selectedSymbol) return false;
+        if (activeCategory === 'FUTURES') {
+            return resolveViopHistoryContract(selectedSymbol, viopContractBySymbol, viopSnapshotBySymbol) != null;
+        }
+        if (!instruments.length) return false;
+        return instruments.some(
+            (i) => normalizeSymbolKey(i.symbol) === normalizeSymbolKey(selectedSymbol),
+        );
+    }, [selectedSymbol, activeCategory, instruments, viopContractBySymbol, viopSnapshotBySymbol]);
+
+    const viopHistoryContract = useMemo(
+        () =>
+            activeCategory === 'FUTURES' && selectedSymbol
+                ? resolveViopHistoryContract(selectedSymbol, viopContractBySymbol, viopSnapshotBySymbol)
+                : null,
+        [activeCategory, selectedSymbol, viopContractBySymbol, viopSnapshotBySymbol],
+    );
+
     const chartIndicatorsEnabled =
+        selectedSymbolReady &&
         Boolean(selectedSymbol && marketType) &&
         !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST') &&
         !(activeCategory === 'FUNDS' && fundSubmarket === 'TR') &&
@@ -2525,13 +2799,13 @@ export function Market() {
 
     const macroSidebarQueriesEnabled = Boolean(selectedSymbol);
 
-    /** Hisse / döviz / kripto / altın: backend `bucket=hourly`. Tahvil / VİOP: yalnızca snapshot/günlük seri (saatlik istemci uydurması yok). */
+    /** Hisse / döviz / kripto / altın: yalnızca 1G için saatlik; 1H = son 7 takvim günü günlük mum (1A ile aynı bucket). */
     const terminalHourlyRange =
         ((activeCategory === 'EQUITY' && equitySubmarket !== 'BIST') ||
             activeCategory === 'FX' ||
             activeCategory === 'CRYPTO' ||
             activeCategory === 'METALS') &&
-        (range === '1D' || range === '1W');
+        range === '1D';
 
     const { data: indicatorData, isLoading: loadingIndicators } = useQuery({
         queryKey: ['market', 'indicators', 'terminal', activeCategory, selectedSymbol, days, terminalHourlyRange ? `hourly:${range}` : 'daily'],
@@ -2556,6 +2830,7 @@ export function Market() {
     const { data: batchData, isLoading: loadingCandles } = useQuery({
         queryKey: ['market', 'candles', 'terminal', activeCategory, selectedSymbol, days, terminalHourlyRange ? `hourly:${range}` : 'daily'],
         enabled:
+            selectedSymbolReady &&
             Boolean(selectedSymbol && marketType) &&
             !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST') &&
             !(activeCategory === 'FUNDS' && fundSubmarket === 'TR'),
@@ -2652,32 +2927,36 @@ export function Market() {
         },
         // Günlük ingest / stale-tail onarımı sonrası grafik güncellensin (BIST ayrı sorgu kullanır).
         refetchInterval:
-            Boolean(selectedSymbol && marketType) && !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST')
+            selectedSymbolReady &&
+            Boolean(selectedSymbol && marketType) &&
+            !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST')
                 ? 90_000
                 : false,
         refetchOnWindowFocus:
-            Boolean(selectedSymbol && marketType) && !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST'),
+            selectedSymbolReady &&
+            Boolean(selectedSymbol && marketType) &&
+            !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST'),
         staleTime: 90_000,
         placeholderData: (prev) => prev,
     });
 
     const { data: viopHistoryApi, isLoading: loadingViopHistory } = useQuery({
-        queryKey: ['market', 'viop-history-api', selectedSymbol, days],
-        enabled: activeCategory === 'FUTURES' && Boolean(selectedSymbol),
+        queryKey: ['market', 'viop-history-api', viopHistoryContract, days],
+        enabled: activeCategory === 'FUTURES' && Boolean(viopHistoryContract),
         queryFn: async ({ signal }) => {
             const now = new Date();
             const fromMs = now.getTime() - Math.max(1, days) * 86_400_000;
             const from = formatEuropeIstanbulLocalIso(new Date(fromMs));
             const to = formatEuropeIstanbulLocalIso(now);
-            const sym = selectedSymbol ?? '';
+            const sym = viopHistoryContract ?? '';
             const { data } = await marketClient.get<ViopHistoryApi>(
                 `/api/market/viop/contracts/${encodeURIComponent(sym)}/history`,
                 { params: { from, to, period: 60 }, signal }
             );
             return data;
         },
-        refetchInterval: activeCategory === 'FUTURES' && Boolean(selectedSymbol) ? 60_000 : false,
-        refetchOnWindowFocus: activeCategory === 'FUTURES',
+        refetchInterval: activeCategory === 'FUTURES' && Boolean(viopHistoryContract) ? 60_000 : false,
+        refetchOnWindowFocus: activeCategory === 'FUTURES' && Boolean(viopHistoryContract),
         staleTime: 45_000,
     });
     const { data: debtHistory = [], isLoading: loadingDebtHistory } = useQuery({
@@ -2749,7 +3028,7 @@ export function Market() {
             });
         }
         if (activeCategory === 'FUNDS' && fundSubmarket === 'TR') {
-            return [...tefasHistory]
+            const mapped = [...tefasHistory]
                 .filter((r) => r.date && Number.isFinite(Number(r.price)) && Number(r.price) > 0)
                 .sort((a, b) => String(a.date).localeCompare(String(b.date)))
                 .map((row, idx, arr) => {
@@ -2767,6 +3046,7 @@ export function Market() {
                         volume: 0,
                     };
                 });
+            return sliceCandlesToChartRange(mapped, dataRangeForChart);
         }
         const series = batchData?.series?.[selectedSymbol] ?? [];
         if (series.length > 0) {
@@ -2816,6 +3096,7 @@ export function Market() {
         days,
         bistCandles,
         tefasHistory,
+        dataRangeForChart,
     ]);
     const bondDualPoints = useMemo(() => {
         if (!isBondInstrumentsView) return [];
@@ -3061,29 +3342,69 @@ export function Market() {
                 };
             }
             if (ins.category === 'EQUITY' && ins.marketRegion === 'TR' && String(ins.exchange ?? '').toUpperCase() === 'BIST') {
-                const sparkLocal = bistSparkClosesBySymbol[symbolKey] ?? [];
+                const sparkLocal =
+                    (bistSparkClosesBySymbol[symbolKey]?.length ?? 0) >= 2
+                        ? bistSparkClosesBySymbol[symbolKey]
+                        : ((ins as InstrumentVm).sparkline ?? []);
                 const displayName = getInstrumentDisplayName({
                     symbol: symbolKey,
                     displayName: ins.displayName,
                     name: ins.name,
                     instrumentName: ins.instrumentName,
                 });
-                const hzBist = horizonPctsFromSparkCloses(
+                const vmIns = ins as InstrumentVm;
+                const enriched = enrichBistInstrumentHorizons(
+                    {
+                        symbol: symbolKey,
+                        sparkline: sparkLocal,
+                        pctDay: vmIns.pctDay,
+                        pctWeek: vmIns.pctWeek,
+                        pctMonth: vmIns.pctMonth,
+                        pctYear: vmIns.pctYear,
+                        changePercent: liveChange,
+                        dailyChangePercent: ins.dailyChangePercent ?? liveChange,
+                    },
                     sparkLocal,
-                    finiteHorizonPct(ins.dailyChangePercent) ?? finiteHorizonPct(liveChange),
-                    'EQUITY',
                 );
                 return {
                     ...ins,
                     price: livePrice,
                     changePercent: liveChange,
-                    dailyChangePercent: ins.dailyChangePercent ?? liveChange,
+                    dailyChangePercent: ins.dailyChangePercent ?? enriched.pctDay ?? liveChange,
                     volume: liveVolume,
                     type: 'STOCK',
                     displayName,
-                    sparkline: normalizeTrendSparkline(sparkLocal, livePrice, liveChange),
+                    sparkline: normalizeTrendSparkline(enriched.sparkline, livePrice, liveChange),
                     longShort: ins.trend === 'UP' ? 'LONG' : 'SHORT',
-                    ...hzBist,
+                    pctDay: enriched.pctDay,
+                    pctWeek: enriched.pctWeek,
+                    pctMonth: enriched.pctMonth,
+                    pctYear: enriched.pctYear,
+                };
+            }
+            if (ins.category === 'FUNDS' && (ins as InstrumentVm).fundSubmarket === 'TR') {
+                const vmFund = ins as InstrumentVm;
+                const displayName =
+                    (vmFund.displayName && String(vmFund.displayName).trim()) ||
+                    (ins.name && String(ins.name).trim()) ||
+                    symbolKey;
+                return {
+                    ...ins,
+                    price: livePrice,
+                    changePercent: liveChange,
+                    dailyChangePercent: vmFund.dailyChangePercent ?? vmFund.pctDay ?? liveChange,
+                    type: 'STOCK',
+                    displayName,
+                    sparkline: [],
+                    pctDay: finiteHorizonPct(vmFund.pctDay),
+                    pctWeek: finiteHorizonPct(vmFund.pctWeek),
+                    pctMonth: finiteHorizonPct(vmFund.pctMonth),
+                    pctYear: finiteHorizonPct(vmFund.pctYear),
+                    fundReturn3m: vmFund.fundReturn3m,
+                    fundReturn6m: vmFund.fundReturn6m,
+                    fundReturn3y: vmFund.fundReturn3y,
+                    fundReturn5y: vmFund.fundReturn5y,
+                    longShort: ins.trend === 'UP' ? 'LONG' : 'SHORT',
                 };
             }
             if (ins.category === 'METALS' && isPreciousMetalAllowlisted(symbolKey)) {
@@ -3184,20 +3505,53 @@ export function Market() {
                 'BOND',
                 pickerEquitySubmarket,
                 pickerFundSubmarket,
+                pickerMetalsSubmarket,
             );
             return mapInstrumentsToVms(dibInstruments);
         }
-        return (terminalListPageData?.items ?? []).map((row) => terminalListItemToVm(row) as InstrumentVm);
+        if (pickerCategory === 'FUTURES') {
+            if ((terminalListPageData?.items?.length ?? 0) > 0) {
+                return (terminalListPageData!.items ?? []).map(
+                    (row) => terminalListItemToVm(row) as InstrumentVm,
+                );
+            }
+            const viopInstruments = buildInstruments(
+                'FUTURES',
+                pickerEquitySubmarket,
+                pickerFundSubmarket,
+                pickerMetalsSubmarket,
+            );
+            return mapInstrumentsToVms(viopInstruments);
+        }
+        let rows = (pickerTerminalListPage?.items ?? []).map((row) => terminalListItemToVm(row) as InstrumentVm);
+        if (pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST') {
+            rows = rows.map((row) =>
+                enrichBistInstrumentHorizons(
+                    row,
+                    bistSparkClosesBySymbol[normalizeSymbolKey(row.symbol)],
+                ) as InstrumentVm,
+            );
+        }
+        if (pickerCategory === 'FUNDS' && pickerFundSubmarket === 'TR' && marketListQuickFilter !== 'ALL') {
+            rows = rows.filter((row) => {
+                const pct = finiteHorizonPct(row.pctDay) ?? finiteHorizonPct(row.dailyChangePercent) ?? 0;
+                return marketListQuickFilter === 'UP' ? pct > 0 : pct < 0;
+            });
+        }
+        return rows;
     }, [
-        terminalListPageData,
+        pickerTerminalListPage,
         pickerCategory,
         buildInstruments,
         mapInstrumentsToVms,
         pickerEquitySubmarket,
         pickerFundSubmarket,
+        pickerMetalsSubmarket,
+        marketListQuickFilter,
+        bistSparkClosesBySymbol,
     ]);
-    const marketListTotalPages = terminalListPageData?.totalPages ?? 0;
-    const marketListTotalElements = terminalListPageData?.totalElements ?? 0;
+    const marketListTotalPages = pickerTerminalListPage?.totalPages ?? 0;
+    const marketListTotalElements = pickerTerminalListPage?.totalElements ?? 0;
     const selectedInstrumentVm = useMemo(() => {
         const fromPicker =
             findInstrumentVmBySymbol(pickerDisplayedInstruments, selectedSymbol, activeCategory) ??
@@ -3230,7 +3584,8 @@ export function Market() {
             e.stopPropagation();
             e.preventDefault();
             if (!chartComparisonAvailable || !selectedInstrumentVm) return;
-            if (!canPickerCompareRow(row, selectedInstrumentVm, activeCategory, equitySubmarket)) return;
+            if (!canPickerCompareRow(row, selectedInstrumentVm, activeCategory, equitySubmarket, metalsSubmarket))
+                return;
             const selKey = normalizeSymbolKey(selectedInstrumentVm.symbol);
             const symKey = normalizeSymbolKey(row.symbol);
             if (symKey === selKey) return;
@@ -3263,7 +3618,7 @@ export function Market() {
                 return out;
             });
         },
-        [chartComparisonAvailable, selectedInstrumentVm, activeCategory, equitySubmarket],
+        [chartComparisonAvailable, selectedInstrumentVm, activeCategory, equitySubmarket, metalsSubmarket],
     );
 
     const compareSymbolChipStrip =
@@ -3302,7 +3657,7 @@ export function Market() {
 
     useEffect(() => {
         setPickerTableSort(null);
-    }, [pickerCategory, pickerEquitySubmarket, searchTerm]);
+    }, [pickerCategory, pickerEquitySubmarket, pickerMetalsSubmarket, searchTerm]);
     const sparklinePath = useCallback((values: number[]) => {
         if (!values.length) return '';
         const min = Math.min(...values);
@@ -3398,16 +3753,45 @@ export function Market() {
         if (first) setPpChartAnchor(clampPpAnchorYmd(first, first, last, today));
     }, [macroCompareEnabled, ppChartAnchor, candles.length]);
 
+    const isMetalsPurchasingPower = macroCompareEnabled && activeCategory === 'METALS';
+
+    const ppUnitLabel = useMemo(
+        () =>
+            resolvePurchasingPowerUnitLabel(
+                {
+                    category: activeCategory,
+                    equitySubmarket,
+                    fundSubmarket,
+                    metalsSubmarket,
+                },
+                t,
+            ),
+        [activeCategory, equitySubmarket, fundSubmarket, metalsSubmarket, t],
+    );
+
     const purchasingPowerChartData = usePurchasingPowerData(
-        macroCompareEnabled,
+        macroCompareEnabled && !isMetalsPurchasingPower,
         trendChartRange,
         candles,
         ppChartAnchor,
         macroAssetInTry,
     );
 
+    const preciousMetalComparisonData = usePreciousMetalComparisonData(
+        isMetalsPurchasingPower,
+        selectedSymbol ?? '',
+        trendChartRange,
+        candles,
+        ppChartAnchor,
+    );
+
     const onAnalysisCrosshairDate = useCallback((d: string) => {
-        ppCrosshairHandlerRef.current?.(d);
+        const { first, last, today } = ppAnchorBoundsRef.current;
+        if (!d) {
+            if (first) setPpChartAnchor(clampPpAnchorYmd(first, first, last, today));
+            return;
+        }
+        setPpChartAnchor(clampPpAnchorYmd(d, first, last, today));
     }, []);
 
     const drawerInstrumentPrice = useMemo(
@@ -3607,12 +3991,17 @@ export function Market() {
                 if (activeCategory === 'EQUITY') return tile.assetClass === 'STOCK';
                 if (activeCategory === 'CRYPTO') return tile.assetClass === 'CRYPTO';
                 if (activeCategory === 'FX') return tile.assetClass === 'FX';
-                if (activeCategory === 'METALS') return tile.assetClass === 'METAL';
+                if (activeCategory === 'METALS') {
+                    return (
+                        tile.assetClass === 'METAL' &&
+                        symbolMatchesMetalsSubmarket(tile.symbol, metalsSubmarket)
+                    );
+                }
                 if (activeCategory === 'FUNDS') return tile.assetClass === 'FUND';
                 return false;
             })
             .map((tile) => enrichTreemapTileForChartRange(tile, dashboard, range));
-    }, [dashboard, activeCategory, range]);
+    }, [dashboard, activeCategory, metalsSubmarket, range]);
 
     const tefasTreemapTiles = useMemo(() => {
         if (!isTefasFundsView) return [];
@@ -3672,18 +4061,6 @@ export function Market() {
 
     const bondTopMovers = useMemo(
         () => [...instruments].sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent)).slice(0, 5),
-        [instruments],
-    );
-    const bondTopYield = useMemo(
-        () =>
-            [...instruments]
-                .map((ins) => ({
-                    symbol: ins.symbol,
-                    yieldPct: Number(ins.metrics?.yield ?? 0),
-                }))
-                .filter((x) => Number.isFinite(x.yieldPct) && x.yieldPct > 0)
-                .sort((a, b) => b.yieldPct - a.yieldPct)
-                .slice(0, 5),
         [instruments],
     );
     const bondBreadthLabel = useMemo(() => {
@@ -3804,16 +4181,29 @@ export function Market() {
                       const from = formatEuropeIstanbulLocalIso(new Date(fromMs));
                       const to = formatEuropeIstanbulLocalIso(now);
                       return Promise.all(
-                          symbols.map((sym) =>
-                              marketClient
-                                  .get<ViopHistoryApi>(`/api/market/viop/contracts/${encodeURIComponent(sym)}/history`, {
-                                      params: { from, to, period: 60 },
-                                  })
+                          symbols.map((sym) => {
+                              const contract = resolveViopHistoryContract(
+                                  sym,
+                                  viopContractBySymbol,
+                                  viopSnapshotBySymbol,
+                              );
+                              if (!contract) {
+                                  return Promise.resolve([sym, null] as const);
+                              }
+                              return marketClient
+                                  .get<ViopHistoryApi>(
+                                      `/api/market/viop/contracts/${encodeURIComponent(contract)}/history`,
+                                      {
+                                          params: { from, to, period: 60 },
+                                      },
+                                  )
                                   .then((res) => [sym, res.data] as const)
-                          )
+                                  .catch(() => [sym, null] as const);
+                          }),
                       ).then((rows) => {
                           const series: Record<string, CandlePoint[]> = {};
                           rows.forEach(([sym, hist]) => {
+                              if (!hist) return;
                               series[sym] = (hist?.points ?? []).map((p) => ({
                                   t: p.time,
                                   o: Number(p.price),
@@ -3860,7 +4250,7 @@ export function Market() {
                                     activeCategory === 'FX' ||
                                     activeCategory === 'CRYPTO' ||
                                     activeCategory === 'METALS') &&
-                                (range === '1D' || range === '1W')
+                                range === '1D'
                                     ? { bucket: 'hourly' }
                                     : {}),
                             },
@@ -3909,6 +4299,8 @@ export function Market() {
         equitySubmarket,
         bistMainHistoryRange.from,
         bistMainHistoryRange.to,
+        viopContractBySymbol,
+        viopSnapshotBySymbol,
     ]);
 
     useEffect(() => {
@@ -4158,11 +4550,19 @@ export function Market() {
                 overflow: 'hidden',
             };
         }
-        if (isSpotTerminalLayout) {
+        // Tahvil: sol sütunda sabit liste (hisse/VİOP gibi); yalnızca popover kapalıyken gizleme.
+        if (isSpotTerminalLayout || isBondTerminalLayout) {
             return undefined;
         }
         return { display: 'none' };
-    }, [instrumentListOpen, instrumentListPopoverBox, isSpotTerminalLayout, tokens.border, tokens.bgCard]);
+    }, [
+        instrumentListOpen,
+        instrumentListPopoverBox,
+        isSpotTerminalLayout,
+        isBondTerminalLayout,
+        tokens.border,
+        tokens.bgCard,
+    ]);
 
     const renderComparisonCard = (cardClass: string) => {
         if (!canShowComparisonChart(activeCategory, marketType, equitySubmarket) || activeCategory === 'BOND') {
@@ -4347,6 +4747,48 @@ export function Market() {
                                     </button>
                                 </div>
                             ) : null}
+                            {pickerCategory === 'METALS' ? (
+                                <div
+                                    className="terminal-equity-submarket"
+                                    role="group"
+                                    aria-label={t('metals.submarketGroup', 'Kıymetli maden alt pazarı')}
+                                >
+                                    <button
+                                        type="button"
+                                        className={`terminal-submarket-chip ${pickerMetalsSubmarket === 'GRAM' ? 'is-active' : ''}`}
+                                        onClick={() => {
+                                            setPickerMetalsSubmarket('GRAM');
+                                            setMetalsSubmarket('GRAM');
+                                            setPickerCategory('METALS');
+                                            setActiveCategory('METALS');
+                                            setMarketListQuickFilter('ALL');
+                                            setMarketListPage(0);
+                                            setSelectedSymbol(defaultMetalSymbolForSubmarket('GRAM'));
+                                            setCompareSymbols([]);
+                                        }}
+                                        title={t('metals.gramGold', 'Gram altın')}
+                                    >
+                                        {t('metals.gramGold', 'Gram altın')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`terminal-submarket-chip ${pickerMetalsSubmarket === 'OUNCE' ? 'is-active' : ''}`}
+                                        onClick={() => {
+                                            setPickerMetalsSubmarket('OUNCE');
+                                            setMetalsSubmarket('OUNCE');
+                                            setPickerCategory('METALS');
+                                            setActiveCategory('METALS');
+                                            setMarketListQuickFilter('ALL');
+                                            setMarketListPage(0);
+                                            setSelectedSymbol(defaultMetalSymbolForSubmarket('OUNCE'));
+                                            setCompareSymbols([]);
+                                        }}
+                                        title={t('metals.usdOunce', 'Ons')}
+                                    >
+                                        {t('metals.usdOunce', 'Ons')}
+                                    </button>
+                                </div>
+                            ) : null}
                             <div className="terminal-list-quick-filters">
                                 <div className="terminal-list-quick-filters__chips">
                                     <MarketCategoryScrollTabs
@@ -4444,7 +4886,7 @@ export function Market() {
                                                 scope="col"
                                                 title={
                                                     isTefasFundsPicker
-                                                        ? t('funds.return1mHint', 'Son 1 ay getirisi (TEFAS)')
+                                                        ? t('funds.return1dHint', 'Son iş günü pay değeri değişimi (TEFAS)')
                                                         : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizonDayHint', '1 günlük fiyat değişimi (faiz/yield değil)')
                                                         : t('market.horizonDayHint', 'Günlük değişim: canlı veya spark son noktaları')
@@ -4463,7 +4905,7 @@ export function Market() {
                                                     onClick={() => togglePickerListSort('pctDay')}
                                                 >
                                                     {isTefasFundsPicker
-                                                        ? t('funds.return1m', '1A')
+                                                        ? t('market.horizonDay', 'Gün')
                                                         : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizon1g', '1G')
                                                         : t('market.horizonDay', 'Gün')}
@@ -4478,7 +4920,9 @@ export function Market() {
                                                 className="terminal-horizon-pct-head"
                                                 scope="col"
                                                 title={
-                                                    pickerCategory === 'BOND'
+                                                    isTefasFundsPicker
+                                                        ? t('funds.return1wHint', 'Son 7 gün pay değeri değişimi (TEFAS)')
+                                                        : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizonWeekHint', '1 haftalık fiyat değişimi')
                                                         : t('market.horizonWeekHint', 'Son ~7 kapanış')
                                                 }
@@ -4496,7 +4940,7 @@ export function Market() {
                                                     onClick={() => togglePickerListSort('pctWeek')}
                                                 >
                                                     {isTefasFundsPicker
-                                                        ? t('funds.return3m', '3A')
+                                                        ? t('market.horizonWeek', 'Hafta')
                                                         : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizon1h', '1H')
                                                         : t('market.horizonWeek', 'Hafta')}
@@ -4511,7 +4955,9 @@ export function Market() {
                                                 className="terminal-horizon-pct-head"
                                                 scope="col"
                                                 title={
-                                                    pickerCategory === 'BOND'
+                                                    isTefasFundsPicker
+                                                        ? t('funds.return1mHint', 'Son 1 ay getirisi (TEFAS)')
+                                                        : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizonMonthHint', '1 aylık fiyat değişimi')
                                                         : t('market.horizonMonthHint', 'Son ~30 kapanış')
                                                 }
@@ -4529,7 +4975,7 @@ export function Market() {
                                                     onClick={() => togglePickerListSort('pctMonth')}
                                                 >
                                                     {isTefasFundsPicker
-                                                        ? t('funds.return6m', '6A')
+                                                        ? t('funds.return1m', '1A')
                                                         : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizon1a', '1A')
                                                         : t('market.horizonMonth', 'Ay')}
@@ -4540,11 +4986,67 @@ export function Market() {
                                                         : ''}
                                                 </button>
                                             </th>
+                                            {isTefasFundsPicker ? (
+                                                <>
+                                                    <th
+                                                        className="terminal-horizon-pct-head"
+                                                        scope="col"
+                                                        title={t('funds.return3mHint', 'Son 3 ay getirisi (TEFAS)')}
+                                                        aria-sort={
+                                                            pickerTableSort?.key === 'fundReturn3m'
+                                                                ? pickerTableSort.dir === 'asc'
+                                                                    ? 'ascending'
+                                                                    : 'descending'
+                                                                : 'none'
+                                                        }
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            className="terminal-sort-th terminal-sort-th--pct"
+                                                            onClick={() => togglePickerListSort('fundReturn3m')}
+                                                        >
+                                                            {t('funds.return3m', '3A')}
+                                                            {pickerTableSort?.key === 'fundReturn3m'
+                                                                ? pickerTableSort.dir === 'asc'
+                                                                    ? ' \u2191'
+                                                                    : ' \u2193'
+                                                                : ''}
+                                                        </button>
+                                                    </th>
+                                                    <th
+                                                        className="terminal-horizon-pct-head"
+                                                        scope="col"
+                                                        title={t('funds.return6mHint', 'Son 6 ay getirisi (TEFAS)')}
+                                                        aria-sort={
+                                                            pickerTableSort?.key === 'fundReturn6m'
+                                                                ? pickerTableSort.dir === 'asc'
+                                                                    ? 'ascending'
+                                                                    : 'descending'
+                                                                : 'none'
+                                                        }
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            className="terminal-sort-th terminal-sort-th--pct"
+                                                            onClick={() => togglePickerListSort('fundReturn6m')}
+                                                        >
+                                                            {t('funds.return6m', '6A')}
+                                                            {pickerTableSort?.key === 'fundReturn6m'
+                                                                ? pickerTableSort.dir === 'asc'
+                                                                    ? ' \u2191'
+                                                                    : ' \u2193'
+                                                                : ''}
+                                                        </button>
+                                                    </th>
+                                                </>
+                                            ) : null}
                                             <th
                                                 className="terminal-horizon-pct-head"
                                                 scope="col"
                                                 title={
-                                                    pickerCategory === 'BOND'
+                                                    isTefasFundsPicker
+                                                        ? t('funds.return1yHint', 'Son 1 yıl getirisi (TEFAS)')
+                                                        : pickerCategory === 'BOND'
                                                         ? t('market.bondHorizonYearHint', '1 yıllık fiyat değişimi')
                                                         : t('market.horizonYearHint', 'Son ~252 kapanış (mevcut seri kısaysa seri uzunluğu)')
                                                 }
@@ -4612,7 +5114,7 @@ export function Market() {
                                         {loadingTerminalList ? (
                                             <tr>
                                                 <td
-                                                    colSpan={isTefasFundsPicker ? 13 : 9}
+                                                    colSpan={isTefasFundsPicker ? 15 : 9}
                                                     className="terminal-chart-empty"
                                                     style={{ padding: 16, textAlign: 'left' }}
                                                 >
@@ -4627,7 +5129,7 @@ export function Market() {
                                         ) : pickerDisplayedInstruments.length === 0 ? (
                                             <tr>
                                                 <td
-                                                    colSpan={isTefasFundsPicker ? 13 : 9}
+                                                    colSpan={isTefasFundsPicker ? 15 : 9}
                                                     className="terminal-chart-empty"
                                                     style={{ padding: 16, textAlign: 'left' }}
                                                 >
@@ -4674,9 +5176,8 @@ export function Market() {
                                                       })}\nNot: Dönemsel % değerleri fiyat performansıdır; tahvil faizi (yield) değildir.`
                                                     : undefined;
                                             const rowIsBistEquity =
-                                                row.category === 'EQUITY' &&
-                                                row.marketRegion === 'TR' &&
-                                                String(row.exchange ?? '').toUpperCase() === 'BIST';
+                                                rowIsBistEquityVm(row) ||
+                                                (pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST');
                                             const rowIsTefas = rowIsTefasFundVm(row);
                                             const rowMatchesChartSelection =
                                                 (row.category === 'FUTURES'
@@ -4687,7 +5188,12 @@ export function Market() {
                                                 (row.category !== 'EQUITY' ||
                                                     equitySubmarket === (rowIsBistEquity ? 'BIST' : 'US')) &&
                                                 (row.category !== 'FUNDS' ||
-                                                    fundSubmarket === (rowIsTefas ? 'TR' : 'US'));
+                                                    fundSubmarket === (rowIsTefas ? 'TR' : 'US')) &&
+                                                (row.category !== 'METALS' ||
+                                                    metalsSubmarket ===
+                                                        (symbolMatchesMetalsSubmarket(row.symbol, 'GRAM')
+                                                            ? 'GRAM'
+                                                            : 'OUNCE'));
                                             const rowKey = normalizeSymbolKey(row.symbol);
                                             const rowInCompareSet = compareSymbols.some((s) => normalizeSymbolKey(s) === rowKey);
                                             const comparePickerFull = compareSymbols.length >= 4 && !rowInCompareSet;
@@ -4712,6 +5218,16 @@ export function Market() {
                                                         const sub: FundSubmarket = rowIsTefas ? 'TR' : 'US';
                                                         setFundSubmarket(sub);
                                                         setPickerFundSubmarket(sub);
+                                                    }
+                                                    if (row.category === 'METALS') {
+                                                        const sub: MetalsSubmarket = symbolMatchesMetalsSubmarket(
+                                                            row.symbol,
+                                                            'GRAM',
+                                                        )
+                                                            ? 'GRAM'
+                                                            : 'OUNCE';
+                                                        setMetalsSubmarket(sub);
+                                                        setPickerMetalsSubmarket(sub);
                                                     }
                                                     const nextSymbol =
                                                         row.category === 'FUTURES'
@@ -4789,7 +5305,8 @@ export function Market() {
                                                                 row,
                                                                 selectedInstrumentVm,
                                                                 activeCategory,
-                                                                equitySubmarket
+                                                                equitySubmarket,
+                                                                metalsSubmarket,
                                                             )
                                                         }
                                                         title={
@@ -4801,7 +5318,8 @@ export function Market() {
                                                                         row,
                                                                         selectedInstrumentVm,
                                                                         activeCategory,
-                                                                        equitySubmarket
+                                                                        equitySubmarket,
+                                                                        metalsSubmarket,
                                                                     )
                                                                     ? t(
                                                                           'market.compareIncompatible',
@@ -4876,9 +5394,7 @@ export function Market() {
                                                     ) : (
                                                         <>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', rowGap: 4 }}>
-                                                                {row.category === 'EQUITY' &&
-                                                                row.marketRegion === 'TR' &&
-                                                                String(row.exchange ?? '').toUpperCase() === 'BIST' ? (
+                                                                {row.category === 'EQUITY' && rowIsBistEquity ? (
                                                                     <span
                                                                         className="bist-symbol-badge"
                                                                         style={bistSymbolBadgeStyle(row.symbol)}
@@ -4894,7 +5410,15 @@ export function Market() {
                                                                                 ? null
                                                                                 : getDynamicLogoUrl(
                                                                                       row.symbol,
-                                                                                      marketKindForCategory(row.category)
+                                                                                      marketKindForCategory(row.category),
+                                                                                      {
+                                                                                          equitySubmarket:
+                                                                                              row.category === 'EQUITY'
+                                                                                                  ? rowIsBistEquity
+                                                                                                      ? 'BIST'
+                                                                                                      : 'US'
+                                                                                                  : undefined,
+                                                                                      },
                                                                                   )
                                                                         }
                                                                         alt={`${row.symbol} logo`}
@@ -4990,10 +5514,20 @@ export function Market() {
                                                 <td className={horizonPctClassName(row.pctWeek)} title={t('market.horizonWeek', 'Hafta')}>
                                                     {formatHorizonPct(row.pctWeek)}
                                                 </td>
-                                                <td className={horizonPctClassName(row.pctMonth)} title={t('market.horizonMonth', 'Ay')}>
+                                                <td className={horizonPctClassName(row.pctMonth)} title={rowIsTefas ? t('funds.return1m', '1A') : t('market.horizonMonth', 'Ay')}>
                                                     {formatHorizonPct(row.pctMonth)}
                                                 </td>
-                                                <td className={horizonPctClassName(row.pctYear)} title={t('market.horizonYear', 'Yıl')}>
+                                                {rowIsTefas ? (
+                                                    <>
+                                                        <td className={horizonPctClassName(row.fundReturn3m)} title={t('funds.return3m', '3A')}>
+                                                            {formatHorizonPct(row.fundReturn3m)}
+                                                        </td>
+                                                        <td className={horizonPctClassName(row.fundReturn6m)} title={t('funds.return6m', '6A')}>
+                                                            {formatHorizonPct(row.fundReturn6m)}
+                                                        </td>
+                                                    </>
+                                                ) : null}
+                                                <td className={horizonPctClassName(row.pctYear)} title={rowIsTefas ? t('funds.return1y', '1Y') : t('market.horizonYear', 'Yıl')}>
                                                     {formatHorizonPct(row.pctYear)}
                                                 </td>
                                                 {rowIsTefas ? (
@@ -5118,13 +5652,79 @@ export function Market() {
         );
     }
 
-    function renderMarketListPanel(): ReactElement {
+    function renderBondInstrumentSummaryRight(): ReactElement | null {
+        if (!isBondInstrumentsView || !bondContractSummary) return null;
+        return (
+            <div className="terminal-bond-right-summary">
+                <div className="terminal-bond-right-summary__grid">
+                    <div className="terminal-mini-card">
+                        <h4>{t('market.bondMaturitySummaryTitle', 'Vade / kupon özeti')}</h4>
+                        <dl className="terminal-viop-summary-dl">
+                            <div>
+                                <dt>{t('market.maturity', 'Vade')}</dt>
+                                <dd>{bondContractSummary.maturityDate ?? '—'}</dd>
+                            </div>
+                            <div>
+                                <dt>{t('market.daysToMaturity', 'Vadeye kalan')}</dt>
+                                <dd>
+                                    {bondContractSummary.daysToMaturity != null
+                                        ? bondContractSummary.daysToMaturity
+                                        : '—'}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>{t('market.coupon', 'Kupon')}</dt>
+                                <dd>
+                                    {bondContractSummary.couponRate != null &&
+                                    Number.isFinite(Number(bondContractSummary.couponRate))
+                                        ? `${Number(bondContractSummary.couponRate).toLocaleString(numberLocale, { maximumFractionDigits: 2 })}%`
+                                        : '—'}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>{t('market.currency', 'Para birimi')}</dt>
+                                <dd>{bondContractSummary.currency ?? '—'}</dd>
+                            </div>
+                        </dl>
+                    </div>
+                    <div className="terminal-mini-card">
+                        <h4>{t('market.bondPriceSummaryTitle', 'Piyasa değeri')}</h4>
+                        <dl className="terminal-viop-summary-dl">
+                            <div>
+                                <dt>{t('market.dirtyPrice', 'Kirli fiyat')}</dt>
+                                <dd>
+                                    {bondContractSummary.dirtyPrice != null &&
+                                    Number.isFinite(Number(bondContractSummary.dirtyPrice))
+                                        ? Number(bondContractSummary.dirtyPrice).toLocaleString(numberLocale, {
+                                              maximumFractionDigits: 4,
+                                          })
+                                        : '—'}
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+                </div>
+                <div className="terminal-mini-card terminal-bond-right-summary__note">
+                    <h4>{t('market.bondMacroNoteTitle', 'Faiz / enflasyon notu')}</h4>
+                    <p className="terminal-viop-risk-note">
+                        {t(
+                            'market.bondMacroNoteBody',
+                            'DİBS verilerinde Değer piyasa fiyatını, Kupon Faiz Oranı yıllık kupon oranını gösterir. Seri kodundaki D2/T2 ifadesi yılda 2 kupon ödemesine işaret ettiği için ödeme sıklığı 6 ayda bir olarak yorumlanır. Tahvil getirisi enflasyon ve politika faizi ile birlikte okunmalıdır.',
+                        )}
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    function renderMarketListPanel(forceDocked = false): ReactElement {
+        const listDocked = forceDocked || isSpotTerminalLayout;
         return (
                         <div
                             ref={leftMarketPanelRef}
                             className={`terminal-card terminal-left-panel ${
                                 pickerCategory === 'BOND' ? 'terminal-left-panel--page-flow' : ''
-                            } ${isSpotTerminalLayout ? 'terminal-left-panel--docked is-compact' : 'terminal-left-panel--undocked-slot'}`}
+                            } ${listDocked ? 'terminal-left-panel--docked is-compact' : 'terminal-left-panel--undocked-slot'}`}
                         >
                             <div
                                 className={`terminal-left-panel__inner${
@@ -5176,18 +5776,26 @@ export function Market() {
                 </div>
                 {macroCompareEnabled ? (
                     <div className="terminal-left-column__card terminal-left-column__card--compare">
-                        <MarketPurchasingPowerSummaryLive
-                            crosshairHandlerRef={ppCrosshairHandlerRef}
-                            boundsRef={ppAnchorBoundsRef}
-                            chartAnchorDate={ppChartAnchor}
-                            enabled={macroCompareEnabled}
-                            range={trendChartRange}
-                            candles={candles}
-                            assetInTry={macroAssetInTry}
-                            symbol={selectedSymbol}
-                            displayName={selectedInstrumentVm?.displayName}
-                            tokens={chartTokens}
-                        />
+                        {isMetalsPurchasingPower ? (
+                            <MarketPreciousMetalSummaryCard
+                                symbol={selectedSymbol}
+                                displayName={selectedInstrumentVm?.displayName}
+                                data={preciousMetalComparisonData}
+                                tokens={chartTokens}
+                            />
+                        ) : (
+                            <MarketPurchasingPowerSummaryLive
+                                anchorDate={ppChartAnchor}
+                                enabled={macroCompareEnabled}
+                                range={trendChartRange}
+                                candles={candles}
+                                assetInTry={macroAssetInTry}
+                                symbol={selectedSymbol}
+                                displayName={selectedInstrumentVm?.displayName}
+                                unitLabel={ppUnitLabel}
+                                tokens={chartTokens}
+                            />
+                        )}
                     </div>
                 ) : null}
                 <div className="terminal-left-column__card terminal-left-column__card--macro">
@@ -5456,7 +6064,10 @@ export function Market() {
                                 <AssetLogo
                                     src={
                                         hero && (activeCategory === 'EQUITY' || activeCategory === 'CRYPTO' || activeCategory === 'FX' || activeCategory === 'METALS' || activeCategory === 'FUNDS')
-                                            ? getDynamicLogoUrl(hero.symbol, marketKindForCategory(activeCategory))
+                                            ? getDynamicLogoUrl(hero.symbol, marketKindForCategory(activeCategory), {
+                                                  equitySubmarket:
+                                                      activeCategory === 'EQUITY' ? equitySubmarket : undefined,
+                                              })
                                             : null
                                     }
                                     alt={hero ? `${hero.symbol} logo` : 'logo'}
@@ -5789,10 +6400,16 @@ export function Market() {
                             className={`terminal-grid market-main-grid${
                                 isSpotTerminalLayout
                                     ? ' terminal-grid--heatmap-rail terminal-spot-unified'
-                                    : ' terminal-grid--list-undocked'
+                                    : isBondTerminalLayout
+                                      ? ' terminal-grid--market-unified terminal-grid--bond-unified'
+                                      : ' terminal-grid--list-undocked'
                             }`}
                         >
-                            {isSpotTerminalLayout ? renderLeftSpotColumn() : renderMarketListPanel()}
+                            {isSpotTerminalLayout
+                                ? renderLeftSpotColumn()
+                                : isBondTerminalLayout
+                                  ? renderMarketListPanel(true)
+                                  : renderMarketListPanel()}
 
                             <div ref={centerStackRef} className="terminal-center-stack">
                         <div className="terminal-card terminal-center-panel market-chart-card">
@@ -6003,75 +6620,33 @@ export function Market() {
                                 </div>
                             </div>
                         ) : null}
-                        {isBondInstrumentsView && bondContractSummary ? (
-                            <div className="terminal-bottom-cards">
-                                <div className="terminal-mini-card">
-                                    <h4>{t('market.bondMaturitySummaryTitle', 'Vade / kupon özeti')}</h4>
-                                    <dl className="terminal-viop-summary-dl">
-                                        <div>
-                                            <dt>{t('market.maturity', 'Vade')}</dt>
-                                            <dd>{bondContractSummary.maturityDate ?? '—'}</dd>
-                                        </div>
-                                        <div>
-                                            <dt>{t('market.daysToMaturity', 'Vadeye kalan')}</dt>
-                                            <dd>
-                                                {bondContractSummary.daysToMaturity != null
-                                                    ? bondContractSummary.daysToMaturity
-                                                    : '—'}
-                                            </dd>
-                                        </div>
-                                        <div>
-                                            <dt>{t('market.coupon', 'Kupon')}</dt>
-                                            <dd>
-                                                {bondContractSummary.couponRate != null &&
-                                                Number.isFinite(Number(bondContractSummary.couponRate))
-                                                    ? `${Number(bondContractSummary.couponRate).toLocaleString(numberLocale, { maximumFractionDigits: 2 })}%`
-                                                    : '—'}
-                                            </dd>
-                                        </div>
-                                        <div>
-                                            <dt>{t('market.currency', 'Para birimi')}</dt>
-                                            <dd>{bondContractSummary.currency ?? '—'}</dd>
-                                        </div>
-                                    </dl>
-                                </div>
-                                <div className="terminal-mini-card">
-                                    <h4>{t('market.bondPriceSummaryTitle', 'Piyasa değeri')}</h4>
-                                    <dl className="terminal-viop-summary-dl">
-                                        <div>
-                                            <dt>{t('market.dirtyPrice', 'Kirli fiyat')}</dt>
-                                            <dd>
-                                                {bondContractSummary.dirtyPrice != null &&
-                                                Number.isFinite(Number(bondContractSummary.dirtyPrice))
-                                                    ? Number(bondContractSummary.dirtyPrice).toLocaleString(numberLocale, {
-                                                          maximumFractionDigits: 4,
-                                                      })
-                                                    : '—'}
-                                            </dd>
-                                        </div>
-                                    </dl>
-                                </div>
-                                <div className="terminal-mini-card">
-                                    <h4>{t('market.bondMacroNoteTitle', 'Faiz / enflasyon notu')}</h4>
-                                    <p className="terminal-viop-risk-note">
-                                        {t(
-                                            'market.bondMacroNoteBody',
-                                            'DİBS verilerinde Değer piyasa fiyatını, Kupon Faiz Oranı yıllık kupon oranını gösterir. Seri kodundaki D2/T2 ifadesi yılda 2 kupon ödemesine işaret ettiği için ödeme sıklığı 6 ayda bir olarak yorumlanır. Tahvil getirisi enflasyon ve politika faizi ile birlikte okunmalıdır.',
-                                        )}
-                                    </p>
-                                </div>
-                            </div>
-                        ) : null}
                         {macroCompareEnabled ? (
-                            <MarketPurchasingPowerCompareChart data={purchasingPowerChartData} tokens={chartTokens} />
+                            isMetalsPurchasingPower ? (
+                                <MarketPreciousMetalCompareChart
+                                    data={preciousMetalComparisonData}
+                                    tokens={chartTokens}
+                                />
+                            ) : (
+                                <MarketPurchasingPowerCompareChart
+                                    unitLabel={ppUnitLabel}
+                                    data={purchasingPowerChartData}
+                                    tokens={chartTokens}
+                                />
+                            )
                         ) : null}
                         </div>
 
                         <div
-                            className="terminal-card terminal-right-panel"
+                            className={`terminal-card terminal-right-panel${
+                                isBondTerminalLayout ? ' terminal-right-panel--bond' : ''
+                            }`}
                             style={rightPanelStyle}
                         >
-                            <div style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}>
+                            {renderBondInstrumentSummaryRight()}
+                            <div
+                                className="terminal-right-panel__insights-head"
+                                style={{ fontWeight: 700, marginBottom: 8, flexShrink: 0 }}
+                            >
                                 {t('market.marketInsights', 'Piyasa İçgörüleri')}
                             </div>
                             <div className="terminal-right-panel-scroll">
@@ -6322,29 +6897,6 @@ export function Market() {
                                                     </div>
                                                 );
                                             })}
-                                        </div>
-                                    </div>
-                                    <div className="terminal-mini-card" style={{ marginBottom: 10 }}>
-                                        <h4 style={{ margin: '0 0 8px', fontSize: 13 }}>
-                                            {t('market.bondTopYield', 'En yüksek getiri')}
-                                        </h4>
-                                        <div className="terminal-mini-list" style={{ margin: 0 }}>
-                                            {bondTopYield.length > 0 ? (
-                                                bondTopYield.map((v) => (
-                                                    <div key={`bond-y-${v.symbol}`} className="terminal-mini-item">
-                                                        <span className="terminal-mini-item__code" title={v.symbol}>
-                                                            {v.symbol}
-                                                        </span>
-                                                        <span className="terminal-pct-pos">
-                                                            {v.yieldPct.toLocaleString(numberLocale, { maximumFractionDigits: 2 })}%
-                                                        </span>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <div className="terminal-mini-item">
-                                                    <span>{t('market.bondYieldUnavailable', 'Yapılandırılmış getiri verisi yok')}</span>
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                     <div className="terminal-mini-card">

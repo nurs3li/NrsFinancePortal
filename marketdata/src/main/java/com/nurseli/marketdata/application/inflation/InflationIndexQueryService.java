@@ -7,7 +7,7 @@ import com.nurseli.marketdata.config.InflationPpiProperties;
 import com.nurseli.marketdata.domain.inflation.InflationIndicatorType;
 import com.nurseli.marketdata.domain.inflation.InflationIndexMonthlyEntity;
 import com.nurseli.marketdata.infrastructure.evds.EvdsSeriesPoint;
-import com.nurseli.marketdata.repository.InflationIndexMonthlyRepository;
+import com.nurseli.marketdata.infrastructure.persistence.InflationIndexMonthlyRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

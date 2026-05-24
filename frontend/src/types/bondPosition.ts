@@ -38,6 +38,17 @@ export type ManualBondPosition = {
     totalReturnPercent?: number | null;
     daysToMaturity?: number | null;
     note?: string | null;
+    cpiAtPurchaseMonth?: string | null;
+    cpiCurrentMonth?: string | null;
+    cpiAtPurchaseIndex?: number | null;
+    cpiCurrentIndex?: number | null;
+    periodInflation?: number | null;
+    periodInflationPercent?: number | null;
+    periodNominalReturn?: number | null;
+    periodNominalReturnPercent?: number | null;
+    periodRealReturn?: number | null;
+    periodRealReturnPercent?: number | null;
+    periodRealReturnAvailable?: boolean | null;
 };
 
 export type BondPositionSummary = {

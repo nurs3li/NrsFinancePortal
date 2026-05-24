@@ -11,6 +11,7 @@ import {
     findPositionForSymbol,
     type BondTypeFilter,
 } from './bondAnalysisHelpers';
+import { isEurobondMarketInstrument } from './viopBondMarket';
 import { fmtDate, fmtMoney, fmtPct } from './formatViopBond';
 import { BondInstrumentDetailPanel } from './BondInstrumentDetailPanel';
 
@@ -18,7 +19,6 @@ type Props = {
     rows: TerminalListInstrumentVm[];
     loading: boolean;
     positions: ManualBondPosition[];
-    cpiYoY: number | null;
     tokens: { border: string; bgCard: string; textMuted: string; text: string };
     onSelect: (symbol: string) => void;
     selectedSymbol: string | null;
@@ -26,13 +26,12 @@ type Props = {
     onAlert: (row: TerminalListInstrumentVm) => void;
 };
 
-const TYPE_FILTERS: BondTypeFilter[] = ['ALL', 'GOVERNMENT_BOND', 'TREASURY_BILL', 'EUROBOND', 'CORPORATE_BOND'];
+const TYPE_FILTERS: BondTypeFilter[] = ['ALL', 'GOVERNMENT_BOND', 'TREASURY_BILL', 'CORPORATE_BOND'];
 
 export function BondMarketSection({
     rows,
     loading,
     positions,
-    cpiYoY,
     tokens,
     onSelect,
     selectedSymbol,
@@ -46,7 +45,8 @@ export function BondMarketSection({
     const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
     const filtered = useMemo(() => {
-        const byType = filterMarketByBondType(rows, typeFilter);
+        const domestic = rows.filter((r) => !isEurobondMarketInstrument(r.symbol, r.displayName));
+        const byType = filterMarketByBondType(domestic, typeFilter);
         const q = search.trim().toLowerCase();
         if (!q) return byType;
         return byType.filter(
@@ -70,11 +70,11 @@ export function BondMarketSection({
 
     return (
         <section className="vb-section">
-            <h3 className="vb-section-title">{t('viopBond.marketBondTitle', 'Piyasa Tahvil / Eurobond')}</h3>
+            <h3 className="vb-section-title">{t('viopBond.marketBondTitle', 'Piyasa Tahvil & Bono')}</h3>
             <p className="vb-section-lead" style={{ color: tokens.textMuted }}>
                 {t(
                     'viopBond.marketBondLead',
-                    'TCMB DİBS snapshot verisi. Eurobond satırları listede ISIN varsa görünür; ayrı eurobond fiyat API’si kullanılmaz.',
+                    'TCMB DİBS snapshot verisi. Devlet tahvili ve hazine bonosu ISIN’leri listelenir.',
                 )}
             </p>
             <div className="vb-toolbar vb-toolbar--filters">
@@ -237,7 +237,6 @@ export function BondMarketSection({
                         <BondInstrumentDetailPanel
                             instrument={selected}
                             matchedPosition={matchedPosition}
-                            cpiYoY={cpiYoY}
                             tokens={tokens}
                             onAddPosition={() => onAdd(selected)}
                             onSetAlert={() => onAlert(selected)}
@@ -251,7 +250,6 @@ export function BondMarketSection({
                         <BondInstrumentDetailPanel
                             instrument={selected}
                             matchedPosition={matchedPosition}
-                            cpiYoY={cpiYoY}
                             tokens={tokens}
                             onAddPosition={() => onAdd(selected)}
                             onSetAlert={() => onAlert(selected)}

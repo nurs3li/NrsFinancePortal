@@ -51,10 +51,12 @@ export function mapTerminalSortToTefas(sort: string | null | undefined): string 
     if (!sort) return undefined;
     const m: Record<string, string> = {
         price: 'return1y',
-        pctDay: 'return1m',
-        pctWeek: 'return3m',
-        pctMonth: 'return6m',
+        pctDay: 'return1d',
+        pctWeek: 'return1w',
+        pctMonth: 'return1m',
         pctYear: 'return1y',
+        fundReturn3m: 'return3m',
+        fundReturn6m: 'return6m',
         return1m: 'return1m',
         return3m: 'return3m',
         return6m: 'return6m',

@@ -22,8 +22,6 @@ type Props = {
         byNominal?: ManualBondPosition;
         best?: ManualBondPosition;
         nearest?: ManualBondPosition;
-        euroPct: number;
-        euroCount: number;
     } | null;
     tokens: { border: string; bgCard: string; textMuted: string };
 };
@@ -169,18 +167,6 @@ export function BondAnalyticsSection({
                                     {bondRisk.nearest
                                         ? `${bondRisk.nearest.symbol} (${bondRisk.nearest.daysToMaturity}g)`
                                         : '—'}
-                                </strong>
-                            </li>
-                            <li>
-                                <span>{t('viopBond.eurobondRatio', 'Eurobond payı')}</span>
-                                <strong>
-                                    %{bondRisk.euroPct}
-                                    {bondRisk.euroCount === 0 ? (
-                                        <span className="vb-detail-muted">
-                                            {' '}
-                                            — {t('viopBond.eurobondEmptyHint', 'Henüz eurobond pozisyonu yok')}
-                                        </span>
-                                    ) : null}
                                 </strong>
                             </li>
                         </ul>

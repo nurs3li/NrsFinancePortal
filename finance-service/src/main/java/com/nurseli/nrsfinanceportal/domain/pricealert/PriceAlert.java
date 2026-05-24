@@ -7,6 +7,10 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
 
+/**
+ * Fiyat alarmı entity; eşik, koşul tipi, bildirim kanalı, cooldown
+ * ve son tetiklenme zamanını tutar.
+ */
 @Entity
 @Table(name = "price_alert")
 public class PriceAlert {

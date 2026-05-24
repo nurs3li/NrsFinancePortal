@@ -5,6 +5,9 @@ import jakarta.persistence.*;
 
 import java.time.Instant;
 
+/**
+ * Portföy AI analiz sonucu entity; analiz tipi, risk profili ve öneri metinlerini persist eder.
+ */
 @Entity
 @Table(name = "portfolio_ai_analysis")
 public class PortfolioAiAnalysisEntity {

@@ -3,7 +3,7 @@ package com.nurseli.marketdata.application;
 import com.nurseli.marketdata.api.dto.NewsResponse;
 import com.nurseli.marketdata.domain.news.News;
 import com.nurseli.marketdata.domain.news.NewsCategory;
-import com.nurseli.marketdata.repository.NewsRepository;
+import com.nurseli.marketdata.infrastructure.persistence.NewsRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;

@@ -4,7 +4,7 @@ import com.nurseli.marketdata.domain.news.News;
 import com.nurseli.marketdata.domain.news.NewsCategory;
 import com.nurseli.marketdata.infrastructure.finhub.FinHubClient;
 import com.nurseli.marketdata.infrastructure.finhub.FinHubNewsDto;
-import com.nurseli.marketdata.repository.NewsRepository;
+import com.nurseli.marketdata.infrastructure.persistence.NewsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;

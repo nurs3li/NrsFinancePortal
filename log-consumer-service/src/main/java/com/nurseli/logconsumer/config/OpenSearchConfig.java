@@ -7,6 +7,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * OpenSearch {@link RestHighLevelClient} bağlantı bean'i; host/port {@code application.yml} üzerinden okunur.
+ */
 @Configuration
 public class OpenSearchConfig {
 
@@ -16,6 +19,9 @@ public class OpenSearchConfig {
     @Value("${opensearch.port:9200}")
     private int port;
 
+    /**
+     * {@code opensearchClient} — HTTP üzerinden OpenSearch cluster'a bağlanan high-level client üretir.
+     */
     @Bean
     public RestHighLevelClient opensearchClient() {
         return new RestHighLevelClient(

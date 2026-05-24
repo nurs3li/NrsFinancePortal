@@ -6,7 +6,7 @@ package com.nurseli.nrsfinanceportal.config;
 public final class AuditContextMdcKeys {
 
     public static final String USER_ID = "userId";
-    /** Örn. TRADE, PROFILE, ADMIN — {@link AuditContextMdcFilter} üretir */
+    /** Örn. PORTFOLIO, PROFILE, ADMIN — {@link AuditContextMdcFilter} üretir */
     public static final String ACTION_TYPE = "actionType";
     public static final String USERNAME = "username";
 

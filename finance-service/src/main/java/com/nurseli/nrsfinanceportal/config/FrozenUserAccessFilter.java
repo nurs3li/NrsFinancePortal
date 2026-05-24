@@ -1,9 +1,9 @@
 package com.nurseli.nrsfinanceportal.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nurseli.nrsfinanceportal.common.response.ApiResponse;
+import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.user.User;
-import com.nurseli.nrsfinanceportal.repository.UserRepository;
+import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,6 +19,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Map;
 
+/**
+ * loginSuspended kullanıcıların kimlik doğrulamalı isteklerini 403 ile keser.
+ */
 @Component
 @RequiredArgsConstructor
 public class FrozenUserAccessFilter extends OncePerRequestFilter {

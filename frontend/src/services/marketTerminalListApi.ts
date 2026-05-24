@@ -38,6 +38,7 @@ export type MarketTerminalListItem = {
     basis?: number | null;
     marginRequirement?: number | null;
     fundRiskLevel?: number | null;
+    fundReturn3m?: number | null;
     fundReturn6m?: number | null;
     fundReturn3y?: number | null;
     fundReturn5y?: number | null;

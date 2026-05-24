@@ -61,7 +61,7 @@ export function categoryFallbackIcon(type: AssetType): LucideIcon {
 }
 
 export function symbolLogoUrl(symbol: string, assetType: AssetType): string | null {
-    return getDynamicLogoUrl(symbol, assetTypeToMarketKind(assetType));
+    return getDynamicLogoUrl(symbol, assetTypeToMarketKind(assetType), { assetType });
 }
 
 export function symbolDisplayLabel(symbol: string, assetType: AssetType): string {

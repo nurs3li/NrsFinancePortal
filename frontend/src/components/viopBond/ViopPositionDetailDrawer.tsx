@@ -3,7 +3,8 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import type { ManualViopPosition } from '../../types/viopPosition';
 import { resolveViopExpiry } from './viopContractMeta';
 import { viopCategoryLabel, viopDirectionLabel, viopStatusLabel } from './viopPositionLabels';
-import { fmtMoney } from './formatViopBond';
+import { fmtDate, fmtLeverageX, fmtMoney, fmtNativeAmount, fmtRatioPercent } from './formatViopBond';
+import { ViopExposureCell } from './ViopExposureCell';
 import { pnlClass } from './vbTabShared';
 
 type Props = {
@@ -27,6 +28,11 @@ export function ViopPositionDetailDrawer({ position, tokens, onClose }: Props) {
     }
 
     const expiry = resolveViopExpiry(position.symbol, locale, { expiryDate: position.expiryDate ?? undefined });
+    const quote = (position.quoteCurrency ?? 'TRY').toUpperCase();
+    const marginLabel =
+        position.initialMargin != null
+            ? t('viopBond.estimatedMargin', 'Tahmini teminat')
+            : t('viopBond.colMargin', 'Teminat');
 
     const row = (label: string, value: ReactNode) => (
         <div key={label} className="vb-detail-row">
@@ -55,14 +61,45 @@ export function ViopPositionDetailDrawer({ position, tokens, onClose }: Props) {
                 </h4>
                 {row(t('viopBond.colDirection', 'Yön'), viopDirectionLabel(position.direction, t))}
                 {row(t('viopBond.colCount', 'Adet'), String(position.contractCount))}
-                {row(t('viopBond.colEntryPrice', 'Giriş fiyatı'), fmtMoney(position.entryPrice, locale))}
-                {row(t('viopBond.colCurrentPrice', 'Güncel fiyat'), fmtMoney(position.currentPrice, locale))}
+                {row(t('viopBond.colMultiplier', 'Kontrat çarpanı'), String(position.contractMultiplier ?? 1))}
+                {row(t('viopBond.colCurrency', 'Para birimi'), quote)}
+                {row(t('viopBond.colEntryDate', 'Alış tarihi'), fmtDate(position.entryDate, locale))}
+                {row(
+                    t('viopBond.colEntryPrice', 'Giriş fiyatı'),
+                    fmtNativeAmount(position.entryPrice, quote, locale),
+                )}
+                {row(
+                    t('viopBond.colCurrentPrice', 'Güncel fiyat'),
+                    fmtNativeAmount(position.currentPrice, quote, locale),
+                )}
                 {row(
                     t('viopBond.colPnl', 'Açık K/Z'),
-                    <span className={pnlClass(position.unrealizedPnl)}>{fmtMoney(position.unrealizedPnl, locale)}</span>,
+                    <span className={pnlClass(position.unrealizedPnl)}>
+                        {fmtMoney(position.unrealizedPnl, locale)} ₺
+                        {position.unrealizedPnlNative != null && quote !== 'TRY' ? (
+                            <span className="vb-cell-sub" style={{ display: 'block', fontWeight: 400 }}>
+                                {fmtNativeAmount(position.unrealizedPnlNative, quote, locale)}
+                            </span>
+                        ) : null}
+                    </span>,
                 )}
-                {row(t('viopBond.colMargin', 'Teminat'), fmtMoney(position.initialMargin, locale))}
-                {row(t('viopBond.colExposure', 'Maruziyet'), fmtMoney(position.riskExposure, locale))}
+                {row(marginLabel, `${fmtMoney(position.initialMargin, locale)} ₺`)}
+                {row(
+                    t('viopBond.colExposure', 'Maruziyet'),
+                    <ViopExposureCell
+                        riskExposureTry={position.riskExposure}
+                        riskExposureNative={position.riskExposureNative}
+                        quoteCurrency={position.quoteCurrency}
+                        missingFxRate={position.missingFxRate}
+                        locale={locale}
+                    />,
+                )}
+                {row(t('viopBond.colLeverage', 'Kaldıraç'), fmtLeverageX(position.leverage, locale))}
+                {row(t('viopBond.colPnlMargin', 'K/Z / Teminat'), fmtRatioPercent(position.pnlToMarginRatio, locale))}
+                {row(
+                    t('viopBond.marginRatioShort', 'Teminat oranı'),
+                    fmtRatioPercent(position.marginRatio, locale),
+                )}
                 {row(
                     t('viopBond.colMaturity', 'Vade'),
                     expiry
@@ -75,7 +112,7 @@ export function ViopPositionDetailDrawer({ position, tokens, onClose }: Props) {
             <p className="vb-risk-note" style={{ marginTop: '0.75rem', color: tokens.textMuted, fontSize: '0.8rem' }}>
                 {t(
                     'viopBond.viopPositionNote',
-                    'Net finansal etki = teminat + açık K/Z. Maruziyet, kaldıraçlı sözleşme büyüklüğüdür.',
+                    'Net finansal etki = teminat + açık K/Z. Maruziyet, kaldıraçlı sözleşme büyüklüğüdür (TRY karşılığı).',
                 )}
             </p>
         </div>

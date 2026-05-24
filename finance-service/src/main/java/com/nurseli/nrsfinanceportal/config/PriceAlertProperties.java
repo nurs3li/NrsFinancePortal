@@ -5,6 +5,9 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+/**
+ * Fiyat alarmı iş kuralları özellikleri.
+ */
 @Getter
 @Setter
 @Component

@@ -12,10 +12,7 @@ function destinationForUser(role: UserRole | null, fromPathname: string | undefi
     return '/dashboard';
 }
 
-/**
- * Keeps /login as a stable Keycloak redirect URI while sending users to the landing experience.
- * Waits for Keycloak init so OAuth query/hash on this URL is processed before moving to /.
- */
+/** Eski /login URL → ana sayfa giriş paneli (Keycloak UI yok). */
 export function LoginRedirect() {
     const { ready, isAuthenticated, role } = useAuth();
     const navigate = useNavigate();
@@ -28,10 +25,13 @@ export function LoginRedirect() {
             navigate(destinationForUser(role, from), { replace: true });
             return;
         }
-        const qs = location.search ?? '';
-        const hash = location.hash ?? '';
-        navigate(`/${qs}${hash}`, { replace: true });
-    }, [ready, isAuthenticated, role, from, location.search, location.hash, navigate]);
+        const params = new URLSearchParams(location.search);
+        if (!params.has('signin')) {
+            params.set('signin', '1');
+        }
+        const qs = params.toString() ? `?${params.toString()}` : '?signin=1';
+        navigate(`/${qs}`, { replace: true });
+    }, [ready, isAuthenticated, role, from, location.search, navigate]);
 
     return (
         <div className="landing-loading-screen">

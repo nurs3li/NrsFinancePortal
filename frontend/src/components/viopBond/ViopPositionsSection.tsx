@@ -6,7 +6,8 @@ import type { ViopCategory } from '../../types/viopPosition';
 import type { ManualViopPosition, ViopDirection, ViopPositionStatus } from '../../types/viopPosition';
 import { viopCategoryLabel, viopDirectionLabel, viopStatusLabel } from './viopPositionLabels';
 import { resolveViopExpiry } from './viopContractMeta';
-import { fmtMoney } from './formatViopBond';
+import { fmtDate, fmtLeverageX, fmtMoney, fmtRatioPercent, fmtNativeAmount } from './formatViopBond';
+import { ViopExposureCell } from './ViopExposureCell';
 import { pnlClass } from './vbTabShared';
 
 type Props = {
@@ -140,24 +141,44 @@ export function ViopPositionsSection({
             </div>
             <div className="vb-position-card__grid">
                 <div>
+                    <span style={{ color: tokens.textMuted }}>{t('viopBond.colEntryDate', 'Alış tarihi')}</span>
+                    <div>{fmtDate(row.entryDate, locale)}</div>
+                </div>
+                <div>
                     <span style={{ color: tokens.textMuted }}>{t('viopBond.colEntryPrice', 'Giriş')}</span>
-                    <div>{fmtMoney(row.entryPrice, locale)}</div>
+                    <div>{fmtNativeAmount(row.entryPrice, row.quoteCurrency ?? 'TRY', locale)}</div>
                 </div>
                 <div>
                     <span style={{ color: tokens.textMuted }}>{t('viopBond.colCurrentPrice', 'Güncel')}</span>
-                    <div>{fmtMoney(row.currentPrice, locale)}</div>
+                    <div>{fmtNativeAmount(row.currentPrice, row.quoteCurrency ?? 'TRY', locale)}</div>
                 </div>
                 <div>
                     <span style={{ color: tokens.textMuted }}>{t('viopBond.colPnl', 'K/Z')}</span>
-                    <div className={pnlClass(row.unrealizedPnl)}>{fmtMoney(row.unrealizedPnl, locale)}</div>
+                    <div className={pnlClass(row.unrealizedPnl)}>{fmtMoney(row.unrealizedPnl, locale)} ₺</div>
                 </div>
                 <div>
                     <span style={{ color: tokens.textMuted }}>{t('viopBond.colExposure', 'Maruziyet')}</span>
-                    <div>{fmtMoney(row.riskExposure, locale)}</div>
+                    <ViopExposureCell
+                        riskExposureTry={row.riskExposure}
+                        riskExposureNative={row.riskExposureNative}
+                        quoteCurrency={row.quoteCurrency}
+                        missingFxRate={row.missingFxRate}
+                        locale={locale}
+                    />
+                </div>
+                <div>
+                    <span style={{ color: tokens.textMuted }}>{t('viopBond.colLeverage', 'Kaldıraç')}</span>
+                    <div>{fmtLeverageX(row.leverage, locale)}</div>
+                </div>
+                <div>
+                    <span style={{ color: tokens.textMuted }}>{t('viopBond.colPnlMargin', 'K/Z %')}</span>
+                    <div className={pnlClass(row.pnlToMarginRatio != null ? row.pnlToMarginRatio * 100 : null)}>
+                        {fmtRatioPercent(row.pnlToMarginRatio, locale)}
+                    </div>
                 </div>
                 <div>
                     <span style={{ color: tokens.textMuted }}>{t('viopBond.colMargin', 'Teminat')}</span>
-                    <div>{fmtMoney(row.initialMargin, locale)}</div>
+                    <div>{fmtMoney(row.initialMargin, locale)} ₺</div>
                 </div>
                 <div>
                     <span style={{ color: tokens.textMuted }}>{t('viopBond.colMaturity', 'Vade')}</span>
@@ -241,10 +262,15 @@ export function ViopPositionsSection({
                                     <th>{t('viopBond.colDirection', 'Yön')}</th>
                                     <th>{t('viopBond.colViopType', 'Kategori')}</th>
                                     <th>{t('viopBond.colCount', 'Adet')}</th>
+                                    <th>{t('viopBond.colMultiplier', 'Çarpan')}</th>
+                                    <th>{t('viopBond.colCurrency', 'PB')}</th>
+                                    <th>{t('viopBond.colEntryDate', 'Alış tarihi')}</th>
                                     <th>{t('viopBond.colEntryPrice', 'Giriş')}</th>
                                     <th>{t('viopBond.colCurrentPrice', 'Güncel')}</th>
                                     <th>{t('viopBond.colPnl', 'K/Z')}</th>
                                     <th>{t('viopBond.colMargin', 'Teminat')}</th>
+                                    <th>{t('viopBond.colLeverage', 'Kaldıraç')}</th>
+                                    <th>{t('viopBond.colPnlMargin', 'K/Z %')}</th>
                                     <th>{t('viopBond.colExposure', 'Maruziyet')}</th>
                                     <th>{t('viopBond.colMaturity', 'Vade')}</th>
                                     <th>{t('viopBond.colStatus', 'Durum')}</th>
@@ -267,13 +293,40 @@ export function ViopPositionsSection({
                                         </td>
                                         <td>{viopCategoryLabel(row.viopCategory, t)}</td>
                                         <td>{row.contractCount}</td>
-                                        <td>{fmtMoney(row.entryPrice, locale)}</td>
-                                        <td>{fmtMoney(row.currentPrice, locale)}</td>
-                                        <td className={pnlClass(row.unrealizedPnl)}>
-                                            {fmtMoney(row.unrealizedPnl, locale)}
+                                        <td>{row.contractMultiplier ?? 1}</td>
+                                        <td>{row.quoteCurrency ?? 'TRY'}</td>
+                                        <td>{fmtDate(row.entryDate, locale)}</td>
+                                        <td>
+                                            {fmtNativeAmount(
+                                                row.entryPrice,
+                                                row.quoteCurrency ?? 'TRY',
+                                                locale,
+                                            )}
                                         </td>
-                                        <td>{fmtMoney(row.initialMargin, locale)}</td>
-                                        <td>{fmtMoney(row.riskExposure, locale)}</td>
+                                        <td>
+                                            {fmtNativeAmount(
+                                                row.currentPrice,
+                                                row.quoteCurrency ?? 'TRY',
+                                                locale,
+                                            )}
+                                        </td>
+                                        <td className={pnlClass(row.unrealizedPnl)}>
+                                            {fmtMoney(row.unrealizedPnl, locale)} ₺
+                                        </td>
+                                        <td>{fmtMoney(row.initialMargin, locale)} ₺</td>
+                                        <td>{fmtLeverageX(row.leverage, locale)}</td>
+                                        <td className={pnlClass(row.pnlToMarginRatio != null ? row.pnlToMarginRatio * 100 : null)}>
+                                            {fmtRatioPercent(row.pnlToMarginRatio, locale)}
+                                        </td>
+                                        <td>
+                                            <ViopExposureCell
+                                                riskExposureTry={row.riskExposure}
+                                                riskExposureNative={row.riskExposureNative}
+                                                quoteCurrency={row.quoteCurrency}
+                                                missingFxRate={row.missingFxRate}
+                                                locale={locale}
+                                            />
+                                        </td>
                                         <td>{maturityCell(row)}</td>
                                         <td>{viopStatusLabel(row.status, t)}</td>
                                         <td>{renderActions(row)}</td>

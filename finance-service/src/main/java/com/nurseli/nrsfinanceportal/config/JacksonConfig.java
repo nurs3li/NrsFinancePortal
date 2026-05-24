@@ -6,8 +6,15 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * ObjectMapper ve JSON serileÅŸtirme ayarlarÄ±.
+ */
 @Configuration
 public class JacksonConfig {
+
+    /**
+ * Uygulama genelinde kullanılan ObjectMapper bean.
+ */
 
     @Bean
     public ObjectMapper objectMapper() {
@@ -16,7 +23,7 @@ public class JacksonConfig {
         // Java time (Instant, LocalDateTime vs)
         mapper.registerModule(new JavaTimeModule());
 
-        // ❗ EN KRİTİK SATIR
+        // â— EN KRÄ°TÄ°K SATIR
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
         return mapper;

@@ -38,7 +38,7 @@ public class DepositRatesProperties {
     @Data
     public static class Backfill {
         private boolean enabled = false;
-        private LocalDate from = LocalDate.of(2018, 1, 1);
+        private LocalDate from = LocalDate.of(2020, 1, 1);
     }
 
     @Data

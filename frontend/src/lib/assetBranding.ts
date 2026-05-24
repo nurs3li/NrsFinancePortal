@@ -81,11 +81,31 @@ function isLikelyEquityTicker(key: string): boolean {
     return true;
 }
 
-export function getDynamicLogoUrl(symbol: string, marketType: MarketKind): string | null {
+export type DynamicLogoOptions = {
+    /** ABD hisseleri için FMP; BIST için null (FMP BIST sembollerini barındırmaz). */
+    equitySubmarket?: 'US' | 'BIST';
+    /** Simülasyon / sipariş: BIST tipinde harici logo yok. */
+    assetType?: string;
+};
+
+export function getDynamicLogoUrl(
+    symbol: string,
+    marketType: MarketKind,
+    options?: DynamicLogoOptions,
+): string | null {
     const logoKey = getLogoKey(symbol, marketType);
     if (dynamicLogoMap[logoKey]) return dynamicLogoMap[logoKey];
     if (marketType === 'EQUITY' || marketType === 'FUNDS') {
         if (!isLikelyEquityTicker(logoKey)) return null;
+        if (marketType === 'FUNDS') return null;
+        const isBist =
+            options?.equitySubmarket === 'BIST' ||
+            options?.assetType === 'BIST';
+        if (isBist) return null;
+        const isUs =
+            options?.equitySubmarket === 'US' ||
+            options?.assetType === 'STOCK';
+        if (!isUs) return null;
         return `https://financialmodelingprep.com/image-stock/${logoKey}.png`;
     }
     return null;

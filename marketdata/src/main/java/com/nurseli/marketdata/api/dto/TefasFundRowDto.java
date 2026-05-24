@@ -7,6 +7,8 @@ public record TefasFundRowDto(
         Integer riskLevel,
         boolean tefasListed,
         Double price,
+        Double return1d,
+        Double return1w,
         Double return1m,
         Double return3m,
         Double return6m,

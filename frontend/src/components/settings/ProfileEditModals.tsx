@@ -10,6 +10,8 @@ import {
     updateUsername,
 } from '../../services/userApi';
 import keycloak from '../../auth/keycloak';
+import { applyKeycloakTokens } from '../../auth/applyKeycloakTokens';
+import { loginResponseToTokens, portalRefreshToken } from '../../services/authApi';
 
 type ModalShellProps = {
     open: boolean;
@@ -43,8 +45,13 @@ function ModalShell({ open, title, onClose, children, busy }: ModalShellProps) {
 }
 
 async function refreshKeycloakToken(): Promise<void> {
+    if (!keycloak.refreshToken) return;
     try {
-        await keycloak.updateToken(30);
+        const data = await portalRefreshToken(keycloak.refreshToken);
+        const tokens = loginResponseToTokens(data);
+        if (tokens?.accessToken) {
+            applyKeycloakTokens(tokens);
+        }
     } catch {
         /* session refresh optional */
     }

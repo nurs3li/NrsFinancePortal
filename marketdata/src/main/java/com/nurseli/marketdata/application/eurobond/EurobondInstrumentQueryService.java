@@ -5,8 +5,8 @@ import com.nurseli.marketdata.config.ConditionalOnEurobondEvds;
 import com.nurseli.marketdata.config.EurobondEvdsProperties;
 import com.nurseli.marketdata.domain.eurobond.EurobondInstrument;
 import com.nurseli.marketdata.domain.eurobond.EurobondPriceSnapshot;
-import com.nurseli.marketdata.repository.EurobondInstrumentRepository;
-import com.nurseli.marketdata.repository.EurobondPriceSnapshotRepository;
+import com.nurseli.marketdata.infrastructure.persistence.EurobondInstrumentRepository;
+import com.nurseli.marketdata.infrastructure.persistence.EurobondPriceSnapshotRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

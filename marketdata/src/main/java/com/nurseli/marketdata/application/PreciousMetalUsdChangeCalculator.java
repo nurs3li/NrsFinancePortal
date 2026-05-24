@@ -3,7 +3,7 @@ package com.nurseli.marketdata.application;
 import com.nurseli.marketdata.api.dto.PreciousMetalUsdChanges;
 import com.nurseli.marketdata.domain.metal.PreciousMetalUsdCatalog;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
-import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
+import com.nurseli.marketdata.infrastructure.persistence.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

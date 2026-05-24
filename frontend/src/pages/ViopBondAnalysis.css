@@ -27,6 +27,24 @@
     margin-bottom: 0.25rem;
 }
 
+.vb-th-with-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+}
+
+.vb-th-info-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: help;
+    line-height: 0;
+}
+
 .vb-hero-title {
     font-size: 1.5rem;
     font-weight: 700;
@@ -627,6 +645,28 @@
     font-size: 0.72rem;
     opacity: 0.75;
     margin-top: 2px;
+}
+
+.vb-cell-sub--warn {
+    color: #f59e0b;
+    opacity: 1;
+}
+
+.vb-duplicate-prompt {
+    margin: 0.75rem 0 0;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    background: rgba(245, 158, 11, 0.08);
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
+.vb-duplicate-prompt__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.65rem;
 }
 
 .vb-actions {

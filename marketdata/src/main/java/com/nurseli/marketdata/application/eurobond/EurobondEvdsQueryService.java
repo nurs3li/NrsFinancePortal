@@ -4,7 +4,7 @@ import com.nurseli.marketdata.api.dto.eurobond.*;
 import com.nurseli.marketdata.config.ConditionalOnEurobondEvds;
 import com.nurseli.marketdata.config.EurobondEvdsProperties;
 import com.nurseli.marketdata.domain.eurobond.EurobondWeeklyObservation;
-import com.nurseli.marketdata.repository.EurobondWeeklyObservationRepository;
+import com.nurseli.marketdata.infrastructure.persistence.EurobondWeeklyObservationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

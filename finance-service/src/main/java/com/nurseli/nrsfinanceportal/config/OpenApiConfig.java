@@ -8,10 +8,17 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * OpenAPI/Swagger dokümantasyon bean'leri.
+ */
 @Configuration
 public class OpenApiConfig {
 
     private static final String BEARER_SCHEME = "bearerAuth";
+
+    /**
+ * Swagger/OpenAPI metadata bean.
+ */
 
     @Bean
     public OpenAPI financeServiceOpenApi() {

@@ -62,9 +62,15 @@ export function guessViopExpiryFromContractMonth(contractMonth?: string): string
     return undefined;
 }
 
+/** Vadeli portföyde eurobond ayrı tür olarak sunulmaz; DİBS dışı XS vb. piyasadan filtrelenir. */
+export function isEurobondMarketInstrument(symbol: string, displayName?: string, issuer?: string): boolean {
+    const cls = classifyDebtInstrument(displayName, issuer, symbol);
+    return cls === 'BOND_EUROBOND' || symbol.trim().toUpperCase().startsWith('XS');
+}
+
 export function bondTypeFromInstrument(symbol: string, displayName?: string, issuer?: string): BondType {
     const cls = classifyDebtInstrument(displayName, issuer, symbol);
-    if (cls === 'BOND_EUROBOND') return 'EUROBOND';
+    if (cls === 'BOND_EUROBOND') return 'GOVERNMENT_BOND';
     if (cls === 'BOND_GOV') {
         const label = `${displayName ?? ''} ${issuer ?? ''}`.toUpperCase();
         if (label.includes('BILL') || label.includes('BONO')) {

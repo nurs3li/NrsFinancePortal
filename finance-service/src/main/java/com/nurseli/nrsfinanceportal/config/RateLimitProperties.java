@@ -4,6 +4,9 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+/**
+ * HTTP rate limit bucket özellikleri.
+ */
 @Data
 @Component
 @ConfigurationProperties(prefix = "app.rate-limit")

@@ -10,8 +10,11 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
-import com.nurseli.nrsfinanceportal.repository.UserRepository;
+import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
 
+/**
+ * Spring Security filter chain; JWT resource server, CORS ve frozen-user kontrolÃƒÂ¼.
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
@@ -29,12 +32,20 @@ public class SecurityConfig {
         this.userRepository = userRepository;
     }
 
+    /**
+ * JWT'den realm + DB rollerini GrantedAuthority olarak baÃ„Å¸lar.
+ */
+
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(new JwtRealmAndDbRoleAuthoritiesConverter(userRepository));
         return converter;
     }
+
+    /**
+ * OAuth2 resource server, permitAll public endpoint'ler ve MDC/frozen-user filter sÃ„Â±rasÃ„Â±nÃ„Â± yapÃ„Â±landÃ„Â±rÃ„Â±r.
+ */
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -47,7 +58,10 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
-                                "/api/public/register/**"
+                                "/api/public/register/**",
+                                "/api/public/login",
+                                "/api/public/login/**",
+                                "/api/public/token/**"
                         ).permitAll()
                         .requestMatchers(req -> "OPTIONS".equalsIgnoreCase(req.getMethod())).permitAll()
                         .anyRequest().authenticated()

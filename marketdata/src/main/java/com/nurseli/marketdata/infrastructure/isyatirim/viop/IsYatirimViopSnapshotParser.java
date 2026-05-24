@@ -2,7 +2,7 @@ package com.nurseli.marketdata.infrastructure.isyatirim.viop;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nurseli.marketdata.viop.domain.ViopDataQuality;
+import com.nurseli.marketdata.domain.viop.ViopDataQuality;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

@@ -1452,12 +1452,10 @@ export function AdminAudit() {
                                             style={{ ...filterInput(tokens), marginTop: 6 }}
                                         >
                                             <option value="">{t('admin.auditActionAll', 'All')}</option>
-                                            <option value="TRADE">{t('admin.auditActionTrade', 'Buy / Sell')}</option>
                                             <option value="PROFILE">{t('admin.auditActionProfile', 'Profile update')}</option>
-                                            <option value="FUND_REQUEST">{t('admin.auditActionFundRequest', 'Fund request')}</option>
                                             <option value="PORTFOLIO">{t('admin.auditActionPortfolio', 'Portfolio')}</option>
-                                            <option value="BALANCE">{t('admin.auditActionBalance', 'Balance')}</option>
-                                            <option value="TRANSACTION">{t('admin.auditActionTransaction', 'Transaction')}</option>
+                                            <option value="ADMIN">{t('admin.auditActionAdmin', 'Admin')}</option>
+                                            <option value="MARKET">{t('admin.auditActionMarket', 'Market')}</option>
                                             <option value="REGISTRATION">{t('admin.auditActionRegistration', 'Registration')}</option>
                                             <option value="login">{t('admin.auditActionLogin', 'Login / session (text)')}</option>
                                         </select>

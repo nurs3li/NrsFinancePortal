@@ -7,7 +7,7 @@ import com.nurseli.marketdata.infrastructure.isyatirim.commodity.IsYatirimCommod
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopHistoricalParser;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopHistoricalParser.ChartRow;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopHistoricalParser.ParsedHistorical;
-import com.nurseli.marketdata.repository.MarketPriceHistoryRepository;
+import com.nurseli.marketdata.infrastructure.persistence.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;

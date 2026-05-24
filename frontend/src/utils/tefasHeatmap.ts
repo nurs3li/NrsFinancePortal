@@ -19,6 +19,8 @@ export function tefasReturnPctForChartRange(
         pctWeek?: number | null;
         pctMonth?: number | null;
         pctYear?: number | null;
+        fundReturn3m?: number | null;
+        fundReturn6m?: number | null;
         changePercent?: number;
     },
     range: ChartRangeId,
@@ -26,17 +28,21 @@ export function tefasReturnPctForChartRange(
     const day = finitePct(row.pctDay);
     const week = finitePct(row.pctWeek);
     const month = finitePct(row.pctMonth);
+    const ret3m = finitePct(row.fundReturn3m);
+    const ret6m = finitePct(row.fundReturn6m);
     const year = finitePct(row.pctYear);
     const ytd = finitePct(row.changePercent);
     switch (range) {
         case '1D':
-        case '1M':
             return day ?? ytd ?? 0;
         case '1W':
-        case '3M':
             return week ?? day ?? ytd ?? 0;
+        case '1M':
+            return month ?? week ?? day ?? ytd ?? 0;
+        case '3M':
+            return ret3m ?? month ?? week ?? day ?? 0;
         case '6M':
-            return month ?? week ?? day ?? 0;
+            return ret6m ?? ret3m ?? month ?? week ?? day ?? 0;
         case '1Y':
             return year ?? month ?? 0;
         case '2Y':
@@ -48,7 +54,12 @@ export function tefasReturnPctForChartRange(
 
 export function tefasHeatmapSortForRange(range: ChartRangeId): string {
     switch (range) {
+        case '1D':
+            return 'return1d';
         case '1W':
+            return 'return1w';
+        case '1M':
+            return 'return1m';
         case '3M':
             return 'return3m';
         case '6M':

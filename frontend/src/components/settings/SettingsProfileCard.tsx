@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { Pencil } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import type { UserMeDto } from '../../services/userApi';
-import { openKeycloakAccountConsole } from '../../utils/keycloakProfile';
 import { SettingsCard } from './SettingsCard';
 
 type SettingsProfileCardProps = {
@@ -64,10 +63,10 @@ export function SettingsProfileCard({
 }: SettingsProfileCardProps) {
     const { t } = useLanguage();
 
-    const editUsername = onEditUsername ?? openKeycloakAccountConsole;
-    const editEmail = onEditEmail ?? openKeycloakAccountConsole;
-    const editFullName = onEditFullName ?? openKeycloakAccountConsole;
-    const editPassword = onEditPassword ?? openKeycloakAccountConsole;
+    const editUsername = onEditUsername;
+    const editEmail = onEditEmail;
+    const editFullName = onEditFullName;
+    const editPassword = onEditPassword;
 
     return (
         <SettingsCard className="settings-card--profile" title={t('settings.profileTitle', 'Profil Bilgileri')}>

@@ -2,10 +2,16 @@ package com.nurseli.nrsfinanceportal.domain.pricing;
 
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 
+/**
+ * Sembol normalizasyon yardımcısı; market lookup öncesi format birleştirme.
+ */
 public class SymbolNormalizer {
 
     private SymbolNormalizer() {}
 
+    /**
+     * AssetType'a göre sembolü market lookup formatına normalize eder.
+     */
     public static String normalize(AssetType type, String symbol) {
 
         return switch (type) {

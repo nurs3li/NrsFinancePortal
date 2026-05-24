@@ -3,8 +3,8 @@ package com.nurseli.marketdata.application;
 import com.nurseli.marketdata.api.dto.DebtInstrumentResponse;
 import com.nurseli.marketdata.api.dto.DebtSnapshotResponse;
 import com.nurseli.marketdata.domain.debt.DebtInstrument;
-import com.nurseli.marketdata.repository.DebtInstrumentRepository;
-import com.nurseli.marketdata.repository.DebtSnapshotRepository;
+import com.nurseli.marketdata.infrastructure.persistence.DebtInstrumentRepository;
+import com.nurseli.marketdata.infrastructure.persistence.DebtSnapshotRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,7 +26,6 @@ import java.util.stream.Collectors;
 public class DebtQueryService {
     private final DebtInstrumentRepository debtInstrumentRepository;
     private final DebtSnapshotRepository debtSnapshotRepository;
-    private final MarketStaleTailRepairService marketStaleTailRepairService;
     private static final DateTimeFormatter[] MATURITY_FORMATS = new DateTimeFormatter[]{
             DateTimeFormatter.ISO_LOCAL_DATE,
             DateTimeFormatter.ofPattern("dd.MM.yyyy"),
@@ -38,19 +37,14 @@ public class DebtQueryService {
         return debtInstrumentRepository.findAll().stream().map(this::toInstrumentResponse).toList();
     }
 
+    /**
+     * Okuma yolu: yalnızca DB. EVDS ingest {@link com.nurseli.marketdata.application.scheduler.ViopDebtMarketScheduler}
+     * ve bootstrap ile yapılır; burada senkron repair tüm HTTP iş parçacıklarını dakikalarca kilitleyebilir.
+     */
     public List<DebtSnapshotResponse> latest() {
-        marketStaleTailRepairService.repairDebtSnapshotsIfStale();
         Map<String, DebtInstrument> instruments = instrumentsByIsin();
         LocalDateTime cutoff = LocalDateTime.now().minusDays(1);
-        List<DebtSnapshotResponse> rows = debtSnapshotRepository.findAll().stream()
-                .filter(s -> !s.getAsOf().isBefore(cutoff))
-                .collect(Collectors.toMap(
-                        com.nurseli.marketdata.domain.debt.DebtSnapshot::getIsin,
-                        s -> s,
-                        DebtQueryService::mergeDebtSnapshots
-                ))
-                .values()
-                .stream()
+        List<DebtSnapshotResponse> rows = debtSnapshotRepository.findLatestPerIsinSince(cutoff).stream()
                 .sorted(Comparator.comparing(
                         com.nurseli.marketdata.domain.debt.DebtSnapshot::getAsOf,
                         Comparator.nullsLast(Comparator.reverseOrder())))

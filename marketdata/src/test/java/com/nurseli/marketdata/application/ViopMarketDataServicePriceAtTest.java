@@ -5,13 +5,13 @@ import com.nurseli.marketdata.api.dto.ViopPriceAtResponse;
 import com.nurseli.marketdata.config.MarketViopProperties;
 import com.nurseli.marketdata.domain.derivatives.DerivativeSnapshot;
 import com.nurseli.marketdata.domain.viop.ViopPriceHistoryEntity;
-import com.nurseli.marketdata.repository.DerivativeSnapshotRepository;
+import com.nurseli.marketdata.infrastructure.persistence.DerivativeSnapshotRepository;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopClient;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopHistoricalParser;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopSnapshotParser;
-import com.nurseli.marketdata.repository.ViopPriceHistoryRepository;
-import com.nurseli.marketdata.repository.ViopSnapshotRepository;
-import com.nurseli.marketdata.viop.domain.ViopPriceMatchType;
+import com.nurseli.marketdata.infrastructure.persistence.ViopPriceHistoryRepository;
+import com.nurseli.marketdata.infrastructure.persistence.ViopSnapshotRepository;
+import com.nurseli.marketdata.domain.viop.ViopPriceMatchType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -102,7 +102,8 @@ class ViopMarketDataServicePriceAtTest {
         LocalDateTime t2 = LocalDateTime.of(2026, 5, 10, 17, 0);
         ViopPriceHistoryEntity a = row(t1, "55.0");
         ViopPriceHistoryEntity b = row(t2, "55.82");
-        when(historyRepository.findByContractCodeAndPriceTimeBetweenOrderByPriceTimeAsc(anyString(), any(), any()))
+        when(historyRepository.findByContractCodeAndPriceTimeGreaterThanEqualAndPriceTimeLessThanOrderByPriceTimeAsc(
+                        anyString(), any(), any()))
                 .thenReturn(List.of(a, b));
 
         ViopPriceAtResponse r = service.getPriceAt("F_USDTRY1226", day);
@@ -126,10 +127,24 @@ class ViopMarketDataServicePriceAtTest {
     }
 
     @Test
+    void priceAtPicksMorningBarOnRequestedDay() {
+        LocalDate day = LocalDate.of(2026, 4, 29);
+        ViopPriceHistoryEntity morning = row(LocalDateTime.of(2026, 4, 29, 10, 0), "55.94");
+        when(historyRepository.findByContractCodeAndPriceTimeGreaterThanEqualAndPriceTimeLessThanOrderByPriceTimeAsc(
+                        anyString(), any(), any()))
+                .thenReturn(List.of(morning));
+
+        ViopPriceAtResponse r = service.getPriceAt("USDTRY1226", day);
+        assertThat(r.matchType()).isEqualTo(ViopPriceMatchType.EXACT.name());
+        assertThat(r.matchedPriceTime()).isEqualTo(morning.getPriceTime());
+        assertThat(r.price()).isEqualByComparingTo(new BigDecimal("55.94"));
+    }
+
+    @Test
     void priceAtPreviousWhenNoDataOnDay() {
         LocalDate day = LocalDate.of(2026, 5, 10);
-        LocalDateTime dayStart = LocalDateTime.of(2026, 5, 10, 0, 0);
-        when(historyRepository.findByContractCodeAndPriceTimeBetweenOrderByPriceTimeAsc(anyString(), any(), any()))
+        when(historyRepository.findByContractCodeAndPriceTimeGreaterThanEqualAndPriceTimeLessThanOrderByPriceTimeAsc(
+                        anyString(), any(), any()))
                 .thenReturn(List.of());
         ViopPriceHistoryEntity prev = row(LocalDateTime.of(2026, 5, 8, 17, 0), "55.1");
         when(historyRepository.findTopByContractCodeAndPriceTimeLessThanOrderByPriceTimeDesc(
@@ -144,7 +159,8 @@ class ViopMarketDataServicePriceAtTest {
     @Test
     void priceAtNotFound() {
         LocalDate day = LocalDate.of(2026, 5, 10);
-        when(historyRepository.findByContractCodeAndPriceTimeBetweenOrderByPriceTimeAsc(anyString(), any(), any()))
+        when(historyRepository.findByContractCodeAndPriceTimeGreaterThanEqualAndPriceTimeLessThanOrderByPriceTimeAsc(
+                        anyString(), any(), any()))
                 .thenReturn(List.of());
         when(historyRepository.findTopByContractCodeAndPriceTimeLessThanOrderByPriceTimeDesc(anyString(), any()))
                 .thenReturn(Optional.empty());
@@ -159,7 +175,8 @@ class ViopMarketDataServicePriceAtTest {
     @Test
     void priceAtFallsBackToDerivativeSnapshotSeries() {
         LocalDate day = LocalDate.of(2026, 3, 4);
-        when(historyRepository.findByContractCodeAndPriceTimeBetweenOrderByPriceTimeAsc(anyString(), any(), any()))
+        when(historyRepository.findByContractCodeAndPriceTimeGreaterThanEqualAndPriceTimeLessThanOrderByPriceTimeAsc(
+                        anyString(), any(), any()))
                 .thenReturn(List.of());
         when(historyRepository.findTopByContractCodeAndPriceTimeLessThanOrderByPriceTimeDesc(anyString(), any()))
                 .thenReturn(Optional.empty());

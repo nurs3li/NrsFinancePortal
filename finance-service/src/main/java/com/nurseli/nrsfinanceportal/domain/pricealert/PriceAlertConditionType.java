@@ -1,5 +1,8 @@
 package com.nurseli.nrsfinanceportal.domain.pricealert;
 
+/**
+ * Alarm tetik koşulu (fiyat üstü/altı, yüzde değişim vb.).
+ */
 public enum PriceAlertConditionType {
     PRICE_GTE,
     PRICE_LTE,

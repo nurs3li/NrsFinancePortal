@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+    type MetalsSubmarket,
+    symbolMatchesMetalsSubmarket,
+} from '../constants/preciousMetalsUsd';
 import { useQuery } from '@tanstack/react-query';
 import { financeClient } from '../api/client';
 import { getBistBatchHistory, getBistLatest, bistPickClose } from '../services/bistEquityApi';
@@ -57,6 +61,7 @@ export function MarketHeatmap() {
     const [hovered, setHovered] = useState<TreemapTile | null>(null);
     const [chartRange, setChartRange] = useState<ChartRangeId>('1M');
     const [sectorFilter, setSectorFilter] = useState<string>('ALL');
+    const [metalsSubmarket, setMetalsSubmarket] = useState<MetalsSubmarket>('GRAM');
 
     useEffect(() => {
         if (searchParams.get('fundSubmarket') === 'TR') {
@@ -219,16 +224,33 @@ export function MarketHeatmap() {
                 changeHorizon: chartRange,
             };
         });
-        if (sectorFilter === 'ALL') return withRange;
-        return withRange.filter((t) => t.sector === sectorFilter);
-    }, [heatTilesSource, sectorFilter, sparklineMap, chartRange]);
+        const metalsFiltered = withRange.filter((t) => {
+            if (t.assetClass !== 'METAL') return true;
+            return symbolMatchesMetalsSubmarket(t.symbol, metalsSubmarket);
+        });
+        if (sectorFilter === 'ALL') return metalsFiltered;
+        if (sectorFilter === 'PRECIOUS_METALS') {
+            return metalsFiltered.filter(
+                (t) =>
+                    t.sector === 'PRECIOUS_METALS' ||
+                    t.sector === 'PRECIOUS_METALS_GRAM' ||
+                    t.sector === 'PRECIOUS_METALS_OUNCE',
+            );
+        }
+        return metalsFiltered.filter((t) => t.sector === sectorFilter);
+    }, [heatTilesSource, sectorFilter, sparklineMap, chartRange, metalsSubmarket]);
 
     const sectorOptions = useMemo(() => {
         const all = new Set<string>();
         for (const t of heatTilesSource) all.add(t.sector);
         if (sectorFilter !== 'ALL') all.add(sectorFilter);
         const rest = Array.from(all).sort((a, b) => a.localeCompare(b, 'tr'));
-        const preferred = ['BIST_EQUITY', HEATMAP_SECTOR_TEFAS_FUNDS];
+        const preferred = [
+            'BIST_EQUITY',
+            HEATMAP_SECTOR_TEFAS_FUNDS,
+            'PRECIOUS_METALS_GRAM',
+            'PRECIOUS_METALS_OUNCE',
+        ];
         const head = preferred.filter((k) => all.has(k));
         const tail = rest.filter((k) => !preferred.includes(k));
         return ['ALL', ...head, ...tail];
@@ -353,10 +375,52 @@ export function MarketHeatmap() {
                                     ))}
                                 </select>
                             </label>
+                            <div
+                                className="terminal-equity-submarket heatmap-detail-metals-submarket"
+                                role="group"
+                                aria-label={t('metals.submarketGroup', 'Kıymetli maden alt pazarı')}
+                            >
+                                <button
+                                    type="button"
+                                    className={`terminal-submarket-chip ${metalsSubmarket === 'GRAM' ? 'is-active' : ''}`}
+                                    onClick={() => {
+                                        setMetalsSubmarket('GRAM');
+                                        if (
+                                            sectorFilter === 'PRECIOUS_METALS_OUNCE' ||
+                                            sectorFilter === 'PRECIOUS_METALS'
+                                        ) {
+                                            setSectorFilter('PRECIOUS_METALS_GRAM');
+                                        }
+                                    }}
+                                >
+                                    {t('metals.gramGold', 'Gram altın')}
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`terminal-submarket-chip ${metalsSubmarket === 'OUNCE' ? 'is-active' : ''}`}
+                                    onClick={() => {
+                                        setMetalsSubmarket('OUNCE');
+                                        if (
+                                            sectorFilter === 'PRECIOUS_METALS_GRAM' ||
+                                            sectorFilter === 'PRECIOUS_METALS'
+                                        ) {
+                                            setSectorFilter('PRECIOUS_METALS_OUNCE');
+                                        }
+                                    }}
+                                >
+                                    {t('metals.usdOunce', 'Ons')}
+                                </button>
+                            </div>
                             <span className="heatmap-detail-card__hint" style={{ color: tokens.textMuted }}>
                                 {t('heatmap.clickHint', 'Kutuya tıklayınca seçili dönem ile gelişmiş grafikte açılır.')}
                             </span>
                         </div>
+                        <p className="heatmap-detail-card__metals-note" style={{ color: tokens.textMuted, margin: '0 0 8px', fontSize: 12 }}>
+                            {t(
+                                'heatmap.metalsTryNote',
+                                'Ons fiyatları ısı haritasında her tarih için USD/ons × o günün USD/TRY kuru ile TL bazında gösterilir.',
+                            )}
+                        </p>
                         <div className="heatmap-detail-card__meta" style={{ color: tokens.textMuted }}>
                             Equity: {data?.heatmapMeta?.equityMode ?? 'EQUITY_FINVIZ'} (
                             {data?.heatmapMeta?.equityChangeHorizon ?? '1D'} /{' '}
@@ -379,9 +443,19 @@ export function MarketHeatmap() {
                                 onTileLeave={() => setHovered(null)}
                                 onTileClick={(tile) => {
                                     const type = toAdvancedType(tile.assetClass);
-                                    navigate(
-                                        `/market/advanced?type=${type}&symbol=${encodeURIComponent(tile.symbol)}&days=${rangeDays}`,
-                                    );
+                                    const sub =
+                                        type === 'METALS'
+                                            ? symbolMatchesMetalsSubmarket(tile.symbol, 'GRAM')
+                                                ? 'GRAM'
+                                                : 'OUNCE'
+                                            : '';
+                                    const q = new URLSearchParams({
+                                        type,
+                                        symbol: tile.symbol,
+                                        days: String(rangeDays),
+                                    });
+                                    if (sub) q.set('metalsSubmarket', sub);
+                                    navigate(`/market?${q.toString()}`);
                                 }}
                             />
                         </div>

@@ -80,8 +80,6 @@ app:
     enabled: ${APP_PRICE_ALERTS_ENABLED:true}
     evaluation-cron: ${APP_PRICE_ALERTS_CRON:0 */2 * * * *}
     max-active-per-user: ${APP_PRICE_ALERTS_MAX_ACTIVE:30}
-  receipt-storage:
-    root: ${NRS_RECEIPT_STORAGE_ROOT:/data/receipts}
   keycloak:
     admin:
       enabled: ${KEYCLOAK_ADMIN_ENABLED:false}

@@ -14,17 +14,19 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 import java.util.Set;
 
+/**
+ * Docker profilinde JWT doğrulama: tarayıcı {@code localhost:8081} issuer'ı ile giriş yaptığı için
+ * JWKS {@code host.docker.internal:8081} üzerinden alınır; çoklu issuer kabul edilir.
+ */
 @Configuration
 @Profile("docker")
 public class JwtDecoderConfig {
 
-    /**
-     * Docker'da: Tarayıcı localhost:8081 ile giriş yaptığı için token'daki iss
-     * http://localhost:8081/realms/nrs-finance olur. JWKS container'dan
-     * host.docker.internal:8081 ile alınır.
-     */
     private static final String JWKS_URI = "http://host.docker.internal:8081/realms/nrs-finance/protocol/openid-connect/certs";
 
+    /**
+     * {@code jwtDecoder} — JWKS tabanlı decoder; varsayılan claim doğrulamasına ek olarak issuer whitelist uygular.
+     */
     @Bean
     @Primary
     public JwtDecoder jwtDecoder() {

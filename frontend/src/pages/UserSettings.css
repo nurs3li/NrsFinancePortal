@@ -37,13 +37,134 @@
 }
 
 .settings-layout__profile,
-.settings-layout__notifications {
+.settings-layout__side {
     min-width: 0;
 }
 
-.settings-layout__profile .settings-card,
-.settings-layout__notifications .settings-card {
+.settings-layout__profile .settings-card {
     height: 100%;
+}
+
+.settings-layout__side {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.settings-totp__status {
+    margin-bottom: 12px;
+}
+
+.settings-totp__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.settings-totp__badge--on {
+    background: color-mix(in srgb, #22c55e 22%, transparent);
+    color: #86efac;
+}
+
+.settings-totp__badge--off {
+    background: color-mix(in srgb, var(--st-muted) 18%, transparent);
+    color: var(--st-muted);
+}
+
+.settings-totp__primary {
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: none;
+    background: var(--st-accent);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.settings-totp__primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.settings-totp__secondary,
+.settings-totp__danger {
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.settings-totp__secondary {
+    border: 1px solid var(--st-border);
+    background: transparent;
+    color: var(--st-text);
+}
+
+.settings-totp__danger {
+    margin-top: 12px;
+    border: 1px solid color-mix(in srgb, #ef4444 45%, var(--st-border));
+    background: color-mix(in srgb, #ef4444 12%, transparent);
+    color: #fca5a5;
+}
+
+.settings-totp__setup {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 8px;
+}
+
+.settings-totp__qr {
+    align-self: flex-start;
+    border-radius: 12px;
+    background: #fff;
+    padding: 8px;
+}
+
+.settings-totp__secret-value {
+    display: block;
+    margin-top: 6px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--st-bg) 70%, #000 30%);
+    font-size: 0.875rem;
+    word-break: break-all;
+    letter-spacing: 0.06em;
+}
+
+.settings-totp__code-input {
+    width: 100%;
+    max-width: 200px;
+    margin-top: 6px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--st-border);
+    background: color-mix(in srgb, var(--st-bg) 70%, #000 30%);
+    color: var(--st-text);
+    font-size: 1.125rem;
+    letter-spacing: 0.2em;
+}
+
+.settings-totp__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.settings-totp__error {
+    color: #fca5a5;
+    font-size: 0.875rem;
+    margin: 0 0 8px;
+}
+
+.settings-totp__message {
+    color: #86efac;
+    font-size: 0.875rem;
+    margin: 0 0 8px;
 }
 
 .settings-card {

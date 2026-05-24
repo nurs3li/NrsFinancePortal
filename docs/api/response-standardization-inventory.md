@@ -10,13 +10,12 @@ Bu envanter `/api/**` endpointleri icin tek tip response envelope gecisini izlem
 
 ### finance-service
 - **A) Zaten envelope kullananlar**
-  - `FundRequestController` (`/api/fund-requests/**`) `ApiResponse`
+  - Cogu `/api/**` controller'lari `ApiResponse` doner.
   - Error responses: `GlobalExceptionHandler` (`ApiResponse.error`)
 - **B) Ham DTO/Map donenler (migrasyon adayi)**
-  - `MarketOverviewController`, `DashboardController`, `PortfolioController`, `SimulationController`, `TradeController`, `WalletController`, vb.
-  - Bu endpointler `ApiResponseEnvelopeAdvice` ile otomatik envelope'a alinmistir.
+  - `MarketOverviewController` gibi bazi uclar ham DTO donabilir; `ApiResponseEnvelopeAdvice` ile otomatik envelope'a alinmistir.
 - **C) Istisnalar (binary/stream)**
-  - `/api/fund-requests/receipts/{receiptId}` (`ResponseEntity<Resource>`)
+  - (su an kayitli istisna yok)
 
 ### marketdata
 - **A) Zaten envelope kullananlar**

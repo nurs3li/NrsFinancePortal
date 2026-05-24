@@ -5,7 +5,7 @@ import com.nurseli.marketdata.domain.bankfx.BankFxLatest;
 import com.nurseli.marketdata.infrastructure.dovizborsa.DovizborsaBankRatesClient;
 import com.nurseli.marketdata.infrastructure.dovizborsa.DovizborsaBankRatesParser;
 import com.nurseli.marketdata.infrastructure.dovizborsa.DovizborsaParsedRate;
-import com.nurseli.marketdata.repository.BankFxLatestRepository;
+import com.nurseli.marketdata.infrastructure.persistence.BankFxLatestRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

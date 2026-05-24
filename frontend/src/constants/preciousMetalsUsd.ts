@@ -20,7 +20,13 @@ export const PRECIOUS_USD_OZ_DESCRIPTION: Record<string, string> = {
 /** Piyasa listesi “Kıymetli madenler” sekmesi: yalnızca bu semboller (sıra korunur). */
 export const PRECIOUS_METAL_SYMBOLS = ['XAU_TRY', 'XAU_USD_OZ', 'XAG_USD_OZ', 'XPT_USD_OZ', 'XPD_USD_OZ'] as const;
 
+export const PRECIOUS_METAL_GRAM_SYMBOLS = ['XAU_TRY'] as const;
+export const PRECIOUS_METAL_OUNCE_SYMBOLS = ['XAU_USD_OZ', 'XAG_USD_OZ', 'XPT_USD_OZ', 'XPD_USD_OZ'] as const;
+
 export type PreciousMetalSymbol = (typeof PRECIOUS_METAL_SYMBOLS)[number];
+
+/** Gram (TRY) ile ons (USD) listeleri ve ısı haritası ayrı gösterilir. */
+export type MetalsSubmarket = 'GRAM' | 'OUNCE';
 
 export type PreciousMetalDisplayMeta = {
     displayName: string;
@@ -95,4 +101,27 @@ export function isUsdPerOunceMetalSymbol(symbol: string | undefined): boolean {
         .trim()
         .toUpperCase();
     return s.endsWith('_USD_OZ');
+}
+
+export function isGramMetalSymbol(symbol: string | undefined): boolean {
+    const k = normSym(symbol);
+    return k === 'XAU_TRY' || k === 'ALTIN_TRY';
+}
+
+export function metalsSubmarketForSymbol(symbol: string | undefined): MetalsSubmarket | null {
+    if (isGramMetalSymbol(symbol)) return 'GRAM';
+    if (isUsdPerOunceMetalSymbol(symbol)) return 'OUNCE';
+    return null;
+}
+
+export function symbolMatchesMetalsSubmarket(symbol: string | undefined, sub: MetalsSubmarket): boolean {
+    return metalsSubmarketForSymbol(symbol) === sub;
+}
+
+export function preciousMetalSymbolsForSubmarket(sub: MetalsSubmarket): readonly string[] {
+    return sub === 'GRAM' ? PRECIOUS_METAL_GRAM_SYMBOLS : PRECIOUS_METAL_OUNCE_SYMBOLS;
+}
+
+export function defaultMetalSymbolForSubmarket(sub: MetalsSubmarket): string {
+    return sub === 'GRAM' ? 'XAU_TRY' : 'XAU_USD_OZ';
 }

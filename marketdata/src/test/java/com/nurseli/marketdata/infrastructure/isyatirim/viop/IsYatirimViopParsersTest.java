@@ -1,7 +1,7 @@
 package com.nurseli.marketdata.infrastructure.isyatirim.viop;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nurseli.marketdata.viop.domain.ViopDataQuality;
+import com.nurseli.marketdata.domain.viop.ViopDataQuality;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

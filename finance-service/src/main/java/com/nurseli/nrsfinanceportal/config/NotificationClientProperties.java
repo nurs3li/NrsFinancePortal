@@ -4,6 +4,9 @@ import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Bildirim servisi client özellikleri.
+ */
 @Getter
 @Setter
 @ConfigurationProperties(prefix = "app.notification")

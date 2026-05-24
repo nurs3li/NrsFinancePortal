@@ -587,6 +587,19 @@
     overflow-y: auto;
 }
 
+.landing-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.65rem;
+}
+
+.landing-form-row > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
 .landing-form label {
     font-size: 0.75rem;
     color: var(--landing-silver-muted);
@@ -604,6 +617,22 @@
 .landing-form input:focus {
     outline: none;
     border-color: rgba(59, 130, 246, 0.5);
+}
+
+.landing-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--landing-silver-muted);
+    cursor: pointer;
+    margin-top: 0.25rem;
+}
+
+.landing-checkbox-row input {
+    width: auto;
+    margin: 0;
+    accent-color: var(--landing-accent, #3b82f6);
 }
 
 .landing-form-note {

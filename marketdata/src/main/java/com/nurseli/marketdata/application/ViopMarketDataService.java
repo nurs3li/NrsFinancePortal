@@ -13,14 +13,14 @@ import com.nurseli.marketdata.config.MarketViopProperties;
 import com.nurseli.marketdata.domain.derivatives.DerivativeSnapshot;
 import com.nurseli.marketdata.domain.viop.ViopPriceHistoryEntity;
 import com.nurseli.marketdata.domain.viop.ViopSnapshotEntity;
-import com.nurseli.marketdata.repository.DerivativeSnapshotRepository;
+import com.nurseli.marketdata.infrastructure.persistence.DerivativeSnapshotRepository;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopClient;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopHistoricalParser;
 import com.nurseli.marketdata.infrastructure.isyatirim.viop.IsYatirimViopSnapshotParser;
-import com.nurseli.marketdata.repository.ViopPriceHistoryRepository;
-import com.nurseli.marketdata.repository.ViopSnapshotRepository;
-import com.nurseli.marketdata.viop.domain.ViopDataQuality;
-import com.nurseli.marketdata.viop.domain.ViopPriceMatchType;
+import com.nurseli.marketdata.infrastructure.persistence.ViopPriceHistoryRepository;
+import com.nurseli.marketdata.infrastructure.persistence.ViopSnapshotRepository;
+import com.nurseli.marketdata.domain.viop.ViopDataQuality;
+import com.nurseli.marketdata.domain.viop.ViopPriceMatchType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -37,6 +37,7 @@ import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -312,15 +313,11 @@ public class ViopMarketDataService {
 
     private ViopPriceAtResponse resolvePriceAtFromDb(String canonical, LocalDate requestedDate, ZoneId zone) {
         LocalDateTime requestedEcho = requestedDate.atStartOfDay(zone).toLocalDateTime();
-        LocalDateTime dayStart = requestedEcho;
-        LocalDateTime dayEnd = requestedDate.plusDays(1).atStartOfDay(zone).minusNanos(1).toLocalDateTime();
 
         for (String code : contractCodeAliases(canonical)) {
-            List<ViopPriceHistoryEntity> onDay =
-                    priceHistoryRepository.findByContractCodeAndPriceTimeBetweenOrderByPriceTimeAsc(
-                            code, dayStart, dayEnd);
-            if (!onDay.isEmpty()) {
-                ViopPriceHistoryEntity pick = onDay.get(onDay.size() - 1);
+            Optional<ViopPriceHistoryEntity> onDay = findLastBarOnCalendarDay(code, requestedDate, zone);
+            if (onDay.isPresent()) {
+                ViopPriceHistoryEntity pick = onDay.get();
                 log.info(
                         "VIOP_PRICE_AT_MATCH contractCode={} requestedDate={} matchType={} priceTime={} dbCode={}",
                         canonical,
@@ -338,6 +335,7 @@ public class ViopMarketDataService {
                         ViopDataQuality.OK.name());
             }
 
+            LocalDateTime dayStart = requestedDate.atStartOfDay(zone).toLocalDateTime();
             Optional<ViopPriceHistoryEntity> prev =
                     priceHistoryRepository.findTopByContractCodeAndPriceTimeLessThanOrderByPriceTimeDesc(
                             code, dayStart);
@@ -369,6 +367,45 @@ public class ViopMarketDataService {
                 ViopPriceMatchType.NOT_FOUND.name(),
                 SOURCE_LABEL_DB,
                 ViopDataQuality.OK.name());
+    }
+
+    /**
+     * Seçilen takvim gününde (İstanbul) kayıtlı herhangi bir saatteki son bar — örn. 10:00 veya 17:00.
+     */
+    private Optional<ViopPriceHistoryEntity> findLastBarOnCalendarDay(String code, LocalDate requestedDate, ZoneId zone) {
+        LocalDateTime dayStart = requestedDate.atStartOfDay(zone).toLocalDateTime();
+        LocalDateTime dayEndExclusive = requestedDate.plusDays(1).atStartOfDay(zone).toLocalDateTime();
+
+        List<ViopPriceHistoryEntity> inDay =
+                priceHistoryRepository.findByContractCodeAndPriceTimeGreaterThanEqualAndPriceTimeLessThanOrderByPriceTimeAsc(
+                        code, dayStart, dayEndExclusive);
+        Optional<ViopPriceHistoryEntity> direct = pickLastValid(inDay);
+        if (direct.isPresent()) {
+            return direct;
+        }
+
+        LocalDateTime slackFrom = requestedDate.minusDays(1).atStartOfDay(zone).toLocalDateTime();
+        LocalDateTime slackTo = requestedDate.plusDays(2).atStartOfDay(zone).toLocalDateTime();
+        List<ViopPriceHistoryEntity> slack =
+                priceHistoryRepository.findByContractCodeAndPriceTimeGreaterThanEqualAndPriceTimeLessThanOrderByPriceTimeAsc(
+                        code, slackFrom, slackTo);
+        return slack.stream()
+                .filter(e -> e.getPriceTime() != null && e.getPrice() != null && e.getPrice().signum() > 0)
+                .filter(e -> e.getPriceTime().atZone(zone).toLocalDate().equals(requestedDate))
+                .max(Comparator.comparing(ViopPriceHistoryEntity::getPriceTime));
+    }
+
+    private static Optional<ViopPriceHistoryEntity> pickLastValid(List<ViopPriceHistoryEntity> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return Optional.empty();
+        }
+        for (int i = rows.size() - 1; i >= 0; i--) {
+            ViopPriceHistoryEntity e = rows.get(i);
+            if (e.getPriceTime() != null && e.getPrice() != null && e.getPrice().signum() > 0) {
+                return Optional.of(e);
+            }
+        }
+        return Optional.empty();
     }
 
     /**

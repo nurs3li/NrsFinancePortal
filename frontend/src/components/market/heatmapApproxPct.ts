@@ -61,10 +61,6 @@ export function approxPctByCalendarSpan(
     return ((last - base) / base) * 100;
 }
 
-function isUsdOunceMetal(sym: string): boolean {
-    return sym.trim().toUpperCase().endsWith('_USD_OZ');
-}
-
 /**
  * Isı haritası (detay + rail) — `Market.tsx` `effectiveChangePercent` ile aynı mantık:
  * 1D için hisse tile % önceliği; diğer aralıklarda takvim günü → downsample nokta oranı.
@@ -72,7 +68,7 @@ function isUsdOunceMetal(sym: string): boolean {
 export function approxHeatmapPctFromSpark(
     closes: readonly number[],
     assetClass: string,
-    symbol: string,
+    _symbol: string,
     range: HeatmapChartRangeId,
     tileChangePercent: number,
 ): number {
@@ -91,12 +87,11 @@ export function approxHeatmapPctFromSpark(
         const a1 = approxPctByDays(closes as number[], 1);
         if (a1 != null && Math.abs(a1) > 1e-6) return a1;
     }
+    /** METAL sparklines (ons): backend TL serisi (USD/ons × tarihsel USDTRY); gram: doğrudan TRY. */
     const assumed =
-        ac === 'STOCK' || ac === 'BIST'
+        ac === 'STOCK' || ac === 'BIST' || ac === 'METAL'
             ? HEATMAP_RANGE_TO_DAYS['2Y']
-            : ac === 'METAL' && isUsdOunceMetal(symbol)
-              ? HEATMAP_RANGE_TO_DAYS['2Y']
-              : 90;
+            : 90;
     const mapped = approxPctByCalendarSpan(closes, calDays, assumed);
     if (mapped != null && Math.abs(mapped) > 1e-6) return mapped;
     const win = Math.min(calDays, Math.max(2, closes.length));

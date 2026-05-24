@@ -1,6 +1,6 @@
 package com.nurseli.nrsfinanceportal.config;
 
-import com.nurseli.nrsfinanceportal.repository.UserRepository;
+import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -10,6 +10,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Set;
 
+/**
+ * JWT realm rollerini DB Role ile birleştirip GrantedAuthority üretir.
+ */
 /**
  * Keycloak realm_access rollerini Spring {@code ROLE_*} olarak yükler.
  * <p>
@@ -32,6 +35,9 @@ public class JwtRealmAndDbRoleAuthoritiesConverter implements Converter<Jwt, Col
     }
 
     @Override
+    /**
+ * JWT realm rollerini DB Role ile birleştirip ROLE_* GrantedAuthority listesi üretir.
+ */
     public Collection<GrantedAuthority> convert(Jwt jwt) {
         Collection<GrantedAuthority> authorities = new ArrayList<>(keycloak.convert(jwt));
         if (hasAnyAppRole(authorities)) {

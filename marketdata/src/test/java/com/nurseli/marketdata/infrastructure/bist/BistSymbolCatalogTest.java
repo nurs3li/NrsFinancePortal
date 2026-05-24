@@ -18,8 +18,8 @@ class BistSymbolCatalogTest {
     }
 
     @Test
-    void getAll_returnsTwentySymbols() {
-        assertThat(catalog.getAll()).hasSize(20);
+    void getAll_returnsCatalogSymbols() {
+        assertThat(catalog.getAll()).hasSize(23);
     }
 
     @Test
@@ -34,6 +34,16 @@ class BistSymbolCatalogTest {
         assertThat(catalog.isSupported("ASELS")).isTrue();
         assertThat(catalog.isSupported("GARAN")).isTrue();
         assertThat(catalog.isSupported("TUPRS")).isTrue();
+    }
+
+    @Test
+    void vesbe_karsn_zoren_akbnk_tcell_supported() {
+        assertThat(catalog.isSupported("VESBE")).isTrue();
+        assertThat(catalog.isSupported("KARSN")).isTrue();
+        assertThat(catalog.isSupported("ZOREN")).isTrue();
+        assertThat(catalog.isSupported("AKBNK")).isTrue();
+        assertThat(catalog.isSupported("TCELL")).isTrue();
+        assertThat(catalog.toYahooSymbol("VESBE")).isEqualTo("VESBE.IS");
     }
 
     @Test

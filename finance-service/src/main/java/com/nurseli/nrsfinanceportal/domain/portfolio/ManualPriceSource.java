@@ -1,5 +1,8 @@
 package com.nurseli.nrsfinanceportal.domain.portfolio;
 
+/**
+ * Alış/satış fiyatının kaynağı (USER_INPUT, market resolve vb.).
+ */
 public enum ManualPriceSource {
     USER_INPUT,
     MARKET_HISTORY_EXACT,

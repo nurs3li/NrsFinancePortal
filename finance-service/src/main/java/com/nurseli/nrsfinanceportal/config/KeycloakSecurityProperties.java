@@ -7,6 +7,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 import java.util.List;
 
+/**
+ * Keycloak güvenlik ve realm URL özellikleri.
+ */
 @Getter
 @Setter
 @ConfigurationProperties(prefix = "app.keycloak.security")

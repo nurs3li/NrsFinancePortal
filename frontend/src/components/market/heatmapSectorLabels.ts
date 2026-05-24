@@ -6,6 +6,8 @@ const SECTOR_I18N_KEY: Record<string, string> = {
     BIST_EQUITY: 'heatmap.sector.bist',
     TEFAS_FUNDS: 'heatmap.sector.tefasFunds',
     PRECIOUS_METALS: 'heatmap.sector.preciousMetals',
+    PRECIOUS_METALS_GRAM: 'heatmap.sector.preciousMetalsGram',
+    PRECIOUS_METALS_OUNCE: 'heatmap.sector.preciousMetalsOunce',
     COMMODITIES: 'heatmap.sector.preciousMetals',
     FOREX: 'heatmap.sector.forex',
     CRYPTO: 'heatmap.sector.crypto',

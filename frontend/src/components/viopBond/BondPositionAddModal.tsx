@@ -28,7 +28,7 @@ type Props = {
 };
 
 const FREQUENCIES: CouponFrequency[] = ['NONE', 'ANNUAL', 'SEMI_ANNUAL', 'QUARTERLY'];
-const BOND_TYPES: BondType[] = ['GOVERNMENT_BOND', 'TREASURY_BILL', 'EUROBOND', 'CORPORATE_BOND'];
+const BOND_TYPES: BondType[] = ['GOVERNMENT_BOND', 'TREASURY_BILL', 'CORPORATE_BOND'];
 
 export function BondPositionAddModal({
     open,

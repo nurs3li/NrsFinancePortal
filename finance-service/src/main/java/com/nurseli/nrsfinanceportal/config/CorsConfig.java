@@ -8,8 +8,15 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * CORS origin ve header yapılandırması.
+ */
 @Configuration
 public class CorsConfig {
+
+    /**
+ * Ä°zin verilen origin ve HTTP metodlarÄ± CORS kaynaÄŸÄ±.
+ */
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {

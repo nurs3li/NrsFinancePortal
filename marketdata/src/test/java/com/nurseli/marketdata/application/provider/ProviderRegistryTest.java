@@ -13,26 +13,25 @@ class ProviderRegistryTest {
     void shouldPickConfiguredCanonicalAndFallbackOrder() {
         ProviderSelectionProperties props = new ProviderSelectionProperties();
         props.getFx().setCanonical("TCMB");
-        props.getFx().setFallbackOrder(List.of("BANK", "EVDS"));
+        props.getFx().setFallbackOrder(List.of("EVDS"));
         props.getFund().setCanonical("ETF");
         props.getFund().setFallbackOrder(List.of());
         props.getEquity().setCanonical("FINHUB");
 
         FxProvider tcmb = new StubFx("TCMB", true);
-        FxProvider bank = new StubFx("BANK", false);
         FxProvider evds = new StubFx("EVDS", false);
         FundProvider etf = new StubFund("ETF", true);
         EquityProvider finhub = new StubEq("FINHUB", true);
 
         ProviderRegistry registry = new ProviderRegistry(
-                List.of(tcmb, bank, evds),
+                List.of(tcmb, evds),
                 List.of(etf),
                 List.of(finhub),
                 props
         );
 
         assertEquals("TCMB", registry.fxCanonical().providerName());
-        assertEquals(List.of("BANK", "EVDS"), registry.fxFallbackOrder().stream().map(FxProvider::providerName).toList());
+        assertEquals(List.of("EVDS"), registry.fxFallbackOrder().stream().map(FxProvider::providerName).toList());
         assertEquals("ETF", registry.fundCanonical().providerName());
         assertEquals(List.of(), registry.fundFallbackOrder().stream().map(FundProvider::providerName).toList());
     }

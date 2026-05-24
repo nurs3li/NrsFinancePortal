@@ -74,12 +74,6 @@ public class MarketViopProperties {
          * {@code price-at} isteğinde DB boşsa İş Yatırım'dan geriye dönük çekilecek gün sayısı.
          */
         private int priceAtBackfillDays = 60;
-        /** @deprecated Cron yerine {@link #snapshotFixedDelayMs} kullanılıyor; geriye dönük YAML için tutulur. */
-        @Deprecated
-        private String snapshotCron = "0 */15 * * * *";
-        /** @deprecated Cron yerine {@link #historyFixedDelayMs} kullanılıyor. */
-        @Deprecated
-        private String historyCron = "0 30 2 * * *";
     }
 
     @Data

@@ -4,7 +4,7 @@ import com.nurseli.marketdata.api.dto.bankfx.BankFxRateRowDto;
 import com.nurseli.marketdata.api.dto.bankfx.BankRatesBoardResponseDto;
 import com.nurseli.marketdata.config.BankRatesProperties;
 import com.nurseli.marketdata.domain.bankfx.BankFxLatest;
-import com.nurseli.marketdata.repository.BankFxLatestRepository;
+import com.nurseli.marketdata.infrastructure.persistence.BankFxLatestRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

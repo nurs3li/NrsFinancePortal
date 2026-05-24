@@ -32,8 +32,8 @@ import { UserSettings } from './pages/UserSettings';
 
 function App() {
     return (
-        <ThemeProvider>
-            <LanguageProvider>
+        <LanguageProvider>
+            <ThemeProvider>
                 <ErrorBoundary>
                     <AuthProvider>
                         <QueryProvider>
@@ -195,10 +195,7 @@ function App() {
                                         </RoleProtectedRoute>
                                     }
                                 />
-                                <Route
-                                    path="/operasyon/suspicious"
-                                    element={<Navigate to="/dashboard" replace />}
-                                />
+                                <Route path="/admin/market-ops" element={<Navigate to="/admin/users" replace />} />
                             </Route>
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
@@ -206,8 +203,8 @@ function App() {
                         </QueryProvider>
                     </AuthProvider>
                 </ErrorBoundary>
-            </LanguageProvider>
-        </ThemeProvider>
+            </ThemeProvider>
+        </LanguageProvider>
     );
 }
 

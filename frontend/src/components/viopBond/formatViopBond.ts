@@ -12,6 +12,28 @@ export function fmtPct(n: number | null | undefined, locale: string): string {
     return `${n.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
+/** Kaldıraç: 25,75x */
+export function fmtLeverageX(n: number | null | undefined, locale: string): string {
+    if (n == null || !Number.isFinite(n)) return '—';
+    return `${n.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x`;
+}
+
+/** Oran (0–1) → yüzde: 0,0388 → %3,88 */
+export function fmtRatioPercent(ratio: number | null | undefined, locale: string): string {
+    if (ratio == null || !Number.isFinite(ratio)) return '—';
+    return fmtPct(ratio * 100, locale);
+}
+
+export function fmtNativeAmount(
+    n: number | null | undefined,
+    currency: string,
+    locale: string,
+): string {
+    if (n == null || !Number.isFinite(n)) return '—';
+    const v = n.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    return currency === 'USD' ? `$ ${v}` : currency === 'EUR' ? `€ ${v}` : `₺ ${v}`;
+}
+
 export function fmtDate(ymd: string | null | undefined, locale: string): string {
     if (!ymd) return '—';
     const d = new Date(`${ymd}T12:00:00`);

@@ -11,6 +11,11 @@ spring:
     username: nrs
     password: nrs123
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${MARKET_DATASOURCE_POOL_SIZE:25}
+      minimum-idle: ${MARKET_DATASOURCE_POOL_MIN_IDLE:5}
+      connection-timeout: ${MARKET_DATASOURCE_CONNECTION_TIMEOUT_MS:45000}
+      max-lifetime: 600000
 
   jpa:
     hibernate:
@@ -52,6 +57,15 @@ logging:
 
 # Harici provider ayarlari (env-driven)
 market:
+  bootstrap:
+    orchestrate-startup: ${MARKET_BOOTSTRAP_ORCHESTRATE:true}
+    initial-delay-ms: ${MARKET_BOOTSTRAP_INITIAL_DELAY_MS:45000}
+    phase-delay-ms: ${MARKET_BOOTSTRAP_PHASE_DELAY_MS:8000}
+    evds-min-interval-ms: ${MARKET_BOOTSTRAP_EVDS_MIN_INTERVAL_MS:1200}
+    metals-delay-ms: ${MARKET_BOOTSTRAP_METALS_DELAY_MS:2500}
+    metals-startup-enabled: ${MARKET_BOOTSTRAP_METALS_STARTUP:true}
+    eurobond-full-seed-row-threshold: ${MARKET_BOOTSTRAP_EUROBOND_FULL_SEED_ROWS:20}
+    eurobond-recent-weeks-when-seeded: ${MARKET_BOOTSTRAP_EUROBOND_RECENT_WEEKS:4}
   stale-tail:
     enabled: ${MARKET_STALE_TAIL_ENABLED:true}
     days: ${MARKET_STALE_TAIL_DAYS:3}
@@ -236,28 +250,28 @@ market:
           yieldScale: 1
   inflation:
     backfill:
-      enabled: ${INFLATION_BACKFILL_ENABLED:false}
-      from: ${INFLATION_BACKFILL_FROM:2003-01-01}
-      startup-enabled: ${INFLATION_BACKFILL_ON_STARTUP:false}
+      enabled: ${INFLATION_BACKFILL_ENABLED:true}
+      from: ${INFLATION_BACKFILL_FROM:2020-01-01}
+      startup-enabled: ${INFLATION_BACKFILL_ON_STARTUP:true}
     cpi:
       persist-enabled: ${INFLATION_CPI_PERSIST_ENABLED:true}
       base-year: 2003
-      scheduler-enabled: ${INFLATION_CPI_SCHEDULER_ENABLED:false}
+      scheduler-enabled: ${INFLATION_CPI_SCHEDULER_ENABLED:true}
       scheduler-cron: ${INFLATION_CPI_SCHEDULER_CRON:0 0 7 3 * *}
     ppi:
       persist-enabled: ${INFLATION_PPI_PERSIST_ENABLED:true}
       base-year: 2003
-      scheduler-enabled: ${INFLATION_PPI_SCHEDULER_ENABLED:false}
+      scheduler-enabled: ${INFLATION_PPI_SCHEDULER_ENABLED:true}
       scheduler-cron: ${INFLATION_PPI_SCHEDULER_CRON:0 0 7 3 * *}
   deposit-rates:
-    enabled: ${DEPOSIT_RATES_ENABLED:false}
+    enabled: ${DEPOSIT_RATES_ENABLED:true}
     # WEEKLY — kredi faizi (haftalık akım) ile aynı frekans ailesi; EVDS ham verisi haftalık seri olarak işlenir.
     frequency: WEEKLY
     scheduler-enabled: ${DEPOSIT_RATES_SCHEDULER_ENABLED:false}
     scheduler-cron: ${DEPOSIT_RATES_SCHEDULER_CRON:0 0 7 * * MON}
     backfill:
-      enabled: ${DEPOSIT_RATES_BACKFILL_ENABLED:false}
-      from: ${DEPOSIT_RATES_BACKFILL_FROM:2018-01-01}
+      enabled: ${DEPOSIT_RATES_BACKFILL_ENABLED:true}
+      from: ${DEPOSIT_RATES_BACKFILL_FROM:2020-01-01}
   providers:
     debt:
       enabled: ${DEBT_PROVIDER_ENABLED:false}
@@ -266,11 +280,11 @@ market:
       timeoutMs: 3000
       latestPath: ${DEBT_PROVIDER_LATEST_PATH:/debt/latest}
   bist:
-    enabled: ${MARKET_BIST_ENABLED:false}
-    scheduler-enabled: ${MARKET_BIST_SCHEDULER_ENABLED:false}
+    enabled: ${MARKET_BIST_ENABLED:true}
+    scheduler-enabled: ${MARKET_BIST_SCHEDULER_ENABLED:true}
     seed-on-start: ${MARKET_BIST_SEED_ON_START:true}
     seed-lookback-days: ${MARKET_BIST_SEED_LOOKBACK_DAYS:730}
-    seed-max-symbols: ${MARKET_BIST_SEED_MAX_SYMBOLS:20}
+    seed-max-symbols: ${MARKET_BIST_SEED_MAX_SYMBOLS:30}
     scheduler-incremental-lookback-days: ${MARKET_BIST_SCHEDULER_LOOKBACK_DAYS:30}
     stale-tail-days: ${MARKET_BIST_STALE_TAIL_DAYS:3}
     scheduler-zone: ${MARKET_BIST_SCHEDULER_ZONE:Europe/Istanbul}
@@ -279,7 +293,7 @@ market:
     read-timeout-ms: ${MARKET_BIST_READ_TIMEOUT_MS:45000}
     connect-timeout-ms: ${MARKET_BIST_CONNECT_TIMEOUT_MS:5000}
     history-fetch-chunk-days: ${MARKET_BIST_HISTORY_FETCH_CHUNK_DAYS:90}
-    delay-ms-between-history-chunks: ${MARKET_BIST_DELAY_MS_BETWEEN_HISTORY_CHUNKS:150}
+    delay-ms-between-history-chunks: ${MARKET_BIST_DELAY_MS_BETWEEN_HISTORY_CHUNKS:350}
     primary-provider: IS_YATIRIM
     fallback-provider: YAHOO
     fallback-to-db: true
@@ -305,6 +319,9 @@ market:
       - PETKM
       - KOZAL
       - PGSUS
+      - VESBE
+      - KARSN
+      - ZOREN
 
 # Veri kaynağı yapılandırması
 app:
@@ -389,6 +406,9 @@ app:
       - EEM
     history-incremental-cron: ${ETF_HISTORY_INCREMENTAL_CRON:0 45 6 * * *}
     history-incremental-days: ${ETF_HISTORY_INCREMENTAL_DAYS:30}
+    history-use-yahoo-only: ${ETF_HISTORY_USE_YAHOO_ONLY:true}
+    history-skip-if-fresh-within-days: ${ETF_HISTORY_SKIP_IF_FRESH_DAYS:3}
+    history-yahoo-only-symbols: []
   market:
     bank-rates:
       enabled: ${DOVIZBORSA_SCRAPER_ENABLED:true}
@@ -430,8 +450,6 @@ app:
         history-lookback-days: 7
         history-chunk-days: 7
         period-minutes: 60
-        snapshot-cron: "0 */15 * * * *"
-        history-cron: "0 30 2 * * *"
       whitelist:
         index:
           - underlying: XU030
@@ -600,9 +618,6 @@ app:
           currency-usd: ${EVDS_SERIES_EUROBOND_GOV_CURRENCY_USD_WEEKLY:TP_EBONDVADE_C5_ST}
           currency-eur: ${EVDS_SERIES_EUROBOND_GOV_CURRENCY_EUR_WEEKLY:TP_EBONDVADE_C6_ST}
           currency-jpy: ${EVDS_SERIES_EUROBOND_GOV_CURRENCY_JPY_WEEKLY:TP_EBONDVADE_C7_ST}
-  providers:
-    fx:
-      bank-proxy-evds-enabled: true
   viop:
     query:
       allowed-contracts:

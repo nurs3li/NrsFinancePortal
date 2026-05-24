@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.config;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -11,7 +12,10 @@ import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 @EnableMethodSecurity(prePostEnabled = true)
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final ApiSecurityErrorHandler apiSecurityErrorHandler;
 
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
@@ -51,6 +55,9 @@ public class SecurityConfig {
                         .requestMatchers("/internal/**").hasAnyRole("ADMIN", "OPS")
                         .anyRequest().authenticated()
                 )
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(apiSecurityErrorHandler)
+                        .accessDeniedHandler(apiSecurityErrorHandler))
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
         return http.build();

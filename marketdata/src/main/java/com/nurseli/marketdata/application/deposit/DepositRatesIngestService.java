@@ -4,7 +4,7 @@ import com.nurseli.marketdata.config.DepositRatesProperties;
 import com.nurseli.marketdata.domain.deposit.DepositRateObservation;
 import com.nurseli.marketdata.infrastructure.evds.EvdsDebtClient;
 import com.nurseli.marketdata.infrastructure.evds.EvdsSeriesPoint;
-import com.nurseli.marketdata.repository.DepositRateObservationRepository;
+import com.nurseli.marketdata.infrastructure.persistence.DepositRateObservationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

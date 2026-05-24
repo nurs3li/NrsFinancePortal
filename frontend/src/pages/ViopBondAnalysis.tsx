@@ -84,7 +84,7 @@ export function ViopBondAnalysis() {
                 <p className="vb-hero-sub" style={{ color: tokens.textMuted }}>
                     {t(
                         'viopBond.subtitle',
-                        'Vadeli işlem, tahvil, bono ve eurobond pozisyonlarınızı risk, vade ve getiri açısından takip edin.',
+                        'Vadeli işlem ve sabit getirili ürünlerinizi vade, teminat, kupon ve risk maruziyetiyle takip edin.',
                     )}
                 </p>
             </header>
@@ -105,7 +105,7 @@ export function ViopBondAnalysis() {
                             active={tab}
                             onChange={setTab}
                             viopLabel={t('viopBond.tabViop', 'VİOP')}
-                            bondLabel={t('viopBond.tabBond', 'Tahvil & Eurobond')}
+                            bondLabel={t('viopBond.tabBond', 'Tahvil & Bono')}
                             tokens={cardTokens}
                         />
                     </div>

@@ -1,14 +1,14 @@
 import type { CouponFrequency } from '../../types/bondPosition';
 import type { ViopDirection } from '../../types/viopPosition';
+import {
+    calculateViopPositionMetrics,
+    type ViopFxRates,
+    type ViopPositionMetricsInput,
+} from '../../utils/viopPositionMetrics';
 import { couponPeriodMonths, holdingMonthsBetween } from './bondCouponInference';
 
-export type ViopLiveCalcInput = {
-    direction: ViopDirection;
-    entryPrice: number;
-    currentPrice: number | null;
-    contractMultiplier: number;
-    contractCount: number;
-    initialMargin: number;
+export type ViopLiveCalcInput = ViopPositionMetricsInput & {
+    fxRates?: ViopFxRates;
 };
 
 export type ViopLiveCalcResult = {
@@ -18,18 +18,13 @@ export type ViopLiveCalcResult = {
 };
 
 export function computeViopLive(input: ViopLiveCalcInput): ViopLiveCalcResult {
-    const { direction, entryPrice, currentPrice, contractMultiplier, contractCount, initialMargin } = input;
-    if (currentPrice == null || !Number.isFinite(currentPrice) || currentPrice <= 0) {
-        return { unrealizedPnl: null, riskExposure: null, netFinancialEffect: null };
-    }
-    if (!Number.isFinite(entryPrice) || entryPrice <= 0 || contractCount <= 0 || contractMultiplier <= 0) {
-        return { unrealizedPnl: null, riskExposure: null, netFinancialEffect: null };
-    }
-    const diff = direction === 'LONG' ? currentPrice - entryPrice : entryPrice - currentPrice;
-    const pnl = diff * contractMultiplier * contractCount;
-    const risk = currentPrice * contractMultiplier * contractCount;
-    const margin = Number.isFinite(initialMargin) ? initialMargin : 0;
-    return { unrealizedPnl: pnl, riskExposure: risk, netFinancialEffect: margin + pnl };
+    const fx: ViopFxRates = input.fxRates ?? { usdTry: null, eurTry: null };
+    const m = calculateViopPositionMetrics(input, fx);
+    return {
+        unrealizedPnl: m.unrealizedPnlTry,
+        riskExposure: m.riskExposureTry,
+        netFinancialEffect: m.netFinancialEffect,
+    };
 }
 
 export type BondPositionMetricsInput = {
@@ -80,9 +75,11 @@ export function computeBondPositionMetrics(input: BondPositionMetricsInput): Bon
             : null;
     const pricePnl = currentValue != null ? currentValue - buyValue : null;
 
-    const periodMonths = couponPeriodMonths(couponFrequency);
     const rate = couponRate != null && Number.isFinite(couponRate) && couponRate > 0 ? couponRate : 0;
-    const annualCoupon = rate > 0 && couponFrequency !== 'NONE' ? (nominalValue * rate) / 100 : null;
+    const freq =
+        rate > 0 && (couponFrequency === 'NONE' || !couponFrequency) ? 'SEMI_ANNUAL' : couponFrequency;
+    const periodMonths = couponPeriodMonths(freq);
+    const annualCoupon = rate > 0 && freq !== 'NONE' ? (nominalValue * rate) / 100 : null;
     let periodicCoupon: number | null = null;
     let completedCouponPeriods = 0;
     let collectedCoupon = 0;

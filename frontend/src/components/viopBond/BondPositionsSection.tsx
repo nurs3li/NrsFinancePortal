@@ -4,14 +4,14 @@ import { PositionSearchFilterBar } from './PositionSearchFilterBar';
 import { useLanguage } from '../../i18n/LanguageContext';
 import type { BondPositionStatus, ManualBondPosition } from '../../types/bondPosition';
 import { bondTypeLabel } from './bondPositionLabels';
-import { approxRealReturnPct, maturityBucket, maturityBucketLabel } from './bondAnalysisHelpers';
+import { bondPeriodRealReturnPercent, maturityBucket, maturityBucketLabel } from './bondAnalysisHelpers';
+import { BondRealReturnHeader, bondRealReturnMissingTitle } from './BondRealReturnHeader';
 import { fmtDate, fmtMoney, fmtPct } from './formatViopBond';
 import { pctClass, pnlClass } from './vbTabShared';
 
 type Props = {
     rows: ManualBondPosition[];
     loading: boolean;
-    cpiYoY: number | null;
     tokens: { border: string; bgCard: string; textMuted: string };
     onManualAdd: () => void;
     onEdit: (row: ManualBondPosition) => void;
@@ -27,7 +27,6 @@ type CurrencyFilter = 'ALL' | 'TRY' | 'USD' | 'EUR';
 export function BondPositionsSection({
     rows,
     loading,
-    cpiYoY,
     tokens,
     onManualAdd,
     onEdit,
@@ -112,7 +111,7 @@ export function BondPositionsSection({
     );
 
     const positionCard = (row: ManualBondPosition) => {
-        const real = approxRealReturnPct(row.returnPct, cpiYoY);
+        const real = bondPeriodRealReturnPercent(row);
         const bucket = maturityBucket(row.daysToMaturity);
         return (
             <article key={row.id} className="vb-position-card pf-card-premium" style={cardStyle}>
@@ -129,25 +128,39 @@ export function BondPositionsSection({
                         <div>{fmtMoney(row.nominalValue, locale)}</div>
                     </div>
                     <div>
-                        <span style={{ color: tokens.textMuted }}>{t('viopBond.colValue', 'Değer')}</span>
+                        <span style={{ color: tokens.textMuted }}>{t('viopBond.colBuyDate', 'Alış tarihi')}</span>
+                        <div>{fmtDate(row.buyDate, locale)}</div>
+                    </div>
+                    <div>
+                        <span style={{ color: tokens.textMuted }}>{t('viopBond.colValue', 'Güncel değer')}</span>
                         <div>{fmtMoney(row.currentValue, locale)}</div>
                     </div>
                     <div>
-                        <span style={{ color: tokens.textMuted }}>{t('viopBond.colPnl', 'K/Z')}</span>
+                        <span style={{ color: tokens.textMuted }}>{t('viopBond.bondPricePnl', 'Fiyat K/Z')}</span>
+                        <div className={pnlClass(row.pricePnl ?? row.pnl)}>
+                            {fmtMoney(row.pricePnl ?? row.pnl, locale)}
+                        </div>
+                    </div>
+                    <div>
+                        <span style={{ color: tokens.textMuted }}>{t('viopBond.bondTotalReturn', 'Toplam getiri')}</span>
                         <div className={pnlClass(row.totalReturn ?? row.pnl)}>
                             {fmtMoney(row.totalReturn ?? row.pnl, locale)}
                         </div>
                     </div>
                     <div>
-                        <span style={{ color: tokens.textMuted }}>{t('viopBond.colReturn', 'Getiri')}</span>
-                        <div className={pctClass(row.returnPct)}>{fmtPct(row.returnPct, locale)}</div>
-                    </div>
-                    {real != null ? (
-                        <div>
-                            <span style={{ color: tokens.textMuted }}>{t('viopBond.colRealReturn', 'Reel')}</span>
-                            <div className={pctClass(real)}>{fmtPct(real, locale)}</div>
+                        <span style={{ color: tokens.textMuted }}>{t('viopBond.colReturn', 'Nom. getiri')}</span>
+                        <div className={pctClass(row.totalReturnPercent ?? row.returnPct)}>
+                            {fmtPct(row.totalReturnPercent ?? row.returnPct, locale)}
                         </div>
-                    ) : null}
+                    </div>
+                    <div>
+                        <span style={{ color: tokens.textMuted }}>
+                            {t('viopBond.colRealReturnPeriod', 'Dönemsel reel getiri')}
+                        </span>
+                        <div className={pctClass(real)} title={real == null ? bondRealReturnMissingTitle(t) : undefined}>
+                            {real != null ? fmtPct(real, locale) : '—'}
+                        </div>
+                    </div>
                     {row.maturityDate ? (
                         <div>
                             <span style={{ color: tokens.textMuted }}>{t('viopBond.colMaturity', 'Vade')}</span>
@@ -212,7 +225,7 @@ export function BondPositionsSection({
                     <p>
                         {t(
                             'viopBond.bondEmpty',
-                            'Henüz tahvil/eurobond pozisyonunuz yok. Piyasa listesinden ekleyebilir veya manuel kayıt açabilirsiniz.',
+                            'Henüz tahvil veya bono pozisyonunuz yok. Piyasa listesinden ekleyebilir veya manuel kayıt açabilirsiniz.',
                         )}
                     </p>
                     <button type="button" className="pf-dash-btn pf-dash-btn--primary" onClick={onManualAdd}>
@@ -229,11 +242,16 @@ export function BondPositionsSection({
                                     <th>{t('viopBond.colInstrument', 'Enstrüman')}</th>
                                     <th>{t('viopBond.colBondType', 'Tür')}</th>
                                     <th>{t('viopBond.colCurrency', 'Döviz')}</th>
+                                    <th>{t('viopBond.colBuyDate', 'Alış tarihi')}</th>
                                     <th>{t('viopBond.colNominal', 'Nominal')}</th>
-                                    <th>{t('viopBond.colValue', 'Değer')}</th>
-                                    <th>{t('viopBond.colPnl', 'K/Z')}</th>
+                                    <th>{t('viopBond.colValue', 'Güncel değer')}</th>
+                                    <th>{t('viopBond.bondPricePnl', 'Fiyat K/Z')}</th>
+                                    <th>{t('viopBond.bondCouponIncome', 'Tahsil kupon')}</th>
+                                    <th>{t('viopBond.bondTotalReturn', 'Toplam getiri')}</th>
                                     <th>{t('viopBond.colReturn', 'Nom. getiri')}</th>
-                                    <th>{t('viopBond.colRealReturn', 'Reel getiri')}</th>
+                                    <th>
+                                        <BondRealReturnHeader tokens={tokens} />
+                                    </th>
                                     <th>{t('viopBond.colMaturity', 'Vade')}</th>
                                     <th>{t('viopBond.colStatus', 'Durum')}</th>
                                     <th />
@@ -241,7 +259,7 @@ export function BondPositionsSection({
                             </thead>
                             <tbody>
                                 {filtered.map((row) => {
-                                    const real = approxRealReturnPct(row.returnPct, cpiYoY);
+                                    const real = bondPeriodRealReturnPercent(row);
                                     const bucket = maturityBucket(row.daysToMaturity);
                                     return (
                                         <tr key={row.id}>
@@ -251,23 +269,23 @@ export function BondPositionsSection({
                                             </td>
                                             <td>{bondTypeLabel(row.bondType, t)}</td>
                                             <td>{row.currency}</td>
+                                            <td>{fmtDate(row.buyDate, locale)}</td>
                                             <td>{fmtMoney(row.nominalValue, locale)}</td>
                                             <td>{fmtMoney(row.currentValue, locale)}</td>
+                                            <td className={pnlClass(row.pricePnl ?? row.pnl)}>
+                                                {fmtMoney(row.pricePnl ?? row.pnl, locale)}
+                                            </td>
+                                            <td>{fmtMoney(row.collectedCoupon ?? 0, locale)}</td>
                                             <td className={pnlClass(row.totalReturn ?? row.pnl)}>
                                                 {fmtMoney(row.totalReturn ?? row.pnl, locale)}
-                                                {(row.collectedCoupon ?? 0) > 0 ? (
-                                                    <div className="vb-cell-sub">
-                                                        {t('viopBond.colPricePnl', 'Fiyat')}:{' '}
-                                                        {fmtMoney(row.pricePnl ?? row.pnl, locale)} ·{' '}
-                                                        {t('viopBond.couponShort', 'Kupon')}:{' '}
-                                                        {fmtMoney(row.collectedCoupon, locale)}
-                                                    </div>
-                                                ) : null}
                                             </td>
                                             <td className={pctClass(row.totalReturnPercent ?? row.returnPct)}>
                                                 {fmtPct(row.totalReturnPercent ?? row.returnPct, locale)}
                                             </td>
-                                            <td className={pctClass(real)} title={cpiYoY != null ? `TÜFE YoY ${cpiYoY}%` : ''}>
+                                            <td
+                                                className={pctClass(real)}
+                                                title={real == null ? bondRealReturnMissingTitle(t) : undefined}
+                                            >
                                                 {real != null ? fmtPct(real, locale) : '—'}
                                             </td>
                                             <td>

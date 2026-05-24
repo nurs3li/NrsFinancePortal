@@ -2,7 +2,7 @@ package com.nurseli.marketdata.application.deposit;
 
 import com.nurseli.marketdata.domain.deposit.DepositRateObservation;
 import com.nurseli.marketdata.config.DepositRatesProperties;
-import com.nurseli.marketdata.repository.DepositRateObservationRepository;
+import com.nurseli.marketdata.infrastructure.persistence.DepositRateObservationRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
