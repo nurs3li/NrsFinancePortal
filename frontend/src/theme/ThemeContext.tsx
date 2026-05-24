@@ -66,7 +66,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         try {
             const s = localStorage.getItem(STORAGE_KEY);
             if (s === 'light' || s === 'dark') return s;
-        } catch (_) {}
+        } catch {
+            // localStorage unavailable (SSR / private mode)
+        }
         return 'dark';
     });
 
@@ -74,7 +76,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         try {
             localStorage.setItem(STORAGE_KEY, theme);
             document.documentElement.setAttribute('data-theme', theme);
-        } catch (_) {}
+        } catch {
+            // localStorage unavailable (SSR / private mode)
+        }
     }, [theme]);
 
     const setTheme = useCallback((mode: ThemeMode) => setThemeState(mode), []);

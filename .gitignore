@@ -51,3 +51,6 @@ backups/
 # Python
 __pycache__/
 *.pyc
+
+# CI-generated verification reports (uploaded as GitHub Actions artifacts)
+artifacts/verification/

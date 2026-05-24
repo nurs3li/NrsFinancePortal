@@ -110,8 +110,8 @@ export function Login() {
             const res = await financeClient.post('/api/public/register/request-code', { email });
             const msg = res.data?.data ?? 'Doğrulama kodu e-postanıza gönderildi.';
             setRegisterMessage(msg);
-        } catch (err: any) {
-            setRegisterError(err?.response?.data?.errors?.message ?? err?.response?.data?.message ?? 'Kod gönderilemedi.');
+        } catch (err: unknown) {
+            setRegisterError(readFinanceBinaryErrorMessage(err) ?? 'Kod gönderilemedi.');
         } finally {
             setRegisterBusy(false);
         }
@@ -171,8 +171,8 @@ export function Login() {
             const msg = res.data?.data ?? 'Kayıt tamamlandı.';
             setRegisterMessage(msg);
             setCode('');
-        } catch (err: any) {
-            setRegisterError(err?.response?.data?.errors?.message ?? err?.response?.data?.message ?? 'Kayıt tamamlanamadı.');
+        } catch (err: unknown) {
+            setRegisterError(readFinanceBinaryErrorMessage(err) ?? 'Kayıt tamamlanamadı.');
         } finally {
             setRegisterBusy(false);
         }

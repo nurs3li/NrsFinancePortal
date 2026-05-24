@@ -1752,7 +1752,6 @@ export function Market() {
     const {
         data: bistLatest = [],
         isLoading: loadingBistLatest,
-        error: _bistLatestError,
     } = useQuery({
         queryKey: ['market', 'bist', 'latest', 'terminal'],
         queryFn: ({ signal }) => getBistLatest(signal),

@@ -1,0 +1,41 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+  datasource:
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 1
+      connection-timeout: 20000
+  kafka:
+    bootstrap-servers: localhost:65535
+    listener:
+      auto-startup: false
+  task:
+    scheduling:
+      enabled: false
+  data:
+    redis:
+      timeout: 3s
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://integration-test/realms/test
+
+market-data:
+  base-url: http://localhost:65535
+
+app:
+  rate-limit:
+    enabled: false
+  keycloak:
+    admin:
+      enabled: false
+  observability:
+    enabled: false
+  price-alerts:
+    enabled: true

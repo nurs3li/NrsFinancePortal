@@ -4,8 +4,8 @@
 
 | File | Purpose |
 |------|---------|
-| [endpoints.md](./endpoints.md) | Human-readable catalog (method, path, service, summary) |
 | [response-standardization-inventory.md](./response-standardization-inventory.md) | Unified `ApiResponse` / `ApiEnvelope` contract |
+| `endpoints.md` (optional) | Regenerate with `bash tools/generate_api_catalog.sh` when you want a committed catalog |
 | [openapi/](./openapi/) | Optional JSON snapshots from live Springdoc (`--export-openapi`) |
 
 ## Regenerate the catalog
@@ -42,8 +42,8 @@ Swagger UI: same host/port with `/swagger-ui/index.html`.
 ## Review workflow
 
 1. Run `bash tools/generate_api_catalog.sh` after controller changes.
-2. Commit `docs/api/endpoints.md` (and optional `openapi/*.json` if you used `--export-openapi`).
-3. PR diff on `endpoints.md` is the catalog drift review.
+2. Optionally commit `docs/api/endpoints.md` (and `openapi/*.json` if you used `--export-openapi`).
+3. CI runs `tools/endpoint_contract_gate.sh` on controllers (no committed catalog required).
 
 ## Contract gate
 
