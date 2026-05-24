@@ -25,7 +25,7 @@ class UserStarredAssetIntegrationTest extends FinanceIntegrationTestBase {
                         .content("""
                                 {
                                   "selected": [
-                                    { "marketType": "BIST", "symbol": "THYAO" },
+                                    { "marketType": "EQUITY", "symbol": "THYAO" },
                                     { "marketType": "FX", "symbol": "USDTRY" }
                                   ]
                                 }

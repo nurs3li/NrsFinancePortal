@@ -2,6 +2,7 @@ package com.nurseli.nrsfinanceportal.integration.portfolio;
 
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioPositionRepository;
 import com.nurseli.nrsfinanceportal.integration.support.FinanceIntegrationTestBase;
+import com.nurseli.nrsfinanceportal.integration.support.IntegrationTestJson;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -71,7 +72,7 @@ class ManualPortfolioIntegrationTest extends FinanceIntegrationTestBase {
                 .andReturn();
 
         String body = created.getResponse().getContentAsString();
-        long id = com.jayway.jsonpath.JsonPath.read(body, "$.data.id");
+        long id = IntegrationTestJson.readLongId(body, "$.data.id");
 
         mockMvc.perform(post("/api/portfolio/manual/{id}/close", id)
                         .with(integrationUserJwt())
@@ -112,7 +113,7 @@ class ManualPortfolioIntegrationTest extends FinanceIntegrationTestBase {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        long id = com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.data.id");
+        long id = IntegrationTestJson.readLongId(created.getResponse().getContentAsString(), "$.data.id");
 
         mockMvc.perform(put("/api/portfolio/manual/{id}", id)
                         .with(integrationUserJwt())
@@ -157,7 +158,7 @@ class ManualPortfolioIntegrationTest extends FinanceIntegrationTestBase {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        long id = com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.data.id");
+        long id = IntegrationTestJson.readLongId(created.getResponse().getContentAsString(), "$.data.id");
 
         mockMvc.perform(delete("/api/portfolio/manual/{id}", id).with(integrationUserJwt()))
                 .andExpect(status().isOk());

@@ -31,6 +31,6 @@ class PortfolioUnifiedIntegrationTest extends FinanceIntegrationTestBase {
         mockMvc.perform(get("/api/portfolio/me/unified").with(integrationUserJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.items[?(@.symbol == 'KCHOL')]").exists());
+                .andExpect(jsonPath("$.data[?(@.symbol == 'KCHOL')]").exists());
     }
 }

@@ -2,6 +2,7 @@ package com.nurseli.nrsfinanceportal.integration.pricealert;
 
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.PriceAlertRepository;
 import com.nurseli.nrsfinanceportal.integration.support.FinanceIntegrationTestBase;
+import com.nurseli.nrsfinanceportal.integration.support.IntegrationTestJson;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -48,7 +49,7 @@ class PriceAlertIntegrationTest extends FinanceIntegrationTestBase {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[?(@.symbol == 'THYAO')]").exists());
 
-        long alertId = com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.data.id");
+        long alertId = IntegrationTestJson.readLongId(created.getResponse().getContentAsString(), "$.data.id");
 
         mockMvc.perform(delete("/api/me/price-alerts/{id}", alertId).with(integrationUserJwt()))
                 .andExpect(status().isOk());
@@ -73,7 +74,7 @@ class PriceAlertIntegrationTest extends FinanceIntegrationTestBase {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        long alertId = com.jayway.jsonpath.JsonPath.read(
+        long alertId = IntegrationTestJson.readLongId(
                 created.getResponse().getContentAsString(), "$.data.id");
 
         mockMvc.perform(put("/api/me/price-alerts/{id}", alertId)

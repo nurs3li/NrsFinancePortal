@@ -2,6 +2,7 @@ package com.nurseli.nrsfinanceportal.integration.viopbond;
 
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualBondPositionRepository;
 import com.nurseli.nrsfinanceportal.integration.support.FinanceIntegrationTestBase;
+import com.nurseli.nrsfinanceportal.integration.support.IntegrationTestJson;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -49,7 +50,7 @@ class ManualBondPositionIntegrationTest extends FinanceIntegrationTestBase {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[?(@.symbol == 'TR0001234567')]").exists());
 
-        long id = com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.data.id");
+        long id = IntegrationTestJson.readLongId(created.getResponse().getContentAsString(), "$.data.id");
 
         mockMvc.perform(post("/api/me/bond-positions/{id}/sell", id)
                         .with(integrationUserJwt())
