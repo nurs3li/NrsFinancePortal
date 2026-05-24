@@ -5,14 +5,17 @@ import com.nurseli.notificationservice.infrastructure.finance.FinanceUserClient;
 import com.nurseli.notificationservice.infrastructure.gmail.GmailClient;
 import com.nurseli.notificationservice.infrastructure.persistence.NotificationRepository;
 import com.nurseli.notificationservice.infrastructure.security.S2SAccessTokenService;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.function.Executable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
+import org.springframework.kafka.test.utils.ContainerTestUtils;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -68,6 +71,12 @@ public abstract class NotificationIntegrationTestBase {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    private EntityManager entityManager;
+
+    @Autowired
+    private KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry;
+
     @MockitoBean
     protected GmailClient gmailClient;
 
@@ -87,6 +96,12 @@ public abstract class NotificationIntegrationTestBase {
     void cleanCommittedNotifications() {
         new TransactionTemplate(transactionManager).executeWithoutResult(
                 status -> notificationRepository.deleteAll());
+    }
+
+    @BeforeEach
+    void awaitKafkaConsumerAssignment() {
+        kafkaListenerEndpointRegistry.getListenerContainers().forEach(container ->
+                ContainerTestUtils.waitForAssignment(container, 1));
     }
 
     protected RequestPostProcessor integrationUserJwt() {
@@ -111,6 +126,7 @@ public abstract class NotificationIntegrationTestBase {
 
         while (System.nanoTime() < deadline) {
             try {
+                entityManager.clear();
                 assertDoesNotThrow(assertion);
                 return;
             } catch (Throwable t) {

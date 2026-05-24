@@ -703,11 +703,12 @@ export function Dashboard() {
             } catch {
                 if (alive) setLatestNews([]);
             } finally {
-                if (!alive) return;
-                setNewsLoading(false);
-                requestAnimationFrame(() => {
-                    if (alive) setNewsFadeIn(true);
-                });
+                if (alive) {
+                    setNewsLoading(false);
+                    requestAnimationFrame(() => {
+                        if (alive) setNewsFadeIn(true);
+                    });
+                }
             }
         };
 

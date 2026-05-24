@@ -11,8 +11,10 @@ import org.opensearch.search.builder.SearchSourceBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.test.context.EmbeddedKafka;
+import org.springframework.kafka.test.utils.ContainerTestUtils;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -21,6 +23,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
+
+import org.junit.jupiter.api.BeforeEach;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -61,8 +65,21 @@ public abstract class LogConsumerIntegrationTestBase {
     @Autowired
     protected KafkaTemplate<String, String> kafkaTemplate;
 
+    @Autowired
+    private KafkaListenerEndpointRegistry kafkaListenerEndpointRegistry;
+
+    @BeforeEach
+    void awaitKafkaConsumerAssignment() {
+        kafkaListenerEndpointRegistry.getListenerContainers().forEach(container ->
+                ContainerTestUtils.waitForAssignment(container, 1));
+    }
+
     protected void publishApplicationLog(String jsonPayload) {
-        kafkaTemplate.send(APPLICATION_LOGS_TOPIC, jsonPayload);
+        try {
+            kafkaTemplate.send(APPLICATION_LOGS_TOPIC, jsonPayload).get();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to publish application log", e);
+        }
     }
 
     protected SearchHit[] searchLogsByCorrelationId(String indexName, String correlationId) throws IOException {

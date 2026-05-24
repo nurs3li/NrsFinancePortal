@@ -21,8 +21,11 @@ type ViopContract = { contractCode: string; underlying: string; expiry: string; 
 type DebtInstrument = { isin: string; name: string; issuer: string; maturityDate: string };
 
 export async function fetchSpotSymbolsByAssetClass(assetClass: AssetClass): Promise<string[]> {
-    const overviewRes = await financeClient.get<MarketOverview>('/api/market/overview');
-    const overview = ((overviewRes.data as any)?.data ?? overviewRes.data) as MarketOverview;
+    const overviewRes = await financeClient.get<MarketOverview | { data?: MarketOverview }>('/api/market/overview');
+    const payload = overviewRes.data;
+    const overview = payload && typeof payload === 'object' && 'data' in payload && payload.data
+        ? payload.data
+        : (payload as MarketOverview);
     const map = assetClass === 'SPOT_EQUITY'
         ? overview?.stocks
         : assetClass === 'SPOT_CRYPTO'
@@ -30,7 +33,7 @@ export async function fetchSpotSymbolsByAssetClass(assetClass: AssetClass): Prom
             : assetClass === 'SPOT_FX'
                 ? overview?.doviz
                 : overview?.metals;
-    return Object.keys(map ?? {}).filter((k) => (map as any)?.[k] != null);
+    return Object.keys(map ?? {}).filter((k) => map?.[k as keyof typeof map] != null);
 }
 
 export async function fetchViopSymbolsByClass(assetClass: AssetClass): Promise<string[]> {

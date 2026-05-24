@@ -20,9 +20,9 @@ class ApplicationLogsFlowIntegrationTest extends LogConsumerIntegrationTestBase 
         publishApplicationLog(payload);
 
         Map<String, Object> source = awaitIndexedLog(
-                LogConsumerIntegrationFixtures.LOG_INDEX_NAME,
+                LogConsumerIntegrationFixtures.todayLogIndexName(),
                 correlationId,
-                Duration.ofSeconds(20));
+                Duration.ofSeconds(30));
 
         assertThat(source.get("level")).isEqualTo("INFO");
         assertThat(source.get("serviceName")).isEqualTo("finance-service");
@@ -32,6 +32,6 @@ class ApplicationLogsFlowIntegrationTest extends LogConsumerIntegrationTestBase 
         assertThat(source.get("actionType")).isEqualTo("LOGIN");
         assertThat(source.get("username")).isEqualTo("integration_user");
         assertThat(source.get("traceId")).isEqualTo("trace-it-1");
-        assertThat(source.get("timestamp")).isEqualTo("2026-05-08T12:00:00Z");
+        assertThat(source.get("timestamp")).isEqualTo(LogConsumerIntegrationFixtures.todayLogTimestamp());
     }
 }

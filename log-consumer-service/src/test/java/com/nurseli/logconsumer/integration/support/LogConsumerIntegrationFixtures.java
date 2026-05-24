@@ -1,13 +1,22 @@
 package com.nurseli.logconsumer.integration.support;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
 public final class LogConsumerIntegrationFixtures {
 
-    public static final String LOG_INDEX_DATE = "2026-05-08";
-    public static final String LOG_INDEX_NAME = "application-logs-" + LOG_INDEX_DATE;
+    private static final DateTimeFormatter ISO_DATE = DateTimeFormatter.ISO_LOCAL_DATE;
 
     private LogConsumerIntegrationFixtures() {
+    }
+
+    public static String todayLogIndexName() {
+        return "application-logs-" + LocalDate.now().format(ISO_DATE);
+    }
+
+    public static String todayLogTimestamp() {
+        return LocalDate.now().format(ISO_DATE) + "T12:00:00Z";
     }
 
     public static String uniqueCorrelationId() {
@@ -15,9 +24,10 @@ public final class LogConsumerIntegrationFixtures {
     }
 
     public static String applicationLogPayload(String correlationId, String message) {
+        String timestamp = todayLogTimestamp();
         return """
                 {
-                  "timestamp":"2026-05-08T12:00:00Z",
+                  "timestamp":"%s",
                   "level":"INFO",
                   "serviceName":"finance-service",
                   "message":"%s",
@@ -28,6 +38,6 @@ public final class LogConsumerIntegrationFixtures {
                   "actionType":"LOGIN",
                   "username":"integration_user"
                 }
-                """.formatted(message, correlationId);
+                """.formatted(timestamp, message, correlationId);
     }
 }

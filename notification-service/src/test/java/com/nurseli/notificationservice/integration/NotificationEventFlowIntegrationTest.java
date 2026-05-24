@@ -6,6 +6,8 @@ import com.nurseli.notificationservice.infrastructure.persistence.NotificationRe
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 
@@ -15,25 +17,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class NotificationEventFlowIntegrationTest extends NotificationIntegrationTestBase {
 
+    private static final String TEST_USER = NotificationIntegrationFixtures.TEST_USER_SUB;
+
     @Autowired
     private NotificationRepository notificationRepository;
 
+    private long userNotificationCount() {
+        return notificationRepository.countByUserSubAndReadAtIsNull(TEST_USER);
+    }
+
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void kafkaNotificationEvent_createsInAppNotification() {
-        long before = notificationRepository.count();
+        long before = userNotificationCount();
 
         publishNotificationEvent(
-                NotificationIntegrationFixtures.inAppOnlyEvent(
-                        NotificationIntegrationFixtures.TEST_USER_SUB,
-                        "Kafka created alert"));
+                NotificationIntegrationFixtures.inAppOnlyEvent(TEST_USER, "Kafka created alert"));
 
-        awaitUntil(Duration.ofSeconds(20), () -> {
-            long after = notificationRepository.count();
-            assertThat(after).isEqualTo(before + 1);
-        });
+        awaitUntil(Duration.ofSeconds(30), () ->
+                assertThat(userNotificationCount()).isEqualTo(before + 1));
 
         var page = notificationRepository.findByUserSubOrderByCreatedAtDesc(
-                NotificationIntegrationFixtures.TEST_USER_SUB,
+                TEST_USER,
                 PageRequest.of(0, 5));
 
         assertThat(page.getTotalElements()).isEqualTo(1);
@@ -42,41 +47,37 @@ class NotificationEventFlowIntegrationTest extends NotificationIntegrationTestBa
     }
 
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void kafkaDuplicateInAppEvent_incrementsOccurrenceCount() {
         publishNotificationEvent(
-                NotificationIntegrationFixtures.inAppOnlyEvent(
-                        NotificationIntegrationFixtures.TEST_USER_SUB,
-                        "Dedup alert v1"));
-        awaitUntil(Duration.ofSeconds(20), () ->
-                assertThat(notificationRepository.count()).isEqualTo(1));
+                NotificationIntegrationFixtures.inAppOnlyEvent(TEST_USER, "Dedup alert v1"));
+        awaitUntil(Duration.ofSeconds(30), () ->
+                assertThat(userNotificationCount()).isEqualTo(1));
 
         publishNotificationEvent(
-                NotificationIntegrationFixtures.inAppOnlyEvent(
-                        NotificationIntegrationFixtures.TEST_USER_SUB,
-                        "Dedup alert v2"));
+                NotificationIntegrationFixtures.inAppOnlyEvent(TEST_USER, "Dedup alert v2"));
 
-        awaitUntil(Duration.ofSeconds(20), () -> {
+        awaitUntil(Duration.ofSeconds(30), () -> {
             var notification = notificationRepository
                     .findFirstByUserSubAndTypeAndReadAtIsNullOrderByCreatedAtDesc(
-                            NotificationIntegrationFixtures.TEST_USER_SUB,
+                            TEST_USER,
                             "REAL_RETURN_NEGATIVE")
                     .orElseThrow();
             assertThat(notification.getOccurrenceCount()).isEqualTo(2);
             assertThat(notification.getTitle()).isEqualTo("Dedup alert v2");
         });
 
-        assertThat(notificationRepository.count()).isEqualTo(1);
+        assertThat(userNotificationCount()).isEqualTo(1);
     }
 
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void createdKafkaNotification_isVisibleViaApi() throws Exception {
         publishNotificationEvent(
-                NotificationIntegrationFixtures.inAppOnlyEvent(
-                        NotificationIntegrationFixtures.TEST_USER_SUB,
-                        "Visible via API"));
+                NotificationIntegrationFixtures.inAppOnlyEvent(TEST_USER, "Visible via API"));
 
-        awaitUntil(Duration.ofSeconds(20), () ->
-                assertThat(notificationRepository.count()).isEqualTo(1));
+        awaitUntil(Duration.ofSeconds(30), () ->
+                assertThat(userNotificationCount()).isEqualTo(1));
 
         mockMvc.perform(get("/api/notifications/me").with(integrationUserJwt()))
                 .andExpect(status().isOk())

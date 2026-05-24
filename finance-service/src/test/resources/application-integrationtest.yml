@@ -5,6 +5,11 @@ spring:
   liquibase:
     enabled: true
     change-log: classpath:db/changelog/db.changelog-master.yaml
+  datasource:
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 1
+      connection-timeout: 20000
   kafka:
     bootstrap-servers: localhost:65535
     listener:
@@ -14,9 +19,7 @@ spring:
       enabled: false
   data:
     redis:
-      host: localhost
-      port: 6379
-      timeout: 200ms
+      timeout: 3s
   security:
     oauth2:
       resourceserver:

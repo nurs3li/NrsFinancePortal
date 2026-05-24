@@ -8,6 +8,10 @@ spring:
   kafka:
     consumer:
       auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: com.nurseli.notificationservice.application.event
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: com.nurseli.notificationservice.application.event.NotificationRequestedEvent
     producer:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
   data:

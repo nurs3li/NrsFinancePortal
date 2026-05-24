@@ -5,6 +5,8 @@ spring:
   liquibase:
     enabled: true
     change-log: classpath:db/changelog/db.changelog-master.yaml
+  kafka:
+    bootstrap-servers: localhost:65535
   task:
     scheduling:
       enabled: false
@@ -60,3 +62,11 @@ app:
         enabled: false
   equity:
     scheduler-enabled: false
+
+management:
+  tracing:
+    sampling:
+      probability: 0.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:65535/v1/traces
