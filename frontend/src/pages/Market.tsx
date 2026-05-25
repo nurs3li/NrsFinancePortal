@@ -4167,7 +4167,7 @@ export function Market() {
             compareSymbols.length < 2 ||
             (activeCategory !== 'FUTURES' && !marketType && !bistCompare)
         ) {
-            setCompareRows([]);
+            setCompareRows((prev) => (prev.length === 0 ? prev : []));
             return;
         }
         setLoadingCompare(true);
@@ -4268,7 +4268,7 @@ export function Market() {
                 });
                 const dates = Object.keys(byDate).sort();
                 if (!dates.length) {
-                    setCompareRows([]);
+                    setCompareRows((prev) => (prev.length === 0 ? prev : []));
                     return;
                 }
                 const first: Record<string, number> = {};
@@ -4287,7 +4287,7 @@ export function Market() {
                 });
                 setCompareRows(rows);
             })
-            .catch(() => setCompareRows([]))
+            .catch(() => setCompareRows((prev) => (prev.length === 0 ? prev : [])))
             .finally(() => setLoadingCompare(false));
     }, [
         compareSymbols,
@@ -4306,7 +4306,7 @@ export function Market() {
         if (compareSymbols.length >= 2) {
             loadCompare();
         } else {
-            setCompareRows([]);
+            setCompareRows((prev) => (prev.length === 0 ? prev : []));
         }
     }, [compareSymbols, loadCompare]);
 

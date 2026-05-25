@@ -1005,6 +1005,12 @@ const en = {
     'portfolio.btnAiAnalysis': 'AI analysis',
     'portfolio.btnMacro': 'Macro compare',
     'portfolio.btnReport': 'Export / print',
+    'portfolio.evaluationConfirmTitle': 'Send the portfolio evaluation?',
+    'portfolio.evaluationConfirmBody':
+        'The portfolio evaluation summary will be sent to the email address below and to your notification center.',
+    'portfolio.evaluationConfirmHint': 'If you confirm, the evaluation will be generated and delivered immediately.',
+    'portfolio.evaluationSuccessTitle': 'Sent successfully',
+    'portfolio.evaluationEmailFallback': 'Your saved email address',
     'portfolio.aiBack': 'Back to portfolio analysis',
     'portfolio.aiPageTitle': 'AI analysis',
     'portfolio.aiPageSubtitle':

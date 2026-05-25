@@ -16,6 +16,7 @@ import com.nurseli.marketdata.infrastructure.persistence.FxDailyCandleRepository
 import com.nurseli.marketdata.infrastructure.persistence.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -24,6 +25,10 @@ import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * BIST {@link com.nurseli.marketdata.application.bist.BistEquityQueryService#maybeIngestStaleTail} ile aynı fikir:
@@ -35,6 +40,12 @@ import java.util.Optional;
 public class MarketStaleTailRepairService {
 
     private static final ZoneId IST = ZoneId.of("Europe/Istanbul");
+    private final Set<String> inFlightRepairs = ConcurrentHashMap.newKeySet();
+    private final ExecutorService repairExecutor = Executors.newFixedThreadPool(2, runnable -> {
+        Thread thread = new Thread(runnable, "market-stale-tail-repair");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private final MarketStaleTailProperties staleTailProperties;
     private final EquityDailyCandleRepository equityDailyCandleRepository;
@@ -56,13 +67,17 @@ public class MarketStaleTailRepairService {
         }
         String sym = symbol.trim().toUpperCase();
         LocalDate targetTo = effectiveTo(requestedTo);
-        switch (type) {
-            case EQUITY -> repairEquity(sym, targetTo);
-            case CRYPTO -> repairCrypto(sym, targetTo);
-            case FX -> repairFx(sym, targetTo);
-            case METALS -> repairMetal(sym, targetTo);
-            default -> {}
-        }
+        String repairKey = type.name() + ":" + sym + ":" + targetTo;
+        scheduleRepair(repairKey, () -> {
+            switch (type) {
+                case EQUITY -> repairEquity(sym, targetTo);
+                case CRYPTO -> repairCrypto(sym, targetTo);
+                case FX -> repairFx(sym, targetTo);
+                case METALS -> repairMetal(sym, targetTo);
+                default -> {
+                }
+            }
+        });
     }
 
     public void repairDebtSnapshotsIfStale() {
@@ -78,12 +93,27 @@ public class MarketStaleTailRepairService {
         if (maxAsOf.isPresent() && !maxAsOf.get().isBefore(cutoff)) {
             return;
         }
-        try {
-            log.info("[STALE_TAIL] debt ingestLatest maxAsOf={}", maxAsOf.orElse(null));
-            debtIngestService.ingestLatest();
-        } catch (Exception ex) {
-            log.warn("[STALE_TAIL] debt ingest failed reason={}", ex.getMessage());
+        scheduleRepair("DEBT_SNAPSHOTS", () -> {
+            try {
+                log.info("[STALE_TAIL] debt ingestLatest maxAsOf={}", maxAsOf.orElse(null));
+                debtIngestService.ingestLatest();
+            } catch (Exception ex) {
+                log.warn("[STALE_TAIL] debt ingest failed reason={}", ex.getMessage());
+            }
+        });
+    }
+
+    private void scheduleRepair(String repairKey, Runnable repairTask) {
+        if (!inFlightRepairs.add(repairKey)) {
+            return;
         }
+        repairExecutor.execute(() -> {
+            try {
+                repairTask.run();
+            } finally {
+                inFlightRepairs.remove(repairKey);
+            }
+        });
     }
 
     private void repairEquity(String symbol, LocalDate targetTo) {
@@ -193,5 +223,10 @@ public class MarketStaleTailRepairService {
             return today;
         }
         return requestedTo;
+    }
+
+    @PreDestroy
+    void shutdownExecutor() {
+        repairExecutor.shutdownNow();
     }
 }

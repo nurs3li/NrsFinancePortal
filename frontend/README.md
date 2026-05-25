@@ -1,73 +1,150 @@
-# React + TypeScript + Vite
+# Frontend — NRS Finans Portalı
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + TypeScript + Vite 7 single-page application.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Özet
 
-## React Compiler
+| Özellik | Değer |
+|---------|-------|
+| **Framework** | React 19 |
+| **Build** | Vite 7 |
+| **State / data** | TanStack Query 5 |
+| **Routing** | React Router 7 |
+| **Auth** | keycloak-js 26 |
+| **Docker port** | 3000 (Vite dev container) |
+| **Yerel dev port** | 5173 |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## Sayfalar (route'lar)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+| Path | Sayfa | Açıklama |
+|------|-------|----------|
+| `/` | Landing / redirect | Giriş yapmamış kullanıcı |
+| `/login` | Login redirect | Keycloak akışı |
+| `/dashboard` | Dashboard | Ana özet |
+| `/market` | Piyasa terminali | Canlı fiyat, grafikler |
+| `/market/heatmap` | Heatmap | Sektör ısı haritası |
+| `/market/macro` | Makro zeka | Enflasyon, faiz, eurobond |
+| `/market/bank-rates` | Banka kurları | Karşılaştırma tablosu |
+| `/portfolio` | Portföy | Manuel pozisyonlar |
+| `/portfolio/ai-analysis` | Portföy AI | AI analiz raporu |
+| `/simulation` | Simülasyon | Geçmiş yatırım simülasyonu |
+| `/viop-bond-analysis` | VİOP / Tahvil | Analiz ve pozisyon |
+| `/notifications` | Bildirimler | In-app inbox |
+| `/settings` | Ayarlar | Profil, 2FA, bildirim tercihleri |
+| `/admin/users` | Admin | Kullanıcı yönetimi (ADMIN) |
+| `/admin/audit` | Admin audit | Log + Grafana embed |
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Route tanımları: `src/App.tsx`
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+---
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Klasör yapısı
+
+```
+src/
+├── api/              # Axios client, JWT interceptor, API versioning
+├── auth/             # Keycloak, ProtectedRoute, RoleGuard
+├── components/       # Domain UI (market, viopBond, macro, simulation, …)
+├── pages/            # Route sayfaları
+├── services/         # Backend API çağrıları
+├── hooks/            # Paylaşılan React hooks
+├── queries/          # TanStack Query cache keys
+├── types/            # TypeScript tipleri
+├── i18n/             # TR / EN çeviriler
+├── theme/            # Dark/light theme
+├── providers/        # QueryProvider
+├── utils/ + lib/     # Yardımcı fonksiyonlar
+├── App.tsx
+└── main.tsx
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Kurulum
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Docker (önerilen — Keycloak redirect uyumlu)
+
+Repo kökünden:
+
+```powershell
+docker compose up -d frontend-dev
 ```
+
+→ http://localhost:3000
+
+### Yerel
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+→ http://localhost:5173
+
+> Keycloak redirect URI genelde `http://localhost:3000/*` olarak yapılandırılmıştır. Yerel `:5173` redirect hatası verebilir.
+
+---
+
+## Ortam değişkenleri
+
+`VITE_*` değişkenleri repo kökü `.env` veya `frontend/.env` dosyasından okunur.
+
+| Değişken | Docker varsayılan |
+|----------|-------------------|
+| `VITE_API_URL` | http://localhost:8085 |
+| `VITE_MARKET_API_URL` | http://localhost:8083 |
+| `VITE_NOTIFICATION_API_URL` | http://localhost:8089 |
+| `VITE_KEYCLOAK_URL` | http://localhost:8081 |
+| `VITE_KEYCLOAK_REALM` | nrs-finance |
+| `VITE_KEYCLOAK_CLIENT_ID` | nrs-frontend |
+| `VITE_API_VERSION` | v1 |
+
+Grafana embed (admin audit): `VITE_GRAFANA_*` — `docker-compose.yml` frontend-dev bölümü.
+
+---
+
+## Komutlar
+
+```powershell
+npm run dev      # Geliştirme sunucusu
+npm run build    # Production build → dist/
+npm run lint     # ESLint
+npm test         # Vitest unit testleri
+npm run preview  # Build önizleme
+```
+
+---
+
+## Test
+
+Vitest — `src/**/*.test.ts`:
+
+- Hesaplama: `viopBondCalculations`, `marketPurchasingPower`
+- API: `apiVersion`, `macroRatesApi`
+
+```powershell
+npm test
+```
+
+Component/E2E testleri kapsam dışı — backend test ağırlıklı proje standardı.
+
+---
+
+## Production imajı
+
+`frontend/Dockerfile` — nginx ile statik `dist/` servisi.
+
+Yerel demo: `docker-compose.yml` → `frontend-dev` (Vite HMR, kaynak bind mount).
+
+---
+
+## Dokümantasyon
+
+- [Kök README](../README.md)
+- [Güvenlik — Keycloak](../docs/security/README.md)
+- [API](../docs/api/README.md)

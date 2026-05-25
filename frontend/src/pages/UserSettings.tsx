@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
-import { useNotificationPreferences } from '../hooks/useNotificationPreferences';
 import {
     EmailChangeModal,
     FullNameEditModal,
@@ -11,7 +10,6 @@ import {
     UsernameEditModal,
 } from '../components/settings/ProfileEditModals';
 import { SettingsProfileCard } from '../components/settings/SettingsProfileCard';
-import { SettingsNotificationsCard } from '../components/settings/SettingsNotificationsCard';
 import { SettingsTwoFactorCard } from '../components/settings/SettingsTwoFactorCard';
 import { fetchCurrentUser, formatUserFullName } from '../services/userApi';
 import { readKeycloakDisplayName } from '../utils/keycloakProfile';
@@ -40,9 +38,6 @@ export function UserSettings() {
     });
 
     const [activeModal, setActiveModal] = useState<EditModal>(null);
-
-    const userId = me?.id ?? authUser?.id ?? null;
-    const { prefs, setPreference } = useNotificationPreferences(userId);
 
     const displayName = useMemo(() => {
         return formatUserFullName(me) ?? readKeycloakDisplayName();
@@ -89,12 +84,7 @@ export function UserSettings() {
                 </div>
 
                 <div className="settings-layout__side">
-                    <SettingsTwoFactorCard disabled={userId == null} />
-                    <SettingsNotificationsCard
-                        prefs={prefs}
-                        onChange={setPreference}
-                        disabled={userId == null}
-                    />
+                    <SettingsTwoFactorCard disabled={me?.id == null && authUser?.id == null} />
                 </div>
             </div>
 

@@ -3,6 +3,14 @@ const DEFAULT_API_VERSION = 'v1';
 /** Active public REST API version segment (e.g. {@code v1} → {@code /api/v1/...}). */
 export const API_VERSION = String(import.meta.env.VITE_API_VERSION ?? DEFAULT_API_VERSION).trim() || DEFAULT_API_VERSION;
 
+function isLegacyPublicAuthPath(url: string): boolean {
+    return (
+        url.startsWith('/api/public/login') ||
+        url.startsWith('/api/public/register') ||
+        url.startsWith('/api/public/token/')
+    );
+}
+
 /**
  * Prefixes unversioned public API paths with the configured version segment.
  * Internal and already-versioned paths are left unchanged.
@@ -11,6 +19,7 @@ export function withApiVersion(url: string | undefined): string {
     if (!url) return url ?? '';
     if (url.startsWith('/internal/')) return url;
     if (/^\/api\/v\d+\//.test(url)) return url;
+    if (isLegacyPublicAuthPath(url)) return url;
     if (url.startsWith('/api/')) {
         return url.replace(/^\/api\//, `/api/${API_VERSION}/`);
     }

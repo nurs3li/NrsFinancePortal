@@ -17,5 +17,5 @@ public class NotificationEmailProperties {
      * {@code requireFinanceEmailVerified} — {@code true}: finance-service {@code /internal/users} yanıtında
      * {@code emailVerified} zorunlu (eski davranış). {@code false}: yalnızca e-posta adresi dolu olması yeterli.
      */
-    private boolean requireFinanceEmailVerified = true;
+    private boolean requireFinanceEmailVerified = false;
 }

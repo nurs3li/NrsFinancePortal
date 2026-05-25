@@ -1016,6 +1016,12 @@ const tr = {
     'portfolio.btnAiAnalysis': 'AI analizi',
     'portfolio.btnMacro': 'Makro karşılaştır',
     'portfolio.btnReport': 'Rapor al',
+    'portfolio.evaluationConfirmTitle': 'Portföy değerlendirmesi gönderilsin mi?',
+    'portfolio.evaluationConfirmBody':
+        'Portföy değerlendirme özeti aşağıdaki e-posta adresine ve bildirim merkezinize gönderilecek.',
+    'portfolio.evaluationConfirmHint': 'Onay verirseniz değerlendirme hemen oluşturulup hesabınıza iletilir.',
+    'portfolio.evaluationSuccessTitle': 'Başarıyla gönderildi',
+    'portfolio.evaluationEmailFallback': 'Kayıtlı e-posta adresiniz',
     'portfolio.aiBack': 'Portföy analizine dön',
     'portfolio.aiPageTitle': 'AI analizi',
     'portfolio.aiPageSubtitle':

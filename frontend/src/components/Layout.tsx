@@ -110,7 +110,7 @@ export function Layout() {
     const isAdmin = role === 'ADMIN';
 
     const navItems = useMemo(() => buildLayoutNavItems({ isAdmin, t }), [isAdmin, t]);
-    const visibleNavItems = navItems.filter((item) => item.show);
+    const visibleNavItems = useMemo(() => navItems.filter((item) => item.show), [navItems]);
     const activeNavItem = useMemo(
         () => resolveActiveNavItem(location.pathname, visibleNavItems),
         [location.pathname, visibleNavItems],

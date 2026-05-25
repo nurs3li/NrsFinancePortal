@@ -240,8 +240,7 @@ public class ViopMarketDataService {
             long t0,
             String mode)
             throws Exception {
-        String providerCode = providerEndeks(canonical);
-        String raw = isYatirimViopClient.fetchHistorical(providerCode, from, to, period);
+        String raw = isYatirimViopClient.fetchHistorical(canonical, from, to, period);
         IsYatirimViopHistoricalParser.ParsedHistorical parsed = historicalParser.parse(raw);
         OffsetDateTime providerTs = parsed.providerTimestamp();
         LocalDateTime providerLocal =
@@ -1151,15 +1150,6 @@ public class ViopMarketDataService {
 
     private static String canonical(MarketViopProperties.IndexEntry e) {
         return e.getContractCode().trim().toUpperCase();
-    }
-
-    /** İş Yatırım {@code endeks} parametresi genelde {@code SISE0726}; DB anahtarı {@code F_SISE0726}. */
-    private static String providerEndeks(String canonical) {
-        if (canonical == null || canonical.isBlank()) {
-            return canonical;
-        }
-        String u = canonical.trim().toUpperCase();
-        return u.startsWith("F_") ? u.substring(2) : u;
     }
 
     private Set<String> contractCodeAliases(String canonical) {

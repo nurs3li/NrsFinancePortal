@@ -21,13 +21,17 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -193,9 +197,34 @@ class ViopMarketDataServicePriceAtTest {
         assertThat(r.source()).isEqualTo("VIOP_SNAPSHOT_SERIES");
     }
 
+    @Test
+    void priceAtBackfillKeepsPrefixedContractCodeForProviderHistory() {
+        LocalDate day = LocalDate.now(ZoneId.of("Europe/Istanbul")).minusDays(1);
+        ViopPriceHistoryEntity fetched = row("F_SISE0726", day.atTime(17, 0), "54.11");
+        when(historyRepository.findByContractCodeAndPriceTimeGreaterThanEqualAndPriceTimeLessThanOrderByPriceTimeAsc(
+                        anyString(), any(), any()))
+                .thenReturn(List.of(), List.of(), List.of(), List.of(), List.of(fetched));
+        when(historyRepository.findTopByContractCodeAndPriceTimeLessThanOrderByPriceTimeDesc(anyString(), any()))
+                .thenReturn(Optional.empty());
+        when(client.fetchHistorical(eq("F_SISE0726"), any(), any(), eq(60)))
+                .thenReturn("{\"data\":[[1779206400000,54.11]],\"timestamp\":\"2026-05-25T20:41:03.2714219+03:00\"}");
+        when(historyRepository.insertIgnore(anyString(), anyString(), anyString(), anyString(), any(), any(), anyInt(), anyString(), any()))
+                .thenReturn(1);
+
+        ViopPriceAtResponse r = service.getPriceAt("SISE0726", day);
+
+        assertThat(r.matchType()).isEqualTo(ViopPriceMatchType.EXACT.name());
+        assertThat(r.price()).isEqualByComparingTo(new BigDecimal("54.11"));
+        verify(client).fetchHistorical(eq("F_SISE0726"), any(), any(), eq(60));
+    }
+
     private static ViopPriceHistoryEntity row(LocalDateTime t, String price) {
+        return row("F_USDTRY1226", t, price);
+    }
+
+    private static ViopPriceHistoryEntity row(String contractCode, LocalDateTime t, String price) {
         ViopPriceHistoryEntity e = new ViopPriceHistoryEntity();
-        e.setContractCode("F_USDTRY1226");
+        e.setContractCode(contractCode);
         e.setUnderlying("USDTRY");
         e.setAssetClass("FX");
         e.setSegment("FX_TRY_FUTURES");

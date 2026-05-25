@@ -12,6 +12,11 @@ describe('apiVersion', () => {
         expect(withApiVersion('/api/dashboard/summary')).toBe('/api/v1/dashboard/summary');
     });
 
+    it('keeps legacy public auth paths unversioned', () => {
+        expect(withApiVersion('/api/public/login')).toBe('/api/public/login');
+        expect(withApiVersion('/api/public/token/refresh')).toBe('/api/public/token/refresh');
+    });
+
     it('leaves internal paths unchanged', () => {
         expect(withApiVersion('/internal/users/by-sub/abc')).toBe('/internal/users/by-sub/abc');
     });
