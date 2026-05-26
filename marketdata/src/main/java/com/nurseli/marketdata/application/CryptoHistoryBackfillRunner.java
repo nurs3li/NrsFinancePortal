@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class CryptoHistoryBackfillRunner implements ApplicationRunner {
     private final CryptoHistoryBackfillProperties properties;
-    private final CryptoPriceIngestService ingestService;
+    private final CryptoHistoryWarmupService warmupService;
     private final ConfigurableApplicationContext context;
 
     @Override
@@ -33,7 +33,7 @@ public class CryptoHistoryBackfillRunner implements ApplicationRunner {
             return;
         }
         try {
-            ingestService.fetchAndSaveHistoryBackfill(periodDays);
+            warmupService.warmSupportedSymbolsSync(periodDays, "startup-backfill");
             log.info("[CRYPTO_HISTORY_BACKFILL] Done");
         } catch (Exception ex) {
             log.error("[CRYPTO_HISTORY_BACKFILL] Failed: {}", ex.getMessage(), ex);

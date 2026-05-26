@@ -95,6 +95,35 @@ public interface MarketPriceHistoryRepository
             @Param("end") LocalDateTime end
     );
 
+    @Query("""
+        SELECT COUNT(m)
+        FROM MarketPriceHistory m
+        WHERE m.symbol = :symbol
+          AND m.timestamp >= :start
+          AND m.timestamp < :endExclusive
+    """)
+    long countBySymbolAndTimestampRange(
+            @Param("symbol") String symbol,
+            @Param("start") LocalDateTime start,
+            @Param("endExclusive") LocalDateTime endExclusive
+    );
+
+    @Query(
+            value = """
+                    SELECT COUNT(DISTINCT CAST(timestamp AS DATE))
+                    FROM market_price_history
+                    WHERE symbol = :symbol
+                      AND timestamp >= :start
+                      AND timestamp < :endExclusive
+                    """,
+            nativeQuery = true
+    )
+    long countDistinctTradeDaysBySymbolAndTimestampRange(
+            @Param("symbol") String symbol,
+            @Param("start") LocalDateTime start,
+            @Param("endExclusive") LocalDateTime endExclusive
+    );
+
     // --- BIST günlük (HisseTekil) — IS_YATIRIM kaynaklı satırlar ---
 
     Optional<MarketPriceHistory> findBySymbolAndSourceAndTimestamp(
@@ -128,6 +157,24 @@ public interface MarketPriceHistoryRepository
             @Param("source") String source,
             @Param("start") LocalDateTime start,
             @Param("endExclusive") LocalDateTime endExclusive);
+
+    @Query(
+            value = """
+                    SELECT COUNT(DISTINCT CAST(timestamp AS DATE))
+                    FROM market_price_history
+                    WHERE symbol = :symbol
+                      AND source = :source
+                      AND timestamp >= :start
+                      AND timestamp < :endExclusive
+                    """,
+            nativeQuery = true
+    )
+    long countDistinctTradeDaysBySymbolAndSourceAndTimestampRange(
+            @Param("symbol") String symbol,
+            @Param("source") String source,
+            @Param("start") LocalDateTime start,
+            @Param("endExclusive") LocalDateTime endExclusive
+    );
 
     @Query(
             """

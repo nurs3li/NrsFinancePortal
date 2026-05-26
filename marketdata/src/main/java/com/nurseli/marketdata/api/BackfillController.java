@@ -2,7 +2,10 @@ package com.nurseli.marketdata.api;
 
 import com.nurseli.marketdata.api.dto.BistBackfillRequest;
 import com.nurseli.marketdata.api.dto.BistBackfillResponse;
+import com.nurseli.marketdata.api.dto.CryptoHistoryWarmupResponse;
 import com.nurseli.marketdata.api.dto.IsyatirimMetalBackfillResponse;
+import com.nurseli.marketdata.application.CryptoHistoryWarmupService;
+import com.nurseli.marketdata.application.FundPriceIngestService;
 import com.nurseli.marketdata.application.IsyatirimMetalUsdBackfillService;
 import com.nurseli.marketdata.application.MarketPriceBackfillService;
 import com.nurseli.marketdata.application.ViopBackfillRunner;
@@ -16,6 +19,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Sadece internal / admin amaçlı backfill endpoint'i.
@@ -33,6 +39,8 @@ public class BackfillController {
     private final ViopBackfillRunner viopBackfillRunner;
     private final BistEquityBackfillService bistEquityBackfillService;
     private final IsyatirimMetalUsdBackfillService isyatirimMetalUsdBackfillService;
+    private final CryptoHistoryWarmupService cryptoHistoryWarmupService;
+    private final FundPriceIngestService fundPriceIngestService;
 
     @Value("${app.internal.backfill-token:}")
     private String internalBackfillToken;
@@ -68,10 +76,7 @@ public class BackfillController {
     public ResponseEntity<?> backfillBistDaily(
             @RequestHeader(value = INTERNAL_BACKFILL_HEADER, required = false) String headerToken,
             @RequestBody(required = false) BistBackfillRequest body) {
-        if (internalBackfillToken == null
-                || internalBackfillToken.isBlank()
-                || headerToken == null
-                || !internalBackfillToken.equals(headerToken)) {
+        if (!hasValidInternalToken(headerToken)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         BistBackfillResponse resp =
@@ -91,14 +96,74 @@ public class BackfillController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false, defaultValue = "false") boolean force
     ) {
-        if (internalBackfillToken == null
-                || internalBackfillToken.isBlank()
-                || headerToken == null
-                || !internalBackfillToken.equals(headerToken)) {
+        if (!hasValidInternalToken(headerToken)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         IsyatirimMetalBackfillResponse resp =
                 isyatirimMetalUsdBackfillService.run(symbols, from, to, force);
         return ResponseEntity.ok(resp);
+    }
+
+    @PostMapping("/crypto-history")
+    public ResponseEntity<?> warmupCryptoHistory(
+            @RequestHeader(value = INTERNAL_BACKFILL_HEADER, required = false) String headerToken,
+            @RequestParam(required = false) String symbols,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false, defaultValue = "manual") String reason
+    ) {
+        if (!hasValidInternalToken(headerToken)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        List<String> symbolList = symbols == null || symbols.isBlank()
+                ? List.of()
+                : Arrays.stream(symbols.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+        CryptoHistoryWarmupResponse resp =
+                cryptoHistoryWarmupService.requestWarmup(symbolList, from, to, reason);
+        return ResponseEntity.ok(resp);
+    }
+
+    @PostMapping("/etf-history")
+    public ResponseEntity<?> backfillEtfHistory(
+            @RequestHeader(value = INTERNAL_BACKFILL_HEADER, required = false) String headerToken,
+            @RequestParam(required = false) String symbols,
+            @RequestParam(name = "days", defaultValue = "365") int days
+    ) {
+        if (!hasValidInternalToken(headerToken)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        List<String> symbolList = symbols == null || symbols.isBlank()
+                ? List.of()
+                : Arrays.stream(symbols.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+        int inserted = fundPriceIngestService.ingestHistoryForSymbols(symbolList, days);
+        int symbolCount = symbolList.isEmpty() ? 0 : symbolList.size();
+        return ResponseEntity.ok(Map.of(
+                "status", "DONE",
+                "requestedSymbols", symbolCount,
+                "days", days,
+                "insertedRows", inserted
+        ));
+    }
+
+    private boolean hasValidInternalToken(String headerToken) {
+        String configuredToken = resolveInternalBackfillToken();
+        return configuredToken != null
+                && !configuredToken.isBlank()
+                && headerToken != null
+                && configuredToken.equals(headerToken);
+    }
+
+    private String resolveInternalBackfillToken() {
+        if (internalBackfillToken != null && !internalBackfillToken.isBlank()) {
+            return internalBackfillToken;
+        }
+        String env = System.getenv("NRS_INTERNAL_BACKFILL_TOKEN");
+        return env != null && !env.isBlank() ? env.trim() : internalBackfillToken;
     }
 }

@@ -58,6 +58,7 @@ public class MarketStaleTailRepairService {
     private final MarketPriceIngestService marketPriceIngestService;
     private final MetalPriceIngestService metalPriceIngestService;
     private final IsYatirimMetalUsdIngestService isYatirimMetalUsdIngestService;
+    private final MetalHistoryWarmupService metalHistoryWarmupService;
     private final MarketMetalsIsyatirimProperties marketMetalsIsyatirimProperties;
     private final DebtIngestService debtIngestService;
 
@@ -168,10 +169,20 @@ public class MarketStaleTailRepairService {
     }
 
     private void repairMetal(String symbol, LocalDate targetTo) {
+        LocalDate warmupFrom = targetTo.minusYears(Math.max(1, marketMetalsIsyatirimProperties.getDefaultLookbackYears()));
         if ("XAU_TRY".equals(symbol)) {
             Optional<MarketPriceHistory> latest =
                     marketPriceHistoryRepository.findTopBySymbolOrderByTimestampDesc(symbol);
             LocalDate lastDay = latest.map(r -> r.getTimestamp().toLocalDate()).orElse(null);
+            if (lastDay == null) {
+                try {
+                    log.info("[STALE_TAIL] XAU_TRY empty_db warmupFrom={} targetTo={}", warmupFrom, targetTo);
+                    metalHistoryWarmupService.warmupSymbolSync(symbol, warmupFrom, targetTo, "stale-tail-empty-db");
+                } catch (Exception ex) {
+                    log.warn("[STALE_TAIL] XAU_TRY empty_db failed reason={}", ex.getMessage());
+                }
+                return;
+            }
             if (isDailyStale(Optional.ofNullable(lastDay), targetTo)) {
                 try {
                     int days = (int) Math.min(90, Math.max(14, targetTo.toEpochDay() - (lastDay != null ? lastDay.toEpochDay() : targetTo.toEpochDay()) + 5));
@@ -194,6 +205,15 @@ public class MarketStaleTailRepairService {
                 marketPriceHistoryRepository.findTopBySymbolAndSourceOrderByTimestampDesc(
                         symbol, PreciousMetalUsdCatalog.SOURCE);
         LocalDate lastDay = latest.map(r -> r.getTimestamp().toLocalDate()).orElse(null);
+        if (lastDay == null) {
+            try {
+                log.info("[STALE_TAIL] metal-usd empty_db symbol={} warmupFrom={} targetTo={}", symbol, warmupFrom, targetTo);
+                metalHistoryWarmupService.warmupSymbolSync(symbol, warmupFrom, targetTo, "stale-tail-empty-db");
+            } catch (Exception ex) {
+                log.warn("[STALE_TAIL] metal-usd empty_db failed symbol={} reason={}", symbol, ex.getMessage());
+            }
+            return;
+        }
         if (!isDailyStale(Optional.ofNullable(lastDay), targetTo)) {
             return;
         }

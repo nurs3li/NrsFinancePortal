@@ -1,12 +1,15 @@
 package com.nurseli.marketdata.api;
 
+import com.nurseli.marketdata.api.dto.CryptoHistoryCoverageResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceHistoryResponse;
 import com.nurseli.marketdata.application.MarketPriceQueryService;
 import com.nurseli.marketdata.domain.price.CryptoSymbolMapping;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,5 +56,23 @@ public class CryptoMarketController {
             @RequestParam(defaultValue = "7") int days
     ) {
         return queryService.getCryptoHistory(symbol, days);
+    }
+
+    @GetMapping("/history/prefilled")
+    public List<MarketPriceHistoryResponse> prefilledHistory(
+            @RequestParam String symbol,
+            @RequestParam(defaultValue = "30") int days,
+            @RequestParam(defaultValue = "daily") String bucket
+    ) {
+        return queryService.getPrefilledCryptoHistory(symbol, days, bucket);
+    }
+
+    @GetMapping("/history/coverage")
+    public CryptoHistoryCoverageResponse historyCoverage(
+            @RequestParam String symbol,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return queryService.getCryptoHistoryCoverage(symbol, from, to);
     }
 }

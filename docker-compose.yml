@@ -385,6 +385,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
       SPRING_DATA_REDIS_HOST: nrs-redis
       MARKET_DATA_SERVICE_URL: http://nrs-market-data:8083
+      MARKET_DATA_INTERNAL_BACKFILL_TOKEN: ${NRS_INTERNAL_BACKFILL_TOKEN:-local-docker-bist-backfill}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
       KEYCLOAK_ADMIN_ENABLED: ${KEYCLOAK_ADMIN_ENABLED:-true}
       KEYCLOAK_ADMIN_SERVER_URL: ${KEYCLOAK_ADMIN_SERVER_URL:-http://nrs-keycloak:8080}

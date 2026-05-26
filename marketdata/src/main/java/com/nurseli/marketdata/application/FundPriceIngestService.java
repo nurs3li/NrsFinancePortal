@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -84,22 +85,19 @@ public class FundPriceIngestService {
         if (symbol == null || symbol.isBlank()) {
             return;
         }
+        String normalized = symbol.trim().toUpperCase(Locale.ROOT);
         LocalDate end = LocalDate.now();
-        int freshDays = Math.max(1, etfProperties.getHistorySkipIfFreshWithinDays());
-        LocalDate freshCutoff = end.minusDays(freshDays);
-        var latest = repository.findTopBySymbolOrderByTimestampDesc(symbol.trim().toUpperCase(Locale.ROOT));
-        if (latest.isPresent() && latest.get().getTimestamp() != null) {
-            LocalDate lastDay = latest.get().getTimestamp().toLocalDate();
-            if (!lastDay.isBefore(freshCutoff)) {
-                log.debug("[ETF][HISTORY] skip symbol={} lastDay={} (fresh within {}d)", symbol, lastDay, freshDays);
-                return;
-            }
+        LocalDate start = end.minusDays(Math.max(1, periodDays));
+        if (hasSufficientHistoryCoverage(normalized, start, end)) {
+            log.debug("[ETF][HISTORY] skip symbol={} (sufficient coverage {}..{})", normalized, start, end);
+            return;
         }
-        ingestHistory(symbol, periodDays);
+        int inserted = ingestHistory(normalized, periodDays);
+        log.info("[ETF][HISTORY] refresh symbol={} inserted={} periodDays={}", normalized, inserted, periodDays);
     }
 
     @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
-    public void ingestHistory(String symbol, int periodDays) {
+    public int ingestHistory(String symbol, int periodDays) {
         try {
             LocalDate end = LocalDate.now();
             LocalDate start = end.minusDays(Math.max(1, periodDays));
@@ -111,9 +109,21 @@ public class FundPriceIngestService {
                 inserted += ingestHistoryFromYahoo(symbol, start, end, periodDays);
             }
             log.info("[ETF][HISTORY] Backfill done symbol={} inserted={} periodDays={}", symbol, inserted, periodDays);
+            return inserted;
         } catch (Exception e) {
             log.error("[ETF][HISTORY] Backfill failed symbol={} periodDays={}", symbol, periodDays, e);
+            return 0;
         }
+    }
+
+    @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
+    public int ingestHistoryForSymbols(List<String> rawSymbols, int periodDays) {
+        List<String> symbols = normalizeConfiguredSymbols(rawSymbols);
+        int totalInserted = 0;
+        for (String symbol : symbols) {
+            totalInserted += ingestHistory(symbol, periodDays);
+        }
+        return totalInserted;
     }
 
     private boolean useYahooOnlyForHistory(String symbol) {
@@ -136,6 +146,60 @@ public class FundPriceIngestService {
 
     private static int minRowsBeforeYahooFallback(int periodDays) {
         return Math.max(40, Math.min(periodDays / 2, 180));
+    }
+
+    private boolean hasSufficientHistoryCoverage(String symbol, LocalDate start, LocalDate end) {
+        int freshDays = Math.max(1, etfProperties.getHistorySkipIfFreshWithinDays());
+        LocalDate freshCutoff = end.minusDays(freshDays);
+        var latest = repository.findTopBySymbolOrderByTimestampDesc(symbol);
+        if (latest.isEmpty() || latest.get().getTimestamp() == null) {
+            return false;
+        }
+        LocalDate lastDay = latest.get().getTimestamp().toLocalDate();
+        if (lastDay.isBefore(freshCutoff)) {
+            return false;
+        }
+        var oldest = repository.findTopBySymbolOrderByTimestampAsc(symbol);
+        if (oldest.isEmpty() || oldest.get().getTimestamp() == null) {
+            return false;
+        }
+        LocalDate oldestDay = oldest.get().getTimestamp().toLocalDate();
+        if (oldestDay.isAfter(start.plusDays(coverageStartToleranceDays(start, end)))) {
+            return false;
+        }
+        long rows = repository.countBySymbolAndTimestampRange(
+                symbol,
+                start.atStartOfDay(),
+                end.plusDays(1).atStartOfDay()
+        );
+        return rows >= minimumCoverageRows(start, end);
+    }
+
+    private static long minimumCoverageRows(LocalDate start, LocalDate end) {
+        long calendarDays = Math.max(1, ChronoUnit.DAYS.between(start, end) + 1);
+        return Math.max(5, Math.round(calendarDays * 0.55d));
+    }
+
+    private static long coverageStartToleranceDays(LocalDate start, LocalDate end) {
+        long calendarDays = Math.max(1, ChronoUnit.DAYS.between(start, end) + 1);
+        return Math.min(14, Math.max(3, calendarDays / 30));
+    }
+
+    private List<String> normalizeConfiguredSymbols(List<String> rawSymbols) {
+        if (rawSymbols == null || rawSymbols.isEmpty()) {
+            return etfProperties.getSymbols() == null
+                    ? List.of()
+                    : etfProperties.getSymbols().stream()
+                    .filter(s -> s != null && !s.isBlank())
+                    .map(s -> s.trim().toUpperCase(Locale.ROOT))
+                    .distinct()
+                    .toList();
+        }
+        return rawSymbols.stream()
+                .filter(s -> s != null && !s.isBlank())
+                .map(s -> s.trim().toUpperCase(Locale.ROOT))
+                .distinct()
+                .toList();
     }
 
     private int ingestHistoryFromFinnhub(String symbol, LocalDate start, LocalDate end) {
@@ -179,7 +243,7 @@ public class FundPriceIngestService {
 
     private int ingestHistoryFromYahoo(String symbol, LocalDate start, LocalDate end, int periodDays) {
         int inserted = 0;
-        List<YahooChartClient.YahooDailyBar> bars = yahooChartClient.fetchDailyBars(symbol, periodDays >= 365 ? "1y" : "6mo");
+        List<YahooChartClient.YahooDailyBar> bars = yahooChartClient.fetchDailyBars(symbol, yahooRangeForPeriod(periodDays));
         for (YahooChartClient.YahooDailyBar bar : bars) {
             LocalDate day = bar.day();
             if (day.isBefore(start) || day.isAfter(end)) {
@@ -202,5 +266,27 @@ public class FundPriceIngestService {
             inserted++;
         }
         return inserted;
+    }
+
+    private static String yahooRangeForPeriod(int periodDays) {
+        if (periodDays >= 3650) {
+            return "10y";
+        }
+        if (periodDays >= 1825) {
+            return "5y";
+        }
+        if (periodDays >= 730) {
+            return "2y";
+        }
+        if (periodDays >= 365) {
+            return "1y";
+        }
+        if (periodDays >= 180) {
+            return "6mo";
+        }
+        if (periodDays >= 90) {
+            return "3mo";
+        }
+        return "1mo";
     }
 }

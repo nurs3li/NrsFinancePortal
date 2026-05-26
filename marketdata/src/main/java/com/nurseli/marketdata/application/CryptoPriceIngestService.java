@@ -17,8 +17,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -139,48 +141,94 @@ public class CryptoPriceIngestService {
 
     @Transactional
     @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
+    public void ensureHistoryCoverage(String symbol, LocalDate requestedFrom, LocalDate requestedTo) {
+        if (symbol == null || symbol.isBlank() || requestedFrom == null || requestedTo == null) {
+            return;
+        }
+        String sym = normalizeSymbol(symbol);
+        if (sym == null) {
+            return;
+        }
+        String coinId = CryptoSymbolMapping.SYMBOL_TO_ID.get(sym);
+        if (coinId == null) {
+            return;
+        }
+        LocalDate today = LocalDate.now(MARKET_WALL_CLOCK_ZONE);
+        LocalDate to = requestedTo.isAfter(today) ? today : requestedTo;
+        if (requestedFrom.isAfter(to)) {
+            return;
+        }
+        Optional<CryptoDailyCandle> oldest = cryptoDailyCandleRepository.findTopBySymbolOrderByAsOfAsc(sym);
+        if (oldest.isPresent() && !oldest.get().getAsOf().isAfter(requestedFrom)) {
+            return;
+        }
+
+        int requestedDays = Math.toIntExact(Math.max(1, ChronoUnit.DAYS.between(requestedFrom, to) + 2));
+        List<CoinGeckoClient.OhlcPoint> points = coinGeckoClient.fetchDailyMarketChart(coinId, requestedDays);
+        if (points.isEmpty() && requestedDays <= 365) {
+            points = coinGeckoClient.fetchDailyOhlc(coinId, requestedDays);
+        }
+        int inserted = saveMissingDailyCandles(sym, points, to);
+        log.info(
+                "[CRYPTO_HISTORY] ensure_coverage symbol={} from={} to={} points={} inserted={}",
+                sym, requestedFrom, to, points.size(), inserted
+        );
+    }
+
+    @Transactional
+    @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
     public void ingestIncrementalForSymbol(String symbol) {
         if (symbol == null || symbol.isBlank()) {
             return;
         }
-        String sym = symbol.trim().toUpperCase();
-        String coinId = CryptoSymbolMapping.SYMBOL_TO_ID.get(sym);
-        if (coinId == null) {
-            String alt = sym.endsWith("USDT") ? sym : sym + "USDT";
-            coinId = CryptoSymbolMapping.SYMBOL_TO_ID.get(alt);
-            if (coinId != null) {
-                sym = alt;
-            }
-        }
+        String sym = normalizeSymbol(symbol);
+        String coinId = sym == null ? null : CryptoSymbolMapping.SYMBOL_TO_ID.get(sym);
         if (coinId == null) {
             return;
         }
         LocalDate today = LocalDate.now();
         try {
             List<CoinGeckoClient.OhlcPoint> points = coinGeckoClient.fetchDailyOhlc(coinId, 14);
-            for (CoinGeckoClient.OhlcPoint p : points) {
-                if (p.day().isAfter(today)) {
-                    continue;
-                }
-                if (cryptoDailyCandleRepository.existsBySymbolAndAsOf(sym, p.day())) {
-                    continue;
-                }
-                CryptoDailyCandle candle = new CryptoDailyCandle();
-                candle.setSymbol(sym);
-                candle.setAsOf(p.day());
-                candle.setOpenPrice(p.open());
-                candle.setHighPrice(p.high());
-                candle.setLowPrice(p.low());
-                candle.setClosePrice(p.close());
-                candle.setVolume(p.volume());
-                candle.setSource("COINGECKO_OHLC");
-                cryptoDailyCandleRepository.save(candle);
-            }
+            saveMissingDailyCandles(sym, points, today);
             sleepQuietly(800);
         } catch (Exception ex) {
             log.debug("[CRYPTO_HISTORY] incremental symbol={} reason={}", sym, ex.getMessage());
             sleepQuietly(800);
         }
+    }
+
+    private String normalizeSymbol(String symbol) {
+        String sym = symbol.trim().toUpperCase();
+        String coinId = CryptoSymbolMapping.SYMBOL_TO_ID.get(sym);
+        if (coinId != null) {
+            return sym;
+        }
+        String alt = sym.endsWith("USDT") ? sym : sym + "USDT";
+        return CryptoSymbolMapping.SYMBOL_TO_ID.containsKey(alt) ? alt : null;
+    }
+
+    private int saveMissingDailyCandles(String symbol, List<CoinGeckoClient.OhlcPoint> points, LocalDate today) {
+        int inserted = 0;
+        for (CoinGeckoClient.OhlcPoint p : points) {
+            if (p == null || p.day() == null || p.day().isAfter(today)) {
+                continue;
+            }
+            if (cryptoDailyCandleRepository.existsBySymbolAndAsOf(symbol, p.day())) {
+                continue;
+            }
+            CryptoDailyCandle candle = new CryptoDailyCandle();
+            candle.setSymbol(symbol);
+            candle.setAsOf(p.day());
+            candle.setOpenPrice(p.open());
+            candle.setHighPrice(p.high());
+            candle.setLowPrice(p.low());
+            candle.setClosePrice(p.close());
+            candle.setVolume(p.volume());
+            candle.setSource("COINGECKO_OHLC");
+            cryptoDailyCandleRepository.save(candle);
+            inserted++;
+        }
+        return inserted;
     }
 
     private void sleepQuietly(long millis) {

@@ -122,6 +122,53 @@ public class CoinGeckoMetalClient {
     }
 
     /**
+     * CoinGecko market_chart/range: belirli tarih aralığı için günlük TRY/ONS fiyatları.
+     */
+    public List<DailyGoldTryPoint> fetchGoldTryHistoryPerOunceRange(LocalDate fromInclusive, LocalDate toInclusive) {
+        if (fromInclusive == null || toInclusive == null || toInclusive.isBefore(fromInclusive)) {
+            return List.of();
+        }
+        long fromEpoch = fromInclusive.atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+        long toEpoch = toInclusive.plusDays(1).atStartOfDay(ZoneOffset.UTC).minusSeconds(1).toEpochSecond();
+        String url = baseUrl + "/coins/pax-gold/market_chart/range?vs_currency=try&from=" + fromEpoch + "&to=" + toEpoch;
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(baseHeaders()), Map.class);
+            Map<?, ?> body = response.getBody();
+            if (body == null || !(body.get("prices") instanceof List<?> prices)) {
+                return List.of();
+            }
+
+            List<DailyGoldTryPoint> out = new ArrayList<>();
+            for (Object rowObj : prices) {
+                if (!(rowObj instanceof List<?> row) || row.size() < 2) {
+                    continue;
+                }
+                Object tsObj = row.get(0);
+                Object pxObj = row.get(1);
+                if (tsObj == null || pxObj == null) {
+                    continue;
+                }
+                long epochMs = new BigDecimal(tsObj.toString()).longValue();
+                LocalDate date = Instant.ofEpochMilli(epochMs).atZone(ZoneOffset.UTC).toLocalDate();
+                BigDecimal ounceTry = new BigDecimal(pxObj.toString());
+                if (ounceTry.signum() <= 0) {
+                    continue;
+                }
+                out.add(new DailyGoldTryPoint(date, ounceTry));
+            }
+            return out;
+        } catch (Exception e) {
+            log.warn(
+                    "[COINGECKO] Failed to fetch metal history range from={} to={} reason={}",
+                    fromInclusive,
+                    toInclusive,
+                    e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
      * CoinGecko OHLC: günlük TRY/ONS mum verisi (open/high/low/close).
      */
     public List<DailyGoldTryOhlcPoint> fetchGoldTryOhlcHistoryPerOunce(int days) {

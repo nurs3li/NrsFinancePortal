@@ -9,6 +9,7 @@ import java.util.Optional;
 
 public interface CryptoDailyCandleRepository extends JpaRepository<CryptoDailyCandle, Long> {
     long countBySymbolAndAsOfGreaterThanEqual(String symbol, LocalDate minAsOf);
+    long countBySymbolAndAsOfBetween(String symbol, LocalDate from, LocalDate to);
 
     boolean existsBySymbolAndAsOf(String symbol, LocalDate asOf);
     List<CryptoDailyCandle> findBySymbolAndAsOfBetweenOrderByAsOfAsc(String symbol, LocalDate from, LocalDate to);
@@ -18,4 +19,6 @@ public interface CryptoDailyCandleRepository extends JpaRepository<CryptoDailyCa
     Optional<CryptoDailyCandle> findBySymbolAndAsOf(String symbol, LocalDate asOf);
 
     Optional<CryptoDailyCandle> findTopBySymbolOrderByAsOfDesc(String symbol);
+
+    Optional<CryptoDailyCandle> findTopBySymbolOrderByAsOfAsc(String symbol);
 }

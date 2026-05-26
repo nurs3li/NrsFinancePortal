@@ -2,6 +2,7 @@ package com.nurseli.marketdata.application;
 
 import com.nurseli.marketdata.api.dto.BatchHistoryResponse;
 import com.nurseli.marketdata.api.dto.CandlePointResponse;
+import com.nurseli.marketdata.api.dto.CryptoHistoryCoverageResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceHistoryResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceLatestResponse;
 import com.nurseli.marketdata.api.dto.MarketType;
@@ -74,10 +75,11 @@ public class MarketPriceQueryService {
     private final EtfProperties etfProperties;
     private final TefasProperties tefasProperties;
     private final EquityMarketCapService equityMarketCapService;
-    private final MetalPriceIngestService metalPriceIngestService;
+    private final CryptoPriceIngestService cryptoPriceIngestService;
     private final MarketMetalsIsyatirimProperties marketMetalsIsyatirimProperties;
     private final PreciousMetalUsdChangeCalculator preciousMetalUsdChangeCalculator;
     private final MarketStaleTailRepairService marketStaleTailRepairService;
+    private final MetalHistoryWarmupService metalHistoryWarmupService;
 
     public MarketPriceLatestResponse getLatestOrThrow(String symbol) {
         return repository
@@ -215,6 +217,7 @@ public class MarketPriceQueryService {
             if (!PreciousMetalUsdCatalog.isUsdOunceMetal(symbol)) {
                 continue;
             }
+            metalHistoryWarmupService.requestWarmupIfMissing(symbol, start.toLocalDate(), end.toLocalDate(), "read:precious-usd-batch");
             List<MarketPriceHistory> rows = findUsdOunceMetalRawHistory(symbol, start, end);
             series.put(symbol, toDailyCandles(rows));
         }
@@ -315,19 +318,12 @@ public class MarketPriceQueryService {
         if (rawSymbol == null || rawSymbol.isBlank()) {
             throw new InvalidRequestException("symbol zorunludur.");
         }
-        String symbol = rawSymbol.trim().toUpperCase();
-        if (!isAllowedSymbol(MarketType.CRYPTO, symbol)) {
-            String maybeUsdt = symbol.endsWith("USDT") ? symbol : symbol + "USDT";
-            if (isAllowedSymbol(MarketType.CRYPTO, maybeUsdt)) {
-                symbol = maybeUsdt;
-            } else {
-                throw new InvalidRequestException("type=CRYPTO için geçersiz symbol: " + symbol);
-            }
-        }
+        String symbol = normalizeCryptoSymbol(rawSymbol);
         LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
         LocalDate to = end.toLocalDate();
         marketStaleTailRepairService.repairBeforeRead(MarketType.CRYPTO, symbol, to);
+        ensureCryptoHistoryCoverage(symbol, start.toLocalDate(), to);
         List<CandlePointResponse> candles = toCryptoCandles(symbol, start.toLocalDate(), to);
         if (!candles.isEmpty()) {
             if (useTickGapFillForLookbackDays(days)) {
@@ -336,6 +332,59 @@ public class MarketPriceQueryService {
             return toHistoryFromCandles(candles);
         }
         return getHistory(symbol, days);
+    }
+
+    /**
+     * Simülasyon gibi DB-first akışlar için: yalnızca veritabanında hazır olan günlük kripto history kapsamasını döner.
+     */
+    public CryptoHistoryCoverageResponse getCryptoHistoryCoverage(String rawSymbol, LocalDate from, LocalDate to) {
+        if (from == null || to == null || to.isBefore(from)) {
+            throw new InvalidRequestException("from/to geçersiz.");
+        }
+        String symbol = normalizeCryptoSymbol(rawSymbol);
+        LocalDate today = LocalDate.now(MARKET_WALL_CLOCK_ZONE);
+        LocalDate effectiveTo = to.isAfter(today) ? today : to;
+        Optional<CryptoDailyCandle> oldest = cryptoDailyCandleRepository.findTopBySymbolOrderByAsOfAsc(symbol);
+        Optional<CryptoDailyCandle> newest = cryptoDailyCandleRepository.findTopBySymbolOrderByAsOfDesc(symbol);
+        long availableDays = cryptoDailyCandleRepository.countBySymbolAndAsOfBetween(symbol, from, effectiveTo);
+        long expectedDays = ChronoUnit.DAYS.between(from, effectiveTo) + 1;
+        boolean ready = oldest.map(CryptoDailyCandle::getAsOf).filter(day -> !day.isAfter(from)).isPresent()
+                && newest.map(CryptoDailyCandle::getAsOf).filter(day -> !day.isBefore(effectiveTo)).isPresent()
+                && availableDays >= expectedDays;
+        return new CryptoHistoryCoverageResponse(
+                symbol,
+                from,
+                effectiveTo,
+                oldest.map(CryptoDailyCandle::getAsOf).orElse(null),
+                newest.map(CryptoDailyCandle::getAsOf).orElse(null),
+                availableDays,
+                expectedDays,
+                ready
+        );
+    }
+
+    /**
+     * DB-first okuma: request yolunda dış provider tetiklemeden günlük/saatlik kripto history döner.
+     */
+    public List<MarketPriceHistoryResponse> getPrefilledCryptoHistory(String rawSymbol, int days, String rawBucket) {
+        validateDays(days);
+        String bucket = normalizeBucket(rawBucket);
+        validateBucketForType(MarketType.CRYPTO, bucket);
+        String symbol = normalizeCryptoSymbol(rawSymbol);
+        LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
+        LocalDateTime start = end.minusDays(days);
+        if ("hourly".equals(bucket)) {
+            return toHistoryFromCandles(hourlyStripFromPriceHistory(symbol, days), "SYSTEM_DB");
+        }
+        List<CandlePointResponse> candles = toCryptoCandles(symbol, start.toLocalDate(), end.toLocalDate());
+        if (!candles.isEmpty() && useTickGapFillForLookbackDays(days)) {
+            candles = mergeDailyPreferDailyFillGapsFromTicks(symbol, candles, start.toLocalDate(), end.toLocalDate());
+        }
+        if (candles.isEmpty()) {
+            List<MarketPriceHistory> rows = repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
+            candles = toDailyCandles(rows);
+        }
+        return toHistoryFromCandles(candles, "SYSTEM_DB");
     }
 
     /**
@@ -372,12 +421,7 @@ public class MarketPriceQueryService {
         }
         LocalDate effectiveTo = from != null ? to : end.toLocalDate();
         marketStaleTailRepairService.repairBeforeRead(MarketType.METALS, symbol, effectiveTo);
-        if ("XAU_TRY".equals(symbol)) {
-            int backfillDays = from != null
-                    ? (int) Math.min(365L, ChronoUnit.DAYS.between(from, to) + 1)
-                    : days;
-            metalPriceIngestService.ensureHistoricalBackfill(backfillDays);
-        }
+        metalHistoryWarmupService.requestWarmupIfMissing(symbol, start.toLocalDate(), effectiveTo, "read:metal-history");
         List<MarketPriceHistory> rows = PreciousMetalUsdCatalog.isUsdOunceMetal(symbol)
                 ? findUsdOunceMetalRawHistory(symbol, start, end)
                 : repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
@@ -450,6 +494,9 @@ public class MarketPriceQueryService {
 
         for (String symbol : symbols) {
             marketStaleTailRepairService.repairBeforeRead(type, symbol, to);
+            if (type == MarketType.METALS) {
+                metalHistoryWarmupService.requestWarmupIfMissing(symbol, from, to, "read:batch-history");
+            }
             if (type == MarketType.FX) {
                 if ("hourly".equals(bucket)) {
                     List<CandlePointResponse> hourly = hourlyStripFromPriceHistory(symbol, days);
@@ -465,6 +512,7 @@ public class MarketPriceQueryService {
                 }
             }
             if (type == MarketType.CRYPTO) {
+                ensureCryptoHistoryCoverage(symbol, from, to);
                 if ("hourly".equals(bucket)) {
                     List<CandlePointResponse> hourly = hourlyStripFromPriceHistory(symbol, days);
                     if (hourly.size() >= 2) {
@@ -759,6 +807,18 @@ public class MarketPriceQueryService {
         };
     }
 
+    private String normalizeCryptoSymbol(String rawSymbol) {
+        String symbol = rawSymbol == null ? "" : rawSymbol.trim().toUpperCase();
+        if (isAllowedSymbol(MarketType.CRYPTO, symbol)) {
+            return symbol;
+        }
+        String maybeUsdt = symbol.endsWith("USDT") ? symbol : symbol + "USDT";
+        if (isAllowedSymbol(MarketType.CRYPTO, maybeUsdt)) {
+            return maybeUsdt;
+        }
+        throw new InvalidRequestException("type=CRYPTO için geçersiz symbol: " + symbol);
+    }
+
     private List<CandlePointResponse> toDailyCandles(List<MarketPriceHistory> rows) {
         if (rows == null || rows.isEmpty()) return List.of();
 
@@ -915,6 +975,17 @@ public class MarketPriceQueryService {
                 .toList();
     }
 
+    private void ensureCryptoHistoryCoverage(String symbol, LocalDate from, LocalDate to) {
+        if (symbol == null || symbol.isBlank() || from == null || to == null || to.isBefore(from)) {
+            return;
+        }
+        Optional<CryptoDailyCandle> oldest = cryptoDailyCandleRepository.findTopBySymbolOrderByAsOfAsc(symbol);
+        if (oldest.isPresent() && !oldest.get().getAsOf().isAfter(from)) {
+            return;
+        }
+        cryptoPriceIngestService.ensureHistoryCoverage(symbol, from, to);
+    }
+
     private List<CandlePointResponse> toFxCandles(String symbol, LocalDate from, LocalDate to) {
         List<FxDailyCandle> rows = fxDailyCandleRepository.findBySymbolAndAsOfBetweenOrderByAsOfAsc(symbol, from, to);
         if (rows == null || rows.isEmpty()) {
@@ -996,13 +1067,20 @@ public class MarketPriceQueryService {
 
         LocalDateTime end = LocalDateTime.now(MARKET_WALL_CLOCK_ZONE);
         LocalDateTime start = end.minusDays(days);
+        if (type == MarketType.METALS) {
+            marketStaleTailRepairService.repairBeforeRead(MarketType.METALS, symbol, end.toLocalDate());
+            metalHistoryWarmupService.requestWarmupIfMissing(symbol, start.toLocalDate(), end.toLocalDate(), "read:indicators");
+        }
 
         List<MarketPriceHistory> rows =
                 repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(symbol, start, end);
 
         List<CandlePointResponse> candles = switch (type) {
             case EQUITY -> toEquityCandles(symbol, start.toLocalDate(), end.toLocalDate());
-            case CRYPTO -> toCryptoCandles(symbol, start.toLocalDate(), end.toLocalDate());
+            case CRYPTO -> {
+                ensureCryptoHistoryCoverage(symbol, start.toLocalDate(), end.toLocalDate());
+                yield toCryptoCandles(symbol, start.toLocalDate(), end.toLocalDate());
+            }
             case FX -> toFxCandles(symbol, start.toLocalDate(), end.toLocalDate());
             default -> List.of();
         };

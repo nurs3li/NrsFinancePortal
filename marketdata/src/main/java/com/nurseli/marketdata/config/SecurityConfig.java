@@ -52,6 +52,8 @@ public class SecurityConfig {
                                 ApiPaths.v1FromLegacy("/api/debt/**"), "/api/debt/**"
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/market/backfill/bist-daily").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/internal/market/backfill/crypto-history").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/internal/market/backfill/etf-history").permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/market/backfill/isyatirim-metals-usd").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 ApiPaths.v1FromLegacy("/api/admin/**"), "/api/admin/**")

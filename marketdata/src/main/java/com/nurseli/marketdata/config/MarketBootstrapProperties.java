@@ -29,6 +29,9 @@ public class MarketBootstrapProperties {
     /** Eurobond: satır sayısı bu eşiğin altındaysa tam seed (from config). */
     private int eurobondFullSeedRowThreshold = 20;
 
+    /** Kredi faizleri: kısmi/tekil seed tespitinde tam geçmiş ingest tetikler. */
+    private int loanRatesFullSeedRowThreshold = 20;
+
     /** Eurobond dolu DB'de son N hafta refresh (gap yoksa bile makro güncelleme). */
     private int eurobondRecentWeeksWhenSeeded = 4;
 }

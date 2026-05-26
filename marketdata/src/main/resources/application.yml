@@ -261,6 +261,13 @@ market:
     backfill:
       enabled: ${DEPOSIT_RATES_BACKFILL_ENABLED:true}
       from: ${DEPOSIT_RATES_BACKFILL_FROM:2020-01-01}
+  loan-rates:
+    enabled: ${LOAN_RATES_ENABLED:true}
+    scheduler-enabled: ${LOAN_RATES_SCHEDULER_ENABLED:true}
+    scheduler-cron: ${LOAN_RATES_SCHEDULER_CRON:0 5 7 * * MON}
+    backfill:
+      enabled: ${LOAN_RATES_BACKFILL_ENABLED:true}
+      from: ${LOAN_RATES_BACKFILL_FROM:2020-01-01}
   providers:
     debt:
       enabled: ${DEBT_PROVIDER_ENABLED:false}
@@ -587,6 +594,10 @@ app:
             chart-type: PRICE_SERIES
             enabled: true
     metals:
+      history-warmup:
+        enabled: true
+        max-range-chunk-days: 180
+        delay-between-chunks-ms: 350
       isyatirim:
         enabled: true
         base-url: https://www.isyatirim.com.tr
