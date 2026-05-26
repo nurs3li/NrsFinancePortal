@@ -28,6 +28,8 @@ class DebtQueryServiceTest {
 
   @Mock private DebtInstrumentRepository debtInstrumentRepository;
   @Mock private DebtSnapshotRepository debtSnapshotRepository;
+  @Mock private DebtHistoryWarmupService debtHistoryWarmupService;
+  @Mock private MarketStaleTailRepairService marketStaleTailRepairService;
 
   @InjectMocks private DebtQueryService service;
 

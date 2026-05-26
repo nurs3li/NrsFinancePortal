@@ -2936,6 +2936,77 @@
     font-size: 13px;
 }
 
+/* Tahvil hero: secili enstruman basligini daha fazla alanla koru,
+   donemsel horizon hucrelerini saga yasla ki fiyat/meta blogu sıkışmasin. */
+.terminal-hero--bond .terminal-hero-selector-row {
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 12px;
+}
+
+.terminal-hero--bond .terminal-hero-selector-row > .terminal-hero-selector--with-inline-quote {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: min(620px, 100%);
+    justify-content: flex-start;
+    gap: 18px;
+}
+
+.terminal-hero--bond .terminal-hero-horizons {
+    margin-left: 0;
+    justify-content: flex-start;
+    gap: 10px;
+    flex: 0 0 auto;
+    min-width: auto;
+    padding: 0;
+}
+
+.terminal-hero--bond .terminal-hero-horizons__cell {
+    flex: 0 0 auto;
+    min-width: 48px;
+}
+
+.terminal-hero--bond .terminal-hero-selector__meta-title {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.1;
+}
+
+.terminal-hero--bond .terminal-hero-selector__meta-symbol {
+    white-space: nowrap;
+}
+
+.terminal-hero--bond .terminal-hero-selector__quote {
+    margin-left: 6px;
+}
+
+.terminal-hero--bond .terminal-hero-selector__quote-main {
+    gap: 8px;
+}
+
+.terminal-hero--bond .terminal-hero-selector--with-inline-quote > div:first-child {
+    flex: 0 1 auto !important;
+    min-width: 0;
+}
+
+.terminal-hero--bond .terminal-hero-selector--with-inline-quote .terminal-hero-selector__quote {
+    flex: 0 0 auto;
+}
+
+@media (max-width: 1400px) {
+    .terminal-hero--bond .terminal-hero-selector-row {
+        flex-wrap: wrap;
+    }
+
+    .terminal-hero--bond .terminal-hero-horizons {
+        width: 100%;
+        justify-content: flex-start;
+        padding-top: 2px;
+    }
+}
+
 /* Karşılaştırma kartı: grafik üstü chip şeridi */
 .terminal-comparison-card__chip-row {
     margin: 0 0 10px;

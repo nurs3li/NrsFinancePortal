@@ -45,3 +45,5 @@ databaseChangeLog:
       file: db/changelog/v21-eurobond-instrument-price.yaml
   - include:
       file: db/changelog/v22-bank-fx-latest.yaml
+  - include:
+      file: db/changelog/v23-debt-snapshot-uniq.yaml

@@ -1,6 +1,7 @@
 package com.nurseli.marketdata.application;
 
 import com.nurseli.marketdata.application.debt.DebtCouponFrequencyPersistence;
+import com.nurseli.marketdata.config.EvdsProperties;
 import com.nurseli.marketdata.domain.debt.DebtInstrument;
 import com.nurseli.marketdata.domain.debt.DebtSnapshot;
 import com.nurseli.marketdata.infrastructure.debt.DebtMarketClient;
@@ -13,13 +14,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,6 +33,7 @@ public class DebtIngestService {
     private final DebtMarketClient debtMarketClient;
     private final EvdsDebtClient evdsDebtClient;
     private final DebtCouponFrequencyPersistence debtCouponFrequencyPersistence;
+    private final EvdsProperties evdsProperties;
 
     @Transactional
     public void ingestLatest() {
@@ -69,24 +71,9 @@ public class DebtIngestService {
                 seeds.isEmpty() ? "NONE" : resolveSource(seeds.get(0)));
 
         for (SeedDebt s : seeds) {
-            DebtInstrument instrument = debtInstrumentRepository.findByIsin(s.isin())
-                    .orElseGet(() -> {
-                        DebtInstrument i = new DebtInstrument();
-                        i.setIsin(s.isin());
-                        i.setName(s.name());
-                        i.setIssuer(s.issuer());
-                        i.setMaturityDate(s.maturityDate());
-                        return debtInstrumentRepository.save(i);
-                    });
+            DebtInstrument instrument = ensureInstrument(s);
             debtCouponFrequencyPersistence.ensurePersistedIfMissing(instrument);
-
-            DebtSnapshot snapshot = new DebtSnapshot();
-            snapshot.setIsin(instrument.getIsin());
-            snapshot.setDirtyPrice(s.dirtyPrice() != null ? s.dirtyPrice() : BigDecimal.ZERO);
-            snapshot.setYieldPct(s.couponRate() != null ? s.couponRate() : BigDecimal.ZERO);
-            snapshot.setSource(resolveSource(s));
-            snapshot.setAsOf(s.asOf() != null ? s.asOf() : now);
-            debtSnapshotRepository.save(snapshot);
+            saveSnapshotIfMissing(instrument, s, now);
         }
     }
 
@@ -155,9 +142,46 @@ public class DebtIngestService {
     @Transactional
     public void ingestEvdsHistoryBackfill(int lookbackDays) {
         int safeLookback = Math.max(30, Math.min(lookbackDays, 730));
-        List<SeedDebt> evdsRows = evdsDebtClient.fetchLatest(safeLookback).stream()
+        LocalDate to = LocalDate.now();
+        LocalDate from = to.minusDays(safeLookback - 1L);
+        int inserted = ingestHistoryForConfiguredInstruments(from, to, "startup-backfill");
+        log.info("[DEBT_HISTORY_BACKFILL] periodDays={} from={} to={} inserted={}", safeLookback, from, to, inserted);
+    }
+
+    @Transactional
+    public int ingestHistoryForConfiguredInstruments(LocalDate from, LocalDate to, String reason) {
+        List<EvdsProperties.Instrument> instruments = configuredDebtInstruments();
+        if (from == null || to == null || to.isBefore(from) || instruments.isEmpty()) {
+            return 0;
+        }
+        int inserted = 0;
+        for (EvdsProperties.Instrument instrument : instruments) {
+            inserted += ingestHistoryRange(instrument, from, to, reason);
+        }
+        return inserted;
+    }
+
+    @Transactional
+    public int ingestHistoryRange(String isin, LocalDate from, LocalDate to, String reason) {
+        EvdsProperties.Instrument instrument = configuredInstrument(isin);
+        if (instrument == null) {
+            log.warn("[DEBT_HISTORY] skip unknown_isin isin={} from={} to={} reason={}", isin, from, to, reason);
+            return 0;
+        }
+        return ingestHistoryRange(instrument, from, to, reason);
+    }
+
+    private static String normIsin(String isin) {
+        return isin == null ? "" : isin.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private int ingestHistoryRange(EvdsProperties.Instrument instrument, LocalDate from, LocalDate to, String reason) {
+        if (instrument == null || from == null || to == null || to.isBefore(from)) {
+            return 0;
+        }
+        List<SeedDebt> rows = evdsDebtClient.fetchInstrumentHistory(instrument, from, to).stream()
                 .map(r -> new SeedDebt(
-                        r.isin(),
+                        normIsin(r.isin()),
                         r.name(),
                         r.issuer(),
                         r.maturityDate(),
@@ -167,54 +191,82 @@ public class DebtIngestService {
                         r.asOf(),
                         false
                 ))
-                .toList();
-        if (evdsRows.isEmpty()) {
-            log.warn("[DEBT_HISTORY_BACKFILL] No EVDS rows fetched for lookbackDays={}", safeLookback);
-            return;
-        }
-        Map<String, List<SeedDebt>> byIsin = evdsRows.stream()
                 .filter(r -> r.isin() != null && !r.isin().isBlank() && r.asOf() != null)
-                .collect(Collectors.groupingBy(SeedDebt::isin));
-        for (Map.Entry<String, List<SeedDebt>> entry : byIsin.entrySet()) {
-            String isin = entry.getKey();
-            List<SeedDebt> rows = entry.getValue().stream()
-                    .sorted(Comparator.comparing(SeedDebt::asOf))
-                    .toList();
-            DebtInstrument instrument = debtInstrumentRepository.findByIsin(isin)
-                    .orElseGet(() -> {
-                        SeedDebt first = rows.get(0);
-                        DebtInstrument i = new DebtInstrument();
-                        i.setIsin(first.isin());
-                        i.setName(first.name());
-                        i.setIssuer(first.issuer());
-                        i.setMaturityDate(first.maturityDate());
-                        return debtInstrumentRepository.save(i);
-                    });
-            debtCouponFrequencyPersistence.ensurePersistedIfMissing(instrument);
-            Set<LocalDateTime> existingDates = debtSnapshotRepository.findByIsinOrderByAsOfAsc(isin).stream()
-                    .map(DebtSnapshot::getAsOf)
-                    .collect(Collectors.toCollection(HashSet::new));
-            int inserted = 0;
-            for (SeedDebt s : rows) {
-                if (s.asOf() == null || existingDates.contains(s.asOf())) {
-                    continue;
-                }
-                DebtSnapshot snapshot = new DebtSnapshot();
-                snapshot.setIsin(instrument.getIsin());
-                snapshot.setDirtyPrice(s.dirtyPrice());
-                snapshot.setYieldPct(s.couponRate() != null ? s.couponRate() : BigDecimal.ZERO);
-                snapshot.setSource(resolveSource(s));
-                snapshot.setAsOf(s.asOf());
-                debtSnapshotRepository.save(snapshot);
-                existingDates.add(s.asOf());
-                inserted++;
-            }
-            log.info("[DEBT_HISTORY_BACKFILL] isin={} rows={} inserted={}", isin, rows.size(), inserted);
+                .sorted(Comparator.comparing(SeedDebt::asOf))
+                .toList();
+        if (rows.isEmpty()) {
+            log.info("[DEBT_HISTORY] no_rows isin={} from={} to={} reason={}", instrument.getIsin(), from, to, reason);
+            return 0;
         }
+        DebtInstrument storedInstrument = ensureInstrument(rows.getFirst());
+        debtCouponFrequencyPersistence.ensurePersistedIfMissing(storedInstrument);
+        int inserted = 0;
+        for (SeedDebt row : rows) {
+            inserted += saveSnapshotIfMissing(storedInstrument, row, row.asOf());
+        }
+        log.info(
+                "[DEBT_HISTORY] isin={} from={} to={} fetchedRows={} inserted={} reason={}",
+                storedInstrument.getIsin(),
+                from,
+                to,
+                rows.size(),
+                inserted,
+                reason);
+        return inserted;
     }
 
-    private static String normIsin(String isin) {
-        return isin == null ? "" : isin.trim().toUpperCase(Locale.ROOT);
+    private List<EvdsProperties.Instrument> configuredDebtInstruments() {
+        if (evdsProperties.getDebt() == null || evdsProperties.getDebt().getInstruments() == null) {
+            return List.of();
+        }
+        return evdsProperties.getDebt().getInstruments().stream()
+                .filter(i -> i != null && i.getIsin() != null && !i.getIsin().isBlank())
+                .toList();
+    }
+
+    private EvdsProperties.Instrument configuredInstrument(String isin) {
+        String key = normIsin(isin);
+        if (key.isBlank()) {
+            return null;
+        }
+        return configuredDebtInstruments().stream()
+                .filter(i -> key.equals(normIsin(i.getIsin())))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private DebtInstrument ensureInstrument(SeedDebt seed) {
+        return debtInstrumentRepository.findByIsin(seed.isin())
+                .map(existing -> {
+                    existing.setName(seed.name());
+                    existing.setIssuer(seed.issuer());
+                    existing.setMaturityDate(seed.maturityDate());
+                    return debtInstrumentRepository.save(existing);
+                })
+                .orElseGet(() -> {
+                    DebtInstrument i = new DebtInstrument();
+                    i.setIsin(seed.isin());
+                    i.setName(seed.name());
+                    i.setIssuer(seed.issuer());
+                    i.setMaturityDate(seed.maturityDate());
+                    return debtInstrumentRepository.save(i);
+                });
+    }
+
+    private int saveSnapshotIfMissing(DebtInstrument instrument, SeedDebt seed, LocalDateTime defaultAsOf) {
+        String source = resolveSource(seed);
+        LocalDateTime asOf = seed.asOf() != null ? seed.asOf() : defaultAsOf;
+        if (asOf == null || debtSnapshotRepository.existsByIsinAndSourceAndAsOf(instrument.getIsin(), source, asOf)) {
+            return 0;
+        }
+        DebtSnapshot snapshot = new DebtSnapshot();
+        snapshot.setIsin(instrument.getIsin());
+        snapshot.setDirtyPrice(seed.dirtyPrice() != null ? seed.dirtyPrice() : BigDecimal.ZERO);
+        snapshot.setYieldPct(seed.couponRate() != null ? seed.couponRate() : BigDecimal.ZERO);
+        snapshot.setSource(source);
+        snapshot.setAsOf(asOf);
+        debtSnapshotRepository.save(snapshot);
+        return 1;
     }
 
     private record SeedDebt(

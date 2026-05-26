@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class DebtHistoryBackfillRunner implements ApplicationRunner {
     private final DebtHistoryBackfillProperties properties;
-    private final DebtIngestService debtIngestService;
+    private final DebtHistoryWarmupService debtHistoryWarmupService;
     private final ConfigurableApplicationContext context;
 
     @Override
@@ -33,7 +33,7 @@ public class DebtHistoryBackfillRunner implements ApplicationRunner {
             return;
         }
         try {
-            debtIngestService.ingestEvdsHistoryBackfill(periodDays);
+            debtHistoryWarmupService.warmConfiguredIsinsSync(periodDays, "startup-backfill-runner");
             log.info("[DEBT_HISTORY_BACKFILL] Done");
         } catch (Exception ex) {
             log.error("[DEBT_HISTORY_BACKFILL] Failed: {}", ex.getMessage(), ex);

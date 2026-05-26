@@ -3,8 +3,10 @@ package com.nurseli.marketdata.api;
 import com.nurseli.marketdata.api.dto.BistBackfillRequest;
 import com.nurseli.marketdata.api.dto.BistBackfillResponse;
 import com.nurseli.marketdata.api.dto.CryptoHistoryWarmupResponse;
+import com.nurseli.marketdata.api.dto.DebtHistoryWarmupResponse;
 import com.nurseli.marketdata.api.dto.IsyatirimMetalBackfillResponse;
 import com.nurseli.marketdata.application.CryptoHistoryWarmupService;
+import com.nurseli.marketdata.application.DebtHistoryWarmupService;
 import com.nurseli.marketdata.application.FundPriceIngestService;
 import com.nurseli.marketdata.application.IsyatirimMetalUsdBackfillService;
 import com.nurseli.marketdata.application.MarketPriceBackfillService;
@@ -40,6 +42,7 @@ public class BackfillController {
     private final BistEquityBackfillService bistEquityBackfillService;
     private final IsyatirimMetalUsdBackfillService isyatirimMetalUsdBackfillService;
     private final CryptoHistoryWarmupService cryptoHistoryWarmupService;
+    private final DebtHistoryWarmupService debtHistoryWarmupService;
     private final FundPriceIngestService fundPriceIngestService;
 
     @Value("${app.internal.backfill-token:}")
@@ -123,6 +126,28 @@ public class BackfillController {
                 .toList();
         CryptoHistoryWarmupResponse resp =
                 cryptoHistoryWarmupService.requestWarmup(symbolList, from, to, reason);
+        return ResponseEntity.ok(resp);
+    }
+
+    @PostMapping("/debt-history")
+    public ResponseEntity<?> warmupDebtHistory(
+            @RequestHeader(value = INTERNAL_BACKFILL_HEADER, required = false) String headerToken,
+            @RequestParam(required = false) String isins,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false, defaultValue = "manual") String reason
+    ) {
+        if (!hasValidInternalToken(headerToken)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        List<String> isinList = isins == null || isins.isBlank()
+                ? List.of()
+                : Arrays.stream(isins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+        DebtHistoryWarmupResponse resp =
+                debtHistoryWarmupService.requestWarmup(isinList, from, to, reason);
         return ResponseEntity.ok(resp);
     }
 

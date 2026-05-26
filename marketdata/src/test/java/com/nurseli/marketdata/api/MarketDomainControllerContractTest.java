@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.api;
 
+import com.nurseli.marketdata.api.dto.DebtHistoryCoverageResponse;
 import com.nurseli.marketdata.api.dto.DebtInstrumentResponse;
 import com.nurseli.marketdata.api.dto.DebtSnapshotResponse;
 import com.nurseli.marketdata.api.dto.ViopHistoryResponse;
@@ -228,6 +229,16 @@ class MarketDomainControllerContractTest {
                         null,
                         null)));
         when(debtQueryService.history("TRT010531T16", 7)).thenReturn(List.of());
+        when(debtQueryService.getCoverage("TRT010531T16", java.time.LocalDate.of(2026, 5, 1), java.time.LocalDate.of(2026, 5, 7)))
+                .thenReturn(new DebtHistoryCoverageResponse(
+                        "TRT010531T16",
+                        java.time.LocalDate.of(2026, 5, 1),
+                        java.time.LocalDate.of(2026, 5, 7),
+                        java.time.LocalDate.of(2026, 5, 1),
+                        java.time.LocalDate.of(2026, 5, 7),
+                        7,
+                        7,
+                        true));
 
         mockMvc.perform(get("/api/market/debt/catalog"))
                 .andExpect(status().isOk())
@@ -239,5 +250,12 @@ class MarketDomainControllerContractTest {
                 .andExpect(jsonPath("$.data[0].source").value("DEBT_MVP"))
                 .andExpect(jsonPath("$.data[0].asOf").exists());
         mockMvc.perform(get("/api/market/debt/history").param("isin", "TRT010531T16")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/market/debt/history/coverage")
+                        .param("isin", "TRT010531T16")
+                        .param("from", "2026-05-01")
+                        .param("to", "2026-05-07"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.ready").value(true));
     }
 }
