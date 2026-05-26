@@ -1,5 +1,6 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ShieldCheck } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -9,6 +10,7 @@ import {
     PasswordChangeModal,
     UsernameEditModal,
 } from '../components/settings/ProfileEditModals';
+import { SettingsCard } from '../components/settings/SettingsCard';
 import { SettingsProfileCard } from '../components/settings/SettingsProfileCard';
 import { SettingsTwoFactorCard } from '../components/settings/SettingsTwoFactorCard';
 import { fetchCurrentUser, formatUserFullName } from '../services/userApi';
@@ -62,30 +64,51 @@ export function UserSettings() {
     return (
         <div className="settings-page" style={pageVars}>
             <header className="settings-page__header">
-                <h1 className="settings-page__title">{t('settings.pageTitle', 'Hesap Ayarları')}</h1>
-                <p className="settings-page__subtitle">
-                    {t('settings.pageSubtitle', 'Hesap bilgilerinizi görüntüleyin ve güncelleyin.')}
-                </p>
+                <div>
+                    <h1 className="settings-page__title">{t('settings.pageTitle', 'Hesap Ayarları')}</h1>
+                    <p className="settings-page__subtitle">
+                        {t('settings.pageSubtitle', 'Hesap bilgilerinizi görüntüleyin ve güncelleyin.')}
+                    </p>
+                </div>
+                <div className="settings-page__hero-art" aria-hidden>
+                    <div className="settings-page__hero-ring" />
+                    <div className="settings-page__hero-icon">
+                        <ShieldCheck size={34} strokeWidth={1.9} />
+                    </div>
+                </div>
             </header>
 
             <div className="settings-layout">
-                <div className="settings-layout__profile">
-                    <SettingsProfileCard
-                        user={me ?? null}
-                        displayName={displayName}
-                        email={email}
-                        memberSinceLabel={memberSinceLabel}
-                        loading={isLoading}
-                        onEditUsername={() => setActiveModal('username')}
-                        onEditEmail={() => setActiveModal('email')}
-                        onEditFullName={() => setActiveModal('fullName')}
-                        onEditPassword={() => setActiveModal('password')}
-                    />
-                </div>
+                <SettingsCard
+                    className="settings-shell-card"
+                    title={t('settings.accountCardTitle', 'Profil ve Güvenlik')}
+                    subtitle={t(
+                        'settings.accountCardSubtitle',
+                        'Hesap bilgilerinizi yönetin ve güvenlik tercihlerinizi tek yerden kontrol edin.'
+                    )}
+                    action={
+                        <div className="settings-shell-card__badge" aria-hidden>
+                            <ShieldCheck size={16} strokeWidth={2} />
+                        </div>
+                    }
+                >
+                    <div className="settings-shell-stack">
+                        <SettingsProfileCard
+                            embedded
+                            user={me ?? null}
+                            displayName={displayName}
+                            email={email}
+                            memberSinceLabel={memberSinceLabel}
+                            loading={isLoading}
+                            onEditUsername={() => setActiveModal('username')}
+                            onEditEmail={() => setActiveModal('email')}
+                            onEditFullName={() => setActiveModal('fullName')}
+                            onEditPassword={() => setActiveModal('password')}
+                        />
 
-                <div className="settings-layout__side">
-                    <SettingsTwoFactorCard disabled={me?.id == null && authUser?.id == null} />
-                </div>
+                        <SettingsTwoFactorCard embedded disabled={me?.id == null && authUser?.id == null} />
+                    </div>
+                </SettingsCard>
             </div>
 
             <UsernameEditModal

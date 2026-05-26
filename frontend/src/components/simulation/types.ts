@@ -9,6 +9,8 @@ export type SimulationPerformancePoint = {
 export type SimDisplayCurrency = 'TRY' | 'USD';
 
 export type SimulationResponse = {
+    status?: 'READY' | 'PREPARING' | string;
+    retryAfterSeconds?: number | null;
     type: string;
     symbol: string;
     buyDate: string | null;
@@ -22,7 +24,7 @@ export type SimulationResponse = {
     pnlPct: number;
     buyPriceSource: 'SYSTEM_HISTORY' | 'USER_INPUT' | string;
     historicalPriceDate: string | null;
-    qualityFlag?: 'EXACT' | 'PREVIOUS_DAY' | 'FALLBACK' | 'MISSING' | string;
+    qualityFlag?: 'EXACT' | 'EXACT_HOURLY' | 'PREVIOUS_DAY' | 'FALLBACK' | 'MISSING' | string;
     performanceSeries: SimulationPerformancePoint[];
     message: string;
     approximationNoticeCode?: string | null;

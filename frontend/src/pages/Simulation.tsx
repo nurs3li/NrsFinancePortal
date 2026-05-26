@@ -18,7 +18,7 @@ import { SimulationPerformanceChart } from '../components/simulation/SimulationP
 import { SimulationResultsList } from '../components/simulation/SimulationResultsList';
 import { SimulationResultDetailDrawer } from '../components/simulation/SimulationResultDetailDrawer';
 import { SimulationHistoryCard } from '../components/simulation/SimulationHistoryCard';
-import { SIMULATION_USD_DENOMINATED } from '../components/simulation/constants';
+import { SIMULATION_HISTORY_PREPARING, SIMULATION_USD_DENOMINATED } from '../components/simulation/constants';
 import {
     appendSimulationHistory,
     cloneHistoryItemsForSession,
@@ -219,6 +219,14 @@ export function Simulation() {
             },
         });
         const dto = unwrapData<SimulationResponse>(res);
+        if (
+            String(dto.status ?? '').toUpperCase() === 'PREPARING' ||
+            dto.approximationNoticeCode === SIMULATION_HISTORY_PREPARING
+        ) {
+            throw new Error(
+                dto.message || t('simulation.historyPreparing', 'Kripto geçmiş verisi hazırlanıyor. Birkaç dakika sonra tekrar deneyin.'),
+            );
+        }
         const displayCurrency = parseDisplayCurrency(dto.displayCurrency);
         const label = scenarioLabel.trim();
         return {

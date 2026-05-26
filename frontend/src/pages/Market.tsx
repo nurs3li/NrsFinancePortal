@@ -617,6 +617,22 @@ function historyRowsToSyntheticCandles(rows: MarketHistoryPoint[]): CandlePoint[
     });
 }
 
+function compareTimeKey(rawTime: string | undefined, preserveIntraday: boolean): string {
+    const raw = String(rawTime ?? '').trim();
+    if (!raw) return '';
+    return preserveIntraday ? raw : raw.slice(0, 10);
+}
+
+function compareTimeKeyMs(key: string): number {
+    if (!key) return Number.NaN;
+    if (key.includes('T')) {
+        const ms = Date.parse(key);
+        return Number.isFinite(ms) ? ms : Number.NaN;
+    }
+    const ms = Date.parse(`${key}T00:00:00`);
+    return Number.isFinite(ms) ? ms : Number.NaN;
+}
+
 /** Grafik serisi gerçekten değişmediyse gereksiz parent re-render / fitContent tetiklenmesin. */
 function chartPriceSeriesSignature(points: { time: string; price?: number; close?: number }[]): string {
     if (!points.length) return 'empty';
@@ -1530,6 +1546,8 @@ export function Market() {
     const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
     const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
     const [loadingCompare, setLoadingCompare] = useState(false);
+    const [compareError, setCompareError] = useState<string | null>(null);
+    const compareRequestSeqRef = useRef(0);
     /** Piyasa listesi: spot terminal düzeninde sol kartta sabit; diğer düzenlerde popover. */
     const [instrumentListOpen, setInstrumentListOpen] = useState(false);
     const terminalHeroRef = useRef<HTMLDivElement | null>(null);
@@ -1745,8 +1763,9 @@ export function Market() {
             financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => unwrapData(r)),
         enabled: activeCategory !== 'FUTURES' && activeCategory !== 'BOND' && !isTefasFundsView,
         staleTime: 30_000,
-        refetchInterval: activeCategory === 'FUTURES' || activeCategory === 'BOND' ? false : 12_000,
+        refetchInterval: activeCategory === 'FUTURES' || activeCategory === 'BOND' ? false : 30_000,
         refetchOnWindowFocus: false,
+        placeholderData: (prev) => prev,
     });
 
     const {
@@ -3784,15 +3803,6 @@ export function Market() {
         ppChartAnchor,
     );
 
-    const onAnalysisCrosshairDate = useCallback((d: string) => {
-        const { first, last, today } = ppAnchorBoundsRef.current;
-        if (!d) {
-            if (first) setPpChartAnchor(clampPpAnchorYmd(first, first, last, today));
-            return;
-        }
-        setPpChartAnchor(clampPpAnchorYmd(d, first, last, today));
-    }, []);
-
     const drawerInstrumentPrice = useMemo(
         () =>
             selectedInstrumentVm
@@ -4138,9 +4148,12 @@ export function Market() {
             .slice(0, 5);
     }, [activeCategory, dashboard]);
 
+    const compareChartSymbols = useMemo(() => compareSymbols.slice(0, 4), [compareSymbols]);
+    const compareChartColors = useMemo(() => ['#38bdf8', '#22c55e', '#eab308', '#f87171'], []);
+
     const lineWidthBySymbol = useMemo(() => {
         const out: Record<string, number> = {};
-        const slice = compareSymbols.slice(0, 4);
+        const slice = compareChartSymbols;
         const vols = slice.map((s) => {
             const vm = instrumentVms.find((x) => x.symbol === s);
             if (vm && TREND_SELECTABLE_CATEGORIES.has(vm.category)) {
@@ -4158,48 +4171,72 @@ export function Market() {
             out[sym] = 2 + Math.min(2.5, (v / max) * 2.5);
         }
         return out;
-    }, [compareSymbols, instruments, instrumentVms, trendChartRange]);
+    }, [compareChartSymbols, instruments, instrumentVms, trendChartRange]);
 
-    const loadCompare = useCallback(() => {
+    useEffect(() => {
         const bistCompare =
             activeCategory === 'EQUITY' && equitySubmarket === 'BIST' && compareSymbols.length >= 2;
+        const compareUsesHourlyBucket =
+            (activeCategory === 'EQUITY' ||
+                activeCategory === 'FX' ||
+                activeCategory === 'CRYPTO' ||
+                activeCategory === 'METALS') &&
+            range === '1D';
         if (
-            compareSymbols.length < 2 ||
+            compareChartSymbols.length < 2 ||
             (activeCategory !== 'FUTURES' && !marketType && !bistCompare)
         ) {
+            compareRequestSeqRef.current += 1;
+            setLoadingCompare(false);
+            setCompareError(null);
             setCompareRows((prev) => (prev.length === 0 ? prev : []));
             return;
         }
+
+        const signalController = new AbortController();
+        const requestId = ++compareRequestSeqRef.current;
+        const symbols = compareChartSymbols;
+        const isCompareRequestCurrent = () =>
+            !signalController.signal.aborted && requestId === compareRequestSeqRef.current;
+
         setLoadingCompare(true);
-        const symbols = compareSymbols.slice(0, 4);
-        const request =
-            activeCategory === 'FUTURES'
-                ? (() => {
-                      const now = new Date();
-                      const fromMs = now.getTime() - Math.max(1, days) * 86_400_000;
-                      const from = formatEuropeIstanbulLocalIso(new Date(fromMs));
-                      const to = formatEuropeIstanbulLocalIso(now);
-                      return Promise.all(
-                          symbols.map((sym) => {
-                              const contract = resolveViopHistoryContract(
-                                  sym,
-                                  viopContractBySymbol,
-                                  viopSnapshotBySymbol,
-                              );
-                              if (!contract) {
-                                  return Promise.resolve([sym, null] as const);
-                              }
-                              return marketClient
-                                  .get<ViopHistoryApi>(
-                                      `/api/market/viop/contracts/${encodeURIComponent(contract)}/history`,
-                                      {
-                                          params: { from, to, period: 60 },
-                                      },
-                                  )
-                                  .then((res) => [sym, res.data] as const)
-                                  .catch(() => [sym, null] as const);
-                          }),
-                      ).then((rows) => {
+        setCompareError(null);
+
+        const loadCompare = async () => {
+            const batch =
+                activeCategory === 'FUTURES'
+                    ? await (async () => {
+                          const now = new Date();
+                          const fromMs = now.getTime() - Math.max(1, days) * 86_400_000;
+                          const from = formatEuropeIstanbulLocalIso(new Date(fromMs));
+                          const to = formatEuropeIstanbulLocalIso(now);
+                          const rows = await Promise.all(
+                              symbols.map((sym) => {
+                                  const contract = resolveViopHistoryContract(
+                                      sym,
+                                      viopContractBySymbol,
+                                      viopSnapshotBySymbol,
+                                  );
+                                  if (!contract) {
+                                      return Promise.resolve([sym, null] as const);
+                                  }
+                                  return marketClient
+                                      .get<ViopHistoryApi>(
+                                          `/api/market/viop/contracts/${encodeURIComponent(contract)}/history`,
+                                          {
+                                              params: { from, to, period: 60 },
+                                              signal: signalController.signal,
+                                          },
+                                      )
+                                      .then((res) => [sym, res.data] as const)
+                                      .catch((error) => {
+                                          if (signalController.signal.aborted) {
+                                              throw error;
+                                          }
+                                          return [sym, null] as const;
+                                      });
+                              }),
+                          );
                           const series: Record<string, CandlePoint[]> = {};
                           rows.forEach(([sym, hist]) => {
                               if (!hist) return;
@@ -4213,84 +4250,168 @@ export function Market() {
                               }));
                           });
                           return { series } satisfies BatchHistoryResponse;
-                      });
-                  })()
-                : bistCompare
-                  ? getBistBatchHistory(symbols, bistMainHistoryRange.from, bistMainHistoryRange.to).then((resp) => {
-                        const series: Record<string, CandlePoint[]> = {};
-                        const hist = resp.historiesBySymbol ?? {};
-                        symbols.forEach((sym) => {
-                            const rowsRaw = hist[sym] ?? hist[normalizeSymbolKey(sym)] ?? [];
-                            const sorted = [...rowsRaw].sort((a, b) =>
-                                String(a.date ?? '').localeCompare(String(b.date ?? ''))
-                            );
-                            series[sym] = sorted.map((row) => {
-                                const c = bistPickClose(row);
-                                const d = String(row.date ?? '').slice(0, 10);
-                                return {
-                                    t: `${d}T12:00:00`,
-                                    o: c,
-                                    h: c,
-                                    l: c,
-                                    c,
-                                    v: 0,
-                                };
+                      })()
+                    : bistCompare
+                      ? await getBistBatchHistory(
+                            symbols,
+                            bistMainHistoryRange.from,
+                            bistMainHistoryRange.to,
+                            signalController.signal,
+                        ).then((resp) => {
+                            const series: Record<string, CandlePoint[]> = {};
+                            const hist = resp.historiesBySymbol ?? {};
+                            symbols.forEach((sym) => {
+                                const rowsRaw = hist[sym] ?? hist[normalizeSymbolKey(sym)] ?? [];
+                                const sorted = [...rowsRaw].sort((a, b) =>
+                                    String(a.date ?? '').localeCompare(String(b.date ?? ''))
+                                );
+                                series[sym] = sorted.map((row) => {
+                                    const c = bistPickClose(row);
+                                    const d = String(row.date ?? '').slice(0, 10);
+                                    return {
+                                        t: `${d}T12:00:00`,
+                                        o: c,
+                                        h: c,
+                                        l: c,
+                                        c,
+                                        v: 0,
+                                    };
+                                });
                             });
-                        });
-                        return { series } satisfies BatchHistoryResponse;
-                    })
-                  : marketClient
-                        .get<BatchHistoryResponse>('/api/market/history/batch', {
-                            params: {
-                                type: marketType,
-                                symbols: symbols.join(','),
-                                days,
-                                ...((activeCategory === 'EQUITY' ||
-                                    activeCategory === 'FX' ||
-                                    activeCategory === 'CRYPTO' ||
-                                    activeCategory === 'METALS') &&
-                                range === '1D'
-                                    ? { bucket: 'hourly' }
-                                    : {}),
-                            },
+                            return { series } satisfies BatchHistoryResponse;
                         })
-                        .then((res) => res.data);
+                      : await (async () => {
+                            const symbolEntries = symbols.map((sym) => ({
+                                symbol: sym,
+                                apiSymbol:
+                                    activeCategory === 'METALS' && normalizeSymbolKey(sym) === 'ALTIN_TRY'
+                                        ? 'XAU_TRY'
+                                        : sym,
+                            }));
+                            const batch = await marketClient
+                                .get<BatchHistoryResponse>('/api/market/history/batch', {
+                                    params: {
+                                        type: marketType,
+                                        symbols: symbolEntries.map((entry) => entry.apiSymbol).join(','),
+                                        days,
+                                        ...(compareUsesHourlyBucket ? { bucket: 'hourly' } : {}),
+                                    },
+                                    signal: signalController.signal,
+                                })
+                                .then((res) => res.data);
+                            const series: Record<string, CandlePoint[]> = { ...(batch?.series ?? {}) };
+                            symbolEntries.forEach(({ symbol, apiSymbol }) => {
+                                if (apiSymbol !== symbol && !series[symbol] && series[apiSymbol]) {
+                                    series[symbol] = series[apiSymbol];
+                                }
+                            });
+                            if (!compareUsesHourlyBucket && (activeCategory === 'METALS' || activeCategory === 'FUNDS')) {
+                                await Promise.all(
+                                    symbolEntries.map(async ({ symbol, apiSymbol }) => {
+                                        const historyPath =
+                                            activeCategory === 'METALS'
+                                                ? '/api/market/metals/history'
+                                                : '/api/market/funds/history';
+                                        const historySymbol = activeCategory === 'METALS' ? apiSymbol : symbol;
+                                        try {
+                                            const rows = await marketClient
+                                                .get<MarketHistoryPoint[]>(historyPath, {
+                                                    params: metalsHistoryQueryParams(historySymbol, days),
+                                                    signal: signalController.signal,
+                                                })
+                                                .then((r) => r.data);
+                                            const fallbackCandles = historyRowsToSyntheticCandles(rows ?? []);
+                                            const existing = series[symbol] ?? series[apiSymbol] ?? [];
+                                            const existingFlat =
+                                                existing.length > 0 &&
+                                                existing.every(
+                                                    (c) =>
+                                                        Number(c.o) === Number(c.h) &&
+                                                        Number(c.h) === Number(c.l) &&
+                                                        Number(c.l) === Number(c.c),
+                                                );
+                                            const shouldReplaceWithFallback =
+                                                fallbackCandles.length > 0 &&
+                                                (fallbackCandles.length > existing.length ||
+                                                    existing.length < 2 ||
+                                                    (activeCategory === 'METALS' && existingFlat));
+                                            if (shouldReplaceWithFallback) {
+                                                series[symbol] = fallbackCandles;
+                                            }
+                                        } catch (error) {
+                                            if (signalController.signal.aborted) {
+                                                throw error;
+                                            }
+                                            /* compare fallback best-effort */
+                                        }
+                                    }),
+                                );
+                            }
+                            return { series } satisfies BatchHistoryResponse;
+                        })();
 
-        request
-            .then((batch) => {
-                const byDate: Record<string, Record<string, number>> = {};
-                Object.entries(batch.series ?? {}).forEach(([sym, candlesBySym]) => {
-                    candlesBySym.forEach((c) => {
-                        const date = new Date(c.t).toISOString().slice(0, 10);
-                        if (!byDate[date]) byDate[date] = {};
-                        byDate[date][sym] = Number(c.c);
-                    });
+            if (!isCompareRequestCurrent()) {
+                return;
+            }
+
+            setCompareError(null);
+            const byDate: Record<string, Record<string, number>> = {};
+            Object.entries(batch.series ?? {}).forEach(([sym, candlesBySym]) => {
+                candlesBySym.forEach((c) => {
+                    const date = compareTimeKey(c.t, compareUsesHourlyBucket);
+                    if (!date) return;
+                    if (!byDate[date]) byDate[date] = {};
+                    byDate[date][sym] = Number(c.c);
                 });
-                const dates = Object.keys(byDate).sort();
-                if (!dates.length) {
-                    setCompareRows((prev) => (prev.length === 0 ? prev : []));
+            });
+            const dates = Object.keys(byDate).sort((a, b) => compareTimeKeyMs(a) - compareTimeKeyMs(b));
+            if (!dates.length) {
+                setCompareRows((prev) => (prev.length === 0 ? prev : []));
+                return;
+            }
+            const first: Record<string, number> = {};
+            symbols.forEach((sym) => {
+                const d = dates.find((dt) => byDate[dt][sym] != null);
+                if (d != null) first[sym] = byDate[d][sym];
+            });
+            const rows = dates.map((date) => {
+                const values: Record<string, number> = {};
+                symbols.forEach((sym) => {
+                    const v = byDate[date][sym];
+                    const base = first[sym];
+                    values[sym] = base && v != null ? Math.round((v / base) * 1000) / 10 : Number.NaN;
+                });
+                return { time: date, values };
+            });
+            setCompareRows(rows);
+        };
+
+        void loadCompare()
+            .catch(() => {
+                if (!isCompareRequestCurrent()) {
                     return;
                 }
-                const first: Record<string, number> = {};
-                symbols.forEach((sym) => {
-                    const d = dates.find((dt) => byDate[dt][sym] != null);
-                    if (d != null) first[sym] = byDate[d][sym];
-                });
-                const rows = dates.map((date) => {
-                    const values: Record<string, number> = {};
-                    symbols.forEach((sym) => {
-                        const v = byDate[date][sym];
-                        const base = first[sym];
-                        values[sym] = base && v != null ? Math.round((v / base) * 1000) / 10 : Number.NaN;
-                    });
-                    return { time: date, values };
-                });
-                setCompareRows(rows);
+                setCompareRows((prev) => (prev.length === 0 ? prev : []));
+                setCompareError(
+                    t(
+                        'market.compareLoadFailed',
+                        'Karşılaştırma verisi alınamadı. Lütfen tekrar deneyin.'
+                    )
+                );
             })
-            .catch(() => setCompareRows((prev) => (prev.length === 0 ? prev : [])))
-            .finally(() => setLoadingCompare(false));
+            .finally(() => {
+                if (!isCompareRequestCurrent()) {
+                    return;
+                }
+                setLoadingCompare(false);
+            });
+
+        return () => {
+            signalController.abort();
+        };
     }, [
-        compareSymbols,
+        compareChartSymbols,
+        compareSymbols.length,
         days,
         marketType,
         activeCategory,
@@ -4298,17 +4419,10 @@ export function Market() {
         equitySubmarket,
         bistMainHistoryRange.from,
         bistMainHistoryRange.to,
-        viopContractBySymbol,
-        viopSnapshotBySymbol,
+        activeCategory === 'FUTURES' ? viopContractBySymbol : null,
+        activeCategory === 'FUTURES' ? viopSnapshotBySymbol : null,
+        t,
     ]);
-
-    useEffect(() => {
-        if (compareSymbols.length >= 2) {
-            loadCompare();
-        } else {
-            setCompareRows((prev) => (prev.length === 0 ? prev : []));
-        }
-    }, [compareSymbols, loadCompare]);
 
     useEffect(() => {
         if (activeCategory === 'FUTURES') {
@@ -4607,8 +4721,8 @@ export function Market() {
                     ) : null}
                     <MarketCompareLwChart
                         rows={compareRows}
-                        symbols={compareSymbols.slice(0, 4)}
-                        colors={['#38bdf8', '#22c55e', '#eab308', '#f87171']}
+                        symbols={compareChartSymbols}
+                        colors={compareChartColors}
                         lineWidthBySymbol={lineWidthBySymbol}
                         timeframeLabel={chartTfLabel}
                         tokens={chartTokens}
@@ -4628,7 +4742,12 @@ export function Market() {
                               )}
                     </div>
                 ) : null}
-                {!loadingCompare && compareSymbols.length >= 2 && compareRows.length === 0 ? (
+                {!loadingCompare && compareError ? (
+                    <div style={{ fontSize: 11, color: theme === 'dark' ? '#fca5a5' : '#b91c1c', marginTop: 8 }}>
+                        {compareError}
+                    </div>
+                ) : null}
+                {!loadingCompare && !compareError && compareSymbols.length >= 2 && compareRows.length === 0 ? (
                     <div style={{ fontSize: 11, color: tokens.textMuted, marginTop: 8 }}>
                         {t(
                             'market.compareInsufficientHistory',
@@ -6075,8 +6194,9 @@ export function Market() {
                                     size={isSpotTerminalLayout ? 28 : 36}
                                 />
                             )}
-                            <div style={{ minWidth: 0 }}>
+                            <div className="terminal-hero-selector__meta">
                                 <div
+                                    className="terminal-hero-selector__meta-label"
                                     style={{
                                         fontSize: isSpotTerminalLayout ? 10 : 12,
                                         color: tokens.textMuted,
@@ -6086,6 +6206,7 @@ export function Market() {
                                     {t('market.selectedInstrument', 'Seçili Enstrüman')}
                                 </div>
                                 <div
+                                    className="terminal-hero-selector__meta-title"
                                     style={{
                                         fontSize: isSpotTerminalLayout ? 16 : 22,
                                         fontWeight: 700,
@@ -6120,6 +6241,7 @@ export function Market() {
                                     </div>
                                 ) : (
                                     <div
+                                        className="terminal-hero-selector__meta-symbol"
                                         style={{
                                             fontSize: isSpotTerminalLayout ? 11 : 12,
                                             color: tokens.textMuted,
@@ -6131,6 +6253,7 @@ export function Market() {
                             </div>
                             </div>
                             <div className="terminal-hero-selector__quote">
+                                <div className="terminal-hero-selector__quote-main">
                                 <div
                                     className="terminal-hero-selector__price"
                                     title={
@@ -6191,6 +6314,7 @@ export function Market() {
                                             <Info size={15} strokeWidth={2.2} aria-hidden />
                                         </span>
                                     ) : null}
+                                </div>
                                 </div>
                             </div>
                             <ChevronDown
@@ -6508,7 +6632,15 @@ export function Market() {
                                     timeframeLabel={chartTfLabel}
                                     chartTimePreferIstanbulBusinessDay={!terminalHourlyRange}
                                     tokens={chartTokens}
-                                    onCrosshairDate={macroCompareEnabled ? onAnalysisCrosshairDate : undefined}
+                                    onCrosshairDate={(ymd) => {
+                                        const { first, last, today } = ppAnchorBoundsRef.current;
+                                        if (!first) return;
+                                        setPpChartAnchor(
+                                            ymd
+                                                ? clampPpAnchorYmd(ymd, first, last, today)
+                                                : clampPpAnchorYmd(first, first, last, today),
+                                        );
+                                    }}
                                 />
                             ) : (
                                 <MarketTerminalChart
@@ -6543,6 +6675,15 @@ export function Market() {
                                     timeframeLabel={chartTfLabel}
                                     chartTimePreferIstanbulBusinessDay={!terminalHourlyRange}
                                     tokens={chartTokens}
+                                    onCrosshairDate={(ymd) => {
+                                        const { first, last, today } = ppAnchorBoundsRef.current;
+                                        if (!first) return;
+                                        setPpChartAnchor(
+                                            ymd
+                                                ? clampPpAnchorYmd(ymd, first, last, today)
+                                                : clampPpAnchorYmd(first, first, last, today),
+                                        );
+                                    }}
                                 />
                             )}
                             {activeCategory === 'FX' ? (

@@ -83,6 +83,7 @@ export function sourceLabel(source: string, t: (k: string, d: string) => string)
 export function qualityLabel(quality: string, t: (k: string, d: string) => string): string {
     const q = String(quality ?? '').toUpperCase();
     if (q === 'EXACT') return t('simulation.qualityExact', 'EXACT — seçilen gün');
+    if (q === 'EXACT_HOURLY') return t('simulation.qualityExactHourly', 'EXACT_HOURLY — seçilen günün son saatlik verisi');
     if (q === 'PREVIOUS_DAY') return t('simulation.qualityPrevious', 'PREVIOUS_DAY — önceki işlem günü');
     if (q === 'FALLBACK') return t('simulation.qualityFallback', 'FALLBACK — en yakın geçerli tarih');
     return quality || t('simulation.qualityUnknown', 'Belirtilmedi');
@@ -90,7 +91,7 @@ export function qualityLabel(quality: string, t: (k: string, d: string) => strin
 
 export function qualityPillClass(quality: string): string {
     const q = String(quality ?? '').toUpperCase();
-    if (q === 'EXACT') return 'quality-pill quality-pill-exact';
+    if (q === 'EXACT' || q === 'EXACT_HOURLY') return 'quality-pill quality-pill-exact';
     if (q === 'PREVIOUS_DAY') return 'quality-pill quality-pill-prev';
     return 'quality-pill quality-pill-fallback';
 }
@@ -207,20 +208,23 @@ export function buildSimulationChartData(
 
     const keys = visibleResults.map((res) => seriesChartKey(res));
     const units = visibleResults.map((res) => (res.buyPrice > 0 ? res.initialAmount / res.buyPrice : 0));
+    const seriesMaps = visibleResults.map((res) => new Map(res.series.map((p) => [p.date, p] as const)));
 
     const dateSet = new Set<string>();
     visibleResults.forEach((res) => res.series.forEach((p) => dateSet.add(p.date)));
     const sortedDates = [...dateSet].sort((a, b) => a.localeCompare(b));
 
     const rows: Array<Record<string, number | string>> = [];
+    const lastPoints = new Array<SimulationPerformancePoint | null>(visibleResults.length).fill(null);
 
     for (const date of sortedDates) {
         const row: Record<string, number | string> = { date };
         let hasAny = false;
         visibleResults.forEach((res, i) => {
             const key = keys[i]!;
-            const pt = res.series.find((p) => p.date === date);
+            const pt = seriesMaps[i]!.get(date) ?? lastPoints[i];
             if (pt == null) return;
+            lastPoints[i] = pt;
             hasAny = true;
             if (metricMode === 'RETURN_PCT' || metricMode === 'NORMALIZE') {
                 row[key] = pt.cumulativeReturnPct;
