@@ -1,0 +1,32 @@
+databaseChangeLog:
+  - changeSet:
+      id: v23-debt-snapshot-deduplicate
+      author: nrs-finance
+      changes:
+        - sql:
+            dbms: postgresql
+            splitStatements: false
+            sql: |
+              DELETE FROM debt_snapshot older
+              USING debt_snapshot newer
+              WHERE older.id < newer.id
+                AND older.isin = newer.isin
+                AND older.source = newer.source
+                AND older.as_of = newer.as_of;
+
+  - changeSet:
+      id: v23-debt-snapshot-unique-index
+      author: nrs-finance
+      changes:
+        - addUniqueConstraint:
+            tableName: debt_snapshot
+            columnNames: isin, source, as_of
+            constraintName: uk_debt_snapshot_isin_source_asof
+        - createIndex:
+            tableName: debt_snapshot
+            indexName: idx_debt_snapshot_isin_asof
+            columns:
+              - column:
+                  name: isin
+              - column:
+                  name: as_of

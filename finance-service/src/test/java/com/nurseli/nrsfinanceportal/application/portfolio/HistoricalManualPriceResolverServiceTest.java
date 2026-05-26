@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +29,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class HistoricalManualPriceResolverServiceTest {
+
+    private static final ZoneId ISTANBUL = ZoneId.of("Europe/Istanbul");
 
     @Mock
     private MarketDataClient marketDataClient;
@@ -108,7 +111,7 @@ class HistoricalManualPriceResolverServiceTest {
 
     @Test
     void resolveUsesSameDayHourlyWhenDailyCloseMissing() {
-        LocalDate day = LocalDate.now().minusDays(3);
+        LocalDate day = todayIstanbul().minusDays(3);
         LocalDate previous = day.minusDays(1);
 
         when(marketDataClient.getChartCompatibleHistory(eq(AssetType.CRYPTO), eq("AVAXUSDT"), anyInt(), eq("daily")))
@@ -190,5 +193,9 @@ class HistoricalManualPriceResolverServiceTest {
                 Map.of(),
                 Map.of()
         );
+    }
+
+    private static LocalDate todayIstanbul() {
+        return LocalDate.now(ISTANBUL);
     }
 }

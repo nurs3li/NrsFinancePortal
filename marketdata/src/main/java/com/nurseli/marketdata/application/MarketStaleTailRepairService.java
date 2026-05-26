@@ -86,11 +86,7 @@ public class MarketStaleTailRepairService {
             return;
         }
         LocalDateTime cutoff = LocalDateTime.now().minusHours(20);
-        Optional<LocalDateTime> maxAsOf =
-                debtSnapshotRepository.findAll().stream()
-                        .map(DebtSnapshot::getAsOf)
-                        .filter(a -> a != null)
-                        .max(Comparator.naturalOrder());
+        Optional<LocalDateTime> maxAsOf = debtSnapshotRepository.findMaxAsOf();
         if (maxAsOf.isPresent() && !maxAsOf.get().isBefore(cutoff)) {
             return;
         }

@@ -6,6 +6,7 @@ import com.nurseli.marketdata.config.InflationPpiProperties;
 import com.nurseli.marketdata.domain.inflation.InflationIndicatorType;
 import com.nurseli.marketdata.domain.inflation.InflationIndexMonthlyEntity;
 import com.nurseli.marketdata.domain.metal.PreciousMetalUsdCatalog;
+import com.nurseli.marketdata.infrastructure.persistence.DebtSnapshotRepository;
 import com.nurseli.marketdata.infrastructure.persistence.DepositRateObservationRepository;
 import com.nurseli.marketdata.infrastructure.persistence.EurobondWeeklyObservationRepository;
 import com.nurseli.marketdata.infrastructure.persistence.InflationIndexMonthlyRepository;
@@ -30,6 +31,7 @@ public class BootstrapWatermarkQuery {
     private final LoanRateWeeklyObservationRepository loanRateWeeklyObservationRepository;
     private final EurobondWeeklyObservationRepository eurobondWeeklyObservationRepository;
     private final MarketPriceHistoryRepository marketPriceHistoryRepository;
+    private final DebtSnapshotRepository debtSnapshotRepository;
 
     public Optional<LocalDate> inflationMaxObservationMonth() {
         Optional<LocalDate> max = Optional.empty();
@@ -60,6 +62,14 @@ public class BootstrapWatermarkQuery {
 
     public long eurobondRowCount() {
         return eurobondWeeklyObservationRepository.count();
+    }
+
+    public Optional<LocalDate> debtMaxObservationDate(String isin) {
+        if (isin == null || isin.isBlank()) {
+            return Optional.empty();
+        }
+        return debtSnapshotRepository.findTopByIsinOrderByAsOfDesc(isin.trim().toUpperCase())
+                .map(snapshot -> snapshot.getAsOf().toLocalDate());
     }
 
     public Optional<LocalDate> metalMaxObservationDate(String canonicalSymbol) {

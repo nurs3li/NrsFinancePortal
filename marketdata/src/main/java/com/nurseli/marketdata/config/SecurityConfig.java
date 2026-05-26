@@ -53,6 +53,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/market/backfill/bist-daily").permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/market/backfill/crypto-history").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/internal/market/backfill/debt-history").permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/market/backfill/etf-history").permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/market/backfill/isyatirim-metals-usd").permitAll()
                         .requestMatchers(HttpMethod.POST,

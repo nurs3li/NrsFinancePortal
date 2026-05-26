@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.application;
 
+import com.nurseli.marketdata.api.dto.DebtHistoryCoverageResponse;
 import com.nurseli.marketdata.api.dto.DebtInstrumentResponse;
 import com.nurseli.marketdata.api.dto.DebtSnapshotResponse;
 import com.nurseli.marketdata.domain.debt.DebtInstrument;
@@ -26,6 +27,8 @@ import java.util.stream.Collectors;
 public class DebtQueryService {
     private final DebtInstrumentRepository debtInstrumentRepository;
     private final DebtSnapshotRepository debtSnapshotRepository;
+    private final DebtHistoryWarmupService debtHistoryWarmupService;
+    private final MarketStaleTailRepairService marketStaleTailRepairService;
     private static final DateTimeFormatter[] MATURITY_FORMATS = new DateTimeFormatter[]{
             DateTimeFormatter.ISO_LOCAL_DATE,
             DateTimeFormatter.ofPattern("dd.MM.yyyy"),
@@ -42,6 +45,7 @@ public class DebtQueryService {
      * ve bootstrap ile yapılır; burada senkron repair tüm HTTP iş parçacıklarını dakikalarca kilitleyebilir.
      */
     public List<DebtSnapshotResponse> latest() {
+        marketStaleTailRepairService.repairDebtSnapshotsIfStale();
         Map<String, DebtInstrument> instruments = instrumentsByIsin();
         LocalDateTime cutoff = LocalDateTime.now().minusDays(1);
         List<DebtSnapshotResponse> rows = debtSnapshotRepository.findLatestPerIsinSince(cutoff).stream()
@@ -65,11 +69,12 @@ public class DebtQueryService {
         if (isin == null || isin.isBlank()) {
             return List.of();
         }
+        marketStaleTailRepairService.repairDebtSnapshotsIfStale();
         String key = normIsin(isin);
         int safeDays = Math.max(1, Math.min(days, 800));
         LocalDateTime cutoff = LocalDateTime.now().minusDays(safeDays);
+        debtHistoryWarmupService.requestWarmupIfMissing(key, cutoff.toLocalDate(), LocalDate.now(), "read-history");
         DebtInstrument instrument = debtInstrumentRepository.findByIsin(key).orElse(null);
-        String maturityDate = instrument != null ? instrument.getMaturityDate() : null;
         return debtSnapshotRepository.findByIsinAndAsOfGreaterThanEqualOrderByAsOfAsc(key, cutoff).stream()
                 .collect(Collectors.toMap(
                         s -> s.getAsOf() == null ? LocalDateTime.MIN : s.getAsOf(),
@@ -86,6 +91,10 @@ public class DebtQueryService {
                         Comparator.nullsFirst(Comparator.naturalOrder())))
                 .map(s -> toResponse(s, instrument))
                 .toList();
+    }
+
+    public DebtHistoryCoverageResponse getCoverage(String isin, LocalDate from, LocalDate to) {
+        return debtHistoryWarmupService.getCoverage(isin, from, to);
     }
 
     private Map<String, DebtInstrument> instrumentsByIsin() {

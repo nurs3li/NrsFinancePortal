@@ -19,6 +19,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 @Component
 @Slf4j
@@ -85,6 +86,38 @@ public class EvdsDebtClient {
                     asOf,
                     "EVDS"
             ));
+        }
+        return out;
+    }
+
+    public List<EvdsDebtRow> fetchInstrumentHistory(EvdsProperties.Instrument instrument, LocalDate fromInclusive, LocalDate toInclusive) {
+        if (!evdsProperties.isEnabled()
+                || evdsProperties.getDebt() == null
+                || !evdsProperties.getDebt().isEnabled()
+                || instrument == null
+                || instrument.getIsin() == null
+                || instrument.getIsin().isBlank()
+                || fromInclusive == null
+                || toInclusive == null
+                || toInclusive.isBefore(fromInclusive)) {
+            return List.of();
+        }
+        List<EvdsSeriesPoint> pricePoints = fetchSeriesAscending(instrument.getDirtyPriceSeries(), fromInclusive, toInclusive);
+        List<EvdsSeriesPoint> couponPoints = fetchSeriesAscending(instrument.couponRateSeries(), fromInclusive, toInclusive);
+        return mergeHistoryRows(instrument, pricePoints, couponPoints);
+    }
+
+    List<EvdsDebtRow> fetchHistory(LocalDate fromInclusive, LocalDate toInclusive) {
+        if (!evdsProperties.isEnabled() || evdsProperties.getDebt() == null || !evdsProperties.getDebt().isEnabled()) {
+            return List.of();
+        }
+        List<EvdsProperties.Instrument> instruments = evdsProperties.getDebt().getInstruments();
+        if (instruments == null || instruments.isEmpty()) {
+            return List.of();
+        }
+        List<EvdsDebtRow> out = new ArrayList<>();
+        for (EvdsProperties.Instrument instrument : instruments) {
+            out.addAll(fetchInstrumentHistory(instrument, fromInclusive, toInclusive));
         }
         return out;
     }
@@ -306,7 +339,7 @@ public class EvdsDebtClient {
         }
     }
 
-    private BigDecimal normalizeByScale(BigDecimal value, BigDecimal scale) {
+    private static BigDecimal normalizeByScale(BigDecimal value, BigDecimal scale) {
         if (value == null) {
             return null;
         }
@@ -314,6 +347,57 @@ public class EvdsDebtClient {
             return value;
         }
         return value.divide(scale, 6, java.math.RoundingMode.HALF_UP);
+    }
+
+    static List<EvdsDebtRow> mergeHistoryRows(
+            EvdsProperties.Instrument instrument,
+            List<EvdsSeriesPoint> pricePoints,
+            List<EvdsSeriesPoint> couponPoints) {
+        if (instrument == null || instrument.getIsin() == null || instrument.getIsin().isBlank()) {
+            return List.of();
+        }
+        LinkedHashMap<LocalDate, BigDecimal> priceByDay = toDailyValues(pricePoints);
+        Map<LocalDate, BigDecimal> couponByDay = toDailyValues(couponPoints);
+        if (priceByDay.isEmpty()) {
+            return List.of();
+        }
+        String isin = instrument.getIsin().trim().toUpperCase(Locale.ROOT);
+        String name = instrument.getName();
+        String issuer = instrument.getIssuer();
+        String maturityDate = instrument.getMaturityDate();
+        List<EvdsDebtRow> out = new ArrayList<>();
+        for (Map.Entry<LocalDate, BigDecimal> entry : priceByDay.entrySet()) {
+            BigDecimal dirtyPrice = normalizeByScale(entry.getValue(), instrument.getDirtyPriceScale());
+            if (dirtyPrice == null || dirtyPrice.signum() <= 0) {
+                continue;
+            }
+            BigDecimal couponRate = normalizeByScale(couponByDay.get(entry.getKey()), instrument.couponRateScale());
+            out.add(new EvdsDebtRow(
+                    isin,
+                    name,
+                    issuer,
+                    maturityDate,
+                    dirtyPrice,
+                    couponRate,
+                    entry.getKey().atStartOfDay(),
+                    "EVDS"));
+        }
+        return out;
+    }
+
+    private static LinkedHashMap<LocalDate, BigDecimal> toDailyValues(List<EvdsSeriesPoint> points) {
+        LinkedHashMap<LocalDate, BigDecimal> out = new LinkedHashMap<>();
+        if (points == null || points.isEmpty()) {
+            return out;
+        }
+        List<EvdsSeriesPoint> sorted = points.stream()
+                .filter(point -> point != null && point.asOf() != null)
+                .sorted(Comparator.comparing(EvdsSeriesPoint::asOf))
+                .toList();
+        for (EvdsSeriesPoint point : sorted) {
+            out.put(point.asOf().toLocalDate(), point.value());
+        }
+        return out;
     }
 
     public record EvdsDebtRow(

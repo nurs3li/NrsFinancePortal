@@ -10,6 +10,7 @@ import org.mockito.Mockito;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -23,13 +24,15 @@ import static org.mockito.Mockito.verify;
 
 class SimulationServiceTest {
 
+    private static final ZoneId ISTANBUL = ZoneId.of("Europe/Istanbul");
+
     @Test
     void shouldUseExactWhenHistoryContainsBuyDate() {
         MarketDataClient marketDataClient = Mockito.mock(MarketDataClient.class);
         DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
         SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
 
-        LocalDate buyDate = LocalDate.now().minusDays(5);
+        LocalDate buyDate = todayIstanbul().minusDays(5);
         Mockito.when(marketDataClient.getCryptoHistoryCoverage(eq("BTCUSDT"), any(LocalDate.class), any(LocalDate.class)))
                 .thenAnswer(inv -> readyCoverage("BTCUSDT", inv.getArgument(1), inv.getArgument(2)));
         Mockito.when(marketDataClient.getCryptoPrefilledHistory(eq("BTCUSDT"), anyInt(), eq("daily")))
@@ -61,7 +64,7 @@ class SimulationServiceTest {
         DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
         SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
 
-        LocalDate buyDate = LocalDate.now().minusDays(5);
+        LocalDate buyDate = todayIstanbul().minusDays(5);
         LocalDate previous = buyDate.minusDays(1);
         Mockito.when(marketDataClient.getHistory(eq(AssetType.FX), eq("USDTRY"), anyInt()))
                 .thenReturn(List.of(
@@ -120,7 +123,7 @@ class SimulationServiceTest {
         DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
         SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
 
-        LocalDate buyDate = LocalDate.now().minusDays(3);
+        LocalDate buyDate = todayIstanbul().minusDays(3);
         LocalDate previous = buyDate.minusDays(1);
 
         Mockito.when(marketDataClient.getCryptoHistoryCoverage(eq("AVAXUSDT"), any(LocalDate.class), any(LocalDate.class)))
@@ -159,7 +162,7 @@ class SimulationServiceTest {
         DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
         SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
 
-        LocalDate buyDate = LocalDate.now().minusDays(3);
+        LocalDate buyDate = todayIstanbul().minusDays(3);
         Mockito.when(marketDataClient.getHistory(any(), any(), anyInt()))
                 .thenReturn(List.of(
                         new MarketPriceHistoryDto(new BigDecimal("10"), new BigDecimal("10"), buyDate.atStartOfDay())
@@ -246,8 +249,8 @@ class SimulationServiceTest {
         DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
         SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
 
-        LocalDate buyDate = LocalDate.now().minusDays(3);
-        LocalDate expectedCoverageTo = LocalDate.now().minusDays(1);
+        LocalDate buyDate = todayIstanbul().minusDays(3);
+        LocalDate expectedCoverageTo = todayIstanbul().minusDays(1);
         Mockito.when(marketDataClient.getCryptoHistoryCoverage(eq("ADAUSDT"), any(LocalDate.class), eq(expectedCoverageTo)))
                 .thenAnswer(inv -> readyCoverage("ADAUSDT", inv.getArgument(1), inv.getArgument(2)));
         Mockito.when(marketDataClient.getCryptoPrefilledHistory(eq("ADAUSDT"), anyInt(), eq("daily")))
@@ -372,7 +375,7 @@ class SimulationServiceTest {
         DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
         SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
 
-        LocalDate buyDate = LocalDate.now().minusDays(10);
+        LocalDate buyDate = todayIstanbul().minusDays(10);
         Mockito.when(marketDataClient.getHistory(eq(AssetType.METAL), eq("XAU_TRY"), anyInt()))
                 .thenReturn(List.of());
         Mockito.when(marketDataClient.getPriceTry(eq(AssetType.METAL), eq("XAU_TRY")))
@@ -439,7 +442,7 @@ class SimulationServiceTest {
         DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
         SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
 
-        LocalDate buyDate = LocalDate.now();
+        LocalDate buyDate = todayIstanbul();
         Mockito.when(marketDataClient.getHistory(eq(AssetType.FX), eq("GBPTRY"), anyInt()))
                 .thenReturn(List.of(
                         new MarketPriceHistoryDto(new BigDecimal("44"), new BigDecimal("44"), buyDate.atStartOfDay())
@@ -528,5 +531,9 @@ class SimulationServiceTest {
                 java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1,
                 false
         );
+    }
+
+    private static LocalDate todayIstanbul() {
+        return LocalDate.now(ISTANBUL);
     }
 }

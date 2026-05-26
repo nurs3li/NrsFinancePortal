@@ -1,12 +1,16 @@
 package com.nurseli.marketdata.application.bootstrap;
 
+import com.nurseli.marketdata.api.dto.DebtHistoryCoverageResponse;
+import com.nurseli.marketdata.application.DebtHistoryWarmupService;
 import com.nurseli.marketdata.application.deposit.DepositRatesIngestService;
 import com.nurseli.marketdata.application.eurobond.EurobondEvdsIngestService;
 import com.nurseli.marketdata.application.eurobond.EurobondInstrumentIngestService;
 import com.nurseli.marketdata.application.inflation.InflationIndexIngestService;
 import com.nurseli.marketdata.application.loan.LoanRatesMacroService;
 import com.nurseli.marketdata.application.MetalHistoryWarmupService;
+import com.nurseli.marketdata.config.DebtHistoryBackfillProperties;
 import com.nurseli.marketdata.config.DepositRatesProperties;
+import com.nurseli.marketdata.config.EvdsProperties;
 import com.nurseli.marketdata.config.EurobondEvdsProperties;
 import com.nurseli.marketdata.config.InflationBackfillProperties;
 import com.nurseli.marketdata.config.LoanRatesProperties;
@@ -48,6 +52,9 @@ public class MarketBootstrapOrchestrator {
     private final EurobondEvdsProperties eurobondEvdsProperties;
     private final EurobondEvdsIngestService eurobondEvdsIngestService;
     private final EurobondInstrumentIngestService eurobondInstrumentIngestService;
+    private final EvdsProperties evdsProperties;
+    private final DebtHistoryBackfillProperties debtHistoryBackfillProperties;
+    private final DebtHistoryWarmupService debtHistoryWarmupService;
     private final MarketMetalsIsyatirimProperties metalsProperties;
     private final MetalHistoryWarmupService metalHistoryWarmupService;
     private final AtomicBoolean started = new AtomicBoolean(false);
@@ -74,6 +81,8 @@ public class MarketBootstrapOrchestrator {
         sleep(bootstrapProperties.getPhaseDelayMs(), "after_loan_rates");
         runEurobond();
         sleep(bootstrapProperties.getPhaseDelayMs(), "after_eurobond");
+        runDebt();
+        sleep(bootstrapProperties.getPhaseDelayMs(), "after_debt");
         runMetals();
         log.info("[BOOTSTRAP] orchestrator finished");
     }
@@ -197,6 +206,92 @@ public class MarketBootstrapOrchestrator {
                     log.warn("[BOOTSTRAP] eurobond instruments failed {}: {}", ex.getClass().getSimpleName(), bootstrapFailureMessage(ex));
                 }
             }
+        }
+    }
+
+    private void runDebt() {
+        if (!evdsProperties.isEnabled() || evdsProperties.getDebt() == null || !evdsProperties.getDebt().isEnabled()) {
+            log.info("[BOOTSTRAP] debt skipped");
+            return;
+        }
+        if (evdsProperties.getDebt().getInstruments() == null || evdsProperties.getDebt().getInstruments().isEmpty()) {
+            log.info("[BOOTSTRAP] debt skipped (no instruments)");
+            return;
+        }
+        int periodDays = Math.max(30, debtHistoryBackfillProperties.getPeriodDays() > 0
+                ? debtHistoryBackfillProperties.getPeriodDays()
+                : 730);
+        LocalDate to = LocalDate.now(IST);
+        LocalDate configFrom = to.minusDays(periodDays - 1L);
+        for (EvdsProperties.Instrument instrument : evdsProperties.getDebt().getInstruments()) {
+            runDebtWarmup(instrument, configFrom, to);
+        }
+    }
+
+    private void runDebtWarmup(EvdsProperties.Instrument instrument, LocalDate configFrom, LocalDate to) {
+        if (instrument == null || instrument.getIsin() == null || instrument.getIsin().isBlank()) {
+            return;
+        }
+        String isin = instrument.getIsin().trim().toUpperCase();
+        DebtHistoryCoverageResponse coverage = debtHistoryWarmupService.getCoverage(isin, configFrom, to);
+        if (coverage.isin() == null || coverage.requestedFrom() == null || coverage.requestedTo() == null) {
+            log.info("[BOOTSTRAP] debt {} skipped invalid_range from={} to={}", isin, configFrom, to);
+            return;
+        }
+        if (coverage.oldestAvailable() == null || coverage.oldestAvailable().isAfter(coverage.requestedFrom())) {
+            log.info(
+                    "[BOOTSTRAP] debt {} mode=FULL_SEED from={} to={} oldest={} newest={} availableDays={} expectedDays={} reason=depth_insufficient",
+                    coverage.isin(),
+                    coverage.requestedFrom(),
+                    coverage.requestedTo(),
+                    coverage.oldestAvailable(),
+                    coverage.newestAvailable(),
+                    coverage.availableDays(),
+                    coverage.expectedDays());
+            warmDebtRange(coverage.isin(), coverage.requestedFrom(), coverage.requestedTo());
+            return;
+        }
+        if (coverage.availableDays() < coverage.expectedDays()) {
+            log.info(
+                    "[BOOTSTRAP] debt {} mode=FULL_SEED from={} to={} oldest={} newest={} availableDays={} expectedDays={} reason=coverage_gap",
+                    coverage.isin(),
+                    coverage.requestedFrom(),
+                    coverage.requestedTo(),
+                    coverage.oldestAvailable(),
+                    coverage.newestAvailable(),
+                    coverage.availableDays(),
+                    coverage.expectedDays());
+            warmDebtRange(coverage.isin(), coverage.requestedFrom(), coverage.requestedTo());
+            return;
+        }
+        ResolvedBootstrapRange range =
+                rangeResolver.resolveDaily(coverage.requestedFrom(), coverage.requestedTo(), watermarks.debtMaxObservationDate(isin));
+        log.info(
+                "[BOOTSTRAP] debt {} mode={} from={} to={} oldest={} newest={} availableDays={} expectedDays={} reason={}",
+                coverage.isin(),
+                range.mode(),
+                range.from(),
+                range.to(),
+                coverage.oldestAvailable(),
+                coverage.newestAvailable(),
+                coverage.availableDays(),
+                coverage.expectedDays(),
+                range.reason());
+        if (!range.shouldFetch()) {
+            return;
+        }
+        warmDebtRange(coverage.isin(), range.from(), range.to());
+    }
+
+    private void warmDebtRange(String isin, LocalDate from, LocalDate to) {
+        try {
+            debtHistoryWarmupService.warmupSync(isin, from, to, "bootstrap");
+        } catch (Exception ex) {
+            log.warn(
+                    "[BOOTSTRAP] debt {} failed {}: {}",
+                    isin,
+                    ex.getClass().getSimpleName(),
+                    bootstrapFailureMessage(ex));
         }
     }
 
