@@ -2,6 +2,8 @@ package com.nurseli.nrsfinanceportal.application;
 
 import com.nurseli.nrsfinanceportal.api.dto.SimulationResponseDto;
 import com.nurseli.nrsfinanceportal.api.dto.SimulationPerformancePointDto;
+import com.nurseli.nrsfinanceportal.application.portfolio.AllowedHistoryDays;
+import com.nurseli.nrsfinanceportal.application.portfolio.HistoricalUsdTryConversion;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.domain.asset.SimulationDisplayCurrency;
 import com.nurseli.nrsfinanceportal.domain.pricing.SymbolNormalizer;
@@ -16,12 +18,14 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * finance-service yatırım simülasyon servisi — geçmiş fiyatlarla belirli tarihte yapılmış yatırımın bugünkü değerini hesaplar.
@@ -32,8 +36,13 @@ import java.util.Objects;
 public class SimulationService {
 
     private static final ZoneId TZ = ZoneId.of("Europe/Istanbul");
+    private static final int HISTORY_LOOKBACK_DAYS = 7;
+    private static final int HISTORY_BUFFER_DAYS = 2;
+    private static final int HISTORY_FORWARD_FALLBACK_DAYS = 7;
+    private static final int HOURLY_EXACT_MAX_AGE_DAYS = 30;
 
     public static final String NOTICE_USD_DENOMINATED = "SIMULATION_USD_DENOMINATED";
+    public static final String NOTICE_HISTORY_PREPARING = "SIMULATION_HISTORY_PREPARING";
 
     public static final String MANUAL_PRICE_REQUIRED = "MANUAL_PRICE_REQUIRED";
 
@@ -82,22 +91,35 @@ public class SimulationService {
         }
 
         String symbol = SymbolNormalizer.normalize(type, rawSymbol.trim().toUpperCase());
-        // Add a small buffer to avoid boundary misses from provider/day-cutoff behavior.
-        int days = Math.min(dateToDaysHelper.toDays(buyDate) + 7, 3650);
-        List<MarketPriceHistoryDto> history;
-        if (type == AssetType.BIST) {
-            LocalDate from = buyDate.minusDays(30);
-            history = marketDataClient.getBistHistoryBetween(symbol, from, today);
-        } else {
-            history = marketDataClient.getHistory(type, symbol, days);
+        LocalDate historyFrom = buyDate.minusDays(HISTORY_LOOKBACK_DAYS + HISTORY_BUFFER_DAYS);
+        long historySpanDays = ChronoUnit.DAYS.between(historyFrom, today) + 1;
+        int days = AllowedHistoryDays.smallestCovering(Math.max(historySpanDays, dateToDaysHelper.toDays(historyFrom)));
+        if (type == AssetType.CRYPTO && (manualBuyPrice == null || manualBuyPrice.signum() <= 0)) {
+            LocalDate coverageTo = cryptoHistoryCoverageTo(historyFrom, today);
+            MarketDataClient.CryptoHistoryCoverageDto coverage =
+                    marketDataClient.getCryptoHistoryCoverage(symbol, historyFrom, coverageTo);
+            if (coverage == null || !coverage.ready()) {
+                marketDataClient.triggerCryptoHistoryWarmup(symbol, historyFrom, coverageTo, "simulation");
+                String message = "Kripto geçmiş verisi hazırlanıyor. Birkaç dakika sonra tekrar deneyin.";
+                return SimulationResponseDto.preparing(
+                        type.name(),
+                        symbol,
+                        buyDate,
+                        amount,
+                        currency.name(),
+                        message,
+                        180
+                );
+            }
         }
+        List<MarketPriceHistoryDto> history = loadHistory(type, symbol, historyFrom, today, days);
         if (history == null) {
             history = List.of();
         }
 
         BigDecimal spotUsdTry = resolveUsdTryRate();
         List<MarketPriceHistoryDto> usdTryHistory = List.of();
-        if (needsHistoricalUsdTrySeries(type) || currency == SimulationDisplayCurrency.USD) {
+        if (needsHistoricalUsdTrySeries(type, symbol) || currency == SimulationDisplayCurrency.USD) {
             List<MarketPriceHistoryDto> fx = marketDataClient.getHistory(AssetType.FX, "USDTRY", days);
             usdTryHistory = fx != null ? fx : List.of();
         }
@@ -118,7 +140,7 @@ public class SimulationService {
         }
 
         List<MarketPriceHistoryDto> normalizedHistory =
-                normalizeHistoryPricesToTry(history, type, usdTryHistory, spotUsdTry);
+                normalizeHistoryPricesToTry(history, type, symbol, usdTryHistory, spotUsdTry);
         BigDecimal currentPrice = resolveCurrentPriceTry(type, symbol, normalizedHistory);
         if (currentPrice.signum() <= 0) {
             throw new IllegalStateException("Current price not found");
@@ -133,7 +155,15 @@ public class SimulationService {
                     "EXACT"
             );
         } else if (!normalizedHistory.isEmpty()) {
-            historicalRef = resolveHistoricalPriceAtOrBeforeDate(normalizedHistory, buyDate);
+            historicalRef = resolveHistoricalPriceAtOrBeforeDate(
+                    normalizedHistory,
+                    type,
+                    symbol,
+                    buyDate,
+                    today,
+                    fxSorted,
+                    spotUsdTry
+            );
         } else {
             String unit = currency == SimulationDisplayCurrency.USD ? "USD/birim" : "TRY/birim";
             throw new IllegalArgumentException(
@@ -158,7 +188,7 @@ public class SimulationService {
                 currentPrice
         );
 
-        String approximationNoticeCode = needsHistoricalUsdTrySeries(type) ? NOTICE_USD_DENOMINATED : null;
+        String approximationNoticeCode = needsHistoricalUsdTrySeries(type, symbol) ? NOTICE_USD_DENOMINATED : null;
 
         if (currency == SimulationDisplayCurrency.TRY) {
             String message = "%s tarihinde %s TRY %s yatırımı bugün %s TRY olurdu. (alış: %s, kaynak: %s)"
@@ -253,15 +283,52 @@ public class SimulationService {
 
     private HistoricalPriceRef resolveHistoricalPriceAtOrBeforeDate(
             List<MarketPriceHistoryDto> history,
-            LocalDate buyDate
+            AssetType type,
+            String symbol,
+            LocalDate buyDate,
+            LocalDate today,
+            List<MarketPriceHistoryDto> fxSorted,
+            BigDecimal spotUsdTryFallback
     ) {
+        MarketPriceHistoryDto exactRow = history.stream()
+                .filter(h -> h.timestamp() != null)
+                .filter(h -> h.timestamp().toLocalDate().isEqual(buyDate))
+                .max(Comparator.comparing(MarketPriceHistoryDto::timestamp))
+                .orElse(null);
+
+        if (exactRow != null) {
+            BigDecimal exactPrice = midPrice(exactRow);
+            if (exactPrice == null || exactPrice.signum() <= 0) {
+                throw new IllegalStateException("Historical exact price is invalid");
+            }
+            return new HistoricalPriceRef(exactPrice, buyDate, "SYSTEM_HISTORY", "EXACT");
+        }
+
+        BigDecimal sameDayHourly = resolveSameDayHourlyPriceTry(type, symbol, buyDate, today, fxSorted, spotUsdTryFallback);
+        if (sameDayHourly != null && sameDayHourly.signum() > 0) {
+            return new HistoricalPriceRef(sameDayHourly, buyDate, "SYSTEM_HISTORY", "EXACT_HOURLY");
+        }
+
         MarketPriceHistoryDto row = history.stream()
                 .filter(h -> h.timestamp() != null)
-                .filter(h -> !h.timestamp().toLocalDate().isAfter(buyDate))
+                .filter(h -> h.timestamp().toLocalDate().isBefore(buyDate))
                 .max(Comparator.comparing(MarketPriceHistoryDto::timestamp))
                 .orElse(null);
 
         if (row == null) {
+            MarketPriceHistoryDto nextRow = history.stream()
+                    .filter(h -> h.timestamp() != null)
+                    .filter(h -> h.timestamp().toLocalDate().isAfter(buyDate))
+                    .filter(h -> !h.timestamp().toLocalDate().isAfter(buyDate.plusDays(HISTORY_FORWARD_FALLBACK_DAYS)))
+                    .min(Comparator.comparing(MarketPriceHistoryDto::timestamp))
+                    .orElse(null);
+            if (nextRow != null) {
+                BigDecimal nextPrice = midPrice(nextRow);
+                if (nextPrice == null || nextPrice.signum() <= 0) {
+                    throw new IllegalStateException("Historical fallback price is invalid");
+                }
+                return new HistoricalPriceRef(nextPrice, nextRow.timestamp().toLocalDate(), "SYSTEM_HISTORY", "FALLBACK");
+            }
             throw new IllegalArgumentException(
                     MANUAL_PRICE_REQUIRED + ": Seçilen tarih veya öncesinde fiyat yok. İlk geçmiş veri daha sonraki bir günde; lütfen alım günü için manuel fiyat girin."
             );
@@ -370,8 +437,8 @@ public class SimulationService {
         return v == null ? BigDecimal.ZERO : v;
     }
 
-    private static boolean needsHistoricalUsdTrySeries(AssetType type) {
-        return type == AssetType.STOCK || type == AssetType.CRYPTO || type == AssetType.FUND;
+    private static boolean needsHistoricalUsdTrySeries(AssetType type, String symbol) {
+        return HistoricalUsdTryConversion.needsHistoricalUsdTry(type, symbol);
     }
 
     private BigDecimal resolveUsdTryRate() {
@@ -386,13 +453,14 @@ public class SimulationService {
     private List<MarketPriceHistoryDto> normalizeHistoryPricesToTry(
             List<MarketPriceHistoryDto> history,
             AssetType type,
+            String symbol,
             List<MarketPriceHistoryDto> usdTryHistory,
             BigDecimal spotUsdTryFallback
     ) {
         if (history == null || history.isEmpty()) {
             return List.of();
         }
-        if (!needsHistoricalUsdTrySeries(type)) {
+        if (!needsHistoricalUsdTrySeries(type, symbol)) {
             return history;
         }
 
@@ -421,33 +489,7 @@ public class SimulationService {
             List<MarketPriceHistoryDto> fxSorted,
             BigDecimal spotUsdTryFallback
     ) {
-        if (assetTs == null || fxSorted.isEmpty()) {
-            return positiveOrOne(spotUsdTryFallback);
-        }
-        int lo = 0;
-        int hi = fxSorted.size() - 1;
-        int ans = -1;
-        while (lo <= hi) {
-            int mid = (lo + hi) >>> 1;
-            LocalDateTime fts = fxSorted.get(mid).timestamp();
-            if (!fts.isAfter(assetTs)) {
-                ans = mid;
-                lo = mid + 1;
-            } else {
-                hi = mid - 1;
-            }
-        }
-        if (ans >= 0) {
-            BigDecimal m = midPrice(fxSorted.get(ans));
-            if (m != null && m.signum() > 0) {
-                return m;
-            }
-        }
-        BigDecimal earliest = midPrice(fxSorted.get(0));
-        if (earliest != null && earliest.signum() > 0) {
-            return earliest;
-        }
-        return positiveOrOne(spotUsdTryFallback);
+        return HistoricalUsdTryConversion.resolveUsdTryAt(assetTs, fxSorted, spotUsdTryFallback);
     }
 
     private static BigDecimal positiveOrOne(BigDecimal spot) {
@@ -461,12 +503,24 @@ public class SimulationService {
         return LocalDate.now(TZ);
     }
 
+    /**
+     * Güncel fiyat spot endpoint'ten geldiği için günlük candle coverage en fazla son kapanmış güne kadar zorunlu.
+     * Gece yarısı civarı "bugün" mumu henüz oluşmadan gereksiz PREPARING'e düşmemek için coverage'i dünkü güne cap'leriz.
+     */
+    private static LocalDate cryptoHistoryCoverageTo(LocalDate historyFrom, LocalDate today) {
+        LocalDate latestClosedDay = today.minusDays(1);
+        if (latestClosedDay.isBefore(historyFrom)) {
+            return historyFrom;
+        }
+        return latestClosedDay;
+    }
+
     private BigDecimal resolveCurrentPriceTry(
             AssetType type,
             String symbol,
             List<MarketPriceHistoryDto> normalizedHistory
     ) {
-        BigDecimal spot = nz(marketDataClient.getPriceTry(type, symbol));
+        BigDecimal spot = nz(marketDataClient.getPriceTry(currentPriceLookupType(type, symbol), currentPriceLookupSymbol(type, symbol)));
         if (spot.signum() > 0) {
             return spot;
         }
@@ -480,6 +534,108 @@ public class SimulationService {
                 .map(this::midPrice)
                 .filter(p -> p != null && p.signum() > 0)
                 .orElse(BigDecimal.ZERO);
+    }
+
+    private List<MarketPriceHistoryDto> loadHistory(
+            AssetType type,
+            String symbol,
+            LocalDate from,
+            LocalDate to,
+            int days
+    ) {
+        return switch (type) {
+            case METAL -> loadChartCompatibleOrFallback(type, symbol, days,
+                    () -> marketDataClient.getMetalHistoryBetween(symbol, from, to));
+            case BIST -> marketDataClient.getBistHistoryBetween(stripBistSuffix(symbol), from, to);
+            case STOCK -> {
+                if (HistoricalUsdTryConversion.isBistSymbol(symbol)) {
+                    String lookupSymbol = stripBistSuffix(symbol);
+                    Map<String, List<MarketPriceHistoryDto>> mapped =
+                            marketDataClient.getBistBatchHistoryMapped(lookupSymbol, from, to);
+                    List<MarketPriceHistoryDto> exact = mapped.get(lookupSymbol);
+                    yield exact != null && !exact.isEmpty()
+                            ? exact
+                            : mapped.values().stream().findFirst().orElse(List.of());
+                }
+                yield loadChartCompatibleOrFallback(type, symbol, days,
+                        () -> marketDataClient.getHistory(type, symbol, days));
+            }
+            case FX -> loadChartCompatibleOrFallback(type, symbol, days,
+                    () -> marketDataClient.getHistory(type, symbol, days));
+            case CRYPTO -> marketDataClient.getCryptoPrefilledHistory(symbol, days, "daily");
+            default -> marketDataClient.getHistory(type, symbol, days);
+        };
+    }
+
+    private List<MarketPriceHistoryDto> loadChartCompatibleOrFallback(
+            AssetType type,
+            String symbol,
+            int days,
+            Supplier<List<MarketPriceHistoryDto>> fallbackSupplier
+    ) {
+        List<MarketPriceHistoryDto> chartCompatible = marketDataClient.getChartCompatibleHistory(type, symbol, days, "daily");
+        if (chartCompatible != null && !chartCompatible.isEmpty()) {
+            return chartCompatible;
+        }
+        List<MarketPriceHistoryDto> fallback = fallbackSupplier != null ? fallbackSupplier.get() : null;
+        return fallback != null ? fallback : List.of();
+    }
+
+    private BigDecimal resolveSameDayHourlyPriceTry(
+            AssetType type,
+            String symbol,
+            LocalDate buyDate,
+            LocalDate today,
+            List<MarketPriceHistoryDto> fxSorted,
+            BigDecimal spotUsdTryFallback
+    ) {
+        if (!supportsHourlyExactLookup(type, symbol)) {
+            return null;
+        }
+        long ageDays = ChronoUnit.DAYS.between(buyDate, today);
+        if (ageDays < 0 || ageDays > HOURLY_EXACT_MAX_AGE_DAYS) {
+            return null;
+        }
+        int days = AllowedHistoryDays.smallestCovering(ageDays + 1);
+        List<MarketPriceHistoryDto> hourly = type == AssetType.CRYPTO
+                ? marketDataClient.getCryptoPrefilledHistory(symbol, days, "hourly")
+                : marketDataClient.getChartCompatibleHistory(type, symbol, days, "hourly");
+        return hourly.stream()
+                .filter(Objects::nonNull)
+                .filter(h -> h.timestamp() != null)
+                .filter(h -> h.timestamp().atZone(TZ).toLocalDate().isEqual(buyDate))
+                .max(Comparator.comparing(MarketPriceHistoryDto::timestamp))
+                .map(h -> normalizeHistoryPricesToTry(List.of(h), type, symbol, fxSorted, spotUsdTryFallback))
+                .filter(list -> !list.isEmpty())
+                .map(list -> midPrice(list.getFirst()))
+                .filter(px -> px != null && px.signum() > 0)
+                .orElse(null);
+    }
+
+    private boolean supportsHourlyExactLookup(AssetType type, String symbol) {
+        if (type == AssetType.STOCK && HistoricalUsdTryConversion.isBistSymbol(symbol)) {
+            return false;
+        }
+        return type == AssetType.FX || type == AssetType.CRYPTO || type == AssetType.STOCK || type == AssetType.METAL;
+    }
+
+    private static AssetType currentPriceLookupType(AssetType type, String symbol) {
+        if (type == AssetType.STOCK && HistoricalUsdTryConversion.isBistSymbol(symbol)) {
+            return AssetType.BIST;
+        }
+        return type;
+    }
+
+    private static String currentPriceLookupSymbol(AssetType type, String symbol) {
+        if (type == AssetType.BIST || (type == AssetType.STOCK && HistoricalUsdTryConversion.isBistSymbol(symbol))) {
+            return stripBistSuffix(symbol);
+        }
+        return symbol;
+    }
+
+    private static String stripBistSuffix(String symbol) {
+        String normalized = symbol == null ? "" : symbol.trim().toUpperCase();
+        return normalized.endsWith(".IS") ? normalized.substring(0, normalized.length() - 3) : normalized;
     }
 
     private record HistoricalPriceRef(

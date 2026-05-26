@@ -9,6 +9,9 @@ import java.util.List;
  */
 public class SimulationResponseDto {
 
+    public static final String STATUS_READY = "READY";
+    public static final String STATUS_PREPARING = "PREPARING";
+
     private final String type;
     private final String symbol;
     private final LocalDate buyDate;
@@ -27,6 +30,8 @@ public class SimulationResponseDto {
     private final String message;
     /** TRY veya USD — parasal alanlar bu birimde. */
     private final String displayCurrency;
+    private final String status;
+    private final Integer retryAfterSeconds;
 
     public SimulationResponseDto(
             String type,
@@ -47,6 +52,50 @@ public class SimulationResponseDto {
             String message,
             String displayCurrency
     ) {
+        this(
+                type,
+                symbol,
+                buyDate,
+                inputAmountTry,
+                historicalPriceTry,
+                currentPriceTry,
+                unitsBought,
+                currentValueTry,
+                pnlTry,
+                pnlPct,
+                buyPriceSource,
+                historicalPriceDate,
+                qualityFlag,
+                performanceSeries,
+                approximationNoticeCode,
+                message,
+                displayCurrency,
+                STATUS_READY,
+                null
+        );
+    }
+
+    public SimulationResponseDto(
+            String type,
+            String symbol,
+            LocalDate buyDate,
+            BigDecimal inputAmountTry,
+            BigDecimal historicalPriceTry,
+            BigDecimal currentPriceTry,
+            BigDecimal unitsBought,
+            BigDecimal currentValueTry,
+            BigDecimal pnlTry,
+            BigDecimal pnlPct,
+            String buyPriceSource,
+            LocalDate historicalPriceDate,
+            String qualityFlag,
+            List<SimulationPerformancePointDto> performanceSeries,
+            String approximationNoticeCode,
+            String message,
+            String displayCurrency,
+            String status,
+            Integer retryAfterSeconds
+    ) {
         this.type = type;
         this.symbol = symbol;
         this.buyDate = buyDate;
@@ -64,6 +113,40 @@ public class SimulationResponseDto {
         this.approximationNoticeCode = approximationNoticeCode;
         this.message = message;
         this.displayCurrency = displayCurrency;
+        this.status = status;
+        this.retryAfterSeconds = retryAfterSeconds;
+    }
+
+    public static SimulationResponseDto preparing(
+            String type,
+            String symbol,
+            LocalDate buyDate,
+            BigDecimal inputAmount,
+            String displayCurrency,
+            String message,
+            Integer retryAfterSeconds
+    ) {
+        return new SimulationResponseDto(
+                type,
+                symbol,
+                buyDate,
+                inputAmount,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                "SYSTEM_HISTORY",
+                null,
+                "MISSING",
+                List.of(),
+                "SIMULATION_HISTORY_PREPARING",
+                message,
+                displayCurrency,
+                STATUS_PREPARING,
+                retryAfterSeconds
+        );
     }
 
     public String getType() { return type; }
@@ -83,4 +166,6 @@ public class SimulationResponseDto {
     public String getApproximationNoticeCode() { return approximationNoticeCode; }
     public String getMessage() { return message; }
     public String getDisplayCurrency() { return displayCurrency; }
+    public String getStatus() { return status; }
+    public Integer getRetryAfterSeconds() { return retryAfterSeconds; }
 }

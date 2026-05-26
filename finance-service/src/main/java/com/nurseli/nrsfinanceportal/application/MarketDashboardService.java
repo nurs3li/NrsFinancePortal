@@ -4,14 +4,26 @@ import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.api.dto.*;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.dto.MarketPriceHistoryDto;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -19,8 +31,10 @@ import java.util.stream.Collectors;
  */
 @RequiredArgsConstructor
 @Service
+@Slf4j
 
 public class MarketDashboardService {
+    private static final Duration DASHBOARD_CACHE_TTL = Duration.ofSeconds(30);
 
     /*
      * Sparkline için pencere: FX/kripto/emtia/fon terminalde kısa aralıklar; takvim günlerinde
@@ -106,11 +120,81 @@ public class MarketDashboardService {
     );
     private final MarketOverviewService overviewService;
     private final MarketDataClient marketDataClient;
+    private final AtomicReference<CachedDashboard> dashboardCache = new AtomicReference<>();
+    private final AtomicReference<CompletableFuture<MarketDashboardResponse>> dashboardRefreshInFlight = new AtomicReference<>();
+    private final ExecutorService dashboardRefreshExecutor = Executors.newSingleThreadExecutor(new DashboardThreadFactory());
 
     /**
      * {@code buildDashboard} — FX, crypto, metal, fund, US equity ve BIST sembolleri için sparkline, heatmap tile ve volatilite listesiyle dashboard yanıtını oluşturur.
      */
     public MarketDashboardResponse buildDashboard() {
+        CachedDashboard cached = dashboardCache.get();
+        Instant now = Instant.now();
+        if (cached != null && cached.expiresAt().isAfter(now)) {
+            return cached.response();
+        }
+        if (cached != null) {
+            ensureDashboardRefresh(true);
+            return cached.response();
+        }
+        return joinDashboardRefresh(ensureDashboardRefresh(false));
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void warmDashboardCacheOnStartup() {
+        ensureDashboardRefresh(true);
+    }
+
+    @PreDestroy
+    void shutdownDashboardRefreshExecutor() {
+        dashboardRefreshExecutor.shutdownNow();
+    }
+
+    private CompletableFuture<MarketDashboardResponse> ensureDashboardRefresh(boolean async) {
+        for (;;) {
+            CompletableFuture<MarketDashboardResponse> existing = dashboardRefreshInFlight.get();
+            if (existing != null) {
+                return existing;
+            }
+            CompletableFuture<MarketDashboardResponse> created = async
+                    ? CompletableFuture.supplyAsync(this::computeDashboardAndStoreCache, dashboardRefreshExecutor)
+                    : new CompletableFuture<>();
+            if (!dashboardRefreshInFlight.compareAndSet(null, created)) {
+                continue;
+            }
+            if (async) {
+                created.whenComplete((ignored, error) -> {
+                    dashboardRefreshInFlight.compareAndSet(created, null);
+                    if (error != null) {
+                        log.warn("market dashboard async refresh failed: {}", rootCauseMessage(error));
+                    }
+                });
+            } else {
+                try {
+                    created.complete(computeDashboardAndStoreCache());
+                } catch (Throwable t) {
+                    created.completeExceptionally(t);
+                } finally {
+                    dashboardRefreshInFlight.compareAndSet(created, null);
+                }
+            }
+            return created;
+        }
+    }
+
+    private MarketDashboardResponse joinDashboardRefresh(CompletableFuture<MarketDashboardResponse> future) {
+        try {
+            return future.join();
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Market dashboard build failed", cause);
+        }
+    }
+
+    private MarketDashboardResponse computeDashboardAndStoreCache() {
         MarketOverviewResponse latest = overviewService.getOverview();
 
         List<SparklineEntry> sparklines = new ArrayList<>();
@@ -124,7 +208,7 @@ public class MarketDashboardService {
         addEquityTiles(latest, sparklines, volatility, heatmapTiles);
         addBistHeatmapTiles(sparklines, volatility, heatmapTiles);
 
-        return new MarketDashboardResponse(
+        MarketDashboardResponse response = new MarketDashboardResponse(
                 latest,
                 sparklines,
                 heatmapTiles,
@@ -139,6 +223,27 @@ public class MarketDashboardService {
                 volatility,
                 java.time.LocalDateTime.now()
         );
+        dashboardCache.set(new CachedDashboard(response, Instant.now().plus(DASHBOARD_CACHE_TTL)));
+        return response;
+    }
+
+    private static String rootCauseMessage(Throwable error) {
+        Throwable root = error;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        return root.getClass().getSimpleName() + ": " + root.getMessage();
+    }
+
+    private record CachedDashboard(MarketDashboardResponse response, Instant expiresAt) {}
+
+    private static final class DashboardThreadFactory implements ThreadFactory {
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "market-dashboard-refresh");
+            thread.setDaemon(true);
+            return thread;
+        }
     }
 
     private static boolean isUsdPerOunceMetalSymbol(String symbol) {
