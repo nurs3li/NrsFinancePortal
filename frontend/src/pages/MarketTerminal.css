@@ -2647,8 +2647,8 @@
 }
 
 .terminal-hero--spot-compact .terminal-hero-selector--with-inline-quote {
-    flex: 0 1 min(400px, 58vw);
-    max-width: min(420px, 58vw);
+    flex: 1 1 min(520px, 66vw);
+    max-width: min(560px, 66vw);
 }
 
 .terminal-hero--spot-compact .terminal-hero-hl-snippet {
@@ -2780,15 +2780,40 @@
     flex-direction: column;
     align-items: flex-end;
     justify-content: center;
-    gap: 2px;
+    gap: 4px;
     flex-shrink: 0;
     margin-left: 10px;
     text-align: right;
     min-width: 0;
 }
 
+.terminal-hero-selector__quote-main {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 10px;
+    min-width: 0;
+}
+
+.terminal-hero-selector__meta {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.terminal-hero-selector__meta-label,
+.terminal-hero-selector__meta-title,
+.terminal-hero-selector__meta-symbol {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.terminal-hero-selector__meta-title,
+.terminal-hero-selector__meta-symbol {
+    white-space: nowrap;
+}
+
 .terminal-hero-selector__price {
-    font-size: clamp(1.2rem, 2.4vw, 1.85rem);
+    font-size: clamp(1.35rem, 2.7vw, 2rem);
     font-weight: 800;
     letter-spacing: 0.01em;
     line-height: 1.1;
@@ -2796,7 +2821,7 @@
 }
 
 .terminal-hero-selector__pct {
-    font-size: 0.82rem;
+    font-size: 0.92rem;
     font-weight: 700;
     white-space: nowrap;
     line-height: 1.2;
@@ -2842,8 +2867,8 @@
 }
 
 .terminal-hero-selector-row > .terminal-hero-selector--with-inline-quote {
-    flex: 0 1 min(440px, 48vw);
-    max-width: min(500px, 54vw);
+    flex: 0 1 min(360px, 39vw);
+    max-width: min(410px, 42vw);
 }
 
 .terminal-hero-selector-row__trailing {
@@ -2859,11 +2884,11 @@
 .terminal-hero-horizons {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: clamp(6px, 1.5vw, 16px);
-    flex: 1 1 auto;
+    justify-content: space-between;
+    gap: clamp(10px, 1.2vw, 18px);
+    flex: 0 1 clamp(280px, 31vw, 380px);
     min-width: 0;
-    padding: 0 4px;
+    padding: 0 6px;
 }
 
 .terminal-hero-viop__selector-wrap .terminal-hero-horizons {
@@ -2876,12 +2901,13 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1px;
-    min-width: 0;
+    gap: 3px;
+    flex: 1 1 0;
+    min-width: 56px;
 }
 
 .terminal-hero-horizons__lab {
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 650;
     letter-spacing: 0.05em;
     text-transform: uppercase;
@@ -2891,7 +2917,7 @@
 }
 
 .terminal-hero-horizons .terminal-horizon-pct {
-    font-size: clamp(11px, 1.05vw, 13px);
+    font-size: clamp(12px, 1.25vw, 15px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     line-height: 1.15;
@@ -2899,15 +2925,15 @@
 }
 
 .terminal-hero--spot-compact .terminal-hero-horizons {
-    gap: 6px;
+    gap: 12px;
 }
 
 .terminal-hero--spot-compact .terminal-hero-horizons__lab {
-    font-size: 9px;
+    font-size: 11px;
 }
 
 .terminal-hero--spot-compact .terminal-hero-horizons .terminal-horizon-pct {
-    font-size: 11px;
+    font-size: 13px;
 }
 
 /* Karşılaştırma kartı: grafik üstü chip şeridi */
@@ -4060,6 +4086,12 @@
         width: 100%;
     }
 
+    .terminal-hero-selector__quote-main {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
     .terminal-hero-selector__price {
         font-size: 1.5rem;
         white-space: normal;
@@ -4069,7 +4101,7 @@
     }
 
     .terminal-hero-selector__pct {
-        font-size: 0.8125rem;
+        font-size: 0.875rem;
     }
 
     .terminal-hero-selector-row__trailing {
@@ -4094,7 +4126,7 @@
 
     .terminal-hero-horizons__lab,
     .terminal-hero-horizons .terminal-horizon-pct {
-        font-size: 0.6875rem;
+        font-size: 0.75rem;
         white-space: nowrap;
     }
 

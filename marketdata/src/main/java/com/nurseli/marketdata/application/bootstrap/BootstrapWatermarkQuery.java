@@ -9,6 +9,7 @@ import com.nurseli.marketdata.domain.metal.PreciousMetalUsdCatalog;
 import com.nurseli.marketdata.infrastructure.persistence.DepositRateObservationRepository;
 import com.nurseli.marketdata.infrastructure.persistence.EurobondWeeklyObservationRepository;
 import com.nurseli.marketdata.infrastructure.persistence.InflationIndexMonthlyRepository;
+import com.nurseli.marketdata.infrastructure.persistence.LoanRateWeeklyObservationRepository;
 import com.nurseli.marketdata.infrastructure.persistence.MarketPriceHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -26,6 +27,7 @@ public class BootstrapWatermarkQuery {
     private final InflationCpiProperties inflationCpiProperties;
     private final InflationPpiProperties inflationPpiProperties;
     private final DepositRateObservationRepository depositRateObservationRepository;
+    private final LoanRateWeeklyObservationRepository loanRateWeeklyObservationRepository;
     private final EurobondWeeklyObservationRepository eurobondWeeklyObservationRepository;
     private final MarketPriceHistoryRepository marketPriceHistoryRepository;
 
@@ -44,6 +46,14 @@ public class BootstrapWatermarkQuery {
         return depositRateObservationRepository.findMaxObservationDate();
     }
 
+    public Optional<LocalDate> loanRateMaxObservationDate() {
+        return loanRateWeeklyObservationRepository.findMaxObservationDate();
+    }
+
+    public long loanRateRowCount() {
+        return loanRateWeeklyObservationRepository.count();
+    }
+
     public Optional<LocalDate> eurobondMaxObservationDate() {
         return eurobondWeeklyObservationRepository.findMaxObservationDate();
     }
@@ -55,6 +65,12 @@ public class BootstrapWatermarkQuery {
     public Optional<LocalDate> metalMaxObservationDate(String canonicalSymbol) {
         return marketPriceHistoryRepository
                 .findTopBySymbolAndSourceOrderByTimestampDesc(canonicalSymbol, PreciousMetalUsdCatalog.SOURCE)
+                .map(m -> m.getTimestamp().toLocalDate());
+    }
+
+    public Optional<LocalDate> gramGoldMaxObservationDate() {
+        return marketPriceHistoryRepository
+                .findTopBySymbolOrderByTimestampDesc("XAU_TRY")
                 .map(m -> m.getTimestamp().toLocalDate());
     }
 

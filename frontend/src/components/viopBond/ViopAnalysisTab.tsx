@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { bondPositionKeys } from '../../queries/bondPositionKeys';
 import { viopPositionKeys } from '../../queries/viopPositionKeys';
@@ -203,6 +204,17 @@ export function ViopAnalysisTab({ tokens }: Props) {
 
     const cardStyle = { borderColor: tokens.border, background: tokens.bgCard };
 
+    useEffect(() => {
+        if (!detailPosition) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setDetailPosition(null);
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [detailPosition]);
+
     return (
         <div className="vb-tab-root">
             <div className="vb-tab-kpis">
@@ -325,17 +337,30 @@ export function ViopAnalysisTab({ tokens }: Props) {
                 }}
             />
 
-            {detailPosition ? (
-                <div className="vb-modal-backdrop" onClick={() => setDetailPosition(null)} role="presentation">
-                    <div className="vb-detail-drawer-mobile vb-detail-overlay" onClick={(e) => e.stopPropagation()}>
-                        <ViopPositionDetailDrawer
-                            position={detailPosition}
-                            tokens={tokens}
-                            onClose={() => setDetailPosition(null)}
-                        />
-                    </div>
-                </div>
-            ) : null}
+            {detailPosition && typeof document !== 'undefined'
+                ? createPortal(
+                      <div
+                          className="vb-detail-modal-backdrop"
+                          onClick={() => setDetailPosition(null)}
+                          role="presentation"
+                      >
+                          <div
+                              className="vb-detail-modal-shell"
+                              onClick={(e) => e.stopPropagation()}
+                              role="dialog"
+                              aria-modal="true"
+                              aria-label={t('viopBond.positionDetail', 'Pozisyon Detayı')}
+                          >
+                              <ViopPositionDetailDrawer
+                                  position={detailPosition}
+                                  tokens={tokens}
+                                  onClose={() => setDetailPosition(null)}
+                              />
+                          </div>
+                      </div>,
+                      document.body,
+                  )
+                : null}
 
             <PriceAlertModal
                 open={alertSymbol != null}

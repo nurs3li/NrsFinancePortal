@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -102,5 +103,25 @@ class LoanRatesMacroServiceTest {
         assertEquals(1, h.series().size());
         assertEquals(1, h.series().getFirst().points().size());
         assertEquals("2026-05-08", h.series().getFirst().points().getFirst().date());
+    }
+
+    @Test
+    void ingestRange_persistsHistoricalSeriesForAllConfiguredLoanTypes() {
+        when(evdsProperties.isEnabled()).thenReturn(true);
+        when(evdsProperties.getSeriesCode(EvdsSeriesLogicalNames.LOAN_RATE_CONSUMER_TRY_WEEKLY)).thenReturn("TP_KTF10");
+        when(evdsProperties.getSeriesCode(EvdsSeriesLogicalNames.LOAN_RATE_VEHICLE_TRY_WEEKLY)).thenReturn("TP_KTF11");
+        when(evdsProperties.getSeriesCode(EvdsSeriesLogicalNames.LOAN_RATE_HOUSING_TRY_WEEKLY)).thenReturn("TP_KTF12");
+        when(evdsProperties.getSeriesCode(EvdsSeriesLogicalNames.LOAN_RATE_COMMERCIAL_TRY_WEEKLY)).thenReturn("TP_KTF17");
+        when(evdsDebtClient.fetchSeriesAscending(any(String.class), any(), any())).thenReturn(List.of(
+                new EvdsSeriesPoint(LocalDate.of(2026, 5, 8).atStartOfDay(), new BigDecimal("50.10")),
+                new EvdsSeriesPoint(LocalDate.of(2026, 5, 15).atStartOfDay(), new BigDecimal("51.20"))
+        ));
+
+        var result = service.ingestRange(LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 31));
+
+        assertEquals("ok", result.status());
+        assertEquals(4, result.seriesTouched());
+        assertEquals(8, result.pointsUpserted());
+        verify(loanRatesPersistenceService, times(4)).upsertAll(anyList());
     }
 }

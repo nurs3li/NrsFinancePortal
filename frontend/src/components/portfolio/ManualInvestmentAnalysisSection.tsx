@@ -30,12 +30,15 @@ import type { ManualAssetType, ManualPortfolioAnalysis, ManualPortfolioView } fr
 import { useLanguage } from '../../i18n/LanguageContext';
 import { cryptoMeta, etfMeta, fxMeta, instrumentMeta } from '../../utils/instrumentMeta';
 import { PRECIOUS_METAL_DISPLAY_META, PRECIOUS_METAL_SYMBOLS } from '../../constants/preciousMetalsUsd';
+import { fetchSimulationSymbolsByType } from '../../services/marketDataService';
+import { getBistSymbols } from '../../services/bistEquityApi';
+import { istanbulTodayYmd } from '../simulation/simDates';
 
 const ASSET_TYPE_ORDER: ManualAssetType[] = ['STOCK', 'CRYPTO', 'FX', 'METAL', 'FUND'];
 
 type ManualSymbolOption = { value: string; label: string };
 
-function manualPortfolioSymbolOptionsForType(type: ManualAssetType): ManualSymbolOption[] {
+function manualPortfolioFallbackSymbolOptionsForType(type: ManualAssetType): ManualSymbolOption[] {
     switch (type) {
         case 'STOCK':
             return Object.keys(instrumentMeta)
@@ -60,6 +63,44 @@ function manualPortfolioSymbolOptionsForType(type: ManualAssetType): ManualSymbo
                 .map((k) => ({ value: k, label: `${k} — ${etfMeta[k]!.name}` }));
         default:
             return [];
+    }
+}
+
+function manualPortfolioSymbolLabel(
+    type: ManualAssetType,
+    symbol: string,
+    bistNameBySymbol: Record<string, string> = {},
+): string {
+    const sym = String(symbol ?? '').trim().toUpperCase();
+    if (!sym) return symbol;
+    switch (type) {
+        case 'STOCK': {
+            if (sym.endsWith('.IS')) {
+                const bistBase = sym.slice(0, -3);
+                const bistName = bistNameBySymbol[bistBase];
+                return bistName ? `${sym} — ${bistName} (BIST)` : `${sym} — BIST`;
+            }
+            const meta = instrumentMeta[sym];
+            return meta?.name ? `${sym} — ${meta.name}` : sym;
+        }
+        case 'CRYPTO': {
+            const meta = cryptoMeta[sym];
+            return meta?.name ? `${sym} — ${meta.name}` : sym;
+        }
+        case 'FX': {
+            const meta = fxMeta[sym];
+            return meta ? `${sym} — ${meta.baseName} / ${meta.quoteName}` : sym;
+        }
+        case 'METAL': {
+            const meta = PRECIOUS_METAL_DISPLAY_META[sym];
+            return meta?.displayName ? `${sym} — ${meta.displayName}` : sym;
+        }
+        case 'FUND': {
+            const meta = etfMeta[sym];
+            return meta?.name ? `${sym} — ${meta.name}` : sym;
+        }
+        default:
+            return sym;
     }
 }
 
@@ -99,8 +140,12 @@ function priceSourceLabel(t: (k: string, d: string) => string, src: string | nul
             return t('manualInvest.sourceUser', 'Manuel giriş');
         case 'MARKET_HISTORY_EXACT':
             return t('manualInvest.sourceExact', 'Seçilen gün kapanışı');
+        case 'MARKET_HISTORY_SAME_DAY_HOURLY':
+            return t('manualInvest.sourceSameDayHourly', 'Aynı gün son saatlik fiyat');
         case 'MARKET_HISTORY_PREVIOUS_CLOSE':
             return t('manualInvest.sourcePrevClose', 'En yakın önceki kapanış');
+        case 'MARKET_HISTORY_NEXT_CLOSE':
+            return t('manualInvest.sourceNextClose', 'En yakın sonraki kapanış');
         case 'NOT_RESOLVED':
             return t('manualInvest.sourceNotResolved', 'Bulunamadı');
         default:
@@ -204,10 +249,10 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     const [fType, setFType] = useState<ManualAssetType>('CRYPTO');
     const [fSymbol, setFSymbol] = useState('');
     const [fQty, setFQty] = useState('1');
-    const [fBuyDate, setFBuyDate] = useState(() => new Date().toISOString().slice(0, 10));
+    const [fBuyDate, setFBuyDate] = useState(() => istanbulTodayYmd());
     const [fBuyFee, setFBuyFee] = useState('0');
     const [fNote, setFNote] = useState('');
-    const [fSellDate, setFSellDate] = useState(() => new Date().toISOString().slice(0, 10));
+    const [fSellDate, setFSellDate] = useState(() => istanbulTodayYmd());
     const [fSellFee, setFSellFee] = useState('0');
     const [fBuyPriceStr, setFBuyPriceStr] = useState('');
     const [fSellPriceStr, setFSellPriceStr] = useState('');
@@ -220,7 +265,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
 
     const [closeOpen, setCloseOpen] = useState(false);
     const [closeId, setCloseId] = useState<number | null>(null);
-    const [cSellDate, setCSellDate] = useState(() => new Date().toISOString().slice(0, 10));
+    const [cSellDate, setCSellDate] = useState(() => istanbulTodayYmd());
     const [cSellFee, setCSellFee] = useState('0');
     const [cSellPriceStr, setCSellPriceStr] = useState('');
     const [cSellSubmitMode, setCSellSubmitMode] = useState<'auto' | 'manual'>('auto');
@@ -235,10 +280,10 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         setFType('CRYPTO');
         setFSymbol('');
         setFQty('1');
-        setFBuyDate(new Date().toISOString().slice(0, 10));
+        setFBuyDate(istanbulTodayYmd());
         setFBuyFee('0');
         setFNote('');
-        setFSellDate(new Date().toISOString().slice(0, 10));
+        setFSellDate(istanbulTodayYmd());
         setFSellFee('0');
         setFBuyPriceStr('');
         setFSellPriceStr('');
@@ -262,7 +307,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         setFBuyDate(String(row.buyDate ?? '').slice(0, 10));
         setFBuyFee(String(n(row.buyFee) ?? 0));
         setFNote(row.note ?? '');
-        setFSellDate(row.sellDate ? String(row.sellDate).slice(0, 10) : new Date().toISOString().slice(0, 10));
+        setFSellDate(row.sellDate ? String(row.sellDate).slice(0, 10) : istanbulTodayYmd());
         setFSellFee(String(n(row.sellFee) ?? 0));
         setFBuyPriceStr(row.buyPrice != null ? String(n(row.buyPrice)) : '');
         setFSellPriceStr(row.sellPrice != null ? String(n(row.sellPrice)) : '');
@@ -304,7 +349,51 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         setTablePage(0);
     }, [statusFilter, typeFilter, search]);
 
-    const baseSymbolOptions = useMemo(() => manualPortfolioSymbolOptionsForType(fType), [fType]);
+    const fallbackSymbolOptions = useMemo(() => manualPortfolioFallbackSymbolOptionsForType(fType), [fType]);
+    const symbolOptionsQuery = useQuery({
+        queryKey: ['manualPortfolio', 'symbolOptions', fType] as const,
+        queryFn: async () => {
+            const fallback = manualPortfolioFallbackSymbolOptionsForType(fType);
+            try {
+                const [dynamicSymbols, bistSymbols] = await Promise.all([
+                    fetchSimulationSymbolsByType(fType as 'STOCK' | 'CRYPTO' | 'FX' | 'METAL' | 'FUND'),
+                    fType === 'STOCK' ? getBistSymbols() : Promise.resolve([]),
+                ]);
+                const bistNameBySymbol: Record<string, string> = Object.fromEntries(
+                    (bistSymbols ?? [])
+                        .map((row) => [
+                            String(row.symbol ?? '')
+                                .trim()
+                                .toUpperCase(),
+                            String(row.displayName ?? '').trim(),
+                        ] as const)
+                        .filter(([sym]) => Boolean(sym)),
+                );
+                const merged = new Set<string>(fallback.map((opt) => opt.value));
+                for (const sym of dynamicSymbols ?? []) {
+                    const normalized = String(sym ?? '').trim().toUpperCase();
+                    if (normalized) merged.add(normalized);
+                }
+                if (fType === 'STOCK') {
+                    for (const row of bistSymbols ?? []) {
+                        const sym = String(row.symbol ?? '').trim().toUpperCase();
+                        if (sym) merged.add(`${sym}.IS`);
+                    }
+                }
+                return [...merged]
+                    .sort((a, b) => a.localeCompare(b, 'tr-TR'))
+                    .map((value) => ({
+                        value,
+                        label: manualPortfolioSymbolLabel(fType, value, bistNameBySymbol),
+                    }));
+            } catch {
+                return fallback;
+            }
+        },
+        staleTime: 5 * 60_000,
+        placeholderData: fallbackSymbolOptions,
+    });
+    const baseSymbolOptions = symbolOptionsQuery.data ?? fallbackSymbolOptions;
     const symbolSelectOptions = useMemo(() => {
         const sym = fSymbol.trim().toUpperCase();
         if (!sym || baseSymbolOptions.some((o) => o.value === sym)) {
@@ -538,7 +627,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
 
     const openClose = (id: number) => {
         setCloseId(id);
-        setCSellDate(new Date().toISOString().slice(0, 10));
+        setCSellDate(istanbulTodayYmd());
         setCSellFee('0');
         setCSellPriceStr('');
         setCSellSubmitMode('auto');
@@ -989,6 +1078,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                                 {lastBuyResolve?.found ? (
                                     <span className="mia-muted" style={{ fontSize: '0.78rem', alignSelf: 'center' }}>
                                         {formatCurrencyTry(locale, lastBuyResolve.price)} · {priceSourceLabel(t, lastBuyResolve.source as string)}
+                                        {lastBuyResolve.resolvedDate ? ` · ${String(lastBuyResolve.resolvedDate).slice(0, 10)}` : ''}
                                     </span>
                                 ) : null}
                             </div>
@@ -1037,6 +1127,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                                         {lastSellResolve?.found ? (
                                             <span className="mia-muted" style={{ fontSize: '0.78rem', alignSelf: 'center' }}>
                                                 {formatCurrencyTry(locale, lastSellResolve.price)} · {priceSourceLabel(t, lastSellResolve.source as string)}
+                                                {lastSellResolve.resolvedDate ? ` · ${String(lastSellResolve.resolvedDate).slice(0, 10)}` : ''}
                                             </span>
                                         ) : null}
                                     </div>
@@ -1241,8 +1332,13 @@ function AnalysisBody({
             .filter((r) => r.y != null && Number.isFinite(r.y));
     }, [data.chartSeries, chartMetric]);
 
-    const prevCloseNote =
-        p.buyPriceSource === 'MARKET_HISTORY_PREVIOUS_CLOSE' || p.sellPriceSource === 'MARKET_HISTORY_PREVIOUS_CLOSE';
+    const fallbackDateNote =
+        p.buyPriceSource === 'MARKET_HISTORY_PREVIOUS_CLOSE'
+        || p.sellPriceSource === 'MARKET_HISTORY_PREVIOUS_CLOSE'
+        || p.buyPriceSource === 'MARKET_HISTORY_NEXT_CLOSE'
+        || p.sellPriceSource === 'MARKET_HISTORY_NEXT_CLOSE';
+    const sameDayHourlyNote =
+        p.buyPriceSource === 'MARKET_HISTORY_SAME_DAY_HOURLY' || p.sellPriceSource === 'MARKET_HISTORY_SAME_DAY_HOURLY';
 
     return (
         <div>
@@ -1273,11 +1369,18 @@ function AnalysisBody({
             <div style={{ fontSize: '0.75rem', color: tokens.textMuted, marginBottom: 8 }}>
                 <strong>{t('manualInvest.priceSources', 'Fiyat kaynakları')}:</strong> {t('manualInvest.buy', 'Alış')}: {priceSourceLabel(t, p.buyPriceSource)}{' '}
                 {p.sellPriceSource ? `· ${t('manualInvest.sell', 'Satış')}: ${priceSourceLabel(t, p.sellPriceSource)}` : ''}
-                {prevCloseNote ? (
+                {fallbackDateNote ? (
                     <span>
                         {' '}
                         <Info size={14} style={{ verticalAlign: 'text-bottom', marginLeft: 4 }} aria-hidden />
-                        {t('manualInvest.prevCloseHint', 'Seçilen tarihte fiyat bulunamadığı için en yakın önceki kapanış kullanılmış olabilir.')}
+                        {t('manualInvest.prevCloseHint', 'Seçilen tarihte günlük fiyat bulunamadığı için en yakın önceki veya sonraki kapanış kullanılmış olabilir.')}
+                    </span>
+                ) : null}
+                {sameDayHourlyNote ? (
+                    <span>
+                        {' '}
+                        <Info size={14} style={{ verticalAlign: 'text-bottom', marginLeft: 4 }} aria-hidden />
+                        {t('manualInvest.sameDayHourlyHint', 'Seçilen gün için günlük kayıt yerine aynı günün son saatlik fiyatı kullanılmış olabilir.')}
                     </span>
                 ) : null}
             </div>

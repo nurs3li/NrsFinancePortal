@@ -5,6 +5,7 @@ import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.dto.MarketPriceHistoryDto;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.dto.MarketPriceLatestDto;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -15,6 +16,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.Duration;
@@ -41,12 +43,20 @@ public class MarketDataClient {
 
     private record ApiEnvelope<T>(Boolean success, T data, Object errors, Object meta) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record BatchHistoryBody(Map<String, List<BatchHistoryPoint>> series) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record BatchHistoryPoint(OffsetDateTime t, BigDecimal c) {}
+
     /** Döviz dahil tüm latest haritalarını market-data {@code MarketPriceLatestResponse} ile aynı şema. */
     private static final ParameterizedTypeReference<Map<String, MarketPriceLatestDto>> LATEST_MAP =
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<Map<String, MarketPriceLatestDto>>> LATEST_ENVELOPE =
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<List<MarketPriceHistoryDto>>> HISTORY_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<BatchHistoryBody>> BATCH_HISTORY_ENVELOPE =
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<List<ViopLatestRow>>> VIOP_LATEST_ENVELOPE =
             new ParameterizedTypeReference<>() {};
@@ -65,6 +75,10 @@ public class MarketDataClient {
     private static final ParameterizedTypeReference<ApiEnvelope<ViopPriceAtRow>> VIOP_PRICE_AT_ENVELOPE =
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<ViopHistoryResponseRow>> VIOP_HISTORY_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<CryptoHistoryCoverageDto>> CRYPTO_COVERAGE_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<CryptoWarmupResponseDto>> CRYPTO_WARMUP_ENVELOPE =
             new ParameterizedTypeReference<>() {};
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -191,9 +205,34 @@ public class MarketDataClient {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ViopHistoryResponseRow(String contractCode, List<ViopHistoryPointRow> points) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record CryptoHistoryCoverageDto(
+            String symbol,
+            LocalDate requestedFrom,
+            LocalDate requestedTo,
+            LocalDate oldestAvailable,
+            LocalDate newestAvailable,
+            long availableDays,
+            long expectedDays,
+            boolean ready
+    ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record CryptoWarmupResponseDto(
+            String status,
+            int requestedSymbols,
+            int queuedSymbols,
+            LocalDate requestedFrom,
+            LocalDate requestedTo,
+            String message
+    ) {}
+
     private static final ZoneId VIOP_ZONE = ZoneId.of("Europe/Istanbul");
 
     private final WebClient marketDataWebClient;
+
+    @Value("${market-data.internal-backfill-token:}")
+    private String internalBackfillToken;
 
     /**
      * Tüm "latest" haritalarını tek seferde (paralel) çeker. Portföy performansı gibi
@@ -294,7 +333,9 @@ public class MarketDataClient {
             }
             case METAL -> {
                 MarketPriceLatestDto metal = snap.metals().get(symbol);
-                yield metal != null ? nz(metal.buyPrice()) : BigDecimal.ZERO;
+                if (metal == null) yield BigDecimal.ZERO;
+                BigDecimal raw = nz(metal.buyPrice());
+                yield isUsdQuotedMetalSymbol(symbol) ? usdToTry(raw, snap) : raw;
             }
             case FUND -> {
                 MarketPriceLatestDto fund = snap.funds().get(symbol);
@@ -324,6 +365,10 @@ public class MarketDataClient {
         return v == null ? BigDecimal.ZERO : v;
     }
 
+    private static boolean isUsdQuotedMetalSymbol(String symbol) {
+        return symbol != null && symbol.trim().toUpperCase().endsWith("_USD_OZ");
+    }
+
     /**
      * Sembol için son N gün market history DTO listesi getirir.
      */
@@ -347,6 +392,157 @@ public class MarketDataClient {
                 .onErrorReturn(List.of())
                 .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(2));
         return list != null ? list : List.of();
+    }
+
+    public CryptoHistoryCoverageDto getCryptoHistoryCoverage(String symbol, LocalDate from, LocalDate to) {
+        if (symbol == null || symbol.isBlank() || from == null || to == null || to.isBefore(from)) {
+            return new CryptoHistoryCoverageDto(symbol, from, to, null, null, 0, 0, false);
+        }
+        try {
+            ApiEnvelope<CryptoHistoryCoverageDto> envelope = marketDataWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/market/crypto/history/coverage")
+                            .queryParam("symbol", symbol.trim().toUpperCase())
+                            .queryParam("from", from.toString())
+                            .queryParam("to", to.toString())
+                            .build())
+                    .retrieve()
+                    .bodyToMono(CRYPTO_COVERAGE_ENVELOPE)
+                    .timeout(HISTORY_REQUEST_TIMEOUT)
+                    .onErrorReturn(new ApiEnvelope<>(Boolean.FALSE, null, null, null))
+                    .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(5));
+            CryptoHistoryCoverageDto body = envelope != null ? envelope.data() : null;
+            return body != null ? body : new CryptoHistoryCoverageDto(symbol, from, to, null, null, 0, 0, false);
+        } catch (RuntimeException ignored) {
+            return new CryptoHistoryCoverageDto(symbol, from, to, null, null, 0, 0, false);
+        }
+    }
+
+    public boolean triggerCryptoHistoryWarmup(String symbol, LocalDate from, LocalDate to, String reason) {
+        if (symbol == null || symbol.isBlank() || from == null || to == null || to.isBefore(from)) {
+            return false;
+        }
+        try {
+            ApiEnvelope<CryptoWarmupResponseDto> envelope = marketDataWebClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/internal/market/backfill/crypto-history")
+                            .queryParam("symbols", symbol.trim().toUpperCase())
+                            .queryParam("from", from.toString())
+                            .queryParam("to", to.toString())
+                            .queryParam("reason", reason == null || reason.isBlank() ? "simulation" : reason)
+                            .build())
+                    .headers(headers -> applyInternalBackfillToken(headers))
+                    .retrieve()
+                    .bodyToMono(CRYPTO_WARMUP_ENVELOPE)
+                    .timeout(REQUEST_TIMEOUT)
+                    .onErrorReturn(new ApiEnvelope<>(Boolean.FALSE, null, null, null))
+                    .block(REQUEST_TIMEOUT.plusSeconds(2));
+            CryptoWarmupResponseDto body = envelope != null ? envelope.data() : null;
+            return body != null && ("QUEUED".equalsIgnoreCase(body.status()) || "IN_FLIGHT".equalsIgnoreCase(body.status()) || "READY".equalsIgnoreCase(body.status()));
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    public List<MarketPriceHistoryDto> getCryptoPrefilledHistory(String symbol, int days, String bucket) {
+        if (symbol == null || symbol.isBlank()) {
+            return List.of();
+        }
+        List<MarketPriceHistoryDto> list = marketDataWebClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/api/market/crypto/history/prefilled")
+                        .queryParam("symbol", symbol.trim().toUpperCase())
+                        .queryParam("days", days)
+                        .queryParam("bucket", bucket == null || bucket.isBlank() ? "daily" : bucket.trim().toLowerCase())
+                        .build())
+                .retrieve()
+                .bodyToMono(HISTORY_ENVELOPE)
+                .map(envelope -> envelope.data() != null ? envelope.data() : List.<MarketPriceHistoryDto>of())
+                .timeout(HISTORY_REQUEST_TIMEOUT)
+                .onErrorReturn(List.of())
+                .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(2));
+        return list != null ? list : List.of();
+    }
+
+    /**
+     * Piyasa grafikleriyle uyumlu geçmiş — tek sembol için batch history kullanır.
+     */
+    public List<MarketPriceHistoryDto> getChartCompatibleHistory(AssetType type, String symbol, int days, String bucket) {
+        if (!supportsBatchHistory(type) || symbol == null || symbol.isBlank()) {
+            return List.of();
+        }
+        String marketType = batchMarketType(type);
+        if (marketType == null) {
+            return List.of();
+        }
+        String sym = symbol.trim().toUpperCase();
+        try {
+            ApiEnvelope<BatchHistoryBody> envelope = marketDataWebClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/api/market/history/batch")
+                            .queryParam("type", marketType)
+                            .queryParam("symbols", sym)
+                            .queryParam("days", days)
+                            .queryParam("bucket", bucket == null || bucket.isBlank() ? "daily" : bucket.trim().toLowerCase())
+                            .build())
+                    .retrieve()
+                    .bodyToMono(BATCH_HISTORY_ENVELOPE)
+                    .timeout(HISTORY_REQUEST_TIMEOUT)
+                    .onErrorReturn(new ApiEnvelope<>(Boolean.FALSE, null, null, null))
+                    .block(HISTORY_REQUEST_TIMEOUT.plusSeconds(5));
+            BatchHistoryBody body = envelope != null ? envelope.data() : null;
+            if (body == null || body.series() == null || body.series().isEmpty()) {
+                return List.of();
+            }
+            List<BatchHistoryPoint> candles = body.series().get(sym);
+            if ((candles == null || candles.isEmpty()) && body.series().size() == 1) {
+                candles = body.series().values().stream().findFirst().orElse(List.of());
+            }
+            if (candles == null || candles.isEmpty()) {
+                return List.of();
+            }
+            List<MarketPriceHistoryDto> out = new ArrayList<>(candles.size());
+            ZoneId ist = ZoneId.of("Europe/Istanbul");
+            for (BatchHistoryPoint candle : candles) {
+                if (candle == null || candle.t() == null || candle.c() == null || candle.c().signum() <= 0) {
+                    continue;
+                }
+                LocalDateTime ts = candle.t().atZoneSameInstant(ist).toLocalDateTime();
+                out.add(new MarketPriceHistoryDto(candle.c(), candle.c(), ts));
+            }
+            return out;
+        } catch (RuntimeException ignored) {
+            return List.of();
+        }
+    }
+
+    private void applyInternalBackfillToken(org.springframework.http.HttpHeaders headers) {
+        String token = resolveInternalBackfillToken();
+        if (token != null && !token.isBlank()) {
+            headers.set("X-Nrs-Internal-Token", token);
+        }
+    }
+
+    private String resolveInternalBackfillToken() {
+        if (internalBackfillToken != null && !internalBackfillToken.isBlank()) {
+            return internalBackfillToken.trim();
+        }
+        String env = System.getenv("NRS_INTERNAL_BACKFILL_TOKEN");
+        return env != null && !env.isBlank() ? env.trim() : "";
+    }
+
+    private static boolean supportsBatchHistory(AssetType type) {
+        return type == AssetType.FX || type == AssetType.CRYPTO || type == AssetType.STOCK || type == AssetType.METAL;
+    }
+
+    private static String batchMarketType(AssetType type) {
+        return switch (type) {
+            case FX -> "FX";
+            case CRYPTO -> "CRYPTO";
+            case STOCK -> "EQUITY";
+            case METAL -> "METALS";
+            default -> null;
+        };
     }
 
     /**

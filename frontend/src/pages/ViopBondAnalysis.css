@@ -1714,6 +1714,32 @@
     align-self: flex-end;
 }
 
+.vb-detail-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 6000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(2, 6, 23, 0.76);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.vb-detail-modal-shell {
+    width: min(100%, 560px);
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    border-radius: 16px;
+    box-sizing: border-box;
+}
+
+.vb-detail-modal-shell .vb-drawer {
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .vb-modal-backdrop {
     position: fixed;
     inset: 0;
@@ -1729,6 +1755,14 @@
     .vb-modal-backdrop {
         align-items: center;
         padding: 1rem;
+    }
+
+    .vb-detail-modal-backdrop {
+        padding: 24px;
+    }
+
+    .vb-detail-modal-shell {
+        max-height: calc(100vh - 48px);
     }
 
     .vb-detail-overlay.vb-detail-drawer-mobile {

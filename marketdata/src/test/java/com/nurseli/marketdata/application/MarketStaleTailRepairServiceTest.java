@@ -20,8 +20,10 @@ import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,6 +53,8 @@ class MarketStaleTailRepairServiceTest {
     @Mock
     private IsYatirimMetalUsdIngestService isYatirimMetalUsdIngestService;
     @Mock
+    private MetalHistoryWarmupService metalHistoryWarmupService;
+    @Mock
     private MarketMetalsIsyatirimProperties marketMetalsIsyatirimProperties;
     @Mock
     private DebtIngestService debtIngestService;
@@ -76,6 +80,7 @@ class MarketStaleTailRepairServiceTest {
                         marketPriceIngestService,
                         metalPriceIngestService,
                         isYatirimMetalUsdIngestService,
+                        metalHistoryWarmupService,
                         marketMetalsIsyatirimProperties,
                         debtIngestService);
     }
@@ -92,7 +97,7 @@ class MarketStaleTailRepairServiceTest {
 
         service.repairBeforeRead(MarketType.EQUITY, "AAPL", today);
 
-        verify(equityPriceIngestService).ingestIncrementalForSymbol("AAPL");
+        verify(equityPriceIngestService, timeout(1000)).ingestIncrementalForSymbol("AAPL");
     }
 
     @Test
@@ -107,7 +112,7 @@ class MarketStaleTailRepairServiceTest {
 
         service.repairBeforeRead(MarketType.EQUITY, "AAPL", today);
 
-        verify(equityPriceIngestService).ingestIncrementalForSymbol("AAPL");
+        verify(equityPriceIngestService, timeout(1000)).ingestIncrementalForSymbol("AAPL");
     }
 
     @Test
@@ -121,6 +126,7 @@ class MarketStaleTailRepairServiceTest {
 
         service.repairBeforeRead(MarketType.EQUITY, "AAPL", today);
 
+        sleepQuietly();
         verify(equityPriceIngestService, never()).ingestIncrementalForSymbol(eq("AAPL"));
     }
 
@@ -135,7 +141,7 @@ class MarketStaleTailRepairServiceTest {
 
         service.repairBeforeRead(MarketType.FX, "USDTRY", today);
 
-        verify(marketPriceIngestService).fetchAndSaveFxHistoryBackfill(anyInt());
+        verify(marketPriceIngestService, timeout(1000)).fetchAndSaveFxHistoryBackfill(anyInt());
     }
 
     @Test
@@ -143,5 +149,40 @@ class MarketStaleTailRepairServiceTest {
         staleTailProperties.setEnabled(false);
         service.repairBeforeRead(MarketType.EQUITY, "AAPL", LocalDate.now(IST));
         verify(equityPriceIngestService, never()).ingestIncrementalForSymbol(eq("AAPL"));
+    }
+
+    @Test
+    void repair_metal_xauTry_emptyDb_triggersWarmup() {
+        LocalDate today = LocalDate.now(IST);
+        when(marketMetalsIsyatirimProperties.getDefaultLookbackYears()).thenReturn(2);
+        when(marketPriceHistoryRepository.findTopBySymbolOrderByTimestampDesc("XAU_TRY"))
+                .thenReturn(Optional.empty());
+
+        service.repairBeforeRead(MarketType.METALS, "XAU_TRY", today);
+
+        verify(metalHistoryWarmupService, timeout(1000))
+                .warmupSymbolSync(eq("XAU_TRY"), any(LocalDate.class), eq(today), eq("stale-tail-empty-db"));
+    }
+
+    @Test
+    void repair_metal_usd_emptyDb_triggersWarmup() {
+        LocalDate today = LocalDate.now(IST);
+        when(marketMetalsIsyatirimProperties.isEnabled()).thenReturn(true);
+        when(marketMetalsIsyatirimProperties.getDefaultLookbackYears()).thenReturn(2);
+        when(marketPriceHistoryRepository.findTopBySymbolAndSourceOrderByTimestampDesc("XAU_USD_OZ", "IS_YATIRIM"))
+                .thenReturn(Optional.empty());
+
+        service.repairBeforeRead(MarketType.METALS, "XAU_USD_OZ", today);
+
+        verify(metalHistoryWarmupService, timeout(1000))
+                .warmupSymbolSync(eq("XAU_USD_OZ"), any(LocalDate.class), eq(today), eq("stale-tail-empty-db"));
+    }
+
+    private static void sleepQuietly() {
+        try {
+            Thread.sleep(150);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

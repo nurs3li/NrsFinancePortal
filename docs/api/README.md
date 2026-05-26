@@ -1,70 +1,155 @@
-# API documentation
+# REST API dokümantasyonu
 
-## Files
+Finans Portalı REST API'leri **OpenAPI 3** (SpringDoc) ile dokümante edilir. Canlı deneme arayüzü **Swagger UI** üzerinden sunulur.
 
-| File | Purpose |
-|------|---------|
-| [response-standardization-inventory.md](./response-standardization-inventory.md) | Unified `ApiResponse` / `ApiEnvelope` contract |
-| `endpoints.md` (optional) | Regenerate with `bash tools/generate_api_catalog.sh` when you want a committed catalog |
-| [openapi/](./openapi/) | Optional JSON snapshots from live Springdoc (`--export-openapi`) |
+---
 
-## Regenerate the catalog
+## Canlı Swagger UI
 
-**Static mode (CI-safe, no running services):**
+| Servis | Docker URL | Swagger UI |
+|--------|------------|------------|
+| finance-service | http://localhost:8085 | http://localhost:8085/swagger-ui.html |
+| marketdata | http://localhost:8083 | http://localhost:8083/swagger-ui.html |
+| notification-service | http://localhost:8089 | http://localhost:8089/swagger-ui.html |
+| log-consumer-service | http://localhost:8087 | http://localhost:8087/swagger-ui.html |
+
+### OpenAPI JSON (machine-readable)
+
+| Servis | Endpoint |
+|--------|----------|
+| finance-service | http://localhost:8085/v3/api-docs |
+| marketdata | http://localhost:8083/v3/api-docs |
+| notification-service | http://localhost:8089/v3/api-docs |
+| log-consumer-service | http://localhost:8087/v3/api-docs |
+
+---
+
+## API versiyonlama (Madde 18)
+
+Standart prefix: **`/api/v1/`**
+
+Örnek:
+
+```
+GET /api/v1/users/me
+GET /api/v1/portfolio/unified
+GET /api/v1/market/dashboard
+```
+
+Geriye dönük uyumluluk için bazı endpoint'ler **dual path** destekler:
+
+```
+/api/v1/users/me/totp
+/api/users/me/totp          ← legacy
+```
+
+Frontend: `frontend/src/api/apiVersion.ts` — `VITE_API_VERSION=v1`
+
+Backend: `ApiPaths.java` — `V1_PREFIX`, `v1WithLegacy()`
+
+---
+
+## Yanıt zarfı (envelope)
+
+Tüm public API'ler tutarlı envelope kullanır:
+
+```json
+{
+  "success": true,
+  "data": { ... },
+  "errors": null,
+  "timestamp": "2026-05-24T12:00:00+03:00"
+}
+```
+
+Hata örneği:
+
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": {
+    "code": "VALIDATION_ERROR",
+    "message": "Geçersiz istek",
+    "details": [ ... ]
+  }
+}
+```
+
+Sınıflar: `ApiResponse`, `ApiErrorCode`, `GlobalExceptionHandler`
+
+---
+
+## Kimlik doğrulama
+
+Swagger UI'da **Authorize** butonuna tıklayın:
+
+```
+Bearer <access_token>
+```
+
+Token alma:
+
+1. Frontend ile Keycloak login, veya
+2. Keycloak token endpoint (password grant — dev ortamı)
+
+Public endpoint'ler (kayıt, login) JWT gerektirmez — `SecurityConfig` permit list.
+
+---
+
+## API katalog otomasyonu
+
+Controller değişikliğinden sonra endpoint listesi üretmek için:
 
 ```bash
+# Statik tarama (servis çalışması gerekmez)
 bash tools/generate_api_catalog.sh
 ```
 
-Scans `*Controller.java` in all four backends (bash + awk) and writes `endpoints.md`.
-
-**Live mode (Springdoc merge, requires `curl` and `jq`):**
+Canlı OpenAPI birleştirme (stack ayakta olmalı):
 
 ```bash
 docker compose up -d
-# wait for health, then:
 bash tools/generate_api_catalog.sh --live
-# or:
+# veya
 bash tools/export_openapi.sh
 ```
 
-### Service URLs (OpenAPI)
-
-| Service | Local dev | Docker host |
-|---------|-----------|-------------|
-| finance-service | http://localhost:8085/v3/api-docs | http://localhost:8085/v3/api-docs (maps container 8080) |
-| marketdata | http://localhost:8086/v3/api-docs | http://localhost:8083/v3/api-docs |
-| notification-service | http://localhost:8091/v3/api-docs | http://localhost:8089/v3/api-docs |
-| log-consumer-service | http://localhost:8090/v3/api-docs | http://localhost:8087/v3/api-docs |
-
-Swagger UI: same host/port with `/swagger-ui/index.html`.
-
-## Review workflow
-
-1. Run `bash tools/generate_api_catalog.sh` after controller changes.
-2. Optionally commit `docs/api/endpoints.md` (and `openapi/*.json` if you used `--export-openapi`).
-3. CI runs `tools/endpoint_contract_gate.sh` on controllers (no committed catalog required).
-
-## Contract gate
+CI contract gate:
 
 ```bash
 bash tools/endpoint_contract_gate.sh
 ```
 
-Checks finance + marketdata endpoint inventory metadata.  
-CI artifact: `artifacts/verification/ci-contract-gate/endpoint-coverage.md`
+Workflow: `.github/workflows/ci.yml` → `api-contract` job
 
-## Priority sections (manual curation)
+---
 
-When enriching summaries or examples, prioritize:
+## Öncelikli API grupları
 
-- **Auth:** `/api/users/me`, `/api/public/register`
-- **Portfolio:** `/api/portfolio/**`
-- **Market:** finance `/api/market/**` proxy + marketdata `/api/market/**`, `/api/news/**`
-- **Bank rates:** `/api/market/bank-rates/**`
-- **Admin:** `/api/admin/**`
+Değerlendirme / demo için önerilen endpoint grupları:
 
-## Requirements
+| Grup | Örnek path | Servis |
+|------|------------|--------|
+| Auth / kullanıcı | `/api/v1/users/me`, `/api/public/register` | finance |
+| Portföy | `/api/v1/portfolio/**` | finance |
+| Piyasa | `/api/market/**`, `/api/news/**` | marketdata |
+| Banka kurları | `/api/market/bank-rates/**` | marketdata |
+| Bildirim | `/api/v1/notifications/**` | notification |
+| Admin | `/api/admin/**` | finance |
+| Health | `/actuator/health` | tüm servisler |
 
-- **bash**, **awk**, **sort**, **find** (static catalog)
-- **curl**, **jq** (optional `--live` / `export_openapi.sh`)
+---
+
+## Yerel geliştirme portları (Docker dışı)
+
+| Servis | Port | OpenAPI |
+|--------|------|---------|
+| finance-service | 8080 | http://localhost:8080/v3/api-docs |
+| marketdata | 8086 | http://localhost:8086/v3/api-docs |
+| notification-service | 8089 | http://localhost:8089/v3/api-docs |
+| log-consumer-service | 8090 | http://localhost:8090/v3/api-docs |
+
+---
+
+[← Dokümantasyon hub](../README.md)

@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,7 @@ public class CoinGeckoClient {
     private static final long WARN_THROTTLE_MS = 5 * 60 * 1000L;
     private static final AtomicLong LAST_WARN_AT = new AtomicLong(0L);
     private static final int OHLC_429_MAX_ATTEMPTS = 4;
+    private static final int MARKET_CHART_429_MAX_ATTEMPTS = 4;
 
     private final RestTemplate restTemplate;
     private final String baseUrl;
@@ -132,6 +134,106 @@ public class CoinGeckoClient {
             }
         }
         return List.of();
+    }
+
+    /**
+     * market_chart: günlük kapanış tabanlı tarihsel seri. Eski tarihlere uzanan backfill için kullanılır.
+     */
+    public List<OhlcPoint> fetchDailyMarketChart(String coinId, int days) {
+        int safeDays = Math.max(1, days);
+        String daysParam = safeDays > 3650 ? "max" : String.valueOf(safeDays);
+        String url = baseUrl + "/coins/" + coinId + "/market_chart?vs_currency=usd&days=" + daysParam + "&interval=daily";
+        for (int attempt = 1; attempt <= MARKET_CHART_429_MAX_ATTEMPTS; attempt++) {
+            try {
+                ResponseEntity<Map> response = restTemplate.exchange(
+                        url, HttpMethod.GET, new HttpEntity<>(baseHeaders()), Map.class);
+                Map<?, ?> body = response.getBody();
+                if (body == null || !(body.get("prices") instanceof List<?> prices) || prices.isEmpty()) {
+                    return List.of();
+                }
+                return parseDailyPriceRows(prices);
+            } catch (HttpClientErrorException ex) {
+                if (ex.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS && attempt < MARKET_CHART_429_MAX_ATTEMPTS) {
+                    long waitMs = 65_000L * attempt;
+                    log.warn(
+                            "[COINGECKO] market_chart 429 coinId={} days={} — waiting {}s before retry {}/{}",
+                            coinId, daysParam, waitMs / 1000, attempt, MARKET_CHART_429_MAX_ATTEMPTS);
+                    sleepQuiet(waitMs);
+                    continue;
+                }
+                log.warn("[COINGECKO] market_chart failed coinId={} days={} reason={}", coinId, daysParam, ex.getMessage());
+                return List.of();
+            } catch (RestClientException ex) {
+                log.warn("[COINGECKO] market_chart failed coinId={} days={} reason={}", coinId, daysParam, ex.getMessage());
+                return List.of();
+            }
+        }
+        return List.of();
+    }
+
+    /**
+     * market_chart/range: belirli tarih aralığı için günlük kapanış bazlı seri.
+     * CoinGecko public plan eski tarih aralıklarını kısıtlayabilir; çağıran taraf bunu loglardan gözlemlemelidir.
+     */
+    public List<OhlcPoint> fetchDailyMarketChartRange(String coinId, LocalDate fromInclusive, LocalDate toInclusive) {
+        if (fromInclusive == null || toInclusive == null || toInclusive.isBefore(fromInclusive)) {
+            return List.of();
+        }
+        long fromEpoch = fromInclusive.atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+        long toEpoch = toInclusive.plusDays(1).atStartOfDay(ZoneOffset.UTC).minusSeconds(1).toEpochSecond();
+        String url = baseUrl + "/coins/" + coinId + "/market_chart/range?vs_currency=usd&from=" + fromEpoch + "&to=" + toEpoch;
+        for (int attempt = 1; attempt <= MARKET_CHART_429_MAX_ATTEMPTS; attempt++) {
+            try {
+                ResponseEntity<Map> response = restTemplate.exchange(
+                        url, HttpMethod.GET, new HttpEntity<>(baseHeaders()), Map.class);
+                Map<?, ?> body = response.getBody();
+                if (body == null || !(body.get("prices") instanceof List<?> prices) || prices.isEmpty()) {
+                    return List.of();
+                }
+                return parseDailyPriceRows(prices);
+            } catch (HttpClientErrorException ex) {
+                if (ex.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS && attempt < MARKET_CHART_429_MAX_ATTEMPTS) {
+                    long waitMs = 65_000L * attempt;
+                    log.warn(
+                            "[COINGECKO] market_chart/range 429 coinId={} from={} to={} — waiting {}s before retry {}/{}",
+                            coinId, fromInclusive, toInclusive, waitMs / 1000, attempt, MARKET_CHART_429_MAX_ATTEMPTS);
+                    sleepQuiet(waitMs);
+                    continue;
+                }
+                log.warn(
+                        "[COINGECKO] market_chart/range failed coinId={} from={} to={} reason={}",
+                        coinId, fromInclusive, toInclusive, ex.getMessage());
+                return List.of();
+            } catch (RestClientException ex) {
+                log.warn(
+                        "[COINGECKO] market_chart/range failed coinId={} from={} to={} reason={}",
+                        coinId, fromInclusive, toInclusive, ex.getMessage());
+                return List.of();
+            }
+        }
+        return List.of();
+    }
+
+    private List<OhlcPoint> parseDailyPriceRows(List<?> prices) {
+        List<OhlcPoint> out = new ArrayList<>();
+        for (Object rowObj : prices) {
+            if (!(rowObj instanceof List<?> row) || row.size() < 2) {
+                continue;
+            }
+            Object tsObj = row.get(0);
+            Object pxObj = row.get(1);
+            if (tsObj == null || pxObj == null) {
+                continue;
+            }
+            long epochMs = new BigDecimal(tsObj.toString()).longValue();
+            LocalDate day = Instant.ofEpochMilli(epochMs).atZone(ZoneOffset.UTC).toLocalDate();
+            BigDecimal close = new BigDecimal(pxObj.toString());
+            if (close.signum() <= 0) {
+                continue;
+            }
+            out.add(new OhlcPoint(day, close, close, close, close, null));
+        }
+        return out;
     }
 
     private static void sleepQuiet(long millis) {

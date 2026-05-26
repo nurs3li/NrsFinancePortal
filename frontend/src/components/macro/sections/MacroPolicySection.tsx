@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { useTheme } from '../../../theme/ThemeContext';
 import { chartGridStroke, chartTooltipContentStyle } from '../../../lib/chartTheme';
-import type { MacroPanelDerivedMetrics } from '../../../services/marketDataService';
+import { fetchInflationCompare, type InflationCompareRow, type MacroPanelDerivedMetrics } from '../../../services/marketDataService';
 import { formatLocaleDate, formatPercent2, lastObservation, selectMacroSeries } from '../../../utils/macroPanelSeries';
 import type { MacroIntelligencePanel } from '../hooks/useMacroIntelligenceData';
 import { MACRO_CHART_COLORS } from '../MacroTheme';
@@ -25,6 +25,12 @@ function fillTemplate(template: string, vars: Record<string, string>): string {
     return Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, v), template);
 }
 
+function ymFromIsoDate(date: string | undefined | null): string | null {
+    const raw = String(date ?? '').trim();
+    if (!raw) return null;
+    return raw.slice(0, 7);
+}
+
 export function MacroPolicySection({ panel, derived, panelLoading, locale, tokens }: Props) {
     const { t } = useLanguage();
     const { theme } = useTheme();
@@ -35,18 +41,39 @@ export function MacroPolicySection({ panel, derived, panelLoading, locale, token
     const polSeries = selectMacroSeries(panel?.series, 'POLICY_RATE_TR');
     const pol = lastObservation(polSeries);
     const funding = lastObservation(selectMacroSeries(panel?.series, 'TCMB_WEIGHTED_AVG_FUNDING_COST_TR'));
+    const [inflationRows, setInflationRows] = useState<InflationCompareRow[] | null | undefined>(undefined);
+
+    useEffect(() => {
+        const observations = polSeries?.observations ?? [];
+        const fromYm = ymFromIsoDate(observations[0]?.date);
+        const toYm = ymFromIsoDate(observations[observations.length - 1]?.date);
+        if (!fromYm || !toYm) {
+            setInflationRows(null);
+            return;
+        }
+        const ac = new AbortController();
+        (async () => {
+            setInflationRows(undefined);
+            const response = await fetchInflationCompare(fromYm, toYm, ac.signal);
+            if (ac.signal.aborted) return;
+            setInflationRows(response?.rows ?? null);
+        })();
+        return () => ac.abort();
+    }, [polSeries?.observations]);
 
     const policyChart = useMemo(() => {
-        const cpiYoY = derived?.cpiYoY;
+        const inflationByMonth = new Map(
+            (inflationRows ?? []).map((row) => [String(row.month ?? '').slice(0, 7), row.cpiAnnualChangePercent] as const),
+        );
         return (polSeries?.observations ?? [])
             .map((o) => ({
                 period: String(o.date).slice(0, 7),
                 policy: Number(o.value),
-                inflationRef: cpiYoY != null && Number.isFinite(Number(cpiYoY)) ? Number(cpiYoY) : undefined,
+                inflationRef: inflationByMonth.get(String(o.date).slice(0, 7)) ?? undefined,
             }))
             .filter((r) => Number.isFinite(r.policy))
             .slice(-48);
-    }, [polSeries?.observations, derived?.cpiYoY]);
+    }, [polSeries?.observations, inflationRows]);
 
     const realInsight =
         derived?.realPolicyRate != null && Number.isFinite(Number(derived.realPolicyRate))
@@ -135,7 +162,7 @@ export function MacroPolicySection({ panel, derived, panelLoading, locale, token
                             <Line
                                 type="monotone"
                                 dataKey="inflationRef"
-                                name={t('macro.policy.chart.cpiYoY', 'TÜFE Yıllık (güncel)')}
+                                name={t('macro.policy.chart.cpiYoY', 'TÜFE Yıllık')}
                                 stroke={MACRO_CHART_COLORS.rose}
                                 dot={false}
                                 strokeDasharray="4 4"

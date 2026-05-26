@@ -25,11 +25,14 @@ public final class HistoricalUsdTryConversion {
     public static boolean needsHistoricalUsdTry(AssetType type, String symbol) {
         if (type == null) {
             return false;
-    }
+        }
         if (type == AssetType.STOCK && isBistSymbol(symbol)) {
             return false;
         }
-        return type == AssetType.STOCK || type == AssetType.CRYPTO || type == AssetType.FUND;
+        return type == AssetType.STOCK
+                || type == AssetType.CRYPTO
+                || type == AssetType.FUND
+                || (type == AssetType.METAL && isUsdQuotedMetalSymbol(symbol));
     }
 
     /**
@@ -38,8 +41,18 @@ public final class HistoricalUsdTryConversion {
     public static boolean isBistSymbol(String symbol) {
         if (symbol == null) {
             return false;
-    }
+        }
         return symbol.trim().toUpperCase().endsWith(".IS");
+    }
+
+    /**
+     * {@code isUsdQuotedMetalSymbol} — Sembolün USD/ons kotasyonlu metal olup olmadığını kontrol eder.
+     */
+    public static boolean isUsdQuotedMetalSymbol(String symbol) {
+        if (symbol == null) {
+            return false;
+        }
+        return symbol.trim().toUpperCase().endsWith("_USD_OZ");
     }
 
     /**
@@ -48,7 +61,7 @@ public final class HistoricalUsdTryConversion {
     public static List<MarketPriceHistoryDto> sortFxHistory(List<MarketPriceHistoryDto> fx) {
         if (fx == null) {
             return List.of();
-    }
+        }
         return fx.stream()
                 .filter(Objects::nonNull)
                 .filter(h -> h.timestamp() != null)
@@ -62,7 +75,7 @@ public final class HistoricalUsdTryConversion {
     public static BigDecimal spotUsdTry(LatestPricingSnapshot snap) {
         if (snap == null) {
             return BigDecimal.ONE;
-    }
+        }
         var usdTry = snap.fx().get("USDTRY");
         if (usdTry == null || usdTry.buyPrice() == null || usdTry.buyPrice().signum() <= 0) {
             return BigDecimal.ONE;
@@ -76,7 +89,7 @@ public final class HistoricalUsdTryConversion {
     public static BigDecimal mid(MarketPriceHistoryDto r) {
         if (r == null) {
             return null;
-    }
+        }
         boolean b = r.buyPrice() != null && r.buyPrice().signum() > 0;
         boolean s = r.sellPrice() != null && r.sellPrice().signum() > 0;
         if (b && s) {
@@ -100,7 +113,7 @@ public final class HistoricalUsdTryConversion {
             BigDecimal spotUsdTryFallback
     ) {
         if (assetTs == null || fxSorted == null || fxSorted.isEmpty()) {
-    return positiveOrOne(spotUsdTryFallback);
+            return positiveOrOne(spotUsdTryFallback);
         }
         int lo = 0;
         int hi = fxSorted.size() - 1;

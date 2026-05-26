@@ -13,6 +13,7 @@ import com.nurseli.marketdata.infrastructure.evds.EvdsSeriesPoint;
 import com.nurseli.marketdata.infrastructure.persistence.LoanRateWeeklyObservationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -82,6 +83,45 @@ public class LoanRatesMacroService {
         }
         loanRatesPersistenceService.upsertAll(persistBatch);
         return new LoanRatesLatestResponse("EVDS", "WEEKLY", "PERCENT", maxAsOf, items);
+    }
+
+    @CacheEvict(cacheNames = "market:macro:interest-inflation-panel", allEntries = true)
+    public LoanRatesIngestResult ingestRange(LocalDate fromInclusive, LocalDate toInclusive) {
+        if (!evdsProperties.isEnabled()) {
+            return new LoanRatesIngestResult(0, 0, 0, "evds disabled");
+        }
+        if (fromInclusive == null || toInclusive == null || toInclusive.isBefore(fromInclusive)) {
+            return new LoanRatesIngestResult(0, 0, 0, "invalid range");
+        }
+        int seriesTouched = 0;
+        int pointsUpserted = 0;
+        int pointsSkipped = 0;
+        for (LoanRateCatalog.LoanRateSeriesSpec spec : LoanRateCatalog.allSpecs()) {
+            String code = resolveSeriesCode(spec.evdsLogicalSeriesKey());
+            if (code == null) {
+                continue;
+            }
+            seriesTouched++;
+            List<LoanRatesPersistenceService.LoanRateObservationRow> batch = new ArrayList<>();
+            for (LoanRateHistoryPointDto point : fetchEvdsPoints(code, fromInclusive, toInclusive)) {
+                LocalDate observedDate = parseDate(point.date());
+                if (observedDate == null || point.value() == null || point.value().compareTo(BigDecimal.ZERO) <= 0) {
+                    pointsSkipped++;
+                    continue;
+                }
+                batch.add(new LoanRatesPersistenceService.LoanRateObservationRow(code, spec.subType(), observedDate, point.value()));
+            }
+            loanRatesPersistenceService.upsertAll(batch);
+            pointsUpserted += batch.size();
+        }
+        log.info(
+                "[LOAN_RATES] ingest from={} to={} seriesTouched={} upserted={} skipped={}",
+                fromInclusive,
+                toInclusive,
+                seriesTouched,
+                pointsUpserted,
+                pointsSkipped);
+        return new LoanRatesIngestResult(seriesTouched, pointsUpserted, pointsSkipped, "ok");
     }
 
     public LoanRatesHistoryResponse history(Set<LoanRateSubtype> types, LocalDate fromInclusive, LocalDate toInclusive) {
@@ -281,4 +321,6 @@ public class LoanRatesMacroService {
         }
         return a.isBefore(b) ? b : a;
     }
+
+    public record LoanRatesIngestResult(int seriesTouched, int pointsUpserted, int pointsSkipped, String status) {}
 }

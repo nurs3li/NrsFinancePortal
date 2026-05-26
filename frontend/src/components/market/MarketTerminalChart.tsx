@@ -46,6 +46,7 @@ type Props = {
     timeframeLabel?: string;
     /** 1M/1Y günlük seri: İstanbul gece yarısı mumlarını `YYYY-MM-DD` iş günü zamanına çevirir. */
     chartTimePreferIstanbulBusinessDay?: boolean;
+    onCrosshairDate?: (dateYmd: string) => void;
 };
 
 /** Doji / sentetik (O≈C) mumlarda kütüphane varsayılanı hep yeşil; önceki kapanşa göre kırmızı/yeşil/nötr. */
@@ -82,6 +83,7 @@ function MarketTerminalChartImpl({
     trendLabel,
     timeframeLabel,
     chartTimePreferIstanbulBusinessDay,
+    onCrosshairDate,
 }: Props) {
     const chartRef = useRef<HTMLDivElement>(null);
     const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null);
@@ -99,9 +101,14 @@ function MarketTerminalChartImpl({
     // destroy+create dongusune giriyor (titreme + ana thread kilitlenmesi + sayfa gecisi engellenme).
     // Ref ile en guncel tokens'i tutuyoruz; mount yalnizca bir kez.
     const tokensRef = useRef(tokens);
+    const onCrosshairDateRef = useRef(onCrosshairDate);
+    const lastCrosshairDateRef = useRef('');
     useEffect(() => {
         tokensRef.current = tokens;
     });
+    useEffect(() => {
+        onCrosshairDateRef.current = onCrosshairDate;
+    }, [onCrosshairDate]);
     const [hoverData, setHoverData] = useState<CandleVM | null>(null);
     const toChartTime = useMemo(
         () => (s: string) =>
@@ -197,11 +204,20 @@ function MarketTerminalChartImpl({
                 const p = pendingParam;
                 pendingParam = null;
                 if (!p?.time) {
+                    if (lastCrosshairDateRef.current) {
+                        lastCrosshairDateRef.current = '';
+                        onCrosshairDateRef.current?.('');
+                    }
                     setHoverData((prev) => (prev == null ? prev : null));
                     return;
                 }
                 const key = String(p.time);
                 const row = candleByTimeRef.current[key] ?? null;
+                const ymd = String(row?.time ?? '').slice(0, 10);
+                if (ymd && ymd !== lastCrosshairDateRef.current) {
+                    lastCrosshairDateRef.current = ymd;
+                    onCrosshairDateRef.current?.(ymd);
+                }
                 setHoverData((prev) => {
                     if (prev?.time === row?.time && prev?.close === row?.close) return prev;
                     return row;

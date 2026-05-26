@@ -12,6 +12,10 @@ type HeaderInteractionsArgs = {
   activeNavKey: string;
 };
 
+function sameHighlightStyle(a: HighlightStyle, b: HighlightStyle): boolean {
+  return a.left === b.left && a.width === b.width && a.visible === b.visible;
+}
+
 function measureHighlight(navRef: RefObject<HTMLDivElement | null>, navKey: string | null): HighlightStyle {
   if (!navRef.current || !navKey) return { left: 0, width: 0, visible: false };
   const containerRect = navRef.current.getBoundingClientRect();
@@ -33,7 +37,8 @@ export function useHeaderInteractions({ navRef, userMenuRef, activeNavKey }: Hea
 
   const syncHighlight = useCallback(() => {
     const key = hoveredNavKey || activeNavKey;
-    setHighlightStyle(measureHighlight(navRef, key));
+    const next = measureHighlight(navRef, key);
+    setHighlightStyle((prev) => (sameHighlightStyle(prev, next) ? prev : next));
   }, [activeNavKey, hoveredNavKey, navRef]);
 
   useLayoutEffect(() => {
@@ -47,7 +52,10 @@ export function useHeaderInteractions({ navRef, userMenuRef, activeNavKey }: Hea
   }, [syncHighlight]);
 
   useEffect(() => {
-    const onScroll = () => setIsScrolled(window.scrollY > 6);
+    const onScroll = () => {
+      const next = window.scrollY > 6;
+      setIsScrolled((prev) => (prev === next ? prev : next));
+    };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);

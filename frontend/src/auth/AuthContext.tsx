@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import keycloak from './keycloak';
 import { applyKeycloakTokens } from './applyKeycloakTokens';
-import { clearPortalSession, PORTAL_AUTH_EXPIRED_EVENT } from './portalSession';
+import { clearPortalSession, persistPortalSession, PORTAL_AUTH_EXPIRED_EVENT, restorePortalSession } from './portalSession';
 import { financeClient } from '../api/client';
 import { effectiveRoleFromRealmRoles, readRealmRolesFromTokenParsed } from './jwtRoleUtils';
 import { loginResponseToTokens, portalLogin, portalRefreshToken, type LoginRequest } from '../services/authApi';
@@ -63,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 throw new Error('Giriş yanıtında token yok');
             }
             applyKeycloakTokens(tokens);
+            persistPortalSession(tokens, body.rememberMe);
             setIsAuthenticated(true);
             setToken(tokens.accessToken);
             syncRolesFromKeycloak();
@@ -153,6 +154,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     useEffect(() => {
+        const restored = restorePortalSession();
+        if (restored?.accessToken) {
+            applyKeycloakTokens(restored);
+            setIsAuthenticated(true);
+            setToken(restored.accessToken);
+            syncRolesFromKeycloak();
+            setReady(true);
+            return;
+        }
         keycloak
             .init({
                 onLoad: 'check-sso',
@@ -189,6 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     throw new Error('refresh failed');
                 }
                 applyKeycloakTokens(tokens);
+                persistPortalSession(tokens);
                 syncRolesFromKeycloak();
             } catch {
                 clearPortalSession();

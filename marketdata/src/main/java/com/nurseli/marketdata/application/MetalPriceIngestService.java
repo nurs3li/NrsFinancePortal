@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -27,96 +28,76 @@ public class MetalPriceIngestService {
     private final CoinGeckoMetalClient client;
     private final MarketPriceHistoryRepository repository;
 
+    public record IngestSummary(
+            int insertedRows,
+            LocalDate from,
+            LocalDate to
+    ) {}
+
     @Transactional
     @CacheEvict(
             cacheNames = {"market:batch", "market:indicators"},
             allEntries = true
     )
     public void ensureHistoricalBackfill(int days) {
-        int safeDays = Math.max(30, Math.min(days, 365));
-        LocalDate needFrom = LocalDate.now().minusDays(safeDays - 1L);
+        int safeDays = Math.max(30, Math.min(days, 3650));
+        LocalDate today = LocalDate.now();
+        backfillRange(today.minusDays(safeDays - 1L), today, "legacy-days");
+    }
 
-        LocalDate oldestStored = repository.findTopBySymbolOrderByTimestampAsc(SYMBOL)
-                .map(r -> r.getTimestamp().toLocalDate())
-                .orElse(null);
-        if (oldestStored != null && !oldestStored.isAfter(needFrom.plusDays(2))) {
-            return;
+    @Transactional
+    @CacheEvict(
+            cacheNames = {"market:batch", "market:indicators"},
+            allEntries = true
+    )
+    public IngestSummary backfillRange(LocalDate fromInclusive, LocalDate toInclusive, String reason) {
+        LocalDate today = LocalDate.now();
+        LocalDate from = fromInclusive;
+        LocalDate to = toInclusive != null && !toInclusive.isAfter(today) ? toInclusive : today;
+        if (from == null || to == null || to.isBefore(from)) {
+            return new IngestSummary(0, fromInclusive, toInclusive);
         }
 
-        List<CoinGeckoMetalClient.DailyGoldTryPoint> points = client.fetchGoldTryHistoryPerOunce(safeDays);
+        List<CoinGeckoMetalClient.DailyGoldTryPoint> points = client.fetchGoldTryHistoryPerOunceRange(from, to);
+        if (points.isEmpty()) {
+            long spanDays = ChronoUnit.DAYS.between(from, to) + 1;
+            if (spanDays > 0 && spanDays <= 3650) {
+                points = client.fetchGoldTryHistoryPerOunce((int) spanDays);
+            }
+        }
+
         int saved = 0;
-        List<CoinGeckoMetalClient.DailyGoldTryOhlcPoint> ohlcPoints = client.fetchGoldTryOhlcHistoryPerOunce(safeDays);
-        if (!ohlcPoints.isEmpty()) {
-            for (CoinGeckoMetalClient.DailyGoldTryOhlcPoint p : ohlcPoints) {
-                if (p.date() == null || p.date().isAfter(LocalDate.now().minusDays(1))) continue;
-                if (p.date().isBefore(needFrom)) continue;
-                LocalDateTime dayStart = p.date().atStartOfDay();
-                LocalDateTime dayEnd = dayStart.plusDays(1);
-                long dayCount = repository.countForDay(SYMBOL, dayStart, dayEnd);
-                if (dayCount >= 4) continue;
-
-                saved += saveOhlcAsIntradayPoints(
-                        dayStart,
-                        p.open().divide(OUNCE_TO_GRAM, 2, RoundingMode.HALF_UP),
-                        p.high().divide(OUNCE_TO_GRAM, 2, RoundingMode.HALF_UP),
-                        p.low().divide(OUNCE_TO_GRAM, 2, RoundingMode.HALF_UP),
-                        p.close().divide(OUNCE_TO_GRAM, 2, RoundingMode.HALF_UP)
-                );
+        for (CoinGeckoMetalClient.DailyGoldTryPoint p : points) {
+            if (p.date() == null || p.date().isBefore(from) || p.date().isAfter(to)) {
+                continue;
             }
-        } else if (!points.isEmpty()) {
-            for (CoinGeckoMetalClient.DailyGoldTryPoint p : points) {
-                if (p.date() == null || p.date().isAfter(LocalDate.now().minusDays(1))) continue;
-                if (p.date().isBefore(needFrom)) continue;
-                LocalDateTime dayTs = p.date().atStartOfDay();
-                if (repository.existsForDay(SYMBOL, dayTs, dayTs.plusDays(1))) continue;
-
-                BigDecimal gramPrice = p.ounceTry().divide(OUNCE_TO_GRAM, 2, RoundingMode.HALF_UP);
-                MarketPriceHistory row = new MarketPriceHistory();
-                row.setSymbol(SYMBOL);
-                row.setBuyPrice(SpreadCalculator.buyPrice(gramPrice));
-                row.setSellPrice(SpreadCalculator.sellPrice(gramPrice));
-                row.setSource("COINGECKO");
-                row.setTimestamp(dayTs);
-                repository.save(row);
-                saved++;
+            LocalDateTime dayTs = p.date().atStartOfDay();
+            if (repository.existsForDay(SYMBOL, dayTs, dayTs.plusDays(1))) {
+                continue;
             }
+            BigDecimal gramPrice = p.ounceTry().divide(OUNCE_TO_GRAM, 2, RoundingMode.HALF_UP);
+            if (gramPrice.signum() <= 0) {
+                continue;
+            }
+            MarketPriceHistory row = new MarketPriceHistory();
+            row.setSymbol(SYMBOL);
+            row.setBuyPrice(SpreadCalculator.buyPrice(gramPrice));
+            row.setSellPrice(SpreadCalculator.sellPrice(gramPrice));
+            row.setSource("COINGECKO_RANGE");
+            row.setTimestamp(dayTs);
+            repository.save(row);
+            saved++;
         }
+
         if (saved > 0) {
-            log.info("[METAL] Backfilled {} daily XAU_TRY points for last {} days", saved, safeDays);
+            log.info(
+                    "[METAL] Backfilled XAU_TRY rows={} from={} to={} reason={}",
+                    saved,
+                    from,
+                    to,
+                    reason == null || reason.isBlank() ? "unspecified" : reason);
         }
-    }
-
-    private int saveOhlcAsIntradayPoints(
-            LocalDateTime dayStart,
-            BigDecimal openGramTry,
-            BigDecimal highGramTry,
-            BigDecimal lowGramTry,
-            BigDecimal closeGramTry
-    ) {
-        int saved = 0;
-        LocalDateTime tOpen = dayStart;
-        LocalDateTime tHigh = dayStart.plusHours(6);
-        LocalDateTime tLow = dayStart.plusHours(12);
-        LocalDateTime tClose = dayStart.plusHours(18);
-
-        saved += saveIfMissing(tOpen, openGramTry);
-        saved += saveIfMissing(tHigh, highGramTry);
-        saved += saveIfMissing(tLow, lowGramTry);
-        saved += saveIfMissing(tClose, closeGramTry);
-        return saved;
-    }
-
-    private int saveIfMissing(LocalDateTime ts, BigDecimal gramPrice) {
-        if (gramPrice == null || gramPrice.signum() <= 0) return 0;
-        if (repository.existsBySymbolAndTimestamp(SYMBOL, ts)) return 0;
-        MarketPriceHistory row = new MarketPriceHistory();
-        row.setSymbol(SYMBOL);
-        row.setBuyPrice(SpreadCalculator.buyPrice(gramPrice));
-        row.setSellPrice(SpreadCalculator.sellPrice(gramPrice));
-        row.setSource("COINGECKO");
-        row.setTimestamp(ts);
-        repository.save(row);
-        return 1;
+        return new IngestSummary(saved, from, to);
     }
 
     @Transactional

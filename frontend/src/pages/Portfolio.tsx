@@ -4,11 +4,13 @@ import { useMutation, useQuery, useQueries, useQueryClient } from '@tanstack/rea
 import { useNavigate } from 'react-router-dom';
 import { manualPortfolioKeys } from '../queries/manualPortfolioKeys';
 import { financeClient } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 import { usePolling } from '../hooks/usePolling';
 import {
     Bell,
+    CheckCircle2,
     ClipboardCheck,
     Eye,
     FileText,
@@ -623,6 +625,7 @@ function buildPageIndices(current: number, totalPages: number): (number | 'gap')
 export function Portfolio() {
     const qc = useQueryClient();
     const navigate = useNavigate();
+    const { user } = useAuth();
     const { tokens } = useTheme();
     const { t, lang } = useLanguage();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
@@ -636,6 +639,8 @@ export function Portfolio() {
     const [chartOverlays, setChartOverlays] = useState<ChartOverlaySpec[]>([]);
     const [chartDropActive, setChartDropActive] = useState(false);
     const [expandedPositionId, setExpandedPositionId] = useState<number | null>(null);
+    const [showEvaluationConfirm, setShowEvaluationConfirm] = useState(false);
+    const [evaluationSuccessCount, setEvaluationSuccessCount] = useState<number | null>(null);
     const [priceAlertTarget, setPriceAlertTarget] = useState<{
         assetType: PriceAlertAssetType;
         symbol: string;
@@ -681,19 +686,40 @@ export function Portfolio() {
     const evaluateInsightsMutation = useMutation({
         mutationFn: evaluatePortfolioInsightNotifications,
         onSuccess: async (result) => {
+            setShowEvaluationConfirm(false);
             await qc.invalidateQueries({ queryKey: notificationKeys.all });
             const n = result?.generatedCount ?? 0;
-            alert(
-                t(
-                    'portfolio.evaluationSent',
-                    'Portföy değerlendirmeniz e-posta ve bildirimlerinize gönderildi. ({count} kayıt)',
-                ).replace('{count}', String(n)),
-            );
+            setEvaluationSuccessCount(n);
         },
         onError: (err: unknown) => {
+            setShowEvaluationConfirm(false);
             alert(readFinanceApiError(err).message || t('portfolio.evaluationFailed', 'Portföy değerlendirmesi gönderilemedi.'));
         },
     });
+
+    const evaluationEmail = user?.email?.trim() || null;
+    const evaluationRecipientLabel =
+        evaluationEmail || t('portfolio.evaluationEmailFallback', 'kayıtlı e-posta adresiniz');
+
+    useEffect(() => {
+        if (!showEvaluationConfirm && evaluationSuccessCount == null) return;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            if (showEvaluationConfirm && !evaluateInsightsMutation.isPending) {
+                setShowEvaluationConfirm(false);
+                return;
+            }
+            if (evaluationSuccessCount != null) setEvaluationSuccessCount(null);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [showEvaluationConfirm, evaluationSuccessCount, evaluateInsightsMutation.isPending]);
+
+    useEffect(() => {
+        if (evaluationSuccessCount == null) return;
+        const timer = window.setTimeout(() => setEvaluationSuccessCount(null), 4200);
+        return () => window.clearTimeout(timer);
+    }, [evaluationSuccessCount]);
 
     const summary = summaryQuery.data;
     const positions = positionsQuery.data ?? [];
@@ -1555,7 +1581,7 @@ export function Portfolio() {
                         type="button"
                         className="pf-dash-btn"
                         disabled={evaluateInsightsMutation.isPending || positions.length === 0}
-                        onClick={() => evaluateInsightsMutation.mutate()}
+                        onClick={() => setShowEvaluationConfirm(true)}
                         title={t(
                             'portfolio.btnEvaluatePortfolioHint',
                             'Portföy özetinizi e-posta ve uygulama bildirimi olarak alın.',
@@ -1586,6 +1612,102 @@ export function Portfolio() {
                     </button>
                 </div>
             </header>
+
+            {showEvaluationConfirm ? (
+                <div
+                    className="pf-confirm-overlay"
+                    role="presentation"
+                    onClick={evaluateInsightsMutation.isPending ? undefined : () => setShowEvaluationConfirm(false)}
+                >
+                    <div
+                        className="pf-confirm-modal pf-card-premium"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="pf-evaluation-confirm-title"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="pf-confirm-modal__badge">
+                            <ClipboardCheck size={16} aria-hidden />
+                            <span>{t('portfolio.btnEvaluatePortfolio', 'Portföyümü değerlendir')}</span>
+                        </div>
+                        <h3 id="pf-evaluation-confirm-title" className="pf-confirm-modal__title">
+                            {t('portfolio.evaluationConfirmTitle', 'Portföy değerlendirmesi gönderilsin mi?')}
+                        </h3>
+                        <p className="pf-confirm-modal__body">
+                            {t(
+                                'portfolio.evaluationConfirmBody',
+                                'Portföy değerlendirme özeti aşağıdaki e-posta adresine ve bildirim merkezinize gönderilecek.',
+                            )}
+                        </p>
+                        <div className="pf-confirm-modal__email">{evaluationRecipientLabel}</div>
+                        <p className="pf-confirm-modal__hint">
+                            {t(
+                                'portfolio.evaluationConfirmHint',
+                                'Onay verirseniz değerlendirme hemen oluşturulup hesabınıza iletilir.',
+                            )}
+                        </p>
+                        <div className="pf-confirm-modal__actions">
+                            <button
+                                type="button"
+                                className="pf-dash-btn pf-confirm-modal__btn"
+                                onClick={() => setShowEvaluationConfirm(false)}
+                                disabled={evaluateInsightsMutation.isPending}
+                            >
+                                {t('common.cancel', 'İptal')}
+                            </button>
+                            <button
+                                type="button"
+                                className="pf-dash-btn pf-dash-btn--primary pf-confirm-modal__btn"
+                                onClick={() => evaluateInsightsMutation.mutate()}
+                                disabled={evaluateInsightsMutation.isPending}
+                            >
+                                {evaluateInsightsMutation.isPending
+                                    ? t('common.loading', 'Yükleniyor…')
+                                    : t('common.confirm', 'Onayla')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {evaluationSuccessCount != null ? (
+                <div
+                    className="pf-confirm-overlay"
+                    role="presentation"
+                    onClick={() => setEvaluationSuccessCount(null)}
+                >
+                    <div
+                        className="pf-confirm-modal pf-confirm-modal--success pf-card-premium"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="pf-evaluation-success-title"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="pf-confirm-modal__badge pf-confirm-modal__badge--success">
+                            <CheckCircle2 size={16} aria-hidden />
+                            <span>{t('portfolio.evaluationSuccessTitle', 'Başarıyla gönderildi')}</span>
+                        </div>
+                        <h3 id="pf-evaluation-success-title" className="pf-confirm-modal__title">
+                            {t('portfolio.evaluationSuccessTitle', 'Başarıyla gönderildi')}
+                        </h3>
+                        <p className="pf-confirm-modal__body">
+                            {t(
+                                'portfolio.evaluationSent',
+                                'Portföy değerlendirmeniz e-posta ve bildirimlerinize gönderildi. ({count} kayıt)',
+                            ).replace('{count}', String(evaluationSuccessCount))}
+                        </p>
+                        <div className="pf-confirm-modal__actions">
+                            <button
+                                type="button"
+                                className="pf-dash-btn pf-dash-btn--primary pf-confirm-modal__btn"
+                                onClick={() => setEvaluationSuccessCount(null)}
+                            >
+                                {t('common.ok', 'Tamam')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
 
             <div className="pf-kpi-grid portfolio-fade-in portfolio-fade-in--delay-1">
                 <button

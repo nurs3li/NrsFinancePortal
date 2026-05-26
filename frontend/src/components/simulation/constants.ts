@@ -1,4 +1,5 @@
 export const SIMULATION_USD_DENOMINATED = 'SIMULATION_USD_DENOMINATED';
+export const SIMULATION_HISTORY_PREPARING = 'SIMULATION_HISTORY_PREPARING';
 export const SIMULATION_STORAGE_KEY = 'nrs-finance-portal-simulation-list-v1';
 export const SIMULATION_HISTORY_STORAGE_KEY = 'nrs-finance-portal-simulation-history-v1';
 

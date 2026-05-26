@@ -3,6 +3,7 @@ package com.nurseli.marketdata.infrastructure.persistence;
 import com.nurseli.marketdata.domain.loan.LoanRateSubtype;
 import com.nurseli.marketdata.domain.loan.LoanRateWeeklyObservation;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -19,4 +20,7 @@ public interface LoanRateWeeklyObservationRepository extends JpaRepository<LoanR
     );
 
     Optional<LoanRateWeeklyObservation> findFirstBySubTypeOrderByObservedDateDesc(LoanRateSubtype subType);
+
+    @Query("SELECT MAX(o.observedDate) FROM LoanRateWeeklyObservation o")
+    Optional<LocalDate> findMaxObservationDate();
 }

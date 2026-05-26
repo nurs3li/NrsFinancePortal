@@ -28,6 +28,15 @@ function lineWidthClamp(n: number): 1 | 2 | 3 | 4 {
     return r as 1 | 2 | 3 | 4;
 }
 
+function toChartTime(raw: string): Time | null {
+    const value = String(raw ?? '').trim();
+    if (!value) return null;
+    if (!value.includes('T')) return value.slice(0, 10) as Time;
+    const parsed = Date.parse(value);
+    if (!Number.isFinite(parsed)) return value.slice(0, 10) as Time;
+    return Math.floor(parsed / 1000) as Time;
+}
+
 function MarketCompareLwChartImpl({
     rows,
     symbols,
@@ -83,10 +92,15 @@ function MarketCompareLwChartImpl({
                 });
                 const pts = rows
                     .filter((r) => r.values[sym] != null && !Number.isNaN(r.values[sym]))
-                    .map((r) => ({
-                        time: r.time.slice(0, 10) as Time,
-                        value: r.values[sym],
-                    }));
+                    .map((r) => {
+                        const time = toChartTime(r.time);
+                        if (time == null) return null;
+                        return {
+                            time,
+                            value: r.values[sym],
+                        };
+                    })
+                    .filter((p): p is { time: Time; value: number } => p != null);
                 line.setData(pts);
             });
         } else {

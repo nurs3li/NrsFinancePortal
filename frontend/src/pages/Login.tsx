@@ -137,7 +137,7 @@ export function Login() {
             });
             if (result.otpRequired) {
                 setLoginOtpStep(true);
-                setLoginError(result.message ?? t('landing.loginOtpHint', 'İki aşamalı doğrulama kodunu girin.'));
+                setLoginError(null);
                 return;
             }
         } catch (err: unknown) {

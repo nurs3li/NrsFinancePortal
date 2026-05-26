@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.TreeMap;
+import java.util.function.Supplier;
 
 /**
  * finance-service tarihsel manuel fiyat çözümleyici — manuel portfolio için geçmiş kapanış fiyatı ve TRY serisi üretir.
@@ -31,6 +32,8 @@ import java.util.TreeMap;
 public class HistoricalManualPriceResolverService {
 
     private static final ZoneId TZ = ZoneId.of("Europe/Istanbul");
+    private static final int HISTORY_BUFFER_DAYS = 2;
+    private static final int HOURLY_EXACT_MAX_AGE_DAYS = 30;
 
     private final MarketDataClient marketDataClient;
     private final ManualPortfolioPriceResolveProperties resolveProperties;
@@ -67,29 +70,37 @@ public class HistoricalManualPriceResolverService {
                     ManualPriceSource.MARKET_HISTORY_EXACT, "TRY", null);
         }
 
-        LocalDate lower = requestedDate.minusDays(maxLb);
-        BigDecimal bestPrice = null;
-        LocalDate bestDate = null;
-        for (Map.Entry<LocalDate, BigDecimal> e : byDay.entrySet()) {
-            LocalDate d = e.getKey();
-            if (d.isBefore(lower)) {
-                continue;
-            }
-            if (!d.isBefore(requestedDate)) {
-                continue;
-            }
-            if (e.getValue() != null && e.getValue().signum() > 0) {
-                if (bestDate == null || d.isAfter(bestDate)) {
-                    bestPrice = e.getValue();
-                    bestDate = d;
-                }
-            }
+        BigDecimal sameDayHourly = resolveSameDayHourlyPriceTry(type, symbol, requestedDate, today, fx);
+        if (sameDayHourly != null && sameDayHourly.signum() > 0) {
+            return ManualPriceResolveDto.ok(type, symbol, requestedDate, requestedDate, sameDayHourly,
+                    ManualPriceSource.MARKET_HISTORY_SAME_DAY_HOURLY, "TRY",
+                    "Seçilen gün için günlük kapanış yerine aynı günün son saatlik fiyatı kullanıldı.");
         }
-        if (bestPrice != null && bestDate != null) {
-            return ManualPriceResolveDto.ok(type, symbol, requestedDate, bestDate, bestPrice,
+
+        LocalDate lower = requestedDate.minusDays(maxLb);
+        Map.Entry<LocalDate, BigDecimal> previous = byDay.floorEntry(requestedDate.minusDays(1));
+        if (previous != null
+                && previous.getKey() != null
+                && !previous.getKey().isBefore(lower)
+                && previous.getValue() != null
+                && previous.getValue().signum() > 0) {
+            return ManualPriceResolveDto.ok(type, symbol, requestedDate, previous.getKey(), previous.getValue(),
                     ManualPriceSource.MARKET_HISTORY_PREVIOUS_CLOSE, "TRY",
                     "Seçilen tarihte fiyat bulunamadı; en yakın önceki kapanış kullanıldı.");
         }
+
+        LocalDate upper = requestedDate.plusDays(maxLb);
+        Map.Entry<LocalDate, BigDecimal> next = byDay.ceilingEntry(requestedDate.plusDays(1));
+        if (next != null
+                && next.getKey() != null
+                && !next.getKey().isAfter(upper)
+                && next.getValue() != null
+                && next.getValue().signum() > 0) {
+            return ManualPriceResolveDto.ok(type, symbol, requestedDate, next.getKey(), next.getValue(),
+                    ManualPriceSource.MARKET_HISTORY_NEXT_CLOSE, "TRY",
+                    "Seçilen tarihte fiyat bulunamadı; en yakın sonraki kapanış kullanıldı.");
+        }
+
         return ManualPriceResolveDto.notFound(type, symbol, requestedDate,
                 "Seçilen tarih için fiyat bulunamadı. Manuel fiyat girin.");
     }
@@ -138,29 +149,85 @@ public class HistoricalManualPriceResolverService {
             int maxLb,
             int allowedDays
     ) {
-        LocalDate from = requestedFrom.minusDays(maxLb + 2);
+        LocalDate from = requestedFrom.minusDays(maxLb + HISTORY_BUFFER_DAYS);
         if (from.isAfter(today)) {
             return List.of();
         }
         return switch (type) {
-            case METAL -> marketDataClient.getMetalHistoryBetween(symbol, from, today);
+            case METAL -> loadChartCompatibleOrFallback(type, symbol, allowedDays,
+                    () -> marketDataClient.getMetalHistoryBetween(symbol, from, today));
             case BIST -> {
-                String key = symbol.trim().toUpperCase();
+                String key = stripBistSuffix(symbol);
                 Map<String, List<MarketPriceHistoryDto>> m =
                         marketDataClient.getBistBatchHistoryMapped(key, from, today);
                 yield m.getOrDefault(key, List.of());
             }
             case STOCK -> {
                 if (HistoricalUsdTryConversion.isBistSymbol(symbol)) {
+                    String key = stripBistSuffix(symbol);
                     Map<String, List<MarketPriceHistoryDto>> m =
-                            marketDataClient.getBistBatchHistoryMapped(symbol.trim().toUpperCase(), from, today);
-                    String key = symbol.trim().toUpperCase();
+                            marketDataClient.getBistBatchHistoryMapped(key, from, today);
                     yield m.getOrDefault(key, m.values().stream().findFirst().orElse(List.of()));
                 }
-                yield marketDataClient.getHistory(type, symbol, allowedDays);
+                yield loadChartCompatibleOrFallback(type, symbol, allowedDays,
+                        () -> marketDataClient.getHistory(type, symbol, allowedDays));
             }
+            case FX, CRYPTO -> loadChartCompatibleOrFallback(type, symbol, allowedDays,
+                    () -> marketDataClient.getHistory(type, symbol, allowedDays));
             default -> marketDataClient.getHistory(type, symbol, allowedDays);
         };
+    }
+
+    private static String stripBistSuffix(String symbol) {
+        String normalized = symbol == null ? "" : symbol.trim().toUpperCase();
+        return normalized.endsWith(".IS") ? normalized.substring(0, normalized.length() - 3) : normalized;
+    }
+
+    private List<MarketPriceHistoryDto> loadChartCompatibleOrFallback(
+            AssetType type,
+            String symbol,
+            int allowedDays,
+            Supplier<List<MarketPriceHistoryDto>> fallbackSupplier
+    ) {
+        List<MarketPriceHistoryDto> chartCompatible = marketDataClient.getChartCompatibleHistory(type, symbol, allowedDays, "daily");
+        if (chartCompatible != null && !chartCompatible.isEmpty()) {
+            return chartCompatible;
+        }
+        List<MarketPriceHistoryDto> fallback = fallbackSupplier != null ? fallbackSupplier.get() : null;
+        return fallback != null ? fallback : List.of();
+    }
+
+    private BigDecimal resolveSameDayHourlyPriceTry(
+            AssetType type,
+            String symbol,
+            LocalDate requestedDate,
+            LocalDate today,
+            FxContext fx
+    ) {
+        if (!supportsHourlyExactLookup(type, symbol)) {
+            return null;
+        }
+        long ageDays = ChronoUnit.DAYS.between(requestedDate, today);
+        if (ageDays < 0 || ageDays > HOURLY_EXACT_MAX_AGE_DAYS) {
+            return null;
+        }
+        int hourlyDays = AllowedHistoryDays.smallestCovering(ageDays + 1);
+        List<MarketPriceHistoryDto> hourly = marketDataClient.getChartCompatibleHistory(type, symbol, hourlyDays, "hourly");
+        return hourly.stream()
+                .filter(Objects::nonNull)
+                .filter(h -> h.timestamp() != null)
+                .filter(h -> h.timestamp().atZone(TZ).toLocalDate().isEqual(requestedDate))
+                .max(Comparator.comparing(MarketPriceHistoryDto::timestamp))
+                .map(row -> rowToTry(type, symbol, row, fx))
+                .filter(px -> px != null && px.signum() > 0)
+                .orElse(null);
+    }
+
+    private static boolean supportsHourlyExactLookup(AssetType type, String symbol) {
+        if (type == AssetType.STOCK && HistoricalUsdTryConversion.isBistSymbol(symbol)) {
+            return false;
+        }
+        return type == AssetType.FX || type == AssetType.CRYPTO || type == AssetType.STOCK || type == AssetType.METAL;
     }
 
     private NavigableMap<LocalDate, BigDecimal> aggregateLastPricePerDay(

@@ -83,7 +83,7 @@ export function SimulationCreateCard({
     onSubmit,
 }: SimulationCreateCardProps) {
     const { t } = useLanguage();
-    const [assetPickerOpen, setAssetPickerOpen] = useState(true);
+    const [assetPickerOpen, setAssetPickerOpen] = useState(false);
     const [comparePickerOpen, setComparePickerOpen] = useState(false);
 
     const canAddCompare =

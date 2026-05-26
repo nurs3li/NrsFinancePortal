@@ -24,6 +24,23 @@ import { SimulationLegendChips } from './SimulationLegendChips';
 
 type TooltipPayload = { name?: string; value?: number; color?: string; dataKey?: string };
 
+function estimatedValueFromMetric(
+    metricMode: ChartMetricMode,
+    metricValue: number | undefined,
+    initialAmount: number,
+): number | null {
+    if (metricValue == null || !Number.isFinite(metricValue) || initialAmount <= 0) {
+        return null;
+    }
+    if (metricMode === 'VALUE_TRY') {
+        return metricValue;
+    }
+    if (metricMode === 'PNL_TRY') {
+        return initialAmount + metricValue;
+    }
+    return initialAmount * (1 + metricValue / 100);
+}
+
 type SimulationPerformanceChartProps = {
     visibleResults: SimulationResultItem[];
     allResults: SimulationResultItem[];
@@ -67,9 +84,7 @@ function SimPerformanceTooltip({
             <div className="sim-chart-tooltip-title">{label}</div>
             {payload.map((e, i) => {
                 const res = e.dataKey ? keyToRes.get(String(e.dataKey)) : undefined;
-                const units = res && res.buyPrice > 0 ? res.initialAmount / res.buyPrice : 0;
-                const pt = res?.series.find((p) => p.date === label);
-                const estValue = pt && units > 0 ? units * pt.priceTry : res?.currentValue;
+                const estValue = res ? estimatedValueFromMetric(metricMode, e.value, res.initialAmount) : null;
                 const estPnl = res && estValue != null ? estValue - res.initialAmount : null;
                 return (
                     <div key={i} className="sim-chart-tooltip-block">

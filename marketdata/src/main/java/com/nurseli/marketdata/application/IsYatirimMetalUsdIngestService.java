@@ -47,6 +47,7 @@ public class IsYatirimMetalUsdIngestService {
      * Admin backfill — sembol bazında hata izole; dış kaynak hatası yukarı fırlatılmaz, özet loglanır.
      */
     @Transactional
+    @CacheEvict(cacheNames = {"market:batch", "market:indicators"}, allEntries = true)
     public IngestSummary ingestRange(
             PreciousMetalUsdCatalog.Entry entry,
             LocalDate fromInclusive,
