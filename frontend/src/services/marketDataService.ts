@@ -5,7 +5,9 @@ import type { LatestPriceRow } from '../components/market/marketTypes';
 import type { AssetClass, AssetType } from '../constants/OrderConstants';
 import { classifyDebtInstrument, classifyViopContract } from '../constants/OrderConstants';
 import { PRECIOUS_METAL_SYMBOLS } from '../constants/preciousMetalsUsd';
+import type { SimulationAssetType } from '../types/simulationAssetType';
 import { getBistLatest } from './bistEquityApi';
+import { fetchTefasFundPage } from './tefasFundApi';
 
 type MarketOverview = {
     doviz?: Record<string, { buyPrice?: number; sellPrice?: number; source?: string }>;
@@ -60,27 +62,8 @@ export function equityLatestPath(marketRegion?: string | null, exchange?: string
     return s ? `/api/market/equity/latest?${s}` : '/api/market/equity/latest';
 }
 
-export async function fetchSimulationSymbolsByType(type: AssetType): Promise<string[]> {
-    if (type === 'BIST') {
-        const rows = await getBistLatest();
-        return rows
-            .map((r) => String(r.symbol ?? '').trim().toUpperCase())
-            .filter(Boolean)
-            .sort((a, b) => a.localeCompare(b, 'tr-TR'));
-    }
-    const endpoint =
-        type === 'FX'
-            ? '/api/market/doviz/latest'
-            : type === 'CRYPTO'
-                ? '/api/market/crypto/latest'
-                : type === 'METAL'
-                    ? '/api/market/metals/latest'
-                    : type === 'FUND'
-                        ? '/api/market/funds/latest'
-                        : '/api/market/equity/latest';
-    const res = await marketClient.get<Record<string, unknown>>(endpoint);
-    const rows = Object.entries(res.data ?? {});
-    const withPrice = rows
+function symbolsWithPrice(rows: Record<string, unknown> | null | undefined): Array<[string, Record<string, unknown>]> {
+    return Object.entries(rows ?? {})
         .filter(([, value]) => {
             if (!value || typeof value !== 'object') return false;
             const row = value as Record<string, unknown>;
@@ -89,8 +72,71 @@ export async function fetchSimulationSymbolsByType(type: AssetType): Promise<str
             const sell = Number(row.sellPrice ?? 0);
             return buy > 0 || sell > 0;
         })
-        .map(([key]) => String(key ?? '').toUpperCase())
-        .filter(Boolean);
+        .map(([key, value]) => [String(key ?? '').toUpperCase(), value as Record<string, unknown>]);
+}
+
+async function fetchAllTefasFundCodes(signal?: AbortSignal): Promise<string[]> {
+    const size = 200;
+    const codes = new Set<string>();
+    let page = 0;
+
+    while (true) {
+        const res = await fetchTefasFundPage(page, size, 'return1y', 'desc', undefined, signal);
+        for (const row of res.items ?? []) {
+            const code = String(row.code ?? '').trim().toUpperCase();
+            if (code) codes.add(code);
+        }
+        if (!res.hasNext || page + 1 >= res.totalPages) break;
+        page += 1;
+    }
+
+    return [...codes].sort((a, b) => a.localeCompare(b, 'tr-TR'));
+}
+
+export async function fetchSimulationSymbolsByType(
+    type: AssetType | SimulationAssetType,
+    signal?: AbortSignal,
+): Promise<string[]> {
+    if (type === 'BIST') {
+        const rows = await getBistLatest();
+        return rows
+            .map((r) => String(r.symbol ?? '').trim().toUpperCase())
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b, 'tr-TR'));
+    }
+
+    if (type === 'TR_FUND') {
+        return fetchAllTefasFundCodes(signal);
+    }
+
+    if (type === 'FUND') {
+        const res = await marketClient.get<Record<string, unknown>>('/api/market/funds/latest');
+        return symbolsWithPrice(res.data)
+            .filter(([, row]) => String(row.source ?? '').toUpperCase() !== 'TEFAS')
+            .map(([symbol]) => symbol)
+            .sort((a, b) => a.localeCompare(b, 'tr-TR'));
+    }
+
+    if (type === 'STOCK') {
+        const res = await marketClient.get<Record<string, unknown>>(equityLatestPath('US', null));
+        return symbolsWithPrice(res.data)
+            .filter(([, row]) => {
+                const region = String(row.marketRegion ?? '').toUpperCase();
+                const exchange = String(row.exchange ?? '').toUpperCase();
+                return region !== 'TR' && exchange !== 'BIST';
+            })
+            .map(([symbol]) => symbol)
+            .sort((a, b) => a.localeCompare(b, 'tr-TR'));
+    }
+
+    const endpoint =
+        type === 'FX'
+            ? '/api/market/doviz/latest'
+            : type === 'CRYPTO'
+              ? '/api/market/crypto/latest'
+              : '/api/market/metals/latest';
+    const res = await marketClient.get<Record<string, unknown>>(endpoint);
+    const withPrice = symbolsWithPrice(res.data).map(([symbol]) => symbol);
 
     if (type === 'METAL') {
         const priced = new Set(withPrice);

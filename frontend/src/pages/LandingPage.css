@@ -5,16 +5,88 @@
     --landing-bg-bottom: #112240;
     --landing-silver: #e2e8f0;
     --landing-silver-muted: #94a3b8;
+    --landing-muted-strong: #64748b;
     --landing-glass: rgba(255, 255, 255, 0.05);
+    --landing-glass-strong: rgba(15, 23, 42, 0.45);
+    --landing-glass-soft: rgba(30, 41, 59, 0.55);
+    --landing-glass-solid: rgba(15, 23, 42, 0.7);
+    --landing-glass-inset: rgba(11, 20, 38, 0.65);
     --landing-border: rgba(255, 255, 255, 0.1);
+    --landing-border-strong: rgba(71, 85, 105, 0.4);
     --landing-accent: #3b82f6;
     --landing-accent-soft: rgba(59, 130, 246, 0.35);
+    --landing-primary-gradient: linear-gradient(135deg, #1d4ed8, #64748b);
+    --landing-hover-glass: rgba(255, 255, 255, 0.04);
+    --landing-particle: rgba(226, 232, 240, 0.35);
+    --landing-cursor-glow: radial-gradient(circle, rgba(148, 163, 184, 0.12) 0%, transparent 70%);
+    --landing-cursor-trail: rgba(226, 232, 240, 0.25);
+    --landing-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.35);
+    --landing-shadow-md: 0 12px 32px rgba(0, 0, 0, 0.28);
+    --landing-shadow-sm: 0 12px 28px rgba(0, 0, 0, 0.22);
+    --landing-frame-shine: rgba(148, 163, 184, 0.08);
+    --landing-overlay-bg: rgba(2, 6, 23, 0.55);
+    --landing-drawer-bg: rgba(15, 23, 42, 0.92);
+    --landing-input-bg: rgba(255, 255, 255, 0.04);
+    --landing-control-shell-bg: rgba(51, 65, 85, 0.74);
+    --landing-control-btn-color: #cbd5e1;
+    --landing-control-active-bg: linear-gradient(135deg, #8bb0ff, #7592ff);
+    --landing-control-active-color: #0f172a;
+    --landing-alert-bg: rgba(239, 68, 68, 0.1);
+    --landing-alert-border: rgba(239, 68, 68, 0.45);
+    --landing-alert-text: #fecaca;
+    --landing-alert-ok-bg: rgba(34, 197, 94, 0.1);
+    --landing-alert-ok-border: rgba(34, 197, 94, 0.45);
+    --landing-alert-ok-text: #bbf7d0;
+    --landing-warn-text: #fde047;
+    --landing-chart-grid: rgba(71, 85, 105, 0.5);
+    --landing-chart-dim: #94a3b8;
     min-height: 100vh;
     font-family: 'Inter', system-ui, sans-serif;
     background: linear-gradient(to bottom, var(--landing-bg-top), var(--landing-bg-bottom));
     color: var(--landing-silver);
     position: relative;
     overflow-x: hidden;
+}
+
+[data-theme='light'] .landing-root {
+    --landing-bg-top: #eef4ff;
+    --landing-bg-bottom: #f8fbff;
+    --landing-silver: #0f172a;
+    --landing-silver-muted: #64748b;
+    --landing-muted-strong: #475569;
+    --landing-glass: rgba(255, 255, 255, 0.72);
+    --landing-glass-strong: rgba(255, 255, 255, 0.82);
+    --landing-glass-soft: rgba(241, 245, 249, 0.92);
+    --landing-glass-solid: rgba(248, 250, 252, 0.96);
+    --landing-glass-inset: rgba(255, 255, 255, 0.88);
+    --landing-border: rgba(148, 163, 184, 0.28);
+    --landing-border-strong: rgba(148, 163, 184, 0.4);
+    --landing-accent: #2563eb;
+    --landing-accent-soft: rgba(37, 99, 235, 0.18);
+    --landing-primary-gradient: linear-gradient(135deg, #2563eb, #7c93ff);
+    --landing-hover-glass: rgba(37, 99, 235, 0.06);
+    --landing-particle: rgba(59, 130, 246, 0.16);
+    --landing-cursor-glow: radial-gradient(circle, rgba(59, 130, 246, 0.12) 0%, transparent 72%);
+    --landing-cursor-trail: rgba(59, 130, 246, 0.2);
+    --landing-shadow-lg: 0 20px 48px rgba(15, 23, 42, 0.12);
+    --landing-shadow-md: 0 12px 32px rgba(15, 23, 42, 0.08);
+    --landing-shadow-sm: 0 12px 28px rgba(15, 23, 42, 0.08);
+    --landing-frame-shine: rgba(59, 130, 246, 0.06);
+    --landing-overlay-bg: rgba(148, 163, 184, 0.3);
+    --landing-drawer-bg: rgba(248, 250, 252, 0.96);
+    --landing-input-bg: rgba(255, 255, 255, 0.92);
+    --landing-control-shell-bg: rgba(226, 232, 240, 0.95);
+    --landing-control-btn-color: #64748b;
+    --landing-control-active-color: #0f172a;
+    --landing-alert-bg: rgba(220, 38, 38, 0.08);
+    --landing-alert-border: rgba(220, 38, 38, 0.2);
+    --landing-alert-text: #b91c1c;
+    --landing-alert-ok-bg: rgba(22, 163, 74, 0.08);
+    --landing-alert-ok-border: rgba(22, 163, 74, 0.2);
+    --landing-alert-ok-text: #166534;
+    --landing-warn-text: #854d0e;
+    --landing-chart-grid: rgba(148, 163, 184, 0.45);
+    --landing-chart-dim: #64748b;
 }
 
 .landing-particles {
@@ -29,7 +101,7 @@
     width: 3px;
     height: 3px;
     border-radius: 50%;
-    background: rgba(226, 232, 240, 0.35);
+    background: var(--landing-particle);
     animation: landing-float-particle 14s linear infinite;
     opacity: 0;
 }
@@ -58,7 +130,7 @@
     border-radius: 50%;
     pointer-events: none;
     z-index: 1;
-    background: radial-gradient(circle, rgba(148, 163, 184, 0.12) 0%, transparent 70%);
+    background: var(--landing-cursor-glow);
     transform: translate(-50%, -50%);
     transition: opacity 0.2s ease;
 }
@@ -70,7 +142,7 @@
     border-radius: 50%;
     pointer-events: none;
     z-index: 2;
-    background: rgba(226, 232, 240, 0.25);
+    background: var(--landing-cursor-trail);
     transform: translate(-50%, -50%);
     animation: landing-trail-fade 0.7s forwards;
 }
@@ -107,6 +179,11 @@
     color: inherit;
 }
 
+.landing-brand .nrs-brand__main,
+.landing-brand .nrs-brand__mark {
+    color: var(--landing-silver);
+}
+
 .landing-nav {
     display: flex;
     align-items: center;
@@ -129,53 +206,80 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
-.landing-lang-wrap {
-    position: relative;
-}
-
-.landing-lang-btn {
+.landing-pref-panel {
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.4rem 0.65rem;
-    border-radius: 8px;
+    padding: 0.32rem;
+    border-radius: 18px;
     border: 1px solid var(--landing-border);
     background: var(--landing-glass);
-    color: var(--landing-silver);
-    font-size: 0.8rem;
-    cursor: pointer;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: var(--landing-shadow-md);
 }
 
-.landing-lang-menu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 6px);
-    min-width: 120px;
-    border-radius: 10px;
-    border: 1px solid var(--landing-border);
-    background: rgba(17, 34, 64, 0.95);
-    backdrop-filter: blur(12px);
-    padding: 0.35rem;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+.landing-segment-control {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem;
+    padding: 0.25rem;
+    min-width: 0;
+    border-radius: 999px;
+    background: var(--landing-control-shell-bg);
 }
 
-.landing-lang-menu button {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: 0.45rem 0.65rem;
+.landing-segment-control--icons {
+    width: 104px;
+    flex: 0 0 104px;
+}
+
+.landing-pref-panel .landing-segment-control:not(.landing-segment-control--icons) {
+    width: 210px;
+    flex: 0 0 210px;
+}
+
+.landing-segment-btn {
     border: none;
+    min-width: 0;
+    min-height: 38px;
+    padding: 0.55rem 0.9rem;
+    border-radius: 999px;
     background: transparent;
-    color: var(--landing-silver);
-    font-size: 0.85rem;
-    border-radius: 6px;
+    color: var(--landing-control-btn-color);
+    font-size: 0.8rem;
+    font-weight: 600;
     cursor: pointer;
+    transition:
+        color 0.2s ease,
+        background 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
 }
 
-.landing-lang-menu button:hover {
-    background: rgba(255, 255, 255, 0.06);
+.landing-segment-btn:hover {
+    color: var(--landing-silver);
+}
+
+.landing-segment-btn--icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 0;
+}
+
+.landing-segment-btn.is-active {
+    background: var(--landing-control-active-bg);
+    color: var(--landing-control-active-color);
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+}
+
+.landing-segment-btn.is-active svg {
+    stroke-width: 2.4;
 }
 
 .landing-btn-ghost {
@@ -191,8 +295,8 @@
 }
 
 .landing-btn-ghost:hover {
-    border-color: rgba(226, 232, 240, 0.35);
-    background: rgba(255, 255, 255, 0.04);
+    border-color: var(--landing-border-strong);
+    background: var(--landing-hover-glass);
 }
 
 .landing-btn-primary {
@@ -203,14 +307,14 @@
     font-weight: 600;
     cursor: pointer;
     color: #fff;
-    background: linear-gradient(135deg, #1d4ed8, #64748b);
+    background: var(--landing-primary-gradient);
     box-shadow: 0 4px 24px var(--landing-accent-soft);
     transition: transform 0.15s, box-shadow 0.15s;
 }
 
 .landing-btn-primary:hover {
     transform: translateY(-1px);
-    box-shadow: 0 8px 28px rgba(59, 130, 246, 0.45);
+    box-shadow: 0 8px 28px var(--landing-accent-soft);
 }
 
 .landing-hero {
@@ -266,7 +370,7 @@
     background: var(--landing-glass);
     backdrop-filter: blur(16px);
     padding: 1rem;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--landing-shadow-lg);
     position: relative;
     overflow: hidden;
 }
@@ -275,7 +379,7 @@
     content: '';
     position: absolute;
     inset: -40%;
-    background: conic-gradient(from 180deg at 50% 50%, transparent, rgba(148, 163, 184, 0.08), transparent);
+    background: conic-gradient(from 180deg at 50% 50%, transparent, var(--landing-frame-shine), transparent);
     animation: landing-mock-glow 12s linear infinite;
 }
 
@@ -416,8 +520,8 @@
 
 .landing-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
-    border-color: rgba(226, 232, 240, 0.22);
+    box-shadow: var(--landing-shadow-lg);
+    border-color: var(--landing-border-strong);
 }
 
 .landing-card:hover::after {
@@ -515,7 +619,7 @@
 .landing-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(2, 6, 23, 0.55);
+    background: var(--landing-overlay-bg);
     z-index: 40;
     opacity: 0;
     pointer-events: none;
@@ -534,7 +638,7 @@
     width: min(420px, 100vw);
     height: 100%;
     z-index: 50;
-    background: rgba(15, 23, 42, 0.92);
+    background: var(--landing-drawer-bg);
     backdrop-filter: blur(16px);
     border-left: 1px solid var(--landing-border);
     transform: translateX(100%);
@@ -542,7 +646,7 @@
     display: flex;
     flex-direction: column;
     padding: 1.25rem 1.5rem;
-    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.4);
+    box-shadow: -12px 0 40px rgba(15, 23, 42, 0.18);
 }
 
 .landing-drawer.open {
@@ -574,9 +678,9 @@
 }
 
 .landing-drawer-tabs button.active {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--landing-hover-glass);
     color: var(--landing-silver);
-    border-color: rgba(226, 232, 240, 0.25);
+    border-color: var(--landing-border-strong);
 }
 
 .landing-form {
@@ -609,14 +713,15 @@
     padding: 0.65rem 0.75rem;
     border-radius: 8px;
     border: 1px solid var(--landing-border);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--landing-input-bg);
     color: var(--landing-silver);
     font-size: 0.9rem;
 }
 
 .landing-form input:focus {
     outline: none;
-    border-color: rgba(59, 130, 246, 0.5);
+    border-color: var(--landing-accent);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
 .landing-checkbox-row {
@@ -646,15 +751,15 @@
     padding: 0.65rem 0.75rem;
     border-radius: 8px;
     font-size: 0.82rem;
-    border: 1px solid rgba(239, 68, 68, 0.45);
-    background: rgba(239, 68, 68, 0.1);
-    color: #fecaca;
+    border: 1px solid var(--landing-alert-border);
+    background: var(--landing-alert-bg);
+    color: var(--landing-alert-text);
 }
 
 .landing-alert.ok {
-    border-color: rgba(34, 197, 94, 0.45);
-    background: rgba(34, 197, 94, 0.1);
-    color: #bbf7d0;
+    border-color: var(--landing-alert-ok-border);
+    background: var(--landing-alert-ok-bg);
+    color: var(--landing-alert-ok-text);
 }
 
 .landing-close {
@@ -676,4 +781,49 @@
     color: #94a3b8;
     font-family: Inter, sans-serif;
     font-size: 0.9rem;
+}
+
+[data-theme='light'] .landing-loading-screen {
+    background: linear-gradient(to bottom, #eef4ff, #f8fbff);
+    color: #64748b;
+}
+
+@media (max-width: 780px) {
+    .landing-header-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .landing-pref-panel {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .landing-segment-control--icons {
+        width: 96px;
+        flex-basis: 96px;
+    }
+
+    .landing-pref-panel .landing-segment-control:not(.landing-segment-control--icons) {
+        width: min(100%, 190px);
+        flex: 1 1 190px;
+    }
+
+    .landing-header-actions > .landing-btn-ghost,
+    .landing-header-actions > .landing-btn-primary {
+        flex: 1 1 0;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 520px) {
+    .landing-pref-panel {
+        flex-wrap: wrap;
+    }
+
+    .landing-segment-control--icons,
+    .landing-pref-panel .landing-segment-control:not(.landing-segment-control--icons) {
+        width: 100%;
+        flex-basis: 100%;
+    }
 }

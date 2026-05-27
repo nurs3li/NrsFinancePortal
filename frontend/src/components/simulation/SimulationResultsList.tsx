@@ -1,6 +1,8 @@
 import { Eye, EyeOff, Trash2 } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { displaySimulationAssetType } from '../../types/simulationAssetType';
 import { SimDualMoney } from './SimDualMoney';
+import { categoryLabel } from './assetBrandingSim';
 import { formatSimMoney } from './simCurrency';
 import { qualityLabel, qualityPillClass, sourceLabel } from './utils';
 import type { SimDisplayCurrency, SimulationResultItem, SortMode } from './types';
@@ -86,12 +88,13 @@ export function SimulationResultsList({
                         {results.map((r) => {
                             const pos = r.pnl >= 0;
                             const dateStr = formatStoryDate(locale, r.buyDate);
+                            const displayAssetType = displaySimulationAssetType(r.assetType, r.pickerAssetType);
                             return (
                                 <article key={r.id} className="sim-result-card">
                                     <div className="sim-result-card__top">
                                         <div>
                                             <h3 className="sim-result-card__title">
-                                                {r.assetName} · {r.assetType}
+                                                {r.assetName} · {categoryLabel(displayAssetType, t)}
                                             </h3>
                                             {r.scenarioLabel ? (
                                                 <p className="sim-result-card__label" style={{ color: mutedColor }}>
@@ -184,7 +187,9 @@ export function SimulationResultsList({
                                         </td>
                                         <td>
                                             <div>{r.assetName}</div>
-                                            <div style={{ color: mutedColor, fontSize: '0.75rem' }}>{r.assetType}</div>
+                                            <div style={{ color: mutedColor, fontSize: '0.75rem' }}>
+                                                {categoryLabel(displaySimulationAssetType(r.assetType, r.pickerAssetType), t)}
+                                            </div>
                                         </td>
                                         <td style={{ maxWidth: 220 }}>
                                             <div className="sim-table-story" style={{ color: textColor, fontSize: '0.8125rem' }}>

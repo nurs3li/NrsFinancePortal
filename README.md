@@ -1,11 +1,40 @@
-# NRS Finans Portalı
+<p align="center">
+  <img src="./docs/assets/brand/nrs-32bit-mark.svg" alt="NRS 32BIT mark" width="220" />
+</p>
 
-[![Java 21](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/)
-[![Spring Boot 3.5](https://img.shields.io/badge/Spring%20Boot-3.5-green)](https://spring.io/projects/spring-boot)
-[![React 19](https://img.shields.io/badge/React-19-61dafb)](https://react.dev/)
-[![Docker Compose](https://img.shields.io/badge/Docker-Compose-blue)](docker-compose.yml)
+<p align="center">
+  <img src="./docs/assets/brand/nrs-finance-portal-lockup.svg" alt="NRS Finance Portal" width="760" />
+</p>
 
-**NRS Finans Portalı**, portföy yönetimi, canlı piyasa terminali, yatırım simülasyonu, VİOP/tahvil analizi, fiyat alarmları, Portföy AI ve admin gözlemlenebilirlik özelliklerini tek platformda birleştiren **çok modüllü** bir finans uygulamasıdır.
+<h1 align="center">NRS Finance Portal</h1>
+
+<p align="center">
+  <strong>Multi-asset market intelligence, portfolio analytics, and investment simulation in one platform.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/nurs3li/NrsFinancePortal/actions/workflows/ci.yml">
+    <img alt="CI" src="https://github.com/nurs3li/NrsFinancePortal/actions/workflows/ci.yml/badge.svg" />
+  </a>
+  <img alt="Java 21" src="https://img.shields.io/badge/Java-21-orange?logo=openjdk&logoColor=white" />
+  <img alt="Spring Boot 3.5.5" src="https://img.shields.io/badge/Spring%20Boot-3.5.5-6DB33F?logo=springboot&logoColor=white" />
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=000000" />
+  <img alt="Docker Compose" src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" />
+  <img alt="Microservices" src="https://img.shields.io/badge/Architecture-Microservices-111827" />
+</p>
+
+<p align="center">
+  NRS Finance Portal; portfoy yonetimi, canli piyasa takibi, enflasyondan arindirilmis reel getiri analizi,
+  yatirim simulasyonlari, fiyat alarmlari ve yonetim gozlemlenebilirligini tek bir deneyimde birlestiren cok modullu
+  bir finans platformudur.
+</p>
+
+<p align="center">
+  Daginik piyasa ekranlari, manuel hesaplamalar ve birbiriyle konusmayan araclar yerine; karar destek, izleme ve analiz
+  akislarini tek merkezde toplayarak daha hizli ve daha guvenilir finansal kararlar alinmasini hedefler.
+</p>
+
+> **README demo slotu hazir:** `./docs/assets/portal-demo.gif` dosyasini eklediginizde bu hero bolumunun altina tek satirla animasyonlu onizleme koyabilirsiniz.
 
 > **Kapsam:** Bu repository **Finans Portalı** projesidir. **IT Servis — Ticket Yönetimi** ve **jBPM** (proje isteri Madde 16) bu repoda yer almaz; ayrı bir projede değerlendirilir.
 
@@ -173,10 +202,8 @@ flowchart TB
 |---------|---------------|----------------|
 | Git | 2.x | `git --version` |
 | Docker Desktop | 4.x (Compose v2) | `docker compose version` |
-| (Opsiyonel) Java 21 | JDK 21 | `java -version` |
-| (Opsiyonel) Node.js | 20+ | `node -version` |
 
-> **Not:** Tam stack için yalnızca **Docker** yeterlidir. Java/Node yalnızca kaynak kodundan ayrı geliştirme/test için gereklidir.
+> **Not:** Derleme, test (CI) ve çalıştırma **Docker** ile yapılır; host’ta JDK, Maven veya Node gerekmez.
 
 ### Adım 1 — Repoyu klonlayın
 
@@ -327,8 +354,7 @@ NrsFinancePortal/
 │
 ├── infra/                       ← Keycloak, Grafana, Prometheus, OTel, Postgres init
 ├── docs/                        ← Teknik dokümantasyon hub'ı
-├── scripts/                     ← Javadoc üretimi vb.
-├── tools/                       ← API katalog otomasyonu
+├── scripts/                     ← Dev SQL (ör. kullanıcı aktivitesi wipe)
 └── .github/workflows/ci.yml     ← CI pipeline
 ```
 
@@ -353,50 +379,23 @@ Her push/PR'da GitHub Actions çalışır: [`.github/workflows/ci.yml`](.github/
 
 - 4 backend modülü: unit + integration (Testcontainers)
 - Frontend: ESLint, Vitest, production build
-- API contract gate
 - Docker smoke build
 
-### Yerel — backend
+### Yerel doğrulama
 
-**Docker Desktop açık olmalı** (Testcontainers PostgreSQL/Redis/Kafka kullanır).
-
-```powershell
-cd finance-service
-..\mvnw test
-
-cd ..\marketdata
-..\mvnw test
-
-cd ..\notification-service
-..\mvnw test
-
-cd ..\log-consumer-service
-..\mvnw test
-```
-
-Tüm modüller tek seferde (repo kökünden):
+Backend ve frontend **Docker imajları** içinde derlenir; host’ta Maven veya `mvnw` gerekmez.
 
 ```powershell
-.\mvnw test
+docker compose up -d --build
+docker compose ps
+curl http://localhost:8085/actuator/health
 ```
 
-### Yerel — frontend
+Backend unit/integration testleri **GitHub Actions** üzerinde çalışır (Testcontainers). İsteğe bağlı Javadoc:
 
 ```powershell
-cd frontend
-npm ci
-npm test
-npm run lint
-npm run build
+docker run --rm -v "${PWD}:/app" -w /app maven:3.9-eclipse-temurin-21 mvn -q javadoc:javadoc -DskipTests
 ```
-
-### Javadoc (Madde 20)
-
-```powershell
-.\scripts\Generate-Javadoc.ps1
-```
-
-Detay: [`docs/javadoc.md`](docs/javadoc.md)
 
 ---
 
@@ -438,7 +437,7 @@ Detay: [`docs/javadoc.md`](docs/javadoc.md)
 | 17 | Redis cache | ✅ | rate limit, market cache |
 | 18 | `/api/v1/` | ✅ | `ApiPaths.java` |
 | 19 | OpenAPI / Swagger | ✅ | SpringDoc |
-| 20 | Javadoc | ✅ | `Generate-Javadoc.ps1` |
+| 20 | Javadoc | ✅ | SpringDoc + isteğe bağlı `maven` konteyneri |
 | 21 | README | ✅ | bu dosya + modül README'leri |
 | 22 | Unit test | ✅ | ~160 backend + 9 frontend |
 | 23 | Error handling | ✅ | `GlobalExceptionHandler` |

@@ -2,6 +2,7 @@ package com.nurseli.marketdata.integration.support;
 
 import com.nurseli.marketdata.api.dto.inflation.InflationBackfillResponse;
 import com.nurseli.marketdata.application.EvdsCpiTrService;
+import com.nurseli.marketdata.application.bankfx.BankFxIngestService;
 import com.nurseli.marketdata.application.inflation.InflationIndexIngestService;
 import com.nurseli.marketdata.infrastructure.evds.EvdsDebtClient;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,11 +60,15 @@ public abstract class MarketdataIntegrationTestBase {
     @MockitoBean
     protected InflationIndexIngestService inflationIndexIngestService;
 
+    @MockitoBean
+    protected BankFxIngestService bankFxIngestService;
+
     @BeforeEach
     void stubExternalMarketProviders() {
         when(evdsDebtClient.fetchSeriesAscending(anyString(), any(), any())).thenReturn(List.of());
         when(inflationIndexIngestService.backfill(any(), any(), anyBoolean(), anyBoolean()))
                 .thenReturn(new InflationBackfillResponse("ok", LocalDate.of(2024, 1, 1), LocalDate.now(), List.of()));
+        when(bankFxIngestService.scrapeAndPersist(anyString())).thenReturn(0);
     }
 
     protected RequestPostProcessor integrationAdminJwt() {

@@ -7,12 +7,12 @@
 .landing-hero-carousel__frame {
     transform: rotateY(-5deg) rotateX(2deg);
     border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--landing-border);
+    background: var(--landing-glass);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     padding: 1rem 1.15rem 0.9rem;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--landing-shadow-lg);
     position: relative;
     overflow: hidden;
     min-height: 400px;
@@ -22,7 +22,7 @@
     content: '';
     position: absolute;
     inset: -40%;
-    background: conic-gradient(from 180deg at 50% 50%, transparent, rgba(148, 163, 184, 0.08), transparent);
+    background: conic-gradient(from 180deg at 50% 50%, transparent, var(--landing-frame-shine), transparent);
     animation: landing-mock-glow 12s linear infinite;
     pointer-events: none;
 }
@@ -65,17 +65,17 @@
     border: none;
     padding: 0;
     cursor: pointer;
-    background: rgba(148, 163, 184, 0.35);
+    background: color-mix(in srgb, var(--landing-silver-muted) 45%, transparent);
     transition: width 0.25s ease, background 0.25s ease;
 }
 
 .landing-hero-carousel__dot.is-active {
     width: 22px;
-    background: rgba(59, 130, 246, 0.85);
+    background: var(--landing-accent);
 }
 
 .landing-hero-carousel__dot:focus-visible {
-    outline: 2px solid rgba(59, 130, 246, 0.6);
+    outline: 2px solid color-mix(in srgb, var(--landing-accent) 60%, transparent);
     outline-offset: 2px;
 }
 
@@ -88,7 +88,7 @@
     margin: 0;
     font-size: 0.92rem;
     font-weight: 700;
-    color: #e2e8f0;
+    color: var(--landing-silver);
     letter-spacing: -0.01em;
     line-height: 1.25;
 }
@@ -96,7 +96,7 @@
 .hero-slide-sub {
     margin: 0.2rem 0 0;
     font-size: 0.68rem;
-    color: #94a3b8;
+    color: var(--landing-silver-muted);
     line-height: 1.35;
 }
 
@@ -120,15 +120,15 @@
 
 .hero-panel {
     border-radius: 10px;
-    border: 1px solid rgba(59, 130, 246, 0.18);
-    background: rgba(15, 23, 42, 0.45);
+    border: 1px solid color-mix(in srgb, var(--landing-accent) 18%, var(--landing-border));
+    background: var(--landing-glass-strong);
     padding: 0.45rem 0.5rem;
 }
 
 .hero-mini-label {
     font-size: 0.58rem;
     font-weight: 600;
-    color: #64748b;
+    color: var(--landing-muted-strong);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin: 0 0 0.35rem;
@@ -142,14 +142,19 @@
     gap: 0.35rem;
     padding: 0.28rem 0.4rem;
     border-radius: 8px;
-    background: rgba(30, 41, 59, 0.55);
-    border: 1px solid rgba(71, 85, 105, 0.35);
+    background: var(--landing-glass-soft);
+    border: 1px solid var(--landing-border-strong);
     font-size: 0.62rem;
 }
 
 .hero-terminal-row .sym {
     font-weight: 700;
-    color: #cbd5e1;
+    color: var(--landing-silver);
+}
+
+.hero-terminal-label {
+    color: var(--landing-muted-strong);
+    font-size: 0.55rem;
 }
 
 .hero-terminal-row .chg.up {
@@ -182,15 +187,15 @@
     font-size: 0.62rem;
     padding: 0.25rem 0.35rem;
     border-radius: 6px;
-    background: rgba(30, 41, 59, 0.5);
+    background: var(--landing-glass-soft);
 }
 
 .hero-ind-item span:first-child {
-    color: #94a3b8;
+    color: var(--landing-silver-muted);
 }
 
 .hero-ind-item span:last-child {
-    color: #e2e8f0;
+    color: var(--landing-silver);
     font-weight: 600;
 }
 
@@ -231,19 +236,19 @@
     font-size: 0.58rem;
     padding: 0.28rem 0.35rem;
     border-radius: 6px;
-    background: rgba(30, 41, 59, 0.55);
-    border: 1px solid rgba(71, 85, 105, 0.4);
+    background: var(--landing-glass-soft);
+    border: 1px solid var(--landing-border-strong);
 }
 
 .hero-macro-card strong {
     display: block;
-    color: #94a3b8;
+    color: var(--landing-silver-muted);
     font-weight: 500;
     margin-bottom: 0.1rem;
 }
 
 .hero-macro-card span {
-    color: #e2e8f0;
+    color: var(--landing-silver);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
@@ -264,19 +269,19 @@
     font-size: 0.58rem;
     padding: 0.3rem 0.38rem;
     border-radius: 7px;
-    background: rgba(30, 41, 59, 0.55);
-    border: 1px solid rgba(71, 85, 105, 0.38);
+    background: var(--landing-glass-soft);
+    border: 1px solid var(--landing-border-strong);
 }
 
 .hero-metric-card strong {
     display: block;
-    color: #94a3b8;
+    color: var(--landing-silver-muted);
     font-weight: 500;
     margin-bottom: 0.12rem;
 }
 
 .hero-metric-card span {
-    color: #e2e8f0;
+    color: var(--landing-silver);
     font-weight: 700;
 }
 
@@ -296,7 +301,7 @@
     font-size: 0.58rem;
     font-weight: 600;
     background: rgba(234, 179, 8, 0.15);
-    color: #fde047;
+    color: var(--landing-warn-text);
     border: 1px solid rgba(234, 179, 8, 0.35);
 }
 
@@ -312,9 +317,9 @@
     font-size: 0.58rem;
     padding: 0.22rem 0.45rem;
     border-radius: 999px;
-    background: rgba(51, 65, 85, 0.65);
-    color: #cbd5e1;
-    border: 1px solid rgba(100, 116, 139, 0.45);
+    background: var(--landing-glass-solid);
+    color: var(--landing-silver);
+    border: 1px solid var(--landing-border-strong);
 }
 
 .hero-bar-compare {
@@ -327,7 +332,13 @@
 .hero-bar-col {
     text-align: center;
     font-size: 0.52rem;
-    color: #94a3b8;
+    color: var(--landing-silver-muted);
+}
+
+.hero-chart-note {
+    margin: 0.25rem 0 0;
+    font-size: 0.52rem;
+    color: var(--landing-muted-strong);
 }
 
 .hero-bar-col .bar {
@@ -346,7 +357,7 @@
 .hero-bar-col.muted .bar {
     height: 8px;
     margin-top: 1.1rem;
-    background: rgba(100, 116, 139, 0.45);
+    background: color-mix(in srgb, var(--landing-silver-muted) 45%, transparent);
 }
 
 /* Slide 6 — alerts */
@@ -354,7 +365,7 @@
     font-size: 0.58rem;
     padding: 0.32rem 0.4rem;
     border-radius: 8px;
-    background: rgba(30, 41, 59, 0.55);
+    background: var(--landing-glass-soft);
     border-left: 3px solid rgba(59, 130, 246, 0.5);
     margin-bottom: 0.28rem;
 }
@@ -369,12 +380,12 @@
 
 .hero-alert-card strong {
     display: block;
-    color: #e2e8f0;
+    color: var(--landing-silver);
     margin-bottom: 0.1rem;
 }
 
 .hero-alert-card span {
-    color: #94a3b8;
+    color: var(--landing-silver-muted);
     line-height: 1.3;
 }
 

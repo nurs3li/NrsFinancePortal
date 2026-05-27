@@ -97,31 +97,9 @@ Public endpoint'ler (kayıt, login) JWT gerektirmez — `SecurityConfig` permit 
 
 ---
 
-## API katalog otomasyonu
+## API katalog
 
-Controller değişikliğinden sonra endpoint listesi üretmek için:
-
-```bash
-# Statik tarama (servis çalışması gerekmez)
-bash tools/generate_api_catalog.sh
-```
-
-Canlı OpenAPI birleştirme (stack ayakta olmalı):
-
-```bash
-docker compose up -d
-bash tools/generate_api_catalog.sh --live
-# veya
-bash tools/export_openapi.sh
-```
-
-CI contract gate:
-
-```bash
-bash tools/endpoint_contract_gate.sh
-```
-
-Workflow: `.github/workflows/ci.yml` → `api-contract` job
+Endpoint listesi: SpringDoc (`/v3/api-docs`) ve modül controller'ları; `docs/api/endpoints.md` gerektiğinde elle güncellenir.
 
 ---
 

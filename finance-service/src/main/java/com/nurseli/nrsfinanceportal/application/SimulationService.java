@@ -437,7 +437,10 @@ public class SimulationService {
         return v == null ? BigDecimal.ZERO : v;
     }
 
-    private static boolean needsHistoricalUsdTrySeries(AssetType type, String symbol) {
+    private boolean needsHistoricalUsdTrySeries(AssetType type, String symbol) {
+        if (type == AssetType.FUND && marketDataClient.isTryQuotedFund(symbol)) {
+            return false;
+        }
         return HistoricalUsdTryConversion.needsHistoricalUsdTry(type, symbol);
     }
 

@@ -63,13 +63,6 @@ docker compose up -d log-consumer-service
 
 Kafka ve OpenSearch ayakta olmalı.
 
-### Yerel
-
-```powershell
-cd log-consumer-service
-..\mvnw spring-boot:run
-```
-
 ---
 
 ## Doğrulama
@@ -85,9 +78,7 @@ Integration test: `ApplicationLogsFlowIntegrationTest` — Kafka → OpenSearch 
 
 ## Test
 
-```powershell
-..\mvnw test
-```
+CI’da `mvn test -pl log-consumer-service`.
 
 ---
 

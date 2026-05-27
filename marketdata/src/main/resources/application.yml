@@ -4,7 +4,7 @@ server:
 spring:
   application:
     name: market-data-service
-  # Repo kökündeki .env (EVDS_API_KEY vb.) IDE / mvn spring-boot:run için
+  # Repo kökündeki .env (EVDS_API_KEY vb.) — docker compose env_file ile de yüklenir
   config:
     import: optional:file:.env[.properties],optional:file:../.env[.properties]
   jackson:
@@ -372,8 +372,8 @@ app:
   crypto:
     history-incremental-cron: ${CRYPTO_HISTORY_INCREMENTAL_CRON:0 45 2 * * *}
     history-backfill:
-      enabled: ${CRYPTO_HISTORY_BACKFILL_ENABLED:false}
-      periodDays: ${CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS:365}
+      enabled: ${CRYPTO_HISTORY_BACKFILL_ENABLED:true}
+      periodDays: ${CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS:730}
       shutdownOnComplete: ${CRYPTO_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
       # Ücretsiz CoinGecko: coin başına bekleme; 429 alırsanız 8000–12000 deneyin
       delayMsBetweenCoins: ${CRYPTO_HISTORY_BACKFILL_DELAY_MS:4500}
@@ -381,7 +381,7 @@ app:
       skipSymbolIfCandleCountAtLeast: ${CRYPTO_HISTORY_BACKFILL_SKIP_IF_COUNT:340}
   fx:
     history-backfill:
-      enabled: ${FX_HISTORY_BACKFILL_ENABLED:false}
+      enabled: ${FX_HISTORY_BACKFILL_ENABLED:true}
       periodDays: ${FX_HISTORY_BACKFILL_PERIOD_DAYS:730}
       shutdownOnComplete: ${FX_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
   debt:

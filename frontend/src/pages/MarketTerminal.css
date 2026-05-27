@@ -96,10 +96,10 @@
 
 .terminal-hero--viop {
     display: grid;
-    grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 0.95fr);
+    grid-template-columns: minmax(300px, max-content) auto auto minmax(360px, 1fr);
+    grid-template-areas: "meta price horizons metrics";
     align-items: center;
-    gap: 12px 16px;
-    flex-wrap: unset;
+    gap: 10px 16px;
     justify-content: stretch;
     padding: 14px 18px;
     margin-bottom: 0;
@@ -150,65 +150,102 @@
 }
 
 .terminal-hero-viop__mid {
+    grid-area: price;
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+    align-items: flex-start;
     justify-content: center;
-    gap: 6px;
-    text-align: right;
+    gap: 4px;
+    text-align: left;
     min-width: 0;
+    padding-left: 4px;
 }
 
 .terminal-hero-viop__mid .terminal-hero-price {
-    font-size: clamp(1.35rem, 2.5vw, 2rem);
+    font-size: clamp(1.25rem, 2.1vw, 1.75rem);
     line-height: 1.05;
 }
 
 .terminal-hero-viop__metrics {
-    border-left: 1px solid color-mix(in srgb, var(--terminal-border) 85%, transparent);
-    padding-left: 16px;
+    grid-area: metrics;
     min-width: 0;
+    padding-left: 14px;
+    border-left: 1px solid color-mix(in srgb, var(--terminal-border) 85%, transparent);
 }
 
 .terminal-hero-viop-metric-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px 14px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px 12px;
     font-size: 11px;
 }
 
-.terminal-hero-viop-metric-grid dt {
-    margin: 0;
-    color: var(--terminal-muted);
-    font-weight: 600;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+.terminal-hero-viop-metric {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 0;
 }
 
-.terminal-hero-viop-metric-grid dd {
-    margin: 0;
+.terminal-hero-viop-metric__label {
+    color: var(--terminal-muted);
+    font-weight: 600;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    flex: 0 1 auto;
+}
+
+.terminal-hero-viop-metric__value {
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     color: var(--terminal-text);
-    font-size: 12px;
+    font-size: 11px;
+    text-align: right;
+    white-space: nowrap;
+    flex: 0 0 auto;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1480px) {
     .terminal-hero--viop {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "meta price"
+            "horizons horizons"
+            "metrics metrics";
     }
 
     .terminal-hero-viop__mid {
         align-items: flex-start;
         text-align: left;
+        padding-left: 0;
     }
 
     .terminal-hero-viop__metrics {
-        border-left: 0;
         padding-left: 0;
+        border-left: 0;
+        padding-top: 8px;
         border-top: 1px solid color-mix(in srgb, var(--terminal-border) 85%, transparent);
-        padding-top: 12px;
+    }
+
+    .terminal-hero-viop__horizons {
+        padding-left: 0;
+    }
+
+    .terminal-hero-viop-metric-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 1240px) {
+    .terminal-hero--viop {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "meta price"
+            "horizons horizons"
+            "metrics metrics";
     }
 }
 
@@ -3040,15 +3077,49 @@
 }
 
 .terminal-hero-viop__selector-wrap {
+    grid-area: meta;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    align-items: center;
     min-width: 0;
-    align-self: stretch;
+    align-self: center;
 }
 
 .terminal-hero-viop__selector-wrap > .terminal-hero-selector--viop {
-    width: 100%;
+    width: auto;
+    max-width: 100%;
+    min-height: auto;
+    padding: 4px 0;
+    border-radius: 0;
+}
+
+.terminal-hero-viop__horizons {
+    grid-area: horizons;
+    min-width: 0;
+    padding-left: 6px;
+    align-self: center;
+}
+
+.terminal-hero-viop__horizons .terminal-hero-horizons {
+    width: auto;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.terminal-hero--viop .terminal-hero-horizons__cell {
+    flex: 0 0 auto;
+    min-width: 44px;
+}
+
+.terminal-hero--viop .terminal-hero-horizons__lab {
+    font-size: 10px;
+}
+
+.terminal-hero--viop .terminal-hero-horizons .terminal-horizon-pct {
+    font-size: 13px;
 }
 
 .terminal-hero-compare-strip {
@@ -3058,10 +3129,6 @@
     justify-content: flex-end;
     gap: 6px;
     min-width: 0;
-}
-
-.terminal-hero-viop__selector-wrap .terminal-hero-compare-strip {
-    justify-content: flex-start;
 }
 
 .terminal-hero-compare-chip {

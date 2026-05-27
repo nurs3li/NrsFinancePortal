@@ -1,6 +1,7 @@
 .nrs-brand__mark {
     flex-shrink: 0;
     display: block;
+    color: #f8fafc;
 }
 
 .nrs-brand__text {
@@ -52,6 +53,7 @@
 .app-header__logo .nrs-brand__mark {
     width: 48px;
     height: 43px;
+    color: var(--header-text);
 }
 
 @media (max-width: 1100px) {

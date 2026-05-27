@@ -10,6 +10,11 @@ import './Simulation.css';
 import { fetchSimulationSymbolsByType } from '../services/marketDataService';
 import { useLanguage } from '../i18n/LanguageContext';
 import type { AssetType } from '../constants/OrderConstants';
+import {
+    backendAssetTypeForSimulation,
+    displaySimulationAssetType,
+    type SimulationAssetType,
+} from '../types/simulationAssetType';
 import { getBistLatest, bistLatestPrice } from '../services/bistEquityApi';
 import { SimulationHeader } from '../components/simulation/SimulationHeader';
 import { SimulationCreateCard } from '../components/simulation/SimulationCreateCard';
@@ -52,12 +57,20 @@ function parseDisplayCurrency(raw?: string | null): SimDisplayCurrency {
     return String(raw ?? '').toUpperCase() === 'USD' ? 'USD' : 'TRY';
 }
 
+function simulationResultKey(item: {
+    assetType: AssetType;
+    assetName: string;
+    pickerAssetType?: SimulationAssetType | null;
+}): string {
+    return `${displaySimulationAssetType(item.assetType, item.pickerAssetType)}:${item.assetName.toUpperCase()}`;
+}
+
 export function Simulation() {
     const { tokens } = useTheme();
     const { t, lang } = useLanguage();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
 
-    const [type, setType] = useState<AssetType>('CRYPTO');
+    const [type, setType] = useState<SimulationAssetType>('CRYPTO');
     const [symbol, setSymbol] = useState('BTCUSDT');
     const [amount, setAmount] = useState('5000');
     const [amountCurrency, setAmountCurrency] = useState<SimDisplayCurrency>('TRY');
@@ -67,7 +80,7 @@ export function Simulation() {
     const [scenarioLabel, setScenarioLabel] = useState('');
 
     const [compareDrafts, setCompareDrafts] = useState<CompareDraftItem[]>([]);
-    const [compareType, setCompareType] = useState<AssetType>('STOCK');
+    const [compareType, setCompareType] = useState<SimulationAssetType>('STOCK');
     const [compareSymbol, setCompareSymbol] = useState('');
     const [compareSymbolOptions, setCompareSymbolOptions] = useState<string[]>([]);
     const [compareOptionsLoading, setCompareOptionsLoading] = useState(false);
@@ -113,7 +126,7 @@ export function Simulation() {
                 const res = await financeClient.get('/api/market/overview');
                 const overview = unwrapData<OverviewLite>(res);
                 let bistLive: Record<string, number> = {};
-                if (simulationResultsRef.current.some((r) => r.assetType === 'BIST')) {
+                if (simulationResultsRef.current.some((r) => displaySimulationAssetType(r.assetType, r.pickerAssetType) === 'BIST')) {
                     try {
                         const rows = await getBistLatest();
                         bistLive = Object.fromEntries(
@@ -134,9 +147,13 @@ export function Simulation() {
                 setSimulationResults((prev) =>
                     prev.map((r) => {
                         const liveTry =
-                            r.assetType === 'BIST'
+                            displaySimulationAssetType(r.assetType, r.pickerAssetType) === 'BIST'
                                 ? bistLive[r.assetName.toUpperCase()] ?? null
-                                : liveTryFromOverview(overview, r.assetType, r.assetName);
+                                : liveTryFromOverview(
+                                      overview,
+                                      displaySimulationAssetType(r.assetType, r.pickerAssetType),
+                                      r.assetName,
+                                  );
                         const live = livePriceInDisplayCurrency(liveTry, r.displayCurrency, usdTry);
                         if (live == null || live <= 0 || r.buyPrice <= 0) return r;
                         const units = r.initialAmount / r.buyPrice;
@@ -191,8 +208,12 @@ export function Simulation() {
         }
     }, [compareSymbolOptions, compareSymbol]);
 
-    const calculateForAsset = async (assetType: AssetType, assetSymbol: string): Promise<SimulationResultItem> => {
+    const calculateForAsset = async (
+        assetType: SimulationAssetType,
+        assetSymbol: string,
+    ): Promise<SimulationResultItem> => {
         const parsedAmount = Number(amount);
+        const backendAssetType = backendAssetTypeForSimulation(assetType);
         if (!parsedAmount || parsedAmount <= 0) {
             throw new Error(t('wallet.amountPositive', 'Tutar sıfırdan büyük olmalı.'));
         }
@@ -210,7 +231,7 @@ export function Simulation() {
 
         const res = await financeClient.get('/api/simulation', {
             params: {
-                type: assetType,
+                type: backendAssetType,
                 symbol: sym,
                 amount: parsedAmount,
                 date: buyDate,
@@ -233,6 +254,7 @@ export function Simulation() {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             assetName: dto.symbol,
             assetType: dto.type as AssetType,
+            pickerAssetType: assetType,
             displayCurrency,
             unitsBought: Number(dto.unitsBought ?? 0),
             initialAmount: Number(dto.inputAmountTry ?? 0),
@@ -261,11 +283,11 @@ export function Simulation() {
         e.preventDefault();
         setError(null);
         setManualPricePrompt(false);
-        const targets: { assetType: AssetType; symbol: string }[] = [{ assetType: type, symbol }];
+        const targets: { assetType: SimulationAssetType; symbol: string }[] = [{ assetType: type, symbol }];
         for (const d of compareDrafts) {
             targets.push({ assetType: d.assetType, symbol: d.symbol });
         }
-        const unique: { assetType: AssetType; symbol: string }[] = [];
+        const unique: { assetType: SimulationAssetType; symbol: string }[] = [];
         const seen = new Set<string>();
         for (const item of targets) {
             const key = `${item.assetType}:${item.symbol.trim().toUpperCase()}`;
@@ -303,11 +325,9 @@ export function Simulation() {
                 }
             }
             if (added.length > 0) {
-                const keyOf = (r: { assetType: AssetType; assetName: string }) =>
-                    `${r.assetType}:${r.assetName.toUpperCase()}`;
-                const replacedKeys = new Set(added.map(keyOf));
+                const replacedKeys = new Set(added.map(simulationResultKey));
                 setSimulationResults((prev) => {
-                    const kept = prev.filter((r) => !replacedKeys.has(keyOf(r)));
+                    const kept = prev.filter((r) => !replacedKeys.has(simulationResultKey(r)));
                     return [...added, ...kept];
                 });
                 setCompareDrafts([]);
@@ -375,7 +395,7 @@ export function Simulation() {
             if (first) {
                 setAmount(String(first.initialAmount));
                 setBuyDate(first.buyDate);
-                setType(first.assetType);
+                setType(first.pickerAssetType ?? first.assetType);
                 setSymbol(first.assetName);
             }
             setAmountCurrency(entry.amountCurrency ?? first?.displayCurrency ?? 'TRY');
@@ -473,7 +493,7 @@ export function Simulation() {
 
     const exportCellFormatters = useMemo(
         () => ({
-            assetType(at: AssetType) {
+            assetType(at: SimulationAssetType) {
                 switch (at) {
                     case 'CRYPTO':
                         return t('category.crypto', 'Kripto');
@@ -481,12 +501,14 @@ export function Simulation() {
                         return t('category.fx', 'Döviz');
                     case 'METAL':
                         return t('category.metals', 'Kıymetli madenler');
+                    case 'TR_FUND':
+                        return t('funds.turkishFunds', 'Türk Fonları');
                     case 'FUND':
-                        return t('category.funds', 'Fonlar');
+                        return t('funds.usFunds', 'Amerika Fonları');
                     case 'STOCK':
-                        return t('category.equity', 'Hisse');
+                        return t('stocks.usStocks', 'ABD Hisseleri');
                     case 'BIST':
-                        return t('category.bist', 'BIST hisse');
+                        return t('stocks.turkishStocks', 'Türk Hisseleri');
                     default:
                         return at;
                 }

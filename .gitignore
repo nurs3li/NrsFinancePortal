@@ -10,8 +10,6 @@ build/
 # Dependencies
 **/node_modules/
 
-.mvn/wrapper/maven-wrapper.jar
-
 ### STS ###
 .apt_generated
 .classpath
@@ -45,7 +43,7 @@ build/
 
 # VIOP: artifacts/viop/ altındaki CSV ve yardımcı .py dosyaları ingest için repoda izlenir; bu yolu ignore etmeyin.
 
-# Postgres pg_dump yedekleri (scripts/ops/Backup-NrsMarketDb.ps1)
+# Postgres pg_dump yedekleri (docker exec pg_dump — backups/ altına)
 backups/
 
 # Python

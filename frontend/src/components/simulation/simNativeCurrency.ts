@@ -1,12 +1,13 @@
 import type { AssetType } from '../../constants/OrderConstants';
+import { displaySimulationAssetType, type SimulationAssetType } from '../../types/simulationAssetType';
 import type { SimulationResultItem } from './types';
 
 export type NativeQuoteCurrency = 'TRY' | 'USD' | 'GBP' | 'EUR';
 
 /** Varlığın kotasyon / pozisyon birimi (grafikte ikincil gösterim için). */
-export function resolveNativeQuoteCurrency(assetType: AssetType, symbol: string): NativeQuoteCurrency {
+export function resolveNativeQuoteCurrency(assetType: AssetType | SimulationAssetType, symbol: string): NativeQuoteCurrency {
     const sym = symbol.trim().toUpperCase();
-    if (assetType === 'BIST' || assetType === 'METAL') return 'TRY';
+    if (assetType === 'BIST' || assetType === 'METAL' || assetType === 'TR_FUND') return 'TRY';
     if (assetType === 'FX') {
         if (sym.startsWith('GBP')) return 'GBP';
         if (sym.startsWith('EUR')) return 'EUR';
@@ -63,7 +64,8 @@ export function computeDualTotalValue(
     valueInDisplay: number,
     usdTryRate?: number | null,
 ): DualMoneyParts {
-    const native = resolveNativeQuoteCurrency(res.assetType, res.assetName);
+    const assetType = displaySimulationAssetType(res.assetType, res.pickerAssetType);
+    const native = resolveNativeQuoteCurrency(assetType, res.assetName);
     const dc = res.displayCurrency;
     const primary = valueInDisplay;
 
@@ -74,7 +76,7 @@ export function computeDualTotalValue(
     const units = simulationUnits(res);
 
     // XXXTRY: birim fiyat TRY/XXX → pozisyon büyüklüğü XXX cinsinden = units
-    if (res.assetType === 'FX' && res.assetName.toUpperCase().endsWith('TRY') && units > 0) {
+    if (assetType === 'FX' && res.assetName.toUpperCase().endsWith('TRY') && units > 0) {
         return { primary, secondary: units, nativeCurrency: native };
     }
 

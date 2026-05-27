@@ -12,11 +12,7 @@ Bu rehber, projeyi **sıfırdan** ayağa kaldırıp **her katmanı tek tek doğr
 - [ ] Diskte **~5 GB** boş alan (image'lar + volume'lar)
 - [ ] Git kurulu
 
-Opsiyonel (kaynak derleme):
-
-- [ ] JDK 21
-- [ ] Node.js 20+
-- [ ] Maven (wrapper `mvnw` zaten repoda)
+Kaynak derleme ve çalıştırma **yalnızca Docker** ile yapılır; host’ta JDK/Maven/Node gerekmez.
 
 ---
 
@@ -143,21 +139,9 @@ curl "http://localhost:9200/application-logs-*/_search?size=1&pretty"
 
 ---
 
-## 7. Test suite çalıştırma
+## 7. Test suite
 
-Docker açıkken (Testcontainers):
-
-```powershell
-.\mvnw test
-```
-
-Frontend:
-
-```powershell
-cd frontend
-npm ci
-npm test
-```
+Backend testleri CI’da (`mvn test`, Testcontainers) çalışır. Yerel doğrulama için stack health kontrolleri (bölüm 4) yeterlidir.
 
 ---
 

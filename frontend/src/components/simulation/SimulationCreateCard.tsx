@@ -1,6 +1,6 @@
 ﻿import { useState, type FormEvent, type RefObject } from 'react';
-import type { AssetType } from '../../constants/OrderConstants';
 import { useLanguage } from '../../i18n/LanguageContext';
+import type { SimulationAssetType } from '../../types/simulationAssetType';
 import { SimAssetPicker } from './SimAssetPicker';
 import { SimCollapsibleAssetSection } from './SimCollapsibleAssetSection';
 import { SimCompareDraftList } from './SimCompareDraftList';
@@ -16,8 +16,8 @@ export type SimulationCreateCardProps = {
     mutedColor: string;
     scenarioLabel: string;
     onScenarioLabelChange: (v: string) => void;
-    type: AssetType;
-    onTypeChange: (t: AssetType) => void;
+    type: SimulationAssetType;
+    onTypeChange: (t: SimulationAssetType) => void;
     symbol: string;
     onSymbolChange: (s: string) => void;
     amount: string;
@@ -34,8 +34,8 @@ export type SimulationCreateCardProps = {
     manualPriceInputRef?: RefObject<HTMLInputElement | null>;
     symbolOptions: string[];
     overviewLoading: boolean;
-    compareType: AssetType;
-    onCompareTypeChange: (t: AssetType) => void;
+    compareType: SimulationAssetType;
+    onCompareTypeChange: (t: SimulationAssetType) => void;
     compareSymbol: string;
     onCompareSymbolChange: (s: string) => void;
     compareSymbolOptions: string[];

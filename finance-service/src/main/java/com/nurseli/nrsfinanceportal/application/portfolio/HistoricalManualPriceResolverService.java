@@ -134,7 +134,8 @@ public class HistoricalManualPriceResolverService {
 
     private FxContext loadFxContext(AssetType type, String symbol, int allowedDays, LatestPricingSnapshot snap) {
         BigDecimal spot = HistoricalUsdTryConversion.spotUsdTry(snap);
-        if (!HistoricalUsdTryConversion.needsHistoricalUsdTry(type, symbol)) {
+        if (!HistoricalUsdTryConversion.needsHistoricalUsdTry(type, symbol)
+                || (type == AssetType.FUND && marketDataClient.isTryQuotedFund(symbol, snap))) {
             return new FxContext(List.of(), spot);
         }
         List<MarketPriceHistoryDto> fxRaw = marketDataClient.getHistory(AssetType.FX, "USDTRY", allowedDays);
@@ -258,7 +259,7 @@ public class HistoricalManualPriceResolverService {
         return map;
     }
 
-    private static BigDecimal rowToTry(AssetType type, String symbol, MarketPriceHistoryDto row, FxContext fx) {
+    private BigDecimal rowToTry(AssetType type, String symbol, MarketPriceHistoryDto row, FxContext fx) {
         BigDecimal raw = HistoricalUsdTryConversion.mid(row);
         if (raw == null || raw.signum() <= 0) {
             return null;
@@ -267,6 +268,9 @@ public class HistoricalManualPriceResolverService {
             return raw;
         }
         if (type == AssetType.BIST) {
+            return raw;
+        }
+        if (type == AssetType.FUND && marketDataClient.isTryQuotedFund(symbol)) {
             return raw;
         }
         if (HistoricalUsdTryConversion.needsHistoricalUsdTry(type, symbol)) {

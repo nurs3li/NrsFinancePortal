@@ -89,11 +89,11 @@ export function HeroSlideMissedOpportunity() {
                 <div className="hero-panel">
                     <p className="hero-mini-label">{t('landing.slide3.chartTitle', 'Satış Sonrası Performans')}</p>
                     <svg className="hero-chart-svg" viewBox="0 0 200 100" aria-hidden>
-                        <line x1="0" y1="90" x2="200" y2="90" stroke="rgba(71,85,105,0.5)" strokeWidth="0.5" />
+                        <line x1="0" y1="90" x2="200" y2="90" stroke="var(--landing-chart-grid)" strokeWidth="0.5" />
                         <polyline points="10,72 50,70 90,68 130,68 170,68 190,68" fill="none" stroke="#60a5fa" strokeWidth="2" />
                         <polyline points="10,72 50,65 90,52 130,38 170,28 190,22" fill="none" stroke="#4ade80" strokeWidth="2" />
-                        <line x1="90" y1="12" x2="90" y2="88" stroke="#94a3b8" strokeWidth="1" strokeDasharray="3 2" />
-                        <text x="92" y="18" fill="#94a3b8" fontSize="7">
+                        <line x1="90" y1="12" x2="90" y2="88" stroke="var(--landing-chart-dim)" strokeWidth="1" strokeDasharray="3 2" />
+                        <text x="92" y="18" fill="var(--landing-chart-dim)" fontSize="7">
                             {t('landing.slide3.sellDate', 'Satış Tarihi')}
                         </text>
                         <text x="100" y="48" fill="#4ade80" fontSize="7">
@@ -177,7 +177,7 @@ export function HeroSlideRealReturn() {
                         <span style={{ width: '10%', background: '#f97316' }} />
                         <span style={{ width: '10%', background: '#8b5cf6' }} />
                     </div>
-                    <p style={{ margin: '0.25rem 0 0', fontSize: '0.52rem', color: '#64748b' }}>
+                    <p className="hero-chart-note">
                         BIST %45 · {t('landing.slide4.gold', 'Altın')} %20 · FX %15 · {t('landing.slide4.crypto', 'Kripto')} %10
                     </p>
                 </div>
@@ -208,7 +208,7 @@ export function HeroSlideTimeMachine() {
                         <polyline points="10,70 60,68 110,55 160,35 190,25" fill="none" stroke="#eab308" strokeWidth="2" />
                         <polyline points="10,70 60,62 110,48 160,38 190,32" fill="none" stroke="#4ade80" strokeWidth="1.5" />
                         <polyline points="10,70 60,65 110,58 160,50 190,45" fill="none" stroke="#38bdf8" strokeWidth="1.5" />
-                        <polyline points="10,70 60,70 110,71 160,72 190,73" fill="none" stroke="#64748b" strokeWidth="1.5" />
+                        <polyline points="10,70 60,70 110,71 160,72 190,73" fill="none" stroke="var(--landing-chart-dim)" strokeWidth="1.5" />
                     </svg>
                 </div>
                 <div className="hero-panel">

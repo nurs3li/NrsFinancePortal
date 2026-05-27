@@ -64,8 +64,7 @@ docker compose up -d market-data-service
 ### Yerel
 
 ```powershell
-cd marketdata
-..\mvnw spring-boot:run
+docker compose up -d market-data-service
 ```
 
 Port: **8086** (`application.yml`)
@@ -74,9 +73,7 @@ Port: **8086** (`application.yml`)
 
 ## Test
 
-```powershell
-..\mvnw test
-```
+CI’da `mvn test -pl marketdata`. Yerel: `curl http://localhost:8083/actuator/health`
 
 Testcontainers: PostgreSQL + Redis integration test paketi.
 

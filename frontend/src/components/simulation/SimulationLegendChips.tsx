@@ -1,4 +1,5 @@
 ﻿import { AssetLogo } from '../AssetLogo';
+import { displaySimulationAssetType } from '../../types/simulationAssetType';
 import { CHART_PALETTE } from './constants';
 import { categoryFallbackIcon, symbolLogoUrl } from './assetBrandingSim';
 import { SimDualMoney } from './SimDualMoney';
@@ -26,6 +27,7 @@ export function SimulationLegendChips({
             {items.map((res, i) => {
                 const color = CHART_PALETTE[i % CHART_PALETTE.length];
                 const pos = res.pnlPct >= 0;
+                const displayAssetType = displaySimulationAssetType(res.assetType, res.pickerAssetType);
                 return (
                     <button
                         key={res.id}
@@ -37,9 +39,9 @@ export function SimulationLegendChips({
                         title={res.visible ? 'Grafikten gizle' : 'Grafikte göster'}
                     >
                         <AssetLogo
-                            src={symbolLogoUrl(res.assetName, res.assetType)}
+                            src={symbolLogoUrl(res.assetName, displayAssetType)}
                             alt=""
-                            fallbackIcon={categoryFallbackIcon(res.assetType)}
+                            fallbackIcon={categoryFallbackIcon(displayAssetType)}
                             fallbackColor="#94a3b8"
                             size={20}
                         />

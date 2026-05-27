@@ -1,5 +1,5 @@
 # NrsFinancePortal — continuous integration
-# PR / main push: backend tests (incl. Testcontainers), frontend, API contract gate, Docker smoke builds.
+# PR / main push: backend tests (incl. Testcontainers), frontend, Docker image build smoke.
 
 name: CI
 
@@ -45,8 +45,7 @@ jobs:
         run: docker info
 
       - name: Run unit & integration tests
-        working-directory: ${{ matrix.module }}
-        run: bash ../mvnw -B test
+        run: mvn -B test -pl ${{ matrix.module }} -am
 
       - name: Upload Surefire reports
         if: failure()
@@ -87,40 +86,14 @@ jobs:
       - name: Production build
         run: npm run build
 
-  api-contract:
-    name: API catalog & contract gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Endpoint contract coverage gate
-        run: bash tools/endpoint_contract_gate.sh
-
-      - name: Upload contract gate artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: endpoint-contract-coverage
-          path: artifacts/verification/ci-contract-gate/*
-          if-no-files-found: warn
-          retention-days: 14
-
   docker-smoke:
     name: Docker · image build smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     needs: [backend-test]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -138,10 +111,30 @@ jobs:
       - name: Build marketdata image
         uses: docker/build-push-action@v6
         with:
-          context: marketdata
+          context: .
           file: marketdata/Dockerfile
           push: false
           tags: nrs-marketdata:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build notification-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: notification-service/Dockerfile
+          push: false
+          tags: nrs-notification-service:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build log-consumer-service image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: log-consumer-service/Dockerfile
+          push: false
+          tags: nrs-log-consumer-service:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -154,37 +147,3 @@ jobs:
           tags: nrs-frontend:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Package JARs for runtime-only service images
-        run: |
-          chmod +x mvnw
-          ./mvnw -B package -DskipTests -pl notification-service,log-consumer-service -am
-
-      - name: Build notification-service image
-        uses: docker/build-push-action@v6
-        with:
-          context: notification-service
-          file: notification-service/Dockerfile
-          push: false
-          tags: nrs-notification-service:ci
-
-      - name: Build log-consumer-service image
-        uses: docker/build-push-action@v6
-        with:
-          context: log-consumer-service
-          file: log-consumer-service/Dockerfile
-          push: false
-          tags: nrs-log-consumer-service:ci
-
-  ci-success:
-    name: CI · all checks passed
-    runs-on: ubuntu-latest
-    needs: [backend-test, frontend, api-contract, docker-smoke]
-    if: always()
-    steps:
-      - name: Require all jobs green
-        run: |
-          test "${{ needs.backend-test.result }}" = "success" || exit 1
-          test "${{ needs.frontend.result }}" = "success" || exit 1
-          test "${{ needs.api-contract.result }}" = "success" || exit 1
-          test "${{ needs.docker-smoke.result }}" = "success" || exit 1

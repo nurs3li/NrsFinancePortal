@@ -1173,14 +1173,6 @@ export function AdminAudit() {
                                 onClick: () => setAuditTab('critical'),
                             },
                             {
-                                key: 'balance',
-                                label: t('admin.auditChipBalance', 'Bakiye / yetersiz bakiye'),
-                                onClick: () => {
-                                    setAuditTab('system');
-                                    setTechQ('insufficient balance bakiye yetersiz');
-                                },
-                            },
-                            {
                                 key: '15m',
                                 label: t('admin.auditChip15m', 'Son 15 dk'),
                                 onClick: () => {
