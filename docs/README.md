@@ -44,21 +44,10 @@ Her çalıştırılabilir bileşenin kendi README'si vardır:
 
 ---
 
-## Otomasyon araçları
-
-| Araç | Komut | Amaç |
-|------|-------|------|
-| API katalog | `bash tools/generate_api_catalog.sh` | Controller taraması → endpoint listesi |
-| OpenAPI export | `bash tools/export_openapi.sh` | Canlı `/v3/api-docs` JSON |
-| Contract gate | `bash tools/endpoint_contract_gate.sh` | CI endpoint metadata kontrolü |
-| Javadoc | `.\scripts\Generate-Javadoc.ps1` | HTML API dokümantasyonu |
-
----
-
 ## Dokümantasyon güncelleme ilkesi
 
 1. **Davranış değişikliği** → ilgili modül README + gerekirse `docs/architecture.md`.
-2. **Yeni API endpoint** → Swagger + isteğe bağlı `tools/generate_api_catalog.sh`.
+2. **Yeni API endpoint** → Swagger / SpringDoc.
 3. **Yeni ortam değişkeni** → `.env.example` + kök README tablosu.
 4. **Güvenlik / Keycloak değişikliği** → `docs/security/README.md`.
 

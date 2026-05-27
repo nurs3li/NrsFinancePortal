@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Moon, Sun } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { financeClient, readFinanceBinaryErrorMessage } from '../api/client';
@@ -7,6 +8,7 @@ import { NrsBrandLockup } from '../components/NrsBrandLockup';
 import { LandingHeroCarousel } from '../components/landing/LandingHeroCarousel';
 import { LandingFeaturesFlip } from '../components/landing/LandingFeaturesFlip';
 import { LandingSystemArchitecture } from '../components/landing/LandingSystemArchitecture';
+import { useTheme } from '../theme/ThemeContext';
 import './LandingPage.css';
 
 function decodeOAuthHint(raw: string | null): string | null {
@@ -46,8 +48,8 @@ export function LandingPage() {
     const { loginWithCredentials, ready, isAuthenticated, role } = useAuth();
     const navigate = useNavigate();
     const { lang, setLang, t } = useLanguage();
+    const { theme, setTheme } = useTheme();
     const [searchParams, setSearchParams] = useSearchParams();
-    const [langOpen, setLangOpen] = useState(false);
     const [panelOpen, setPanelOpen] = useState(false);
     const [panelTab, setPanelTab] = useState<'register' | 'signin'>('signin');
     const [loginError, setLoginError] = useState<string | null>(null);
@@ -271,25 +273,45 @@ export function LandingPage() {
                         <a href="#architecture">{t('landing.navArchitecture', 'Altyapı')}</a>
                     </nav>
                     <div className="landing-header-actions">
-                        <div className="landing-lang-wrap">
-                            <button
-                                type="button"
-                                className="landing-lang-btn"
-                                onClick={() => setLangOpen((v) => !v)}
-                                aria-expanded={langOpen}
-                            >
-                                {lang === 'tr' ? '🇹🇷 TR' : '🇬🇧 EN'} ▾
-                            </button>
-                            {langOpen ? (
-                                <div className="landing-lang-menu" role="menu">
-                                    <button type="button" role="menuitem" onClick={() => { setLang('tr'); setLangOpen(false); }}>
-                                        🇹🇷 Türkçe
-                                    </button>
-                                    <button type="button" role="menuitem" onClick={() => { setLang('en'); setLangOpen(false); }}>
-                                        🇬🇧 English
-                                    </button>
-                                </div>
-                            ) : null}
+                        <div className="landing-pref-panel" aria-label={t('landing.preferencePanel', 'Tema ve dil ayarları')}>
+                            <div className="landing-segment-control landing-segment-control--icons" role="group" aria-label={t('landing.themeSwitchLabel', 'Tema seçimi')}>
+                                <button
+                                    type="button"
+                                    className={`landing-segment-btn landing-segment-btn--icon ${theme === 'light' ? 'is-active' : ''}`}
+                                    onClick={() => setTheme('light')}
+                                    aria-pressed={theme === 'light'}
+                                    title={t('theme.light', 'Açık Tema')}
+                                >
+                                    <Sun size={16} />
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`landing-segment-btn landing-segment-btn--icon ${theme === 'dark' ? 'is-active' : ''}`}
+                                    onClick={() => setTheme('dark')}
+                                    aria-pressed={theme === 'dark'}
+                                    title={t('theme.dark', 'Koyu Tema')}
+                                >
+                                    <Moon size={16} />
+                                </button>
+                            </div>
+                            <div className="landing-segment-control" role="group" aria-label={t('landing.langSwitchLabel', 'Dil seçimi')}>
+                                <button
+                                    type="button"
+                                    className={`landing-segment-btn ${lang === 'tr' ? 'is-active' : ''}`}
+                                    onClick={() => setLang('tr')}
+                                    aria-pressed={lang === 'tr'}
+                                >
+                                    {t('lang.turkish', 'Türkçe')}
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`landing-segment-btn ${lang === 'en' ? 'is-active' : ''}`}
+                                    onClick={() => setLang('en')}
+                                    aria-pressed={lang === 'en'}
+                                >
+                                    {t('lang.english', 'English')}
+                                </button>
+                            </div>
                         </div>
                         <button type="button" className="landing-btn-ghost" onClick={() => openPanel('signin')}>
                             {t('landing.btnLogin', 'Giriş Yap')}

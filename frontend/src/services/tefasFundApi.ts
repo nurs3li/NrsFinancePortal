@@ -1,11 +1,63 @@
 import type { AxiosResponse } from 'axios';
-import { financeClient } from '../api/client';
+import { financeClient, marketClient } from '../api/client';
 import { unwrapFinanceSuccess } from './manualPortfolioApi';
+
+export type TefasFundRow = {
+    code: string;
+    title?: string | null;
+    fundType?: string | null;
+    riskLevel?: string | null;
+    tefasListed?: boolean;
+    price?: number | null;
+    return1d?: number | null;
+    return1w?: number | null;
+    return1m?: number | null;
+    return3m?: number | null;
+    return6m?: number | null;
+    return1y?: number | null;
+    returnYtd?: number | null;
+    return3y?: number | null;
+    return5y?: number | null;
+    source?: string | null;
+};
+
+export type TefasFundPage = {
+    items: TefasFundRow[];
+    page: number;
+    size: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+};
 
 export type TefasFundHistoryPoint = {
     date: string;
     price: number;
 };
+
+export async function fetchTefasFundPage(
+    page = 0,
+    size = 50,
+    sort = 'return1y',
+    dir = 'desc',
+    search?: string,
+    signal?: AbortSignal,
+): Promise<TefasFundPage> {
+    const { data } = await marketClient.get<TefasFundPage>('/api/market/tefas/funds', {
+        params: { page, size, sort, dir, search },
+        signal,
+    });
+    return {
+        items: Array.isArray(data?.items) ? data.items : [],
+        page: Number.isFinite(data?.page) ? Number(data.page) : 0,
+        size: Number.isFinite(data?.size) ? Number(data.size) : size,
+        total: Number.isFinite(data?.total) ? Number(data.total) : 0,
+        totalPages: Number.isFinite(data?.totalPages) ? Number(data.totalPages) : 0,
+        hasNext: Boolean(data?.hasNext),
+        hasPrevious: Boolean(data?.hasPrevious),
+    };
+}
 
 export async function fetchTefasFundHistory(
     code: string,

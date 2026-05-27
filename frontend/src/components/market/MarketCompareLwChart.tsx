@@ -23,6 +23,43 @@ type Props = {
     timeframeLabel?: string;
 };
 
+function arraysEqual(a: string[], b: string[]): boolean {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i += 1) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+function lineWidthsEqual(
+    prev: Record<string, number>,
+    next: Record<string, number>,
+    symbols: string[],
+): boolean {
+    for (const sym of symbols) {
+        if ((prev[sym] ?? 0) !== (next[sym] ?? 0)) return false;
+    }
+    return true;
+}
+
+function rowsEqual(prev: Row[], next: Row[], symbols: string[]): boolean {
+    if (prev === next) return true;
+    if (prev.length !== next.length) return false;
+    for (let i = 0; i < prev.length; i += 1) {
+        const a = prev[i]!;
+        const b = next[i]!;
+        if (a.time !== b.time) return false;
+        for (const sym of symbols) {
+            const av = a.values[sym];
+            const bv = b.values[sym];
+            if (Number.isNaN(av) && Number.isNaN(bv)) continue;
+            if (av !== bv) return false;
+        }
+    }
+    return true;
+}
+
 function lineWidthClamp(n: number): 1 | 2 | 3 | 4 {
     const r = Math.round(Math.max(1, Math.min(4, n)));
     return r as 1 | 2 | 3 | 4;
@@ -49,6 +86,10 @@ function MarketCompareLwChartImpl({
     const containerRef = useRef<HTMLDivElement>(null);
     const tokensRef = useRef(tokens);
     tokensRef.current = tokens;
+    const chartApiRef = useRef<ReturnType<typeof createChart> | null>(null);
+    const lineWidthSignature = symbols
+        .map((sym) => `${sym}:${Number(lineWidthBySymbol[sym] ?? 0).toFixed(3)}`)
+        .join('|');
 
     useEffect(() => {
         const el = containerRef.current;
@@ -71,15 +112,35 @@ function MarketCompareLwChartImpl({
                 vertLines: { color: t.border },
                 horzLines: { color: t.border },
             },
-            rightPriceScale: { borderColor: t.border },
+            rightPriceScale: {
+                borderColor: t.border,
+                minimumWidth: 64,
+            },
             timeScale: {
                 borderColor: t.border,
                 timeVisible: true,
                 secondsVisible: false,
+                lockVisibleTimeRangeOnResize: true,
+                fixLeftEdge: true,
+                fixRightEdge: true,
+                shiftVisibleRangeOnNewBar: false,
                 ...tsLay,
             },
-            crosshair: { mode: 1 },
+            handleScroll: false,
+            handleScale: false,
+            crosshair: {
+                mode: 1,
+                vertLine: {
+                    visible: false,
+                    labelVisible: false,
+                },
+                horzLine: {
+                    visible: false,
+                    labelVisible: false,
+                },
+            },
         });
+        chartApiRef.current = chart;
 
         if (hasData) {
             symbols.forEach((sym, i) => {
@@ -141,12 +202,13 @@ function MarketCompareLwChartImpl({
         return () => {
             window.removeEventListener('resize', onResize);
             chart.remove();
+            chartApiRef.current = null;
         };
     }, [
         rows,
         symbols,
         colors,
-        lineWidthBySymbol,
+        lineWidthSignature,
         height,
         timeframeLabel,
         tokens.bgCard,
@@ -155,11 +217,24 @@ function MarketCompareLwChartImpl({
         tokens.textMuted,
     ]);
 
-    return <div ref={containerRef} style={{ width: '100%', height }} />;
+    return <div ref={containerRef} style={{ width: '100%', height, pointerEvents: 'none', touchAction: 'none' }} />;
 }
 
 /*
  * React.memo: Trend periyodu vb. parent state guncellemelerinde karsilastirma grafiginin
  * gereksiz re-render'larini engeller. Prop'lar parent'ta useMemo'lu (rows/symbols/colors).
  */
-export const MarketCompareLwChart = memo(MarketCompareLwChartImpl);
+export const MarketCompareLwChart = memo(
+    MarketCompareLwChartImpl,
+    (prev, next) =>
+        prev.height === next.height &&
+        prev.timeframeLabel === next.timeframeLabel &&
+        prev.tokens.bgCard === next.tokens.bgCard &&
+        prev.tokens.border === next.tokens.border &&
+        prev.tokens.text === next.tokens.text &&
+        prev.tokens.textMuted === next.tokens.textMuted &&
+        arraysEqual(prev.symbols, next.symbols) &&
+        arraysEqual(prev.colors, next.colors) &&
+        lineWidthsEqual(prev.lineWidthBySymbol, next.lineWidthBySymbol, next.symbols) &&
+        rowsEqual(prev.rows, next.rows, next.symbols),
+);

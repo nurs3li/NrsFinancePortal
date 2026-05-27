@@ -1,4 +1,5 @@
 import type { AssetType } from '../../constants/OrderConstants';
+import type { SimulationAssetType } from '../../types/simulationAssetType';
 
 export type SimulationPerformancePoint = {
     date: string;
@@ -34,6 +35,8 @@ export type SimulationResultItem = {
     id: string;
     assetName: string;
     assetType: AssetType;
+    /** Picker'da gösterilen alt kategori (örn. TR_FUND, STOCK=ABD Hisseleri). */
+    pickerAssetType?: SimulationAssetType;
     /** Tutar ve tüm parasal alanlar bu birimde (TRY veya USD). */
     displayCurrency: SimDisplayCurrency;
     /** Backend unitsBought — pozisyon adedi (hisse, USD, GBP vb.). */
@@ -73,7 +76,7 @@ export type SimulationSummaryStats = {
 /** Karşılaştırmaya eklenecek taslak varlık (henüz simüle edilmedi) */
 export type CompareDraftItem = {
     id: string;
-    assetType: AssetType;
+    assetType: SimulationAssetType;
     symbol: string;
 };
 

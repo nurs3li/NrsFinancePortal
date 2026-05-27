@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
-import type { AssetType } from '../../constants/OrderConstants';
 import { AssetLogo } from '../AssetLogo';
+import type { SimulationAssetType } from '../../types/simulationAssetType';
 import {
     SIM_ASSET_TYPES,
     categoryFallbackIcon,
@@ -11,11 +11,11 @@ import {
 } from './assetBrandingSim';
 
 type SimAssetPickerProps = {
-    assetType: AssetType;
+    assetType: SimulationAssetType;
     symbol: string;
     symbolOptions: string[];
     loading?: boolean;
-    onTypeChange: (t: AssetType) => void;
+    onTypeChange: (t: SimulationAssetType) => void;
     onSymbolChange: (s: string) => void;
     t: (k: string, d: string) => string;
     mutedColor: string;

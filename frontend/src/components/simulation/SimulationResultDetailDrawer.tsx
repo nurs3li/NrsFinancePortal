@@ -1,5 +1,7 @@
 import { X } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { displaySimulationAssetType } from '../../types/simulationAssetType';
+import { categoryLabel } from './assetBrandingSim';
 import { formatSimMoney } from './simCurrency';
 import { qualityLabel, qualityPillClass, sourceLabel } from './utils';
 import type { SimDisplayCurrency, SimulationResultItem } from './types';
@@ -29,6 +31,7 @@ export function SimulationResultDetailDrawer({
     if (!item) return null;
 
     const currency = item?.displayCurrency ?? displayCurrency;
+    const displayAssetType = displaySimulationAssetType(item.assetType, item.pickerAssetType);
     const fmt = (n: number, fractionDigits = 2) =>
         formatSimMoney(locale, n, currency, { maximumFractionDigits: fractionDigits });
 
@@ -44,7 +47,7 @@ export function SimulationResultDetailDrawer({
             >
                 <header className="sim-drawer__head">
                     <h2 id="sim-drawer-title" className="sim-drawer__title">
-                        {item.assetName} · {item.assetType}
+                        {item.assetName} · {categoryLabel(displayAssetType, t)}
                     </h2>
                     <button type="button" className="sim-drawer__close" onClick={onClose} aria-label={t('common.close', 'Kapat')}>
                         <X size={20} />

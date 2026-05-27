@@ -340,7 +340,11 @@ public class MarketDataClient {
             case FUND -> {
                 MarketPriceLatestDto fund = snap.funds().get(symbol);
                 if (fund == null) yield BigDecimal.ZERO;
-                yield usdToTry(fund.buyPrice(), snap);
+                BigDecimal raw = nz(fund.buyPrice());
+                if ("TEFAS".equalsIgnoreCase(fund.source())) {
+                    yield raw;
+                }
+                yield usdToTry(raw, snap);
             }
             case STOCK -> {
                 MarketPriceLatestDto equity = snap.equity().get(symbol);
@@ -350,6 +354,18 @@ public class MarketDataClient {
             case BIST -> getBistLatestMidTry(symbol);
             default -> BigDecimal.ZERO;
         };
+    }
+
+    public boolean isTryQuotedFund(String symbol) {
+        return isTryQuotedFund(symbol, loadLatestPricing());
+    }
+
+    public boolean isTryQuotedFund(String symbol, LatestPricingSnapshot snap) {
+        if (symbol == null || symbol.isBlank() || snap == null) {
+            return false;
+        }
+        MarketPriceLatestDto fund = snap.funds().get(symbol.trim().toUpperCase());
+        return fund != null && "TEFAS".equalsIgnoreCase(fund.source());
     }
 
     private BigDecimal usdToTry(BigDecimal usdPrice, LatestPricingSnapshot snap) {

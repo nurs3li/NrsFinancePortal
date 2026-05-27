@@ -1,5 +1,6 @@
 import { Eye, EyeOff, Trash2 } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { displaySimulationAssetType } from '../../types/simulationAssetType';
 import { AssetLogo } from '../AssetLogo';
 import { formatSimMoney, simCurrencySymbol } from './simCurrency';
 import { categoryFallbackIcon, categoryLabel, symbolLogoUrl } from './assetBrandingSim';
@@ -102,11 +103,15 @@ export function SimulationHistoryCard({
                                         <td>
                                             <ul className="sim-history-assets">
                                                 {entry.items.map((item) => {
-                                                    const Fallback = categoryFallbackIcon(item.assetType);
+                                                    const displayAssetType = displaySimulationAssetType(
+                                                        item.assetType,
+                                                        item.pickerAssetType,
+                                                    );
+                                                    const Fallback = categoryFallbackIcon(displayAssetType);
                                                     return (
                                                         <li key={item.id} className="sim-history-asset">
                                                             <AssetLogo
-                                                                src={symbolLogoUrl(item.assetName, item.assetType)}
+                                                                src={symbolLogoUrl(item.assetName, displayAssetType)}
                                                                 alt=""
                                                                 fallbackIcon={Fallback}
                                                                 fallbackColor="#94a3b8"
@@ -115,7 +120,7 @@ export function SimulationHistoryCard({
                                                             <span className="sim-history-asset__meta">
                                                                 <span className="sim-history-asset__sym">{item.assetName}</span>
                                                                 <span className="sim-history-asset__cat" style={{ color: mutedColor }}>
-                                                                    {categoryLabel(item.assetType, t)}
+                                                                    {categoryLabel(displayAssetType, t)}
                                                                 </span>
                                                             </span>
                                                         </li>

@@ -46,13 +46,6 @@ Bildirim ve e-posta mikroservisi — Kafka event tüketimi, in-app bildirim, Gma
 docker compose up -d notification-service
 ```
 
-### Yerel
-
-```powershell
-cd notification-service
-..\mvnw spring-boot:run
-```
-
 Port: **8089**
 
 ---
@@ -77,11 +70,7 @@ Gmail yapılandırması yoksa in-app bildirimler çalışır; e-posta gönderimi
 
 ## Test
 
-```powershell
-..\mvnw test
-```
-
-Integration: Kafka + PostgreSQL Testcontainers, notification flow testleri.
+CI’da `mvn test -pl notification-service`. Yerel: servis health + bildirim akışı manuel doğrulama.
 
 ---
 

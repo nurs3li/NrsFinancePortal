@@ -1,5 +1,5 @@
-import type { AssetType } from '../../constants/OrderConstants';
 import type { EquityMarketMetadata } from '../market/marketTypes';
+import { displaySimulationAssetType, type SimulationAssetType } from '../../types/simulationAssetType';
 import { formatSimMoney, type SimDisplayCurrency } from './simCurrency';
 import type {
     ChartMetricMode,
@@ -16,14 +16,14 @@ export function unwrapData<T>(res: unknown): T {
 }
 
 export function seriesChartKey(res: SimulationResultItem): string {
-    return `${res.assetType}-${res.assetName}-${res.id.slice(-4)}`;
+    return `${displaySimulationAssetType(res.assetType, res.pickerAssetType)}-${res.assetName}-${res.id.slice(-4)}`;
 }
 
 export function seriesDisplayName(res: SimulationResultItem): string {
     return res.scenarioLabel?.trim() ? `${res.assetName} · ${res.scenarioLabel.trim()}` : res.assetName;
 }
 
-export function assetTypeOptionIcon(t: AssetType): string {
+export function assetTypeOptionIcon(t: SimulationAssetType): string {
     switch (t) {
         case 'CRYPTO':
             return '₿';
@@ -31,6 +31,7 @@ export function assetTypeOptionIcon(t: AssetType): string {
             return '💱';
         case 'METAL':
             return '◆';
+        case 'TR_FUND':
         case 'FUND':
             return '▣';
         case 'STOCK':
@@ -51,13 +52,13 @@ export function formatExportDecimal(n: number, decimals: number): string {
 export function buildSimulationExportRow(
     r: SimulationResultItem,
     fmt: {
-        assetType: (a: AssetType) => string;
+        assetType: (a: SimulationAssetType) => string;
         quality: (q: string) => string;
         source: (s: string) => string;
     },
 ): string[] {
     return [
-        fmt.assetType(r.assetType),
+        fmt.assetType(displaySimulationAssetType(r.assetType, r.pickerAssetType)),
         r.assetName,
         r.buyDate,
         formatExportDecimal(r.initialAmount, 2),
@@ -130,7 +131,7 @@ export function computeSummaryStats(results: SimulationResultItem[]): Simulation
     };
 }
 
-type OverviewPriceRow = { buyPrice?: number; sellPrice?: number } & EquityMarketMetadata;
+type OverviewPriceRow = { buyPrice?: number; sellPrice?: number; source?: string } & EquityMarketMetadata;
 
 export type OverviewLite = {
     doviz?: Record<string, OverviewPriceRow>;
@@ -152,7 +153,7 @@ function midFromRow(row?: OverviewPriceRow | null): number | null {
 
 export function liveTryFromOverview(
     o: OverviewLite | null | undefined,
-    assetType: AssetType,
+    assetType: SimulationAssetType,
     symbol: string,
 ): number | null {
     if (!o) return null;
@@ -170,8 +171,12 @@ export function liveTryFromOverview(
             return midFromRow(o.metals?.[sym]);
         case 'CRYPTO':
             return usdMul(midFromRow(o.crypto?.[sym]));
+        case 'TR_FUND':
+            return midFromRow(o.funds?.[sym]);
         case 'FUND':
-            return usdMul(midFromRow(o.funds?.[sym]));
+            return String(o.funds?.[sym]?.source ?? '').toUpperCase() === 'TEFAS'
+                ? midFromRow(o.funds?.[sym])
+                : usdMul(midFromRow(o.funds?.[sym]));
         case 'STOCK':
             return usdMul(midFromRow(o.stocks?.[sym]));
         case 'BIST':

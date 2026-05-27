@@ -28,7 +28,7 @@ export function NrsBrandMark({ className }: { className?: string }) {
             <text
                 x="19"
                 y="27.5"
-                fill="#f8fafc"
+                fill="currentColor"
                 fontSize="14"
                 fontWeight="800"
                 fontFamily="Inter, system-ui, sans-serif"

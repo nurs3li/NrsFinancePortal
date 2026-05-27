@@ -15,7 +15,7 @@ export type ManualPriceSource =
     | 'MARKET_HISTORY_NEXT_CLOSE'
     | 'NOT_RESOLVED';
 
-export type ManualAssetType = 'STOCK' | 'CRYPTO' | 'FX' | 'METAL' | 'FUND';
+export type ManualAssetType = 'BIST' | 'STOCK' | 'CRYPTO' | 'FX' | 'METAL' | 'TR_FUND' | 'FUND';
 
 export type ManualResolvedPrice = {
     found: boolean;

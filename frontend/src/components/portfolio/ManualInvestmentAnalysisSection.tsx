@@ -32,14 +32,18 @@ import { cryptoMeta, etfMeta, fxMeta, instrumentMeta } from '../../utils/instrum
 import { PRECIOUS_METAL_DISPLAY_META, PRECIOUS_METAL_SYMBOLS } from '../../constants/preciousMetalsUsd';
 import { fetchSimulationSymbolsByType } from '../../services/marketDataService';
 import { getBistSymbols } from '../../services/bistEquityApi';
+import { fetchTefasFundPage } from '../../services/tefasFundApi';
 import { istanbulTodayYmd } from '../simulation/simDates';
 
-const ASSET_TYPE_ORDER: ManualAssetType[] = ['STOCK', 'CRYPTO', 'FX', 'METAL', 'FUND'];
+const ASSET_TYPE_ORDER: ManualAssetType[] = ['BIST', 'STOCK', 'TR_FUND', 'FUND', 'CRYPTO', 'FX', 'METAL'];
 
 type ManualSymbolOption = { value: string; label: string };
 
 function manualPortfolioFallbackSymbolOptionsForType(type: ManualAssetType): ManualSymbolOption[] {
     switch (type) {
+        case 'BIST':
+        case 'TR_FUND':
+            return [];
         case 'STOCK':
             return Object.keys(instrumentMeta)
                 .sort()
@@ -70,16 +74,17 @@ function manualPortfolioSymbolLabel(
     type: ManualAssetType,
     symbol: string,
     bistNameBySymbol: Record<string, string> = {},
+    tefasNameBySymbol: Record<string, string> = {},
 ): string {
     const sym = String(symbol ?? '').trim().toUpperCase();
     if (!sym) return symbol;
     switch (type) {
+        case 'BIST': {
+            const bistBase = sym.endsWith('.IS') ? sym.slice(0, -3) : sym;
+            const bistName = bistNameBySymbol[bistBase];
+            return bistName ? `${bistBase} — ${bistName}` : bistBase;
+        }
         case 'STOCK': {
-            if (sym.endsWith('.IS')) {
-                const bistBase = sym.slice(0, -3);
-                const bistName = bistNameBySymbol[bistBase];
-                return bistName ? `${sym} — ${bistName} (BIST)` : `${sym} — BIST`;
-            }
             const meta = instrumentMeta[sym];
             return meta?.name ? `${sym} — ${meta.name}` : sym;
         }
@@ -99,9 +104,56 @@ function manualPortfolioSymbolLabel(
             const meta = etfMeta[sym];
             return meta?.name ? `${sym} — ${meta.name}` : sym;
         }
+        case 'TR_FUND': {
+            const title = tefasNameBySymbol[sym];
+            return title ? `${sym} — ${title}` : sym;
+        }
         default:
             return sym;
     }
+}
+
+function effectiveManualAssetType(
+    rawType: string | null | undefined,
+    rawSymbol: string | null | undefined,
+    tefasCodeSet: ReadonlySet<string>,
+): ManualAssetType {
+    const type = String(rawType ?? '').trim().toUpperCase();
+    const symbol = String(rawSymbol ?? '').trim().toUpperCase();
+    if (type === 'BIST') {
+        return 'BIST';
+    }
+    if (type === 'STOCK' && symbol.endsWith('.IS')) {
+        return 'BIST';
+    }
+    if (type === 'FUND' && tefasCodeSet.has(symbol)) {
+        return 'TR_FUND';
+    }
+    if (type === 'STOCK') {
+        return 'STOCK';
+    }
+    if (type === 'FUND') {
+        return 'FUND';
+    }
+    if (type === 'CRYPTO' || type === 'FX' || type === 'METAL') {
+        return type;
+    }
+    return 'CRYPTO';
+}
+
+function normalizeManualSymbolForType(type: ManualAssetType, rawSymbol: string | null | undefined): string {
+    const symbol = String(rawSymbol ?? '').trim().toUpperCase();
+    if (!symbol) {
+        return '';
+    }
+    if (type === 'BIST' && symbol.endsWith('.IS')) {
+        return symbol.slice(0, -3);
+    }
+    return symbol;
+}
+
+function backendManualAssetType(type: ManualAssetType): 'BIST' | 'STOCK' | 'CRYPTO' | 'FX' | 'METAL' | 'FUND' {
+    return type === 'TR_FUND' ? 'FUND' : type;
 }
 
 function n(v: unknown): number | null {
@@ -205,6 +257,11 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         queryFn: getManualPortfolioInsights,
         enabled: surface === 'full',
     });
+    const tefasFundsQuery = useQuery({
+        queryKey: ['manualPortfolio', 'tefasFunds'] as const,
+        queryFn: () => fetchTefasFundPage(0, 50, 'return1y', 'desc'),
+        staleTime: 10 * 60_000,
+    });
     const evaluateAlertsMutation = useMutation({
         mutationFn: evaluatePortfolioInsightNotifications,
         onSuccess: async () => {
@@ -216,6 +273,17 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     const summary = summaryQuery.data;
     const insights = insightsQuery.data;
     const insightSummary = insights?.summary;
+    const tefasRows = tefasFundsQuery.data?.items ?? [];
+    const tefasNameBySymbol = useMemo(
+        () =>
+            Object.fromEntries(
+                tefasRows
+                    .map((row) => [String(row.code ?? '').trim().toUpperCase(), String(row.title ?? '').trim()] as const)
+                    .filter(([code]) => Boolean(code)),
+            ) as Record<string, string>,
+        [tefasRows],
+    );
+    const tefasCodeSet = useMemo(() => new Set(Object.keys(tefasNameBySymbol)), [tefasNameBySymbol]);
 
     const riskLevelClass = (level: string | undefined) => {
         const l = (level ?? '').toUpperCase();
@@ -298,11 +366,12 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     const openFormEdit = useCallback((id: number) => {
         const row = positions.find((p) => p.id === id);
         if (!row) return;
+        const effectiveType = effectiveManualAssetType(row.type, row.symbol, tefasCodeSet);
         setFormMode('edit');
         setEditId(id);
         setPositionStatus(statusOf(row) === 'SOLD' ? 'SOLD' : 'OPEN');
-        setFType((String(row.type).toUpperCase() as ManualAssetType) || 'CRYPTO');
-        setFSymbol(String(row.symbol ?? '').trim().toUpperCase());
+        setFType(effectiveType);
+        setFSymbol(normalizeManualSymbolForType(effectiveType, row.symbol));
         setFQty(String(n(row.quantity) ?? ''));
         setFBuyDate(String(row.buyDate ?? '').slice(0, 10));
         setFBuyFee(String(n(row.buyFee) ?? 0));
@@ -317,7 +386,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         setLastSellResolve(null);
         setFormBanner(null);
         setFormOpen(true);
-    }, [positions]);
+    }, [positions, tefasCodeSet]);
 
     const filteredRows = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -325,7 +394,8 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
             const st = statusOf(p);
             if (statusFilter === 'OPEN' && st !== 'OPEN') return false;
             if (statusFilter === 'SOLD' && st !== 'SOLD') return false;
-            if (typeFilter !== 'ALL' && String(p.type).toUpperCase() !== typeFilter) return false;
+            const effectiveType = effectiveManualAssetType(p.type, p.symbol, tefasCodeSet);
+            if (typeFilter !== 'ALL' && effectiveType !== typeFilter) return false;
             if (q) {
                 const sym = String(p.symbol ?? '').toLowerCase();
                 const note = String(p.note ?? '').toLowerCase();
@@ -333,7 +403,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
             }
             return true;
         });
-    }, [positions, statusFilter, typeFilter, search]);
+    }, [positions, statusFilter, typeFilter, search, tefasCodeSet]);
 
     const totalPages = Math.max(1, Math.ceil(filteredRows.length / TABLE_PAGE));
     const pageSlice = useMemo(() => {
@@ -349,42 +419,87 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         setTablePage(0);
     }, [statusFilter, typeFilter, search]);
 
-    const fallbackSymbolOptions = useMemo(() => manualPortfolioFallbackSymbolOptionsForType(fType), [fType]);
+    const fallbackSymbolOptions = useMemo(() => {
+        if (fType === 'TR_FUND') {
+            return tefasRows
+                .map((row) => {
+                    const code = String(row.code ?? '').trim().toUpperCase();
+                    if (!code) return null;
+                    return {
+                        value: code,
+                        label: manualPortfolioSymbolLabel('TR_FUND', code, {}, tefasNameBySymbol),
+                    };
+                })
+                .filter((row): row is ManualSymbolOption => row != null)
+                .sort((a, b) => a.value.localeCompare(b.value, 'tr-TR'));
+        }
+        return manualPortfolioFallbackSymbolOptionsForType(fType);
+    }, [fType, tefasRows, tefasNameBySymbol]);
     const symbolOptionsQuery = useQuery({
         queryKey: ['manualPortfolio', 'symbolOptions', fType] as const,
         queryFn: async () => {
             const fallback = manualPortfolioFallbackSymbolOptionsForType(fType);
             try {
-                const [dynamicSymbols, bistSymbols] = await Promise.all([
-                    fetchSimulationSymbolsByType(fType as 'STOCK' | 'CRYPTO' | 'FX' | 'METAL' | 'FUND'),
-                    fType === 'STOCK' ? getBistSymbols() : Promise.resolve([]),
-                ]);
-                const bistNameBySymbol: Record<string, string> = Object.fromEntries(
-                    (bistSymbols ?? [])
-                        .map((row) => [
-                            String(row.symbol ?? '')
-                                .trim()
-                                .toUpperCase(),
-                            String(row.displayName ?? '').trim(),
-                        ] as const)
-                        .filter(([sym]) => Boolean(sym)),
-                );
+                if (fType === 'TR_FUND') {
+                    const page = await fetchTefasFundPage(0, 50, 'return1y', 'desc');
+                    const nameByCode: Record<string, string> = Object.fromEntries(
+                        (page.items ?? [])
+                            .map((row) => [String(row.code ?? '').trim().toUpperCase(), String(row.title ?? '').trim()] as const)
+                            .filter(([code]) => Boolean(code)),
+                    );
+                    return (page.items ?? [])
+                        .map((row) => {
+                            const code = String(row.code ?? '').trim().toUpperCase();
+                            if (!code) {
+                                return null;
+                            }
+                            return {
+                                value: code,
+                                label: manualPortfolioSymbolLabel('TR_FUND', code, {}, nameByCode),
+                            };
+                        })
+                        .filter((row): row is ManualSymbolOption => row != null)
+                        .sort((a, b) => a.value.localeCompare(b.value, 'tr-TR'));
+                }
+
+                if (fType === 'BIST') {
+                    const bistSymbols = await getBistSymbols();
+                    const bistNameBySymbol: Record<string, string> = Object.fromEntries(
+                        (bistSymbols ?? [])
+                            .map((row) => [
+                                String(row.symbol ?? '').trim().toUpperCase(),
+                                String(row.displayName ?? '').trim(),
+                            ] as const)
+                            .filter(([sym]) => Boolean(sym)),
+                    );
+                    return (bistSymbols ?? [])
+                        .map((row) => String(row.symbol ?? '').trim().toUpperCase())
+                        .filter(Boolean)
+                        .sort((a, b) => a.localeCompare(b, 'tr-TR'))
+                        .map((value) => ({
+                            value,
+                            label: manualPortfolioSymbolLabel('BIST', value, bistNameBySymbol),
+                        }));
+                }
+
+                const dynamicSymbols = await fetchSimulationSymbolsByType(backendManualAssetType(fType));
+                const bistNameBySymbol: Record<string, string> = {};
                 const merged = new Set<string>(fallback.map((opt) => opt.value));
                 for (const sym of dynamicSymbols ?? []) {
                     const normalized = String(sym ?? '').trim().toUpperCase();
-                    if (normalized) merged.add(normalized);
-                }
-                if (fType === 'STOCK') {
-                    for (const row of bistSymbols ?? []) {
-                        const sym = String(row.symbol ?? '').trim().toUpperCase();
-                        if (sym) merged.add(`${sym}.IS`);
+                    if (!normalized) {
+                        continue;
                     }
+                    if (fType === 'FUND' && tefasCodeSet.has(normalized)) {
+                        continue;
+                    }
+                    merged.add(normalized);
                 }
                 return [...merged]
                     .sort((a, b) => a.localeCompare(b, 'tr-TR'))
                     .map((value) => ({
                         value,
-                        label: manualPortfolioSymbolLabel(fType, value, bistNameBySymbol),
+                        label: manualPortfolioSymbolLabel(fType, value, bistNameBySymbol, tefasNameBySymbol),
                     }));
             } catch {
                 return fallback;
@@ -478,15 +593,16 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     });
 
     const runBuyResolve = async () => {
-        const sym = fSymbol.trim().toUpperCase();
+        const sym = normalizeManualSymbolForType(fType, fSymbol);
         if (!sym) {
             alert(t('manualInvest.needSymbol', 'Önce sembol girin.'));
             return;
         }
+        const backendType = backendManualAssetType(fType);
         setResolveBusy('buy');
         setFormBanner(null);
         try {
-            const r = await resolveManualPrice(fType, sym, fBuyDate);
+            const r = await resolveManualPrice(backendType, sym, fBuyDate);
             setLastBuyResolve(r);
             if (r.found && r.price != null) {
                 setFBuyPriceStr(String(r.price));
@@ -506,15 +622,16 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     };
 
     const runSellResolve = async () => {
-        const sym = fSymbol.trim().toUpperCase();
+        const sym = normalizeManualSymbolForType(fType, fSymbol);
         if (!sym) {
             alert(t('manualInvest.needSymbol', 'Önce sembol girin.'));
             return;
         }
+        const backendType = backendManualAssetType(fType);
         setResolveBusy('sell');
         setFormBanner(null);
         try {
-            const r = await resolveManualPrice(fType, sym, fSellDate);
+            const r = await resolveManualPrice(backendType, sym, fSellDate);
             setLastSellResolve(r);
             if (r.found && r.price != null) {
                 setFSellPriceStr(String(r.price));
@@ -559,12 +676,13 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     };
 
     const buildPayload = (): Record<string, unknown> => {
-        const sym = fSymbol.trim().toUpperCase();
+        const sym = normalizeManualSymbolForType(fType, fSymbol);
         const qty = Number(fQty);
         const buyFee = Number(fBuyFee || 0);
         const sellFee = Number(fSellFee || 0);
+        const backendType = backendManualAssetType(fType);
         const body: Record<string, unknown> = {
-            type: fType,
+            type: backendType,
             symbol: sym,
             quantity: qty,
             buyDate: fBuyDate,
@@ -591,7 +709,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     const submitForm = async (e: FormEvent) => {
         e.preventDefault();
         setFormBanner(null);
-        const sym = fSymbol.trim().toUpperCase();
+        const sym = normalizeManualSymbolForType(fType, fSymbol);
         if (!sym) {
             alert(t('manualInvest.needSymbol', 'Önce sembol girin.'));
             return;
@@ -938,12 +1056,13 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                                 const isOpen = st === 'OPEN';
                                 const pnl = isOpen ? n(p.unrealizedProfit) : n(p.realizedProfit);
                                 const pct = isOpen ? n(p.unrealizedReturnPct) : n(p.realizedReturnPct);
+                                const displayType = effectiveManualAssetType(p.type, p.symbol, tefasCodeSet);
                                 return (
                                     <tr key={p.id} className="mia-row-click" style={{ cursor: 'pointer' }} onClick={() => openAnalysis(p.id)}>
                                         <td>
                                             <span className="pf-num-strong">{p.symbol}</span>
                                             <span style={{ display: 'block', fontSize: '0.72rem', color: tokens.textMuted }}>
-                                                {manualAssetTypeLabel(String(p.type).toUpperCase() as ManualAssetType)}
+                                                {manualAssetTypeLabel(displayType)}
                                             </span>
                                         </td>
                                         <td>
@@ -1226,7 +1345,16 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
                             <div>
                                 <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>{analysisQuery.data?.position.symbol ?? '…'}</div>
                                 <div style={{ fontSize: '0.78rem', color: tokens.textMuted }}>
-                                    {analysisQuery.data?.position.type} · <span className={`mia-badge mia-badge--${statusOf(analysisQuery.data?.position as ManualPortfolioView) === 'OPEN' ? 'open' : 'sold'}`}>{statusOf(analysisQuery.data?.position as ManualPortfolioView)}</span>
+                                    {analysisQuery.data?.position
+                                        ? manualAssetTypeLabel(
+                                              effectiveManualAssetType(
+                                                  analysisQuery.data.position.type,
+                                                  analysisQuery.data.position.symbol,
+                                                  tefasCodeSet,
+                                              ),
+                                          )
+                                        : '—'}{' '}
+                                    · <span className={`mia-badge mia-badge--${statusOf(analysisQuery.data?.position as ManualPortfolioView) === 'OPEN' ? 'open' : 'sold'}`}>{statusOf(analysisQuery.data?.position as ManualPortfolioView)}</span>
                                 </div>
                             </div>
                             <button type="button" className="mia-icon-btn" onClick={() => setAnalysisOpen(false)}>

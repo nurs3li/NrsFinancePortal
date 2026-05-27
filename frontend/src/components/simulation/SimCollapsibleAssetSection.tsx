@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
-import type { AssetType } from '../../constants/OrderConstants';
 import { AssetLogo } from '../AssetLogo';
+import type { SimulationAssetType } from '../../types/simulationAssetType';
 import { categoryFallbackIcon, symbolLogoUrl } from './assetBrandingSim';
 
 export type CollapsedSymbolChip = {
     symbol: string;
-    assetType: AssetType;
+    assetType: SimulationAssetType;
 };
 
 type SimCollapsibleAssetSectionProps = {

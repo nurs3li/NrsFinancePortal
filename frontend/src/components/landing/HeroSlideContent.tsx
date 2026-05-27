@@ -57,7 +57,7 @@ export function HeroSlideMultiAsset() {
                 <div className="hero-panel">
                     {rows.map((r) => (
                         <div key={r.sym} className="hero-terminal-row" style={{ marginBottom: '0.28rem' }}>
-                            <span style={{ color: '#64748b', fontSize: '0.55rem' }}>{r.label}</span>
+                            <span className="hero-terminal-label">{r.label}</span>
                             <span className="sym">{r.sym}</span>
                             {r.up ? <SparkUp /> : <SparkDown />}
                             <span className={`chg ${r.up ? 'up' : 'down'}`}>{r.chg}</span>

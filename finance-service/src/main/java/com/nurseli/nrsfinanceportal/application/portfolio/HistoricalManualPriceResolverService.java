@@ -269,6 +269,9 @@ public class HistoricalManualPriceResolverService {
         if (type == AssetType.BIST) {
             return raw;
         }
+        if (type == AssetType.FUND && "TEFAS".equalsIgnoreCase(row.source())) {
+            return raw;
+        }
         if (HistoricalUsdTryConversion.needsHistoricalUsdTry(type, symbol)) {
             return HistoricalUsdTryConversion.usdToTryAt(
                     raw, row.timestamp(), fx.fxSorted(), fx.spotUsdTry());

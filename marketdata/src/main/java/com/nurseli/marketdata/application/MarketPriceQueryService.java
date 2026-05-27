@@ -227,18 +227,22 @@ public class MarketPriceQueryService {
     public Map<String, MarketPriceLatestResponse> getLatestFunds() {
         Map<String, MarketPriceLatestResponse> fromFinnhub = getLatestBySource("ETF");
         Map<String, MarketPriceLatestResponse> fromYahoo = getLatestBySource("ETF_YAHOO");
-        if (fromYahoo.isEmpty()) {
-            return fromFinnhub;
-        }
-        if (fromFinnhub.isEmpty()) {
-            return fromYahoo;
-        }
         Map<String, MarketPriceLatestResponse> merged = new LinkedHashMap<>(fromFinnhub);
         for (var e : fromYahoo.entrySet()) {
             MarketPriceLatestResponse y = e.getValue();
             MarketPriceLatestResponse cur = merged.get(e.getKey());
             if (cur == null || y.timestamp().isAfter(cur.timestamp())) {
                 merged.put(e.getKey(), y);
+            }
+        }
+        Map<String, MarketPriceLatestResponse> fromTefas = getLatestBySource("TEFAS");
+        for (var e : fromTefas.entrySet()) {
+            MarketPriceLatestResponse tefas = e.getValue();
+            MarketPriceLatestResponse cur = merged.get(e.getKey());
+            if (cur == null || (tefas.timestamp() != null && cur.timestamp() != null && tefas.timestamp().isAfter(cur.timestamp()))) {
+                merged.put(e.getKey(), tefas);
+            } else if (cur == null) {
+                merged.put(e.getKey(), tefas);
             }
         }
         return merged;

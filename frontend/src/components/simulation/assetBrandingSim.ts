@@ -1,10 +1,10 @@
 import type { LucideIcon } from 'lucide-react';
 import { Bitcoin, Building2, Coins, Gem, Landmark, TrendingUp } from 'lucide-react';
-import type { AssetType } from '../../constants/OrderConstants';
 import type { MarketKind } from '../../lib/assetBranding';
 import { formatAssetLabel, getDynamicLogoUrl } from '../../lib/assetBranding';
+import { SIMULATION_ASSET_TYPES, type SimulationAssetType } from '../../types/simulationAssetType';
 
-export function assetTypeToMarketKind(type: AssetType): MarketKind {
+export function assetTypeToMarketKind(type: SimulationAssetType): MarketKind {
     switch (type) {
         case 'CRYPTO':
             return 'CRYPTO';
@@ -12,6 +12,7 @@ export function assetTypeToMarketKind(type: AssetType): MarketKind {
             return 'FX';
         case 'METAL':
             return 'METALS';
+        case 'TR_FUND':
         case 'FUND':
             return 'FUNDS';
         case 'STOCK':
@@ -22,7 +23,7 @@ export function assetTypeToMarketKind(type: AssetType): MarketKind {
     }
 }
 
-export function categoryLabel(type: AssetType, t: (k: string, d: string) => string): string {
+export function categoryLabel(type: SimulationAssetType, t: (k: string, d: string) => string): string {
     switch (type) {
         case 'CRYPTO':
             return t('category.crypto', 'Kripto');
@@ -30,18 +31,20 @@ export function categoryLabel(type: AssetType, t: (k: string, d: string) => stri
             return t('category.fx', 'Döviz');
         case 'METAL':
             return t('category.metals', 'Kıymetli madenler');
+        case 'TR_FUND':
+            return t('funds.turkishFunds', 'Türk Fonları');
         case 'FUND':
-            return t('category.funds', 'Fonlar');
+            return t('funds.usFunds', 'Amerika Fonları');
         case 'STOCK':
-            return t('category.equity', 'Hisse (ABD)');
+            return t('stocks.usStocks', 'ABD Hisseleri');
         case 'BIST':
-            return t('category.bist', 'BIST Hisse');
+            return t('stocks.turkishStocks', 'Türk Hisseleri');
         default:
             return type;
     }
 }
 
-export function categoryFallbackIcon(type: AssetType): LucideIcon {
+export function categoryFallbackIcon(type: SimulationAssetType): LucideIcon {
     switch (type) {
         case 'CRYPTO':
             return Bitcoin;
@@ -49,6 +52,7 @@ export function categoryFallbackIcon(type: AssetType): LucideIcon {
             return Coins;
         case 'METAL':
             return Gem;
+        case 'TR_FUND':
         case 'FUND':
             return Landmark;
         case 'STOCK':
@@ -60,12 +64,12 @@ export function categoryFallbackIcon(type: AssetType): LucideIcon {
     }
 }
 
-export function symbolLogoUrl(symbol: string, assetType: AssetType): string | null {
+export function symbolLogoUrl(symbol: string, assetType: SimulationAssetType): string | null {
     return getDynamicLogoUrl(symbol, assetTypeToMarketKind(assetType), { assetType });
 }
 
-export function symbolDisplayLabel(symbol: string, assetType: AssetType): string {
+export function symbolDisplayLabel(symbol: string, assetType: SimulationAssetType): string {
     return formatAssetLabel(symbol, assetTypeToMarketKind(assetType));
 }
 
-export const SIM_ASSET_TYPES: AssetType[] = ['CRYPTO', 'FX', 'METAL', 'FUND', 'STOCK', 'BIST'];
+export const SIM_ASSET_TYPES = [...SIMULATION_ASSET_TYPES];

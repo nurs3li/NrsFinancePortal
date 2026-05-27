@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SimulationResultItem } from './types';
-import { buildSimulationChartData } from './utils';
+import { buildSimulationChartData, liveTryFromOverview } from './utils';
 
 function makeResult(partial: Partial<SimulationResultItem> & Pick<SimulationResultItem, 'id' | 'assetName' | 'assetType'>): SimulationResultItem {
     return {
@@ -82,5 +82,37 @@ describe('buildSimulationChartData', () => {
         expect(rows[0]).toEqual(expect.objectContaining({ date: '2026-03-06', 'CRYPTO-ADAUSDT-main': 0 }));
         expect(rows[0]).not.toHaveProperty('STOCK-AAPL-late');
         expect(rows[1]).toEqual(expect.objectContaining({ date: '2026-03-07', 'STOCK-AAPL-late': 0 }));
+    });
+});
+
+describe('liveTryFromOverview', () => {
+    it('keeps TEFAS funds in TRY', () => {
+        const liveTry = liveTryFromOverview(
+            {
+                doviz: { USDTRY: { buyPrice: 40, sellPrice: 40.2 } },
+                funds: {
+                    YKT: { buyPrice: 12.5, sellPrice: 12.5, source: 'TEFAS' },
+                },
+            },
+            'TR_FUND',
+            'YKT',
+        );
+
+        expect(liveTry).toBe(12.5);
+    });
+
+    it('converts US funds to TRY with USDTRY', () => {
+        const liveTry = liveTryFromOverview(
+            {
+                doviz: { USDTRY: { buyPrice: 40, sellPrice: 40 } },
+                funds: {
+                    SPY: { buyPrice: 10, sellPrice: 10, source: 'ETF' },
+                },
+            },
+            'FUND',
+            'SPY',
+        );
+
+        expect(liveTry).toBe(400);
     });
 });

@@ -5982,54 +5982,54 @@ export function Market() {
                                 aria-haspopup="dialog"
                                 title={t('market.instrumentPickerHint', 'Piyasa listesini aç / kapat')}
                             >
-                            <div className="terminal-hero-viop__left">
-                            <div className="terminal-hero-viop__eyebrow">{t('market.selectedInstrument', 'Seçili Enstrüman')}</div>
-                            <div className="terminal-hero-viop__code" title={hero.symbol}>
-                                {hero.symbol}
-                            </div>
-                            <div className="terminal-hero-viop__name">
-                                {(() => {
-                                    const snap = viopSnapshotBySymbol[normalizeSymbolKey(hero.symbol)];
-                                    const n = getInstrumentDisplayName({
-                                        symbol: hero.symbol,
-                                        displayName: hero.displayName,
-                                        name: snap?.contractName,
-                                    });
-                                    return n !== hero.symbol ? n : parseViopContractLabel(hero.symbol);
-                                })()}
-                            </div>
-                            <div className="terminal-hero-viop__badges">
-                                {(() => {
-                                    const cat = viopCategoryFor(hero.symbol);
-                                    if (!cat) return null;
-                                    return (
-                                        <span className={viopCatBadgeClass(cat)} title={viopAssetClassTitle(cat, t)}>
-                                            {VIOP_CATEGORY_CHIP[cat].label}
+                                <div className="terminal-hero-viop__left">
+                                    <div className="terminal-hero-viop__eyebrow">{t('market.selectedInstrument', 'Seçili Enstrüman')}</div>
+                                    <div className="terminal-hero-viop__code" title={hero.symbol}>
+                                        {hero.symbol}
+                                    </div>
+                                    <div className="terminal-hero-viop__name">
+                                        {(() => {
+                                            const snap = viopSnapshotBySymbol[normalizeSymbolKey(hero.symbol)];
+                                            const n = getInstrumentDisplayName({
+                                                symbol: hero.symbol,
+                                                displayName: hero.displayName,
+                                                name: snap?.contractName,
+                                            });
+                                            return n !== hero.symbol ? n : parseViopContractLabel(hero.symbol);
+                                        })()}
+                                    </div>
+                                    <div className="terminal-hero-viop__badges">
+                                        {(() => {
+                                            const cat = viopCategoryFor(hero.symbol);
+                                            if (!cat) return null;
+                                            return (
+                                                <span className={viopCatBadgeClass(cat)} title={viopAssetClassTitle(cat, t)}>
+                                                    {VIOP_CATEGORY_CHIP[cat].label}
+                                                </span>
+                                            );
+                                        })()}
+                                        <span className="instrument-highlight-chip" style={{ borderColor: 'var(--terminal-border)', color: 'var(--terminal-text)' }}>
+                                            {viopAssetClassTitle(viopCategoryFor(hero.symbol), t)}
                                         </span>
-                                    );
-                                })()}
-                                <span className="instrument-highlight-chip" style={{ borderColor: 'var(--terminal-border)', color: 'var(--terminal-text)' }}>
-                                    {viopAssetClassTitle(viopCategoryFor(hero.symbol), t)}
-                                </span>
-                                {(() => {
-                                    const snap = viopSnapshotBySymbol[normalizeSymbolKey(hero.symbol)];
-                                    const hint = viopDataQualityHint(snap, t);
-                                    return hint ? <span className="viop-stale-pill">{hint}</span> : null;
-                                })()}
-                            </div>
-                            <div className="terminal-hero-viop__src">
-                                {t('market.source', 'Kaynak')}: {futuresHeaderMetrics?.sourceLabel ?? '—'}
-                                {futuresHeaderMetrics?.delayMinutes != null && futuresHeaderMetrics.delayMinutes > 0
-                                    ? ` · ${t('market.delayedData', 'Gecikmeli veri')}: ${futuresHeaderMetrics.delayMinutes} dk`
-                                    : viopDelayMinutesDisplay != null && viopDelayMinutesDisplay > 0
-                                      ? ` · ${viopDelayMinutesDisplay} dk`
-                                      : ''}
-                            </div>
-                            <ChevronDown className="terminal-hero-selector__chevron" size={18} aria-hidden />
-                        </div>
+                                        {(() => {
+                                            const snap = viopSnapshotBySymbol[normalizeSymbolKey(hero.symbol)];
+                                            const hint = viopDataQualityHint(snap, t);
+                                            return hint ? <span className="viop-stale-pill">{hint}</span> : null;
+                                        })()}
+                                    </div>
+                                    <div className="terminal-hero-viop__src">
+                                        {t('market.source', 'Kaynak')}: {futuresHeaderMetrics?.sourceLabel ?? '—'}
+                                        {futuresHeaderMetrics?.delayMinutes != null && futuresHeaderMetrics.delayMinutes > 0
+                                            ? ` · ${t('market.delayedData', 'Gecikmeli veri')}: ${futuresHeaderMetrics.delayMinutes} dk`
+                                            : viopDelayMinutesDisplay != null && viopDelayMinutesDisplay > 0
+                                              ? ` · ${viopDelayMinutesDisplay} dk`
+                                              : ''}
+                                    </div>
+                                </div>
+                                <ChevronDown className="terminal-hero-selector__chevron" size={18} aria-hidden />
                             </button>
-                            {heroHorizonsEl}
                         </div>
+                        {heroHorizonsEl ? <div className="terminal-hero-viop__horizons">{heroHorizonsEl}</div> : null}
                         <div className="terminal-hero-viop__mid">
                             <div className="terminal-hero-price" title={heroScaled?.title}>
                                 {heroScaled ? (
@@ -6057,85 +6057,92 @@ export function Market() {
                             </div>
                         </div>
                         <div className="terminal-hero-viop__metrics">
-                            <dl className="terminal-hero-viop-metric-grid">
-                                <dt>{t('market.bidAsk', 'Alış / Satış')}</dt>
-                                <dd>
-                                    {fmtViopBidAskLine(
-                                        futuresHeaderMetrics?.bid ?? null,
-                                        futuresHeaderMetrics?.ask ?? null,
-                                        viopPriceDecimals(hero.symbol),
-                                        numberLocale,
-                                    )}
-                                </dd>
-                                <dt>{t('market.open', 'Açılış')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.open != null && Number.isFinite(futuresHeaderMetrics.open)
-                                        ? futuresHeaderMetrics.open.toLocaleString(numberLocale, {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.dayHighLow', 'Gün Yük / Düş')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.high != null && Number.isFinite(futuresHeaderMetrics.high)
-                                        ? futuresHeaderMetrics.high.toLocaleString(numberLocale, {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}{' '}
-                                    /{' '}
-                                    {futuresHeaderMetrics?.low != null && Number.isFinite(futuresHeaderMetrics.low)
-                                        ? futuresHeaderMetrics.low.toLocaleString(numberLocale, {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.volumeQty', 'Hacim / Adet')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.volume != null
-                                        ? futuresHeaderMetrics.volume.toLocaleString(numberLocale)
-                                        : '—'}{' '}
-                                    /{' '}
-                                    {futuresHeaderMetrics?.quantity != null
-                                        ? futuresHeaderMetrics.quantity.toLocaleString(numberLocale)
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.settlement', 'Uzlaşma')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.settlement != null && Number.isFinite(futuresHeaderMetrics.settlement)
-                                        ? futuresHeaderMetrics.settlement.toLocaleString(numberLocale, {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.preSettlement', 'Ön uzlaşma')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.preSettlement != null && Number.isFinite(futuresHeaderMetrics.preSettlement)
-                                        ? futuresHeaderMetrics.preSettlement.toLocaleString(numberLocale, {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.initialMargin', 'Teminat')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.initialMargin != null && Number.isFinite(futuresHeaderMetrics.initialMargin)
-                                        ? futuresHeaderMetrics.initialMargin.toLocaleString(numberLocale)
-                                        : '—'}
-                                </dd>
-                                <dt>{t('market.limitUpDown', 'Tavan / Taban')}</dt>
-                                <dd>
-                                    {futuresHeaderMetrics?.limitUp != null && Number.isFinite(futuresHeaderMetrics.limitUp)
-                                        ? futuresHeaderMetrics.limitUp.toLocaleString(numberLocale, {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}{' '}
-                                    /{' '}
-                                    {futuresHeaderMetrics?.limitDown != null && Number.isFinite(futuresHeaderMetrics.limitDown)
-                                        ? futuresHeaderMetrics.limitDown.toLocaleString(numberLocale, {
-                                              maximumFractionDigits: viopPriceDecimals(hero.symbol),
-                                          })
-                                        : '—'}
-                                </dd>
-                            </dl>
+                            <div className="terminal-hero-viop-metric-grid">
+                                {[
+                                    {
+                                        label: t('market.bidAsk', 'Alış / Satış'),
+                                        value: fmtViopBidAskLine(
+                                            futuresHeaderMetrics?.bid ?? null,
+                                            futuresHeaderMetrics?.ask ?? null,
+                                            viopPriceDecimals(hero.symbol),
+                                            numberLocale,
+                                        ),
+                                    },
+                                    {
+                                        label: t('market.open', 'Açılış'),
+                                        value:
+                                            futuresHeaderMetrics?.open != null && Number.isFinite(futuresHeaderMetrics.open)
+                                                ? futuresHeaderMetrics.open.toLocaleString(numberLocale, {
+                                                      maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                                  })
+                                                : '—',
+                                    },
+                                    {
+                                        label: t('market.dayHighLow', 'Gün Yük / Düş'),
+                                        value: `${futuresHeaderMetrics?.high != null && Number.isFinite(futuresHeaderMetrics.high)
+                                            ? futuresHeaderMetrics.high.toLocaleString(numberLocale, {
+                                                  maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                              })
+                                            : '—'} / ${futuresHeaderMetrics?.low != null && Number.isFinite(futuresHeaderMetrics.low)
+                                            ? futuresHeaderMetrics.low.toLocaleString(numberLocale, {
+                                                  maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                              })
+                                            : '—'}`,
+                                    },
+                                    {
+                                        label: t('market.volumeQty', 'Hacim / Adet'),
+                                        value: `${futuresHeaderMetrics?.volume != null
+                                            ? futuresHeaderMetrics.volume.toLocaleString(numberLocale)
+                                            : '—'} / ${futuresHeaderMetrics?.quantity != null
+                                            ? futuresHeaderMetrics.quantity.toLocaleString(numberLocale)
+                                            : '—'}`,
+                                    },
+                                    {
+                                        label: t('market.settlement', 'Uzlaşma'),
+                                        value:
+                                            futuresHeaderMetrics?.settlement != null && Number.isFinite(futuresHeaderMetrics.settlement)
+                                                ? futuresHeaderMetrics.settlement.toLocaleString(numberLocale, {
+                                                      maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                                  })
+                                                : '—',
+                                    },
+                                    {
+                                        label: t('market.preSettlement', 'Ön uzlaşma'),
+                                        value:
+                                            futuresHeaderMetrics?.preSettlement != null &&
+                                            Number.isFinite(futuresHeaderMetrics.preSettlement)
+                                                ? futuresHeaderMetrics.preSettlement.toLocaleString(numberLocale, {
+                                                      maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                                  })
+                                                : '—',
+                                    },
+                                    {
+                                        label: t('market.initialMargin', 'Teminat'),
+                                        value:
+                                            futuresHeaderMetrics?.initialMargin != null &&
+                                            Number.isFinite(futuresHeaderMetrics.initialMargin)
+                                                ? futuresHeaderMetrics.initialMargin.toLocaleString(numberLocale)
+                                                : '—',
+                                    },
+                                    {
+                                        label: t('market.limitUpDown', 'Tavan / Taban'),
+                                        value: `${futuresHeaderMetrics?.limitUp != null && Number.isFinite(futuresHeaderMetrics.limitUp)
+                                            ? futuresHeaderMetrics.limitUp.toLocaleString(numberLocale, {
+                                                  maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                              })
+                                            : '—'} / ${futuresHeaderMetrics?.limitDown != null && Number.isFinite(futuresHeaderMetrics.limitDown)
+                                            ? futuresHeaderMetrics.limitDown.toLocaleString(numberLocale, {
+                                                  maximumFractionDigits: viopPriceDecimals(hero.symbol),
+                                              })
+                                            : '—'}`,
+                                    },
+                                ].map((item) => (
+                                    <div key={item.label} className="terminal-hero-viop-metric">
+                                        <span className="terminal-hero-viop-metric__label">{item.label}</span>
+                                        <span className="terminal-hero-viop-metric__value">{item.value}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </>
                 ) : (

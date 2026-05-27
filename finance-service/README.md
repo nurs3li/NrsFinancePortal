@@ -58,32 +58,17 @@ docker compose up -d finance-service
 
 Bağımlılıklar (postgres, keycloak, market-data, redis, kafka, opensearch) otomatik başlar.
 
-### Yerel
-
-Ön koşul: PostgreSQL, Redis, Kafka, Keycloak, marketdata ayakta.
+Tek servis (bağımlılıklarla):
 
 ```powershell
-cd finance-service
-..\mvnw spring-boot:run
-```
-
-Profil: varsayılan `application.yml` (localhost JDBC).
-
-Docker profili:
-
-```powershell
-..\mvnw spring-boot:run -Dspring-boot.run.profiles=docker
+docker compose up -d finance-service
 ```
 
 ---
 
 ## Test
 
-```powershell
-..\mvnw test
-```
-
-Integration testler Testcontainers kullanır — Docker Desktop açık olmalı.
+Backend testleri GitHub Actions CI’da çalışır. Yerel doğrulama: `curl http://localhost:8085/actuator/health`
 
 ---
 

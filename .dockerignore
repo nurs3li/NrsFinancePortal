@@ -1,0 +1,26 @@
+# Git & IDE
+.git
+.github
+.idea
+.vscode
+*.iml
+
+# Build outputs (host); Docker build stages compile inside image
+**/target
+
+# Frontend — ayrı imaj (context: frontend/); kök backend build'e dahil etme
+frontend
+
+# Local env & secrets
+.env
+.env.*
+**/*.local.yml
+
+# Docs & assets not needed for Maven compile
+docs
+artifacts
+backups
+
+# OS
+.DS_Store
+Thumbs.db
