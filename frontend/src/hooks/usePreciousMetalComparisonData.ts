@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { marketClient } from '../api/client';
 import { RANGE_TO_DAYS, snapMarketHistoryDays, type ChartRangeId } from '../components/market/heatmapRange';
 import { fetchInterestInflationMacroPanel } from '../services/marketDataService';
@@ -82,6 +82,7 @@ export type PreciousMetalComparisonData = {
     comparison: AssetInflationDepositComparison | null;
     chartSeries: AssetInflationDepositComparison['series'];
     loading: boolean;
+    isRefreshing: boolean;
     anchorDate: string;
     unit: ReturnType<typeof resolvePreciousMetalComparisonUnit>;
     initialAssetValueTRY: number | null;
@@ -112,22 +113,24 @@ export function usePreciousMetalComparisonData(
 
     const candleAsset = useMemo(() => mergeCandleSeries(candles), [candles]);
 
-    const { data: extendedMetalHistory, isLoading: loadingMetalHist } = useQuery({
-        queryKey: ['market', 'metals-pp-history', symbol, historyFrom, today],
-        queryFn: async ({ signal }) => {
-            const sym = symbol.trim().toUpperCase().replace(/\s+/g, '');
-            const apiSym = sym === 'ALTIN_TRY' ? 'XAU_TRY' : sym;
-            const rows = await marketClient
-                .get<HistoryRow[]>('/api/market/metals/history', {
-                    params: metalsHistoryParams(apiSym, historyFrom, today),
-                    signal,
-                })
-                .then((r) => r.data);
-            return historyRowsToDateValues(rows ?? []);
-        },
-        enabled: enabled && Boolean(symbol && anchor && historyFrom),
-        staleTime: 300_000,
-    });
+    const { data: extendedMetalHistory, isPending: pendingMetalHist, isFetching: fetchingMetalHist } =
+        useQuery({
+            queryKey: ['market', 'metals-pp-history', symbol, historyFrom, today],
+            queryFn: async ({ signal }) => {
+                const sym = symbol.trim().toUpperCase().replace(/\s+/g, '');
+                const apiSym = sym === 'ALTIN_TRY' ? 'XAU_TRY' : sym;
+                const rows = await marketClient
+                    .get<HistoryRow[]>('/api/market/metals/history', {
+                        params: metalsHistoryParams(apiSym, historyFrom, today),
+                        signal,
+                    })
+                    .then((r) => r.data);
+                return historyRowsToDateValues(rows ?? []);
+            },
+            enabled: enabled && Boolean(symbol && anchor && historyFrom),
+            staleTime: 300_000,
+            placeholderData: keepPreviousData,
+        });
 
     const assetUnit: DateValue[] = useMemo(() => {
         const map = new Map<string, number>();
@@ -138,7 +141,7 @@ export function usePreciousMetalComparisonData(
             .sort((a, b) => a.date.localeCompare(b.date));
     }, [extendedMetalHistory, candleAsset]);
 
-    const { data: usdTryHistory, isLoading: loadingFx } = useQuery({
+    const { data: usdTryHistory, isPending: pendingFx, isFetching: fetchingFx } = useQuery({
         queryKey: ['market', 'usdtry-history', 'pp', historyFrom, today],
         queryFn: async ({ signal }) => {
             const res = await marketClient.get('/api/market/doviz/history', {
@@ -149,13 +152,15 @@ export function usePreciousMetalComparisonData(
         },
         enabled: enabled && !unit.assetInTry && Boolean(anchor),
         staleTime: 300_000,
+        placeholderData: keepPreviousData,
     });
 
-    const { data: panel, isLoading: loadingMacro } = useQuery({
+    const { data: panel, isPending: pendingMacro, isFetching: fetchingMacro } = useQuery({
         queryKey: ['market', 'macro', 'interest-inflation-panel'],
         queryFn: ({ signal }) => fetchInterestInflationMacroPanel(signal),
         enabled,
         staleTime: 300_000,
+        placeholderData: keepPreviousData,
     });
 
     const usdTry: DateValue[] = useMemo(
@@ -218,16 +223,21 @@ export function usePreciousMetalComparisonData(
         }));
     }, [comparison, anchor]);
 
+    const metalRows: DateValue[] = extendedMetalHistory ?? [];
+    const usdTryRows: HistoryRow[] = usdTryHistory ?? [];
     const loading =
         (enabled && !anchor) ||
-        loadingMacro ||
-        loadingMetalHist ||
-        (!unit.assetInTry && loadingFx);
+        (enabled && pendingMacro && !panel) ||
+        (enabled && pendingMetalHist && metalRows.length === 0) ||
+        (enabled && !unit.assetInTry && pendingFx && usdTryRows.length === 0);
+    const isRefreshing =
+        enabled && (fetchingMetalHist || fetchingFx || fetchingMacro) && !loading;
 
     return {
         comparison,
         chartSeries,
         loading,
+        isRefreshing,
         anchorDate: anchor,
         unit,
         initialAssetValueTRY: comparison?.initialAssetValueTRY ?? null,

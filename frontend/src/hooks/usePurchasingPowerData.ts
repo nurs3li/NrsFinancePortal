@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { marketClient } from '../api/client';
 import { RANGE_TO_DAYS, type ChartRangeId } from '../components/market/heatmapRange';
 import { fetchInterestInflationMacroPanel } from '../services/marketDataService';
@@ -14,6 +14,8 @@ import {
     type PurchasingPowerPoint,
     type PurchasingPowerSnapshot,
 } from '../utils/marketPurchasingPower';
+
+export type { PurchasingPowerSnapshot };
 import { selectMacroSeries } from '../utils/macroPanelSeries';
 
 type CandlePoint = { time: string; close: number };
@@ -55,7 +57,10 @@ export type PurchasingPowerData = {
     chartSeries: PurchasingPowerPoint[];
     snapshot: PurchasingPowerSnapshot | null;
     lotCost: number | null;
+    /** İlk yükleme — henüz gösterilecek özet yok */
     loading: boolean;
+    /** Referans tarihi değişirken arka planda veri çekiliyor */
+    isRefreshing: boolean;
     anchorDate: string;
 };
 
@@ -76,7 +81,7 @@ export function usePurchasingPowerData(
 
     const assetUnit: DateValue[] = useMemo(() => mergeCandleSeries(candles), [candles]);
 
-    const { data: usdTryHistory, isLoading: loadingFx } = useQuery({
+    const { data: usdTryHistory, isPending: pendingFx, isFetching: fetchingFx } = useQuery({
         queryKey: ['market', 'usdtry-history', fxDays, anchor],
         queryFn: async () => {
             const res = await marketClient.get('/api/market/doviz/history', {
@@ -86,13 +91,15 @@ export function usePurchasingPowerData(
         },
         enabled: enabled && !assetInTry && Boolean(anchor),
         staleTime: 300_000,
+        placeholderData: keepPreviousData,
     });
 
-    const { data: panel, isLoading: loadingMacro } = useQuery({
+    const { data: panel, isPending: pendingMacro, isFetching: fetchingMacro } = useQuery({
         queryKey: ['market', 'macro', 'interest-inflation-panel'],
         queryFn: ({ signal }) => fetchInterestInflationMacroPanel(signal),
         enabled,
         staleTime: 300_000,
+        placeholderData: keepPreviousData,
     });
 
     const usdTry: DateValue[] = useMemo(
@@ -158,7 +165,12 @@ export function usePurchasingPowerData(
         return computePurchasingPowerSnapshot(series, initialCost, anchor);
     }, [enabled, anchor, initialCost, series]);
 
-    const loading = (enabled && !anchor) || loadingMacro || (!assetInTry && loadingFx);
+    const usdTryRows: HistoryRow[] = usdTryHistory ?? [];
+    const loading =
+        (enabled && !anchor) ||
+        (enabled && pendingMacro && !panel) ||
+        (enabled && !assetInTry && pendingFx && usdTryRows.length === 0);
+    const isRefreshing = enabled && (fetchingFx || fetchingMacro) && !loading;
 
     return {
         series,
@@ -166,6 +178,7 @@ export function usePurchasingPowerData(
         snapshot,
         lotCost: initialCost,
         loading,
+        isRefreshing,
         anchorDate: anchor,
     };
 }
