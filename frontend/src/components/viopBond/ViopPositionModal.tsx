@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { readApiError } from '../../api/envelope';
 import { useLanguage } from '../../i18n/LanguageContext';
 import type { ManualViopPosition, ManualViopPositionCreatePayload, ViopCategory, ViopDirection } from '../../types/viopPosition';
 
@@ -74,7 +75,7 @@ export function ViopPositionModal({ open, onClose, initial, onSubmit, tokens }: 
             await onSubmit(payload);
             onClose();
         } catch (err) {
-            setError(err instanceof Error ? err.message : t('viopBond.saveFailed', 'Kayıt başarısız'));
+            setError(readApiError(err).message || t('viopBond.saveFailed', 'Kayıt başarısız'));
         } finally {
             setSaving(false);
         }

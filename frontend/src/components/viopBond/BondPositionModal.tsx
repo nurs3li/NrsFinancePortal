@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { readApiError } from '../../api/envelope';
 import { useLanguage } from '../../i18n/LanguageContext';
 import type { BondType, CouponFrequency, ManualBondPosition, ManualBondPositionCreatePayload } from '../../types/bondPosition';
 
@@ -71,7 +72,7 @@ export function BondPositionModal({ open, onClose, initial, onSubmit, tokens }: 
             });
             onClose();
         } catch (err) {
-            setError(err instanceof Error ? err.message : t('viopBond.saveFailed', 'Kayıt başarısız'));
+            setError(readApiError(err).message || t('viopBond.saveFailed', 'Kayıt başarısız'));
         } finally {
             setSaving(false);
         }

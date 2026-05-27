@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Moon, Sun } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { readApiError } from '../api/envelope';
 import { financeClient, readFinanceBinaryErrorMessage } from '../api/client';
 import { NrsBrandLockup } from '../components/NrsBrandLockup';
 import { LandingHeroCarousel } from '../components/landing/LandingHeroCarousel';
@@ -195,8 +196,7 @@ export function LandingPage() {
             const msg = res.data?.data ?? t('landing.codeSent', 'Doğrulama kodu e-postanıza gönderildi.');
             setRegisterMessage(msg);
         } catch (err: unknown) {
-            const ax = err as { response?: { data?: { errors?: { message?: string }; message?: string } } };
-            setRegisterError(ax?.response?.data?.errors?.message ?? ax?.response?.data?.message ?? 'Kod gönderilemedi.');
+            setRegisterError(readApiError(err).message || 'Kod gönderilemedi.');
         } finally {
             setRegisterBusy(false);
         }
@@ -227,8 +227,7 @@ export function LandingPage() {
             setRegisterMessage(msg);
             setCode('');
         } catch (err: unknown) {
-            const ax = err as { response?: { data?: { errors?: { message?: string }; message?: string } } };
-            setRegisterError(ax?.response?.data?.errors?.message ?? ax?.response?.data?.message ?? 'Kayıt tamamlanamadı.');
+            setRegisterError(readApiError(err).message || 'Kayıt tamamlanamadı.');
         } finally {
             setRegisterBusy(false);
         }

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Info, ShieldCheck, ShieldOff } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { SettingsCard } from './SettingsCard';
+import { readApiError } from '../../api/envelope';
 import {
     beginTotpSetup,
     cancelTotpSetup,
@@ -37,14 +38,8 @@ export function SettingsTwoFactorCard({ disabled, embedded = false }: SettingsTw
         void queryClient.invalidateQueries({ queryKey: ['users', 'me', 'totp'] });
     }, [queryClient]);
 
-    const readError = (err: unknown): string => {
-        const ax = err as { response?: { data?: { errors?: { message?: string }; message?: string } } };
-        return (
-            ax?.response?.data?.errors?.message ??
-            ax?.response?.data?.message ??
-            (err instanceof Error ? err.message : t('settings.totpFailed', 'İşlem başarısız.'))
-        );
-    };
+    const readError = (err: unknown): string =>
+        readApiError(err).message || t('settings.totpFailed', 'İşlem başarısız.');
 
     const handleBeginSetup = async () => {
         setError(null);

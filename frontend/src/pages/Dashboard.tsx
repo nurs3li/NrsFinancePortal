@@ -12,6 +12,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import type { AxiosResponse } from 'axios';
 import DOMPurify from 'dompurify';
+import { readApiError } from '../api/envelope';
 import { financeClient, marketClient, readFinanceBinaryErrorMessage } from '../api/client';
 import type { LatestPriceRow, MarketDashboard } from '../components/market/marketTypes';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
@@ -580,13 +581,7 @@ export function Dashboard() {
                 })
             );
         } catch (err: unknown) {
-            const msg =
-                readFinanceBinaryErrorMessage(err) ??
-                (err as { response?: { data?: { errors?: { error?: string }; message?: string } }; message?: string })
-                    ?.response?.data?.errors?.error ??
-                (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-                (err as { message?: string })?.message ??
-                'Bilinmeyen hata';
+            const msg = readFinanceBinaryErrorMessage(err) ?? readApiError(err).message ?? 'Bilinmeyen hata';
             if (!silent || !hasLoadedOnceRef.current) setError(msg);
         } finally {
             if (showLoader) setLoading(false);

@@ -22,14 +22,17 @@ import com.nurseli.nrsfinanceportal.config.ApiPaths;
 public class SecurityConfig {
     private final AuditContextMdcFilter auditContextMdcFilter;
     private final FrozenUserAccessFilter frozenUserAccessFilter;
+    private final ApiSecurityErrorHandler apiSecurityErrorHandler;
     private final UserRepository userRepository;
 
     public SecurityConfig(
             AuditContextMdcFilter auditContextMdcFilter,
             FrozenUserAccessFilter frozenUserAccessFilter,
+            ApiSecurityErrorHandler apiSecurityErrorHandler,
             UserRepository userRepository) {
         this.auditContextMdcFilter = auditContextMdcFilter;
         this.frozenUserAccessFilter = frozenUserAccessFilter;
+        this.apiSecurityErrorHandler = apiSecurityErrorHandler;
         this.userRepository = userRepository;
     }
 
@@ -73,6 +76,9 @@ public class SecurityConfig {
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(apiSecurityErrorHandler)
+                        .accessDeniedHandler(apiSecurityErrorHandler))
                 .addFilterAfter(auditContextMdcFilter, BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(frozenUserAccessFilter, AuditContextMdcFilter.class);
         return http.build();

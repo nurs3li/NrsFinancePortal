@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { X } from 'lucide-react';
+import { readApiError } from '../../api/envelope';
 import { useLanguage } from '../../i18n/LanguageContext';
 import type { ManualViopPosition, ManualViopPositionCreatePayload, ViopDirection } from '../../types/viopPosition';
 import type { TerminalListInstrumentVm } from '../../utils/marketTerminalListVm';
@@ -137,7 +138,7 @@ export function ViopPositionAddModal({
                 setEntryPriceInput(fmtLocaleDecimal(r.price, locale));
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : t('viopBond.priceResolveFailed', 'Fiyat bulunamadı'));
+            setError(readApiError(err).message || t('viopBond.priceResolveFailed', 'Fiyat bulunamadı'));
         } finally {
             setResolvingPrice(false);
         }
@@ -219,7 +220,7 @@ export function ViopPositionAddModal({
             setPendingPayload(null);
             onClose();
         } catch (err) {
-            setError(err instanceof Error ? err.message : t('viopBond.saveFailed', 'Kayıt başarısız'));
+            setError(readApiError(err).message || t('viopBond.saveFailed', 'Kayıt başarısız'));
         } finally {
             setSaving(false);
         }

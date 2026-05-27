@@ -1,6 +1,7 @@
 package com.nurseli.nrsfinanceportal.api;
 
 import com.nurseli.nrsfinanceportal.api.exception.ApiBusinessException;
+import com.nurseli.nrsfinanceportal.api.response.ApiErrorBody;
 import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.api.response.ApiErrorCode;
 import com.nurseli.nrsfinanceportal.domain.user.Role;
@@ -9,7 +10,6 @@ import com.nurseli.nrsfinanceportal.infrastructure.kafka.event.NotificationReque
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.ThreadContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -23,11 +23,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static com.nurseli.nrsfinanceportal.config.CorrelationIdFilter.CORRELATION_ID_MDC_KEY;
 
 /**
  * Controller katmanÄ±ndaki istisnalarÄ± standart {@link com.nurseli.nrsfinanceportal.api.response.ApiResponse} hata zarfÄ±na ve uygun HTTP status'a dÃ¶nÃ¼ÅŸtÃ¼rÃ¼r.
@@ -53,17 +50,6 @@ public class GlobalExceptionHandler {
         this.userRepository = userRepository;
     }
 
-    private static Map<String, Object> errorBody(String code, String message, HttpServletRequest request) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("code", code);
-        map.put("message", message);
-        map.put("timestamp", Instant.now().toString());
-        map.put("error", message);
-        map.put("path", request != null ? request.getRequestURI() : null);
-        map.put("correlationId", ThreadContext.get(CORRELATION_ID_MDC_KEY));
-        return map;
-    }
-
     /**
      * {@code handleValidation} â€” Bean validation hatalarÄ±nÄ± 400 Bad Request ve alan mesajÄ±yla dÃ¶ner.
      */
@@ -76,7 +62,7 @@ public class GlobalExceptionHandler {
         log.warn("[EXCEPTION] MethodArgumentNotValidException: {}", msg);
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(errorBody(ApiErrorCode.BAD_REQUEST, msg, request)));
+                .body(ApiResponse.error(ApiErrorBody.of(ApiErrorCode.BAD_REQUEST, msg, request)));
     }
 
     /**
@@ -87,7 +73,7 @@ public class GlobalExceptionHandler {
         log.warn("[EXCEPTION] IllegalArgumentException: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(errorBody(ApiErrorCode.BAD_REQUEST, ex.getMessage(), request)));
+                .body(ApiResponse.error(ApiErrorBody.of(ApiErrorCode.BAD_REQUEST, ex.getMessage(), request)));
     }
 
     /**
@@ -98,7 +84,7 @@ public class GlobalExceptionHandler {
         log.warn("[EXCEPTION] ApiBusinessException {}: {}", ex.getErrorCode(), ex.getMessage());
         return ResponseEntity
                 .status(ex.getStatus())
-                .body(ApiResponse.error(errorBody(ex.getErrorCode(), ex.getMessage(), request)));
+                .body(ApiResponse.error(ApiErrorBody.of(ex.getErrorCode(), ex.getMessage(), request)));
     }
 
     /**
@@ -112,8 +98,10 @@ public class GlobalExceptionHandler {
         log.warn("[EXCEPTION] ResponseStatusException: {} {}", status.value(), reason);
         return ResponseEntity
                 .status(status)
-                .body(ApiResponse.error(errorBody(ApiErrorCode.INTERNAL_SERVER_ERROR,
-                        reason != null ? reason : status.getReasonPhrase(), request)));
+                .body(ApiResponse.error(ApiErrorBody.of(
+                        resolveStatusCode(status),
+                        reason != null ? reason : status.getReasonPhrase(),
+                        request)));
     }
 
     /**
@@ -126,8 +114,8 @@ public class GlobalExceptionHandler {
         HttpStatus status = msg.contains("Keycloak") && (msg.contains("401") || msg.contains("UNAUTHORIZED"))
                 ? HttpStatus.BAD_GATEWAY
                 : HttpStatus.BAD_REQUEST;
-        String code = status == HttpStatus.BAD_GATEWAY ? ApiErrorCode.INTERNAL_SERVER_ERROR : ApiErrorCode.BAD_REQUEST;
-        return ResponseEntity.status(status).body(ApiResponse.error(errorBody(code, msg, request)));
+        String errorCode = status == HttpStatus.BAD_GATEWAY ? ApiErrorCode.BAD_GATEWAY : ApiErrorCode.BAD_REQUEST;
+        return ResponseEntity.status(status).body(ApiResponse.error(ApiErrorBody.of(errorCode, msg, request)));
     }
 
     /**
@@ -138,7 +126,21 @@ public class GlobalExceptionHandler {
         log.warn("[EXCEPTION] AccessDenied: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error(errorBody(ApiErrorCode.ACCESS_DENIED, "Access denied", request)));
+                .body(ApiResponse.error(ApiErrorBody.of(ApiErrorCode.ACCESS_DENIED, "Access denied", request)));
+    }
+
+    private static String resolveStatusCode(HttpStatus status) {
+        return switch (status) {
+            case BAD_REQUEST -> ApiErrorCode.BAD_REQUEST;
+            case NOT_FOUND -> ApiErrorCode.RESOURCE_NOT_FOUND;
+            case UNAUTHORIZED -> ApiErrorCode.UNAUTHORIZED;
+            case FORBIDDEN -> ApiErrorCode.ACCESS_DENIED;
+            case CONFLICT -> ApiErrorCode.CONFLICT;
+            case SERVICE_UNAVAILABLE -> ApiErrorCode.SERVICE_UNAVAILABLE;
+            case BAD_GATEWAY -> ApiErrorCode.BAD_GATEWAY;
+            default ->
+                    status.is5xxServerError() ? ApiErrorCode.INTERNAL_SERVER_ERROR : ApiErrorCode.BAD_REQUEST;
+        };
     }
 
     /**
@@ -180,7 +182,7 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error(errorBody(ApiErrorCode.INTERNAL_SERVER_ERROR, "Internal server error", request)));
+                .body(ApiResponse.error(ApiErrorBody.of(ApiErrorCode.INTERNAL_SERVER_ERROR, "Internal server error", request)));
     }
 
     private void notifyAdminsOnError(Exception ex, HttpServletRequest request) {

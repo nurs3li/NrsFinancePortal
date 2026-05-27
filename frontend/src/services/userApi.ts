@@ -1,3 +1,4 @@
+import { readApiError } from '../api/envelope';
 import { financeClient } from '../api/client';
 
 export type UserMeDto = {
@@ -20,15 +21,7 @@ function unwrap<T>(res: { data?: { data?: T } | T }): T {
 }
 
 export function readProfileApiError(err: unknown, fallback: string): string {
-    const ax = err as {
-        response?: { data?: { errors?: { message?: string }; message?: string; data?: { message?: string } } };
-    };
-    const raw =
-        ax?.response?.data?.errors?.message ??
-        ax?.response?.data?.data?.message ??
-        ax?.response?.data?.message ??
-        (err instanceof Error ? err.message : null) ??
-        fallback;
+    const raw = readApiError(err).message || fallback;
 
     if (raw.includes('Internal server error') && raw.includes('email/send')) {
         return 'E-posta servisi şu an yanıt vermiyor. Lütfen kısa süre sonra tekrar deneyin.';

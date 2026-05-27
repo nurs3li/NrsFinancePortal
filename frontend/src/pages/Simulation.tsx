@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { registerSimulationPdfFont, SIMULATION_PDF_FONT_FAMILY } from '../utils/simulationPdfFont';
+import { readApiError } from '../api/envelope';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import './TerminalPages.css';
@@ -305,15 +306,7 @@ export function Simulation() {
                     const row = await calculateForAsset(item.assetType, item.symbol);
                     added.push(row);
                 } catch (err: unknown) {
-                    const ex = err as {
-                        response?: { data?: { errors?: { error?: string }; message?: string } };
-                        message?: string;
-                    };
-                    const msg =
-                        ex?.response?.data?.errors?.error ??
-                        ex?.response?.data?.message ??
-                        ex?.message ??
-                        t('simulation.error', 'Simülasyon hatası');
+                    const msg = readApiError(err).message || t('simulation.error', 'Simülasyon hatası');
                     if (isManualPriceRequiredMessage(msg)) {
                         setBuyPriceMode('MANUAL');
                         setManualPricePrompt(true);

@@ -161,7 +161,7 @@ financeClient.interceptors.response.use(
             err?.response?.status === 403 &&
             errs &&
             typeof errs === 'object' &&
-            errs.error === 'USER_LOGIN_SUSPENDED'
+            (errs.code === 'USER_LOGIN_SUSPENDED' || errs.error === 'USER_LOGIN_SUSPENDED')
         ) {
             notifyAuthExpired('suspended');
             redirectToPortalSignIn({ suspended: '1' });

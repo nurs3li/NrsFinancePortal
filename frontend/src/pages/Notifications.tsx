@@ -7,6 +7,7 @@ import {
     ChevronRight,
     X,
 } from 'lucide-react';
+import { readApiError } from '../api/envelope';
 import { notificationClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
@@ -155,8 +156,7 @@ export function Notifications() {
             })
             .catch((err) => {
                 setError(
-                    err.response?.data?.message ??
-                        err.message ??
+                    readApiError(err).message ||
                         t('notifications.loadFailed', 'Bildirimler yüklenemedi'),
                 );
             })

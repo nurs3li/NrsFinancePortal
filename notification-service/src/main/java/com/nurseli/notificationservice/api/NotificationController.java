@@ -18,9 +18,9 @@ import org.springframework.data.domain.Pageable;
 
 import org.springframework.data.web.PageableDefault;
 
-import org.springframework.http.ResponseEntity;
-
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 
 
@@ -100,13 +100,17 @@ public class NotificationController {
 
     @PatchMapping("/{id}/read")
 
-    public ResponseEntity<Void> markAsRead(@PathVariable Long id) {
+    public void markAsRead(@PathVariable Long id) {
 
         String sub = currentUserSubResolver.getRequiredSub();
 
         boolean updated = notificationService.markRead(id, sub);
 
-        return updated ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+        if (!updated) {
+
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Bildirim bulunamadı");
+
+        }
 
     }
 
