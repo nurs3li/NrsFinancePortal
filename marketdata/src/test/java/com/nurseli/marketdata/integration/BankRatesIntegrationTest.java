@@ -20,6 +20,7 @@ class BankRatesIntegrationTest extends MarketdataIntegrationTestBase {
 
     @BeforeEach
     void seedBankRates() {
+        bankFxLatestRepository.deleteAll();
         bankFxLatestRepository.save(
                 MarketdataIntegrationFixtures.bankFxUsd("AKBNK", "Akbank", new BigDecimal("34.10"), new BigDecimal("34.50"))
         );

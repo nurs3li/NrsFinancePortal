@@ -56,6 +56,7 @@ app:
     enabled: false
   market:
     bank-rates:
+      enabled: false
       scrape-on-startup: false
     viop:
       scheduler:
