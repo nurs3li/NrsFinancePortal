@@ -2,6 +2,7 @@ package com.nurseli.marketdata.application;
 
 import com.nurseli.marketdata.api.dto.CryptoHistoryCoverageResponse;
 import com.nurseli.marketdata.api.dto.CryptoHistoryWarmupResponse;
+import com.nurseli.marketdata.config.CryptoHistoryBackfillProperties;
 import com.nurseli.marketdata.domain.price.CryptoDailyCandle;
 import com.nurseli.marketdata.domain.price.CryptoSymbolMapping;
 import com.nurseli.marketdata.infrastructure.coingecko.CoinGeckoClient;
@@ -41,6 +42,7 @@ public class CryptoHistoryWarmupService {
 
     private final CoinGeckoClient coinGeckoClient;
     private final CryptoDailyCandleRepository cryptoDailyCandleRepository;
+    private final CryptoHistoryBackfillProperties backfillProperties;
 
     public CryptoHistoryCoverageResponse getCoverage(String rawSymbol, LocalDate requestedFrom, LocalDate requestedTo) {
         String symbol = normalizeSymbol(rawSymbol);
@@ -131,7 +133,7 @@ public class CryptoHistoryWarmupService {
     }
 
     public void warmSupportedSymbolsSync(int periodDays, String reason) {
-        int days = Math.max(1, periodDays);
+        int days = Math.max(1, Math.min(periodDays, MAX_RANGE_CHUNK_DAYS));
         LocalDate today = LocalDate.now(MARKET_WALL_CLOCK_ZONE);
         LocalDate from = today.minusDays(days - 1L);
         for (String symbol : CryptoSymbolMapping.supportedSymbols().stream().sorted(Comparator.naturalOrder()).toList()) {
@@ -145,6 +147,28 @@ public class CryptoHistoryWarmupService {
         LocalDate from = requestedFrom;
         if (symbol == null || from == null || to == null || to.isBefore(from)) {
             return;
+        }
+        CryptoHistoryCoverageResponse coverage = getCoverage(symbol, from, to);
+        if (coverage.ready()) {
+            log.info(
+                    "[CRYPTO_HISTORY_WARMUP] skip symbol={} coverage ready availableDays={} expectedDays={} reason={}",
+                    symbol, coverage.availableDays(), coverage.expectedDays(), reason
+            );
+            return;
+        }
+        int skipAt = backfillProperties.getSkipSymbolIfCandleCountAtLeast();
+        if (skipAt > 0) {
+            long expectedDays = coverage.expectedDays();
+            int threshold = expectedDays > 0
+                    ? Math.min(skipAt, Math.toIntExact(expectedDays))
+                    : skipAt;
+            if (coverage.availableDays() >= threshold) {
+                log.info(
+                        "[CRYPTO_HISTORY_WARMUP] skip symbol={} candlesInRange={} threshold={} reason={}",
+                        symbol, coverage.availableDays(), threshold, reason
+                );
+                return;
+            }
         }
         Optional<CryptoDailyCandle> oldestBefore = cryptoDailyCandleRepository.findTopBySymbolOrderByAsOfAsc(symbol);
         if (oldestBefore.isEmpty()) {

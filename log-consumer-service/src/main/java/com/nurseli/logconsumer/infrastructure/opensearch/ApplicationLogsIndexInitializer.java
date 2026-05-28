@@ -68,6 +68,11 @@ public class ApplicationLogsIndexInitializer {
         props.put("logger", Map.of("type", "keyword"));
         props.put("thread", Map.of("type", "keyword"));
         props.put("correlationId", Map.of("type", "keyword"));
+        props.put("traceId", Map.of("type", "keyword"));
+        props.put("spanId", Map.of("type", "keyword"));
+        props.put("userId", Map.of("type", "keyword"));
+        props.put("username", Map.of("type", "keyword"));
+        props.put("actionType", Map.of("type", "keyword"));
         props.put("exception", Map.of("type", "keyword"));
         props.put("stackTrace", Map.of("type", "text"));
         return Map.of("properties", props);

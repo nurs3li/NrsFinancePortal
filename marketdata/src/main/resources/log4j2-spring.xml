@@ -4,6 +4,7 @@
         <Property name="LOG_PATTERN">{"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}","level":"%p","service":"${SERVICE_NAME}","correlationId":"%X{correlationId:-}","traceId":"%X{trace_id:-}","spanId":"%X{span_id:-}","thread":"%t","logger":"%c{1.}","message":"%enc{%m}{JSON}"}%n</Property>
         <Property name="SERVICE_NAME">market-data-service</Property>
         <Property name="KAFKA_BOOTSTRAP">${env:SPRING_KAFKA_BOOTSTRAP_SERVERS:-${env:KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}}</Property>
+        <Property name="KAFKA_LOG_LEVEL">${env:APP_LOG_KAFKA_MIN_LEVEL:-INFO}</Property>
     </Properties>
     <Appenders>
         <Console name="Console" target="SYSTEM_OUT">
@@ -12,9 +13,14 @@
         <KafkaLog name="KafkaLog" topic="application-logs" bootstrapServers="${KAFKA_BOOTSTRAP}" serviceName="${SERVICE_NAME}"/>
     </Appenders>
     <Loggers>
+        <Logger name="org.apache.kafka" level="WARN"/>
+        <Logger name="org.springframework.kafka" level="WARN"/>
+        <Logger name="org.hibernate" level="WARN"/>
+        <Logger name="com.zaxxer.hikari" level="WARN"/>
+        <Logger name="org.apache.http" level="WARN"/>
         <Root level="INFO">
             <AppenderRef ref="Console"/>
-            <AppenderRef ref="KafkaLog" level="WARN"/>
+            <AppenderRef ref="KafkaLog" level="${KAFKA_LOG_LEVEL}"/>
         </Root>
     </Loggers>
 </Configuration>

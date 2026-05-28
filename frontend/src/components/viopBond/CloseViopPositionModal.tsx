@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { X } from 'lucide-react';
+import { readApiError } from '../../api/envelope';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { resolveViopHistoricalPrice } from '../../services/viopPositionApi';
 import type { ManualViopPosition, ManualViopPositionClosePayload, ViopCloseReason } from '../../types/viopPosition';
@@ -156,7 +157,7 @@ export function CloseViopPositionModal({ open, position, onClose, onSubmit }: Pr
             });
             onClose();
         } catch (err) {
-            setError(err instanceof Error ? err.message : t('viopBond.saveFailed', 'Kayıt başarısız'));
+            setError(readApiError(err).message || t('viopBond.saveFailed', 'Kayıt başarısız'));
         } finally {
             setSaving(false);
         }

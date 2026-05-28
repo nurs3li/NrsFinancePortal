@@ -7,7 +7,12 @@ public final class ApiErrorCode {
 
     public static final String BAD_REQUEST = "BAD_REQUEST";
     public static final String RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND";
+    public static final String UNAUTHORIZED = "UNAUTHORIZED";
     public static final String ACCESS_DENIED = "ACCESS_DENIED";
+    public static final String CONFLICT = "CONFLICT";
+    public static final String SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE";
+    public static final String BAD_GATEWAY = "BAD_GATEWAY";
+    public static final String USER_LOGIN_SUSPENDED = "USER_LOGIN_SUSPENDED";
     public static final String INVALID_CREDENTIALS = "INVALID_CREDENTIALS";
     public static final String OTP_REQUIRED = "OTP_REQUIRED";
     public static final String INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR";

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { readApiError } from '../api/envelope';
 import { financeClient } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -56,7 +57,7 @@ export function AdminUsersAndAccounts() {
                 const list = Array.isArray(raw) ? raw : [];
                 setUsers([...list].sort((a, b) => Number(a.id) - Number(b.id)));
             })
-            .catch((err) => setError(err.response?.data?.message ?? err.message ?? t('admin.usersLoadFailed', 'Kullanıcılar yüklenemedi')))
+            .catch((err) => setError(readApiError(err).message || t('admin.usersLoadFailed', 'Kullanıcılar yüklenemedi')))
             .finally(() => setLoadingUsers(false));
     }, [t]);
 
@@ -73,13 +74,7 @@ export function AdminUsersAndAccounts() {
             .post(`/api/admin/users/${userId}/assign-role`, { role: newRole })
             .then(() => reloadUsers())
             .catch((err) => {
-                const msg =
-                    err.response?.data?.errors?.message ??
-                    err.response?.data?.errors?.error ??
-                    err.response?.data?.message ??
-                    err.message ??
-                    t('admin.roleAssignFailed', 'Rol ataması başarısız');
-                setError(String(msg));
+                setError(readApiError(err).message || t('admin.roleAssignFailed', 'Rol ataması başarısız'));
                 void reloadUsers().catch(() => undefined);
             })
             .finally(() => setActionLoading(null));
@@ -94,13 +89,7 @@ export function AdminUsersAndAccounts() {
             .post(`/api/admin/users/${userId}/suspend-login`, body)
             .then(() => reloadUsers())
             .catch((err) => {
-                const msg =
-                    err.response?.data?.errors?.message ??
-                    err.response?.data?.errors?.error ??
-                    err.response?.data?.message ??
-                    err.message ??
-                    t('admin.suspendFailed', 'Askıya alma başarısız');
-                setError(String(msg));
+                setError(readApiError(err).message || t('admin.suspendFailed', 'Askıya alma başarısız'));
                 void reloadUsers().catch(() => undefined);
             })
             .finally(() => setActionLoading(null));
@@ -122,13 +111,7 @@ export function AdminUsersAndAccounts() {
             .delete(`/api/admin/users/${userId}`)
             .then(() => reloadUsers())
             .catch((err) => {
-                const msg =
-                    err.response?.data?.errors?.message ??
-                    err.response?.data?.errors?.error ??
-                    err.response?.data?.message ??
-                    err.message ??
-                    t('admin.deleteUserFailed', 'Kullanıcı silinemedi');
-                setError(String(msg));
+                setError(readApiError(err).message || t('admin.deleteUserFailed', 'Kullanıcı silinemedi'));
             })
             .finally(() => setActionLoading(null));
     };
@@ -140,13 +123,7 @@ export function AdminUsersAndAccounts() {
             .post(`/api/admin/users/${userId}/unsuspend-login`, {})
             .then(() => reloadUsers())
             .catch((err) => {
-                const msg =
-                    err.response?.data?.errors?.message ??
-                    err.response?.data?.errors?.error ??
-                    err.response?.data?.message ??
-                    err.message ??
-                    t('admin.unsuspendFailed', 'Askı kaldırma başarısız');
-                setError(String(msg));
+                setError(readApiError(err).message || t('admin.unsuspendFailed', 'Askı kaldırma başarısız'));
                 void reloadUsers().catch(() => undefined);
             })
             .finally(() => setActionLoading(null));
@@ -179,8 +156,7 @@ export function AdminUsersAndAccounts() {
                 setInspectData(raw as AdminUserInspection);
             })
             .catch((err) => {
-                const msg = err.response?.data?.errors?.error ?? err.response?.data?.message ?? err.message ?? 'Detaylar yüklenemedi';
-                setError(msg);
+                setError(readApiError(err).message || 'Detaylar yüklenemedi');
             })
             .finally(() => setInspectLoading(false));
     };

@@ -387,7 +387,7 @@ app:
     history-incremental-cron: ${CRYPTO_HISTORY_INCREMENTAL_CRON:0 45 2 * * *}
     history-backfill:
       enabled: ${CRYPTO_HISTORY_BACKFILL_ENABLED:true}
-      periodDays: ${CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS:730}
+      periodDays: ${CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS:365}
       shutdownOnComplete: ${CRYPTO_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE:false}
       delayMsBetweenCoins: ${CRYPTO_HISTORY_BACKFILL_DELAY_MS:4500}
       skipSymbolIfCandleCountAtLeast: ${CRYPTO_HISTORY_BACKFILL_SKIP_IF_COUNT:340}

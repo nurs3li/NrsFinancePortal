@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { readApiError } from '../api/envelope';
 import { financeClient } from '../api/client';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTheme, type ThemeTokens } from '../theme/ThemeContext';
@@ -543,8 +544,7 @@ export function AdminAudit() {
                     setTotal(payload?.total ?? 0);
                 }
             } catch (e: unknown) {
-                const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-                setListError(msg ?? (e as Error).message ?? t('admin.auditLoadFailed', 'Logs could not be loaded'));
+                setListError(readApiError(e).message || t('admin.auditLoadFailed', 'Logs could not be loaded'));
             } finally {
                 setListLoading(false);
             }

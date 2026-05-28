@@ -51,14 +51,14 @@ Backend: `ApiPaths.java` — `V1_PREFIX`, `v1WithLegacy()`
 
 ## Yanıt zarfı (envelope)
 
-Tüm public API'ler tutarlı envelope kullanır:
+Tüm public `/api/**` endpoint'leri tutarlı envelope kullanır (`/internal/**` hariç):
 
 ```json
 {
   "success": true,
   "data": { ... },
   "errors": null,
-  "timestamp": "2026-05-24T12:00:00+03:00"
+  "meta": null
 }
 ```
 
@@ -69,14 +69,18 @@ Hata örneği:
   "success": false,
   "data": null,
   "errors": {
-    "code": "VALIDATION_ERROR",
-    "message": "Geçersiz istek",
-    "details": [ ... ]
-  }
+    "code": "BAD_REQUEST",
+    "message": "symbol: must not be blank",
+    "timestamp": "2026-05-28T09:15:00.123456789Z",
+    "error": "symbol: must not be blank",
+    "path": "/api/v1/portfolio/manual/me",
+    "correlationId": "abc-123"
+  },
+  "meta": null
 }
 ```
 
-Sınıflar: `ApiResponse`, `ApiErrorCode`, `GlobalExceptionHandler`
+Sınıflar: `ApiResponse` / `ApiEnvelope`, `ApiErrorBody`, `ApiErrorCode`, `GlobalExceptionHandler`, `ApiResponseEnvelopeAdvice`, `ApiSecurityErrorHandler`
 
 ---
 

@@ -21,8 +21,10 @@ public class CryptoHistoryBackfillRunner implements ApplicationRunner {
         boolean enabled = properties.isEnabled()
                 || envBoolean("CRYPTO_HISTORY_BACKFILL_ENABLED")
                 || envBoolean("APP_CRYPTO_HISTORY_BACKFILL_ENABLED");
-        int periodDays = resolveInt(properties.getPeriodDays(),
-                "CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS", "APP_CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS", 365);
+        int periodDays = Math.min(
+                resolveInt(properties.getPeriodDays(),
+                        "CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS", "APP_CRYPTO_HISTORY_BACKFILL_PERIOD_DAYS", 365),
+                365);
         boolean shutdownOnComplete = properties.isShutdownOnComplete()
                 || envBoolean("CRYPTO_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE")
                 || envBoolean("APP_CRYPTO_HISTORY_BACKFILL_SHUTDOWN_ON_COMPLETE");

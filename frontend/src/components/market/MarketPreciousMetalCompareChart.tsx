@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import {
     CartesianGrid,
     Legend,
@@ -27,9 +27,17 @@ function MarketPreciousMetalCompareChartImpl({ data, tokens }: Props) {
     const { t, lang } = useLanguage();
     const { theme } = useTheme();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
-    const { chartSeries, comparison, loading, unit } = data;
+    const { chartSeries, comparison, loading, isRefreshing, unit } = data;
 
     const fmtTryStable = useMemo(() => (v: number) => fmtTry(locale, v), [locale]);
+    const lastChartRef = useRef(chartSeries);
+    useEffect(() => {
+        if (chartSeries.length >= 2) lastChartRef.current = chartSeries;
+    }, [chartSeries]);
+
+    const seriesToRender = chartSeries.length >= 2 ? chartSeries : lastChartRef.current;
+    const showChart = seriesToRender.length >= 2;
+    const refreshing = Boolean(isRefreshing && showChart);
 
     const title = t('market.ppChartTitleUnit', '{unit} — varlık vs enflasyon vs mevduat').replace('{unit}', unit.unitLabel);
     const initialCost = comparison?.initialAssetValueTRY ?? null;
@@ -53,7 +61,7 @@ function MarketPreciousMetalCompareChartImpl({ data, tokens }: Props) {
                     initialCost != null ? fmtTryStable(initialCost) : '—',
                 )}
             </p>
-            {loading ? (
+            {loading && !showChart ? (
                 <div className="terminal-chart-empty">{t('market.loading', 'Yükleniyor...')}</div>
             ) : comparison?.missingUsdTry ? (
                 <div className="terminal-chart-empty">
@@ -66,13 +74,17 @@ function MarketPreciousMetalCompareChartImpl({ data, tokens }: Props) {
                 <div className="terminal-chart-empty">
                     {t('market.ppMissingCpi', 'TÜFE endeks verisi olmadığı için enflasyon karşılaştırması yapılamıyor.')}
                 </div>
-            ) : chartSeries.length < 2 ? (
+            ) : !showChart ? (
                 <div className="terminal-chart-empty">
                     {t('market.ppChartEmpty', 'Karşılaştırma için yeterli tarihsel veri yok.')}
                 </div>
             ) : (
+                <div
+                    className={`terminal-pp-compare-chart__plot${refreshing ? ' terminal-pp-compare-chart__plot--refreshing' : ''}`}
+                    aria-busy={refreshing}
+                >
                 <ResponsiveContainer width="100%" height={260}>
-                    <LineChart data={chartSeries} margin={{ top: 8, right: 12, left: 8, bottom: 4 }}>
+                    <LineChart data={seriesToRender} margin={{ top: 8, right: 12, left: 8, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={chartGridStroke(theme)} />
                         <XAxis dataKey="date" tick={{ fontSize: 9, fill: tokens.textMuted }} minTickGap={28} />
                         <YAxis
@@ -122,6 +134,7 @@ function MarketPreciousMetalCompareChartImpl({ data, tokens }: Props) {
                         />
                     </LineChart>
                 </ResponsiveContainer>
+                </div>
             )}
         </div>
     );
@@ -133,5 +146,6 @@ export const MarketPreciousMetalCompareChart = memo(
         prev.tokens === next.tokens &&
         prev.data.chartSeries === next.data.chartSeries &&
         prev.data.comparison === next.data.comparison &&
-        prev.data.loading === next.data.loading,
+        prev.data.loading === next.data.loading &&
+        prev.data.isRefreshing === next.data.isRefreshing,
 );

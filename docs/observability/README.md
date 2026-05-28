@@ -69,17 +69,39 @@ Log satırlarında `traceId` ve `spanId` alanları — OpenSearch'te korelasyon 
 
 ```
 Servis (finance / marketdata / notification)
-    → Log4j2 (JSON console + KafkaLog appender, WARN+)
+    → Log4j2 (JSON console + KafkaLog appender, INFO+ varsayılan)
         → Kafka topic: application-logs
             → log-consumer-service (ApplicationLogsConsumer)
                 → OpenSearch index: application-logs-yyyy-MM-dd
+                    → OpenSearch Dashboards (filtreleme burada)
 ```
 
 Konfigürasyon:
 
-- Appender: `KafkaLogAppender` — her serviste
-- XML: `log4j2-spring.xml`
+- Appender: `KafkaLogAppender` — finance, marketdata, notification
+- XML: `log4j2-spring.xml` — `APP_LOG_KAFKA_MIN_LEVEL` (varsayılan **INFO**)
 - Consumer: `log-consumer-service/.../ApplicationLogsConsumer.java`
+- Access log: `RequestLoggingFilter` — `[REQUEST] method uri status= durationMs=` (INFO)
+
+### Ortam değişkeni
+
+| Değişken | Varsayılan | Açıklama |
+|----------|------------|----------|
+| `APP_LOG_KAFKA_MIN_LEVEL` | `INFO` | Kafka/OpenSearch'e giden minimum Log4j seviyesi. `WARN` = yalnızca uyarı/hata (eski davranış). |
+
+Framework gürültüsü (kafka, hibernate, hikari) log4j2'de **WARN** ile sınırlı; iş ve `[REQUEST]` logları INFO ile merkeze gider.
+
+DEBUG merkeze **gitmez** (Root level INFO).
+
+### OpenSearch Dashboards — Discover
+
+1. http://localhost:5601
+2. Index pattern: `application-logs-*`, time field: `timestamp`
+3. Time range: **Last 24 hours** (son 15 dk'da az kayıt olabilir)
+4. Örnek sorgular:
+   - `level:INFO AND message:"[REQUEST]"`
+   - `serviceName:"finance-service" AND level:ERROR`
+   - `correlationId:"<uuid>"`
 
 ### Log doğrulama
 
@@ -91,7 +113,7 @@ curl "http://localhost:9200/_cat/indices?v" | findstr application-logs
 curl "http://localhost:9200/application-logs-*/_search?size=3&pretty"
 ```
 
-JSON log alanları: `service`, `level`, `message`, `traceId`, `spanId`, `correlationId`
+JSON log alanları: `serviceName`, `level`, `message`, `traceId`, `spanId`, `correlationId`, `userId`, `username`, `actionType`
 
 ---
 

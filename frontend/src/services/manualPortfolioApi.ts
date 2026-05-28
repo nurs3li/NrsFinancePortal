@@ -1,4 +1,5 @@
-import axios, { type AxiosResponse } from 'axios';
+import { type AxiosResponse } from 'axios';
+import { readApiError, unwrapApiSuccess } from '../api/envelope';
 import { financeClient } from '../api/client';
 import type {
     ManualPortfolioAnalysis,
@@ -12,29 +13,11 @@ import type {
     PortfolioInsightNotificationEvaluateResult,
 } from '../types/manualPortfolio';
 
-type ApiEnvelope<T> = {
-    success?: boolean;
-    data?: T;
-    errors?: { code?: string; message?: string; error?: string };
-};
-
 export function unwrapFinanceSuccess<T>(res: AxiosResponse<unknown>): T {
-    const body = res.data as ApiEnvelope<T>;
-    if (body && typeof body === 'object' && body.success === true && body.data !== undefined) {
-        return body.data as T;
-    }
-    throw new Error('Unexpected finance API response shape');
+    return unwrapApiSuccess<T>(res.data);
 }
 
-export function readFinanceApiError(err: unknown): { code?: string; message: string } {
-    if (axios.isAxiosError(err)) {
-        const data = err.response?.data as ApiEnvelope<unknown> | undefined;
-        const e = data?.errors as { code?: string; message?: string; error?: string } | undefined;
-        const msg = e?.message ?? e?.error ?? err.message ?? 'Request failed';
-        return { code: typeof e?.code === 'string' ? e.code : undefined, message: msg };
-    }
-    return { message: err instanceof Error ? err.message : 'Request failed' };
-}
+export { readApiError as readFinanceApiError };
 
 export async function getManualPositions(): Promise<ManualPortfolioView[]> {
     const res = await financeClient.get('/api/portfolio/manual/me');

@@ -1,6 +1,8 @@
 package com.nurseli.nrsfinanceportal.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nurseli.nrsfinanceportal.api.response.ApiErrorBody;
+import com.nurseli.nrsfinanceportal.api.response.ApiErrorCode;
 import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
@@ -17,16 +19,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Map;
-
 /**
  * loginSuspended kullanıcıların kimlik doğrulamalı isteklerini 403 ile keser.
  */
 @Component
 @RequiredArgsConstructor
 public class FrozenUserAccessFilter extends OncePerRequestFilter {
-
-    private static final String SUSPENDED_ERROR_CODE = "USER_LOGIN_SUSPENDED";
 
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
@@ -71,10 +69,10 @@ public class FrozenUserAccessFilter extends OncePerRequestFilter {
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
-        ApiResponse<?> body = ApiResponse.error(Map.of(
-                "error", SUSPENDED_ERROR_CODE,
-                "message", "Hesabınız askıya alındı. Erişim için destek ile iletişime geçin."
-        ));
+        ApiResponse<?> body = ApiResponse.error(ApiErrorBody.of(
+                ApiErrorCode.USER_LOGIN_SUSPENDED,
+                "Hesabınız askıya alındı. Erişim için destek ile iletişime geçin.",
+                request));
         response.getWriter().write(objectMapper.writeValueAsString(body));
     }
 }
