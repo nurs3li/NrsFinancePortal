@@ -13,6 +13,7 @@ import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class NotificationEventFlowIntegrationTest extends NotificationIntegrationTestBase {
@@ -81,8 +82,7 @@ class NotificationEventFlowIntegrationTest extends NotificationIntegrationTestBa
 
         mockMvc.perform(get("/api/notifications/me").with(integrationUserJwt()))
                 .andExpect(status().isOk())
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
-                        .jsonPath("$.content[0].title")
-                        .value("Visible via API"));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content[0].title").value("Visible via API"));
     }
 }

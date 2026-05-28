@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class NotificationMarkReadIntegrationTest extends NotificationIntegrationTestBase {
@@ -25,7 +26,8 @@ class NotificationMarkReadIntegrationTest extends NotificationIntegrationTestBas
                         "PRICE_ALERT_IN_APP"));
 
         mockMvc.perform(patch("/api/notifications/{id}/read", saved.getId()).with(integrationUserJwt()))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
 
         Notification updated = notificationRepository.findById(saved.getId()).orElseThrow();
         assertThat(updated.getReadAt()).isNotNull();

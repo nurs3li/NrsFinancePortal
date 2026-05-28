@@ -34,9 +34,10 @@ class NotificationQueryIntegrationTest extends NotificationIntegrationTestBase {
     void getMyNotifications_returnsOnlyAuthenticatedUserRows() throws Exception {
         mockMvc.perform(get("/api/notifications/me").with(integrationUserJwt()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(1))
-                .andExpect(jsonPath("$.content[0].title").value("Portfolio alert"))
-                .andExpect(jsonPath("$.content[0].type").value("REAL_RETURN_NEGATIVE"));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].title").value("Portfolio alert"))
+                .andExpect(jsonPath("$.data.content[0].type").value("REAL_RETURN_NEGATIVE"));
     }
 
     @Test
@@ -51,13 +52,15 @@ class NotificationQueryIntegrationTest extends NotificationIntegrationTestBase {
                         .param("unreadOnly", "true")
                         .with(integrationUserJwt()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(2));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content.length()").value(2));
     }
 
     @Test
     void getUnreadCount_returnsAuthenticatedUserCount() throws Exception {
         mockMvc.perform(get("/api/notifications/me/unread-count").with(integrationUserJwt()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.count").value(1));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.count").value(1));
     }
 }
