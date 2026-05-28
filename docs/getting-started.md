@@ -127,15 +127,21 @@ Realm: **nrs-finance** (otomatik import).
 
 ## 6. Log pipeline doğrulama (Madde 13)
 
-1. Herhangi bir API'ye istek atın (Swagger veya frontend).
+1. Portalda gezin veya Swagger'dan API çağırın.
 2. OpenSearch Dashboards: http://localhost:5601
-3. Index pattern: `application-logs-*` (ilk kullanımda oluşması birkaç dakika sürebilir).
+3. **Stack Management → Index Patterns** → `application-logs-*` (time field: `timestamp`)
+4. **Discover** → time range **Last 24 hours**
+5. Filtre: `message:"[REQUEST]"` — finance, market-data, notification servislerinden access log görünmeli.
+
+`.env` / compose: `APP_LOG_KAFKA_MIN_LEVEL=INFO` (varsayılan). Eski WARN-only davranış için `WARN` yapın.
 
 Alternatif:
 
 ```powershell
-curl "http://localhost:9200/application-logs-*/_search?size=1&pretty"
+curl "http://localhost:9200/application-logs-*/_search?size=5&pretty"
 ```
+
+Discover örnek sorgular: `level:INFO AND message:"[REQUEST]"`, `serviceName:"finance-service" AND level:ERROR`
 
 ---
 

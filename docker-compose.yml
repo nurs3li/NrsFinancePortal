@@ -196,6 +196,7 @@ services:
       SPRING_PROFILES_ACTIVE: docker,ops
       SPRING_DATASOURCE_URL: jdbc:postgresql://nrs-postgres:5432/nrs_market
       SPRING_KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
+      APP_LOG_KAFKA_MIN_LEVEL: ${APP_LOG_KAFKA_MIN_LEVEL:-INFO}
       SPRING_DATA_REDIS_HOST: nrs-redis
       FINHUB_API_KEY: ${FINHUB_API_KEY}
       ETF_HISTORY_INCREMENTAL_CRON: ${ETF_HISTORY_INCREMENTAL_CRON:-0 45 6 * * *}
@@ -385,6 +386,7 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://nrs-postgres:5432/nrs_finance
       SPRING_KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
+      APP_LOG_KAFKA_MIN_LEVEL: ${APP_LOG_KAFKA_MIN_LEVEL:-INFO}
       SPRING_DATA_REDIS_HOST: nrs-redis
       MARKET_DATA_SERVICE_URL: http://nrs-market-data:8083
       MARKET_DATA_INTERNAL_BACKFILL_TOKEN: ${NRS_INTERNAL_BACKFILL_TOKEN:-local-docker-bist-backfill}
@@ -476,6 +478,7 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://nrs-postgres:5432/nrs_finance?currentSchema=public
       SPRING_KAFKA_BOOTSTRAP_SERVERS: nrs-kafka:9093
+      APP_LOG_KAFKA_MIN_LEVEL: ${APP_LOG_KAFKA_MIN_LEVEL:-INFO}
       GMAIL_CLIENT_ID: ${GMAIL_CLIENT_ID}
       GMAIL_CLIENT_SECRET: ${GMAIL_CLIENT_SECRET}
       GMAIL_REFRESH_TOKEN: ${GMAIL_REFRESH_TOKEN}
