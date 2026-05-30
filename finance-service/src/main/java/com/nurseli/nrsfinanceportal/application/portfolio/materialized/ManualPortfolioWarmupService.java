@@ -14,6 +14,8 @@ import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioPo
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -42,6 +44,7 @@ public class ManualPortfolioWarmupService {
 
     private final ExecutorService warmupExecutor = Executors.newFixedThreadPool(2);
     private final Set<Long> inFlight = ConcurrentHashMap.newKeySet();
+    private final ConcurrentHashMap<Long, Object> userWarmLocks = new ConcurrentHashMap<>();
 
     public ManualPortfolioWarmupService(
             ManualPortfolioPositionRepository positionRepository,
@@ -64,7 +67,23 @@ public class ManualPortfolioWarmupService {
     }
 
     public void scheduleWarmup(Long userId) {
-        if (userId == null || !inFlight.add(userId)) {
+        if (userId == null) {
+            return;
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    enqueueWarmup(userId);
+                }
+            });
+            return;
+        }
+        enqueueWarmup(userId);
+    }
+
+    private void enqueueWarmup(Long userId) {
+        if (!inFlight.add(userId)) {
             return;
         }
         CompletableFuture.runAsync(() -> {
@@ -77,6 +96,16 @@ public class ManualPortfolioWarmupService {
     }
 
     public void warmUser(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        Object lock = userWarmLocks.computeIfAbsent(userId, ignored -> new Object());
+        synchronized (lock) {
+            doWarmUser(userId);
+        }
+    }
+
+    private void doWarmUser(Long userId) {
         long started = System.currentTimeMillis();
         List<ManualPortfolioPosition> positions = positionRepository.findByUserIdOrderByBuyDateAsc(userId);
         String fingerprint = fingerprintService.compute(positions);

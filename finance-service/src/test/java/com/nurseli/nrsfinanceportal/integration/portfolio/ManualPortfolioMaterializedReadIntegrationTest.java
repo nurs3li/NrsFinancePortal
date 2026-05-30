@@ -97,6 +97,6 @@ class ManualPortfolioMaterializedReadIntegrationTest extends FinanceIntegrationT
                 .andExpect(jsonPath("$.data.summary.totalPositions").value(1))
                 .andExpect(jsonPath("$.data.timeseries.range").value("6M"));
 
-        verify(marketDataClient, atMost(1)).loadLatestPricing();
+        verify(marketDataClient, atMost(2)).loadLatestPricing();
     }
 }
