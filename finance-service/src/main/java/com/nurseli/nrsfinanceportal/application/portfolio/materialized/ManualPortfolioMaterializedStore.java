@@ -11,6 +11,7 @@ import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioReadSnapshotRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioTimeseriesSnapshotRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,16 @@ public class ManualPortfolioMaterializedStore {
     private final ManualPortfolioTimeseriesSnapshotRepository timeseriesSnapshotRepository;
     private final ManualPortfolioMaterializedJsonCodec jsonCodec;
     private final UserRepository userRepository;
+    private final EntityManager entityManager;
+
+    private ManualPortfolioReadSnapshot resolveReadSnapshot(Long userId) {
+        ManualPortfolioReadSnapshot existing = entityManager.find(ManualPortfolioReadSnapshot.class, userId);
+        if (existing != null) {
+            return existing;
+        }
+        User user = userRepository.findById(userId).orElseThrow();
+        return ManualPortfolioReadSnapshot.forUser(user);
+    }
 
     @Transactional(readOnly = true)
     public Optional<ManualPortfolioReadSnapshot> findReadSnapshot(Long userId) {
@@ -39,9 +50,7 @@ public class ManualPortfolioMaterializedStore {
 
     @Transactional
     public ManualPortfolioReadSnapshot markPending(Long userId, String fingerprint) {
-        User user = userRepository.findById(userId).orElseThrow();
-        ManualPortfolioReadSnapshot row = readSnapshotRepository.findById(userId)
-                .orElseGet(() -> ManualPortfolioReadSnapshot.forUser(user));
+        ManualPortfolioReadSnapshot row = resolveReadSnapshot(userId);
         row.setPositionsFingerprint(fingerprint);
         row.setWarmStatus(ManualPortfolioWarmStatus.PENDING);
         row.setWarmError(null);
@@ -57,9 +66,7 @@ public class ManualPortfolioMaterializedStore {
             ManualPortfolioInsightsResponse insights,
             Instant marketPricingAt
     ) {
-        User user = userRepository.findById(userId).orElseThrow();
-        ManualPortfolioReadSnapshot row = readSnapshotRepository.findById(userId)
-                .orElseGet(() -> ManualPortfolioReadSnapshot.forUser(user));
+        ManualPortfolioReadSnapshot row = resolveReadSnapshot(userId);
         row.setPositionsFingerprint(fingerprint);
         row.setViewsJson(jsonCodec.writeViews(views));
         row.setSummaryJson(jsonCodec.writeSummary(summary));
@@ -80,9 +87,7 @@ public class ManualPortfolioMaterializedStore {
             ManualPortfolioInsightsResponse insights,
             Instant marketPricingAt
     ) {
-        User user = userRepository.findById(userId).orElseThrow();
-        ManualPortfolioReadSnapshot row = readSnapshotRepository.findById(userId)
-                .orElseGet(() -> ManualPortfolioReadSnapshot.forUser(user));
+        ManualPortfolioReadSnapshot row = resolveReadSnapshot(userId);
         row.setPositionsFingerprint(fingerprint);
         row.setViewsJson(jsonCodec.writeViews(views));
         row.setSummaryJson(jsonCodec.writeSummary(summary));
@@ -100,8 +105,7 @@ public class ManualPortfolioMaterializedStore {
         if (user == null) {
             return;
         }
-        ManualPortfolioReadSnapshot row = readSnapshotRepository.findById(userId)
-                .orElseGet(() -> ManualPortfolioReadSnapshot.forUser(user));
+        ManualPortfolioReadSnapshot row = resolveReadSnapshot(userId);
         row.setPositionsFingerprint(fingerprint);
         row.setWarmStatus(ManualPortfolioWarmStatus.FAILED);
         row.setWarmError(error != null && error.length() > 500 ? error.substring(0, 500) : error);
