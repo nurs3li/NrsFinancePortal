@@ -39,3 +39,8 @@ app:
     enabled: false
   price-alerts:
     enabled: true
+
+manual:
+  portfolio:
+    backfill:
+      enabled: false

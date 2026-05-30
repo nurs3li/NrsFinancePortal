@@ -118,15 +118,23 @@ public class ManualPortfolioMaterializedStore {
             List<ManualPortfolioTimeseriesPointDto> points
     ) {
         User user = userRepository.findById(userId).orElseThrow();
-        ManualPortfolioTimeseriesSnapshot row = ManualPortfolioTimeseriesSnapshot.of(
-                user,
-                seriesKey,
-                from,
-                to,
-                jsonCodec.writeTimeseriesPoints(points),
-                fingerprint,
-                Instant.now()
-        );
+        String pointsJson = jsonCodec.writeTimeseriesPoints(points);
+        Instant computedAt = Instant.now();
+        ManualPortfolioTimeseriesSnapshot.IdKey id = new ManualPortfolioTimeseriesSnapshot.IdKey(userId, seriesKey);
+        ManualPortfolioTimeseriesSnapshot row = timeseriesSnapshotRepository.findById(id)
+                .map(existing -> {
+                    existing.replaceContent(from, to, pointsJson, fingerprint, computedAt);
+                    return existing;
+                })
+                .orElseGet(() -> ManualPortfolioTimeseriesSnapshot.of(
+                        user,
+                        seriesKey,
+                        from,
+                        to,
+                        pointsJson,
+                        fingerprint,
+                        computedAt
+                ));
         timeseriesSnapshotRepository.save(row);
     }
 

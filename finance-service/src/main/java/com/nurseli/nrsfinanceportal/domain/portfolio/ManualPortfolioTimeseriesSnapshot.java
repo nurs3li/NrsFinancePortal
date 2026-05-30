@@ -92,6 +92,20 @@ public class ManualPortfolioTimeseriesSnapshot {
         return computedAt;
     }
 
+    public void replaceContent(
+            LocalDate fromDate,
+            LocalDate toDate,
+            String pointsJson,
+            String positionsFingerprint,
+            Instant computedAt
+    ) {
+        this.fromDate = fromDate;
+        this.toDate = toDate;
+        this.pointsJson = pointsJson;
+        this.positionsFingerprint = positionsFingerprint;
+        this.computedAt = computedAt;
+    }
+
     public static final class IdKey implements Serializable {
         private Long userId;
         private String seriesKey;
