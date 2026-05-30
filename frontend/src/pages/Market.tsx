@@ -3672,6 +3672,56 @@ export function Market() {
         ) : null;
 
     const tableWrapRef = useRef<HTMLDivElement>(null);
+    const marketListScrollRef = useRef<HTMLDivElement>(null);
+
+    const syncMarketListHorizontalScroll = useCallback(() => {
+        const markScrolled = (el: HTMLElement | null) => {
+            if (!el) return;
+            el.classList.toggle('is-scrolled-x', el.scrollLeft > 4);
+        };
+        markScrolled(marketListScrollRef.current);
+        markScrolled(tableWrapRef.current);
+    }, []);
+
+    useEffect(() => {
+        const scrollTargets = [marketListScrollRef.current, tableWrapRef.current].filter(
+            (el): el is HTMLDivElement => el != null,
+        );
+        if (!scrollTargets.length) return;
+
+        const onScroll = () => syncMarketListHorizontalScroll();
+        scrollTargets.forEach((el) => el.addEventListener('scroll', onScroll, { passive: true }));
+
+        const resizeObserver = new ResizeObserver(() => syncMarketListHorizontalScroll());
+        scrollTargets.forEach((el) => resizeObserver.observe(el));
+
+        syncMarketListHorizontalScroll();
+
+        return () => {
+            scrollTargets.forEach((el) => {
+                el.removeEventListener('scroll', onScroll);
+                el.classList.remove('is-scrolled-x');
+            });
+            resizeObserver.disconnect();
+        };
+    }, [
+        syncMarketListHorizontalScroll,
+        pickerCategory,
+        pickerEquitySubmarket,
+        pickerFundSubmarket,
+        pickerMetalsSubmarket,
+        marketListPage,
+        marketListExpanded,
+        loadingTerminalList,
+        pickerDisplayedInstruments.length,
+        searchTerm,
+    ]);
+
+    useEffect(() => {
+        marketListScrollRef.current?.scrollTo({ left: 0 });
+        tableWrapRef.current?.scrollTo({ left: 0 });
+        syncMarketListHorizontalScroll();
+    }, [pickerCategory, pickerEquitySubmarket, pickerFundSubmarket, pickerMetalsSubmarket, marketListPage, searchTerm, syncMarketListHorizontalScroll]);
 
     useEffect(() => {
         setPickerTableSort(null);
@@ -4938,7 +4988,7 @@ export function Market() {
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
-                            <div className="terminal-market-list-scroll-host">
+                            <div ref={marketListScrollRef} className="terminal-market-list-scroll-host">
                             <div
                                 ref={tableWrapRef}
                                 className="terminal-table-wrap"
@@ -4952,17 +5002,17 @@ export function Market() {
                                 >
                                     <thead>
                                         <tr>
-                                            <th className="terminal-picker-star-head" aria-label={t('market.favoritesColumn', 'Favoriler')}>
+                                            <th className="terminal-picker-star-head terminal-picker-pin" aria-label={t('market.favoritesColumn', 'Favoriler')}>
                                                 <span aria-hidden>★</span>
                                             </th>
                                             <th
-                                                className="terminal-picker-cmp-head"
+                                                className="terminal-picker-cmp-head terminal-picker-pin"
                                                 aria-label={t('market.compareWithSelected', 'Karşılaştırma')}
                                                 title={t('market.compareWithSelectedHint', 'Seçili enstrümanla grafikte karşılaştır')}
                                             >
                                                 <GitCompare size={13} strokeWidth={2.2} aria-hidden className="terminal-picker-cmp-head__ic" />
                                             </th>
-                                            <th>{t('market.instrument', 'Enstrüman')}</th>
+                                            <th className="terminal-instrument-head terminal-picker-pin">{t('market.instrument', 'Enstrüman')}</th>
                                             {isTefasFundsPicker ? (
                                                 <>
                                                     <th scope="col">{t('funds.fundType', 'Fon türü')}</th>
@@ -5360,7 +5410,7 @@ export function Market() {
                                                 }}
                                                 title={bondTooltip}
                                             >
-                                                <td className="terminal-picker-star-cell" onClick={(e) => e.stopPropagation()}>
+                                                <td className="terminal-picker-star-cell terminal-picker-pin" onClick={(e) => e.stopPropagation()}>
                                                     {sk ? (
                                                         <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
                                                         <button
@@ -5411,7 +5461,7 @@ export function Market() {
                                                         <span style={{ color: tokens.textMuted, fontSize: 11 }}>—</span>
                                                     )}
                                                 </td>
-                                                <td className="terminal-picker-cmp-cell" onClick={(e) => e.stopPropagation()}>
+                                                <td className="terminal-picker-cmp-cell terminal-picker-pin" onClick={(e) => e.stopPropagation()}>
                                                     <button
                                                         type="button"
                                                         className={`terminal-picker-compare-btn${rowInCompareSet ? ' is-active' : ''}`}
@@ -5454,7 +5504,7 @@ export function Market() {
                                                         <GitCompare size={13} strokeWidth={2.2} aria-hidden />
                                                     </button>
                                                 </td>
-                                                <td className="terminal-instrument-cell">
+                                                <td className="terminal-instrument-cell terminal-picker-pin">
                                                     {row.category === 'FUTURES' ? (
                                                         <div className="viop-instrument-stack">
                                                             <div className="viop-instrument-stack__badge">
@@ -6164,7 +6214,7 @@ export function Market() {
                                     alignItems: 'center',
                                     gap: isSpotTerminalLayout ? 8 : 12,
                                     minWidth: 0,
-                                    flex: '1 1 auto',
+                                    flex: isSpotTerminalLayout ? '0 1 auto' : '1 1 auto',
                                 }}
                             >
                             {/* AssetLogo en basta -- onceden hero'da hic gorsel yoktu, sadece "Secili Enstrüman" yazisi

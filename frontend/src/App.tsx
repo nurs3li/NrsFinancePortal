@@ -29,6 +29,11 @@ import { UserSettings } from './pages/UserSettings';
 // commit'leri pending state'i takip ediyor ve Outlet asla yeni sayfaya gecmiyordu — URL
 // degisse bile DOM eski Market sayfasinda kaliyordu (defaultPrevented=false ile teshis).
 // Eager import'a donduk: bundle birazcik buyuyor ama navigation deterministik calisiyor.
+//
+// React Router v7 varsayilan olarak tum navigasyonlari startTransition icine alir;
+// Dashboard/Portfolio gibi agir sayfalarda eski icerik uzun sure ekranda kalir (URL
+// degisir, Outlet guncellenmez gibi gorunur). unstable_useTransitions={false} ile senkron
+// rota gecisi saglanir; Layout'ta Outlet key={pathname} ile eski sayfa unmount edilir.
 
 function App() {
     return (
@@ -37,7 +42,7 @@ function App() {
                 <ErrorBoundary>
                     <AuthProvider>
                         <QueryProvider>
-                        <BrowserRouter>
+                        <BrowserRouter unstable_useTransitions={false}>
                         <Routes>
                             <Route path="/" element={<HomeRedirect />} />
                             <Route path="/login" element={<LoginRedirect />} />

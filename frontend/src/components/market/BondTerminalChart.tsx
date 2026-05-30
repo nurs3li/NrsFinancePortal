@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createChart } from 'lightweight-charts';
 import type { LogicalRange, Time } from 'lightweight-charts';
 import { apiDatetimeToChartTime as toChartTime } from '../../lib/chartApiTime';
+import { normalizeChartLineSeries } from '../../lib/chartSeriesData';
 import { createChartResizeScheduler } from './chartResize';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
@@ -302,11 +303,11 @@ function BondTerminalChartImpl({
         const ma21Series = ma21Ref.current;
         if (ma7Series) {
             ma7Series.applyOptions({ visible: showMa });
-            ma7Series.setData(showMa ? ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+            ma7Series.setData(showMa ? normalizeChartLineSeries(ma7, toChartTime) : []);
         }
         if (ma21Series) {
             ma21Series.applyOptions({ visible: showMa });
-            ma21Series.setData(showMa ? ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+            ma21Series.setData(showMa ? normalizeChartLineSeries(ma21, toChartTime) : []);
         }
         volumeRef.current?.setData(
             sorted.map((p) => ({
