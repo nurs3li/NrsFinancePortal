@@ -1,0 +1,158 @@
+databaseChangeLog:
+  - changeSet:
+      id: v33-manual-symbol-daily-close
+      author: nrsfinance
+      changes:
+        - createTable:
+            tableName: manual_symbol_daily_close
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_manual_symbol_daily_close_user
+                    references: users(id)
+              - column:
+                  name: asset_type
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: symbol
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: trade_date
+                  type: date
+                  constraints:
+                    nullable: false
+              - column:
+                  name: close_try
+                  type: numeric(38, 8)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: price_source
+                  type: varchar(40)
+              - column:
+                  name: fetched_at
+                  type: timestamptz
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: manual_symbol_daily_close
+            columnNames: user_id, asset_type, symbol, trade_date
+            constraintName: uq_manual_symbol_daily_close
+        - createIndex:
+            indexName: idx_manual_symbol_daily_close_lookup
+            tableName: manual_symbol_daily_close
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: asset_type
+              - column:
+                  name: symbol
+              - column:
+                  name: trade_date
+
+  - changeSet:
+      id: v33-manual-portfolio-read-snapshot
+      author: nrsfinance
+      changes:
+        - createTable:
+            tableName: manual_portfolio_read_snapshot
+            columns:
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    primaryKey: true
+                    foreignKeyName: fk_manual_portfolio_read_snapshot_user
+                    references: users(id)
+              - column:
+                  name: positions_fingerprint
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: views_json
+                  type: text
+              - column:
+                  name: summary_json
+                  type: text
+              - column:
+                  name: insights_json
+                  type: text
+              - column:
+                  name: market_pricing_at
+                  type: timestamptz
+              - column:
+                  name: warm_status
+                  type: varchar(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: warmed_at
+                  type: timestamptz
+              - column:
+                  name: warm_error
+                  type: varchar(500)
+
+  - changeSet:
+      id: v33-manual-portfolio-timeseries-snapshot
+      author: nrsfinance
+      changes:
+        - createTable:
+            tableName: manual_portfolio_timeseries_snapshot
+            columns:
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_manual_portfolio_ts_snapshot_user
+                    references: users(id)
+              - column:
+                  name: series_key
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: from_date
+                  type: date
+                  constraints:
+                    nullable: false
+              - column:
+                  name: to_date
+                  type: date
+                  constraints:
+                    nullable: false
+              - column:
+                  name: points_json
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: positions_fingerprint
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: computed_at
+                  type: timestamptz
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: manual_portfolio_timeseries_snapshot
+            columnNames: user_id, series_key
+            constraintName: pk_manual_portfolio_timeseries_snapshot

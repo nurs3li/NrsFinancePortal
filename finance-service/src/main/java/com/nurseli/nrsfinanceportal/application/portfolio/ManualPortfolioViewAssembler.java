@@ -39,7 +39,7 @@ public class ManualPortfolioViewAssembler {
         List<ManualPortfolioView> views = new ArrayList<>(positions.size());
         for (int i = 0; i < positions.size(); i++) {
             ManualPortfolioPosition p = positions.get(i);
-            var nominal = nominalAnalysisCalculator.compute(p);
+            var nominal = nominalAnalysisCalculator.compute(p, pricing);
             var positionReal = i < realResult.positions().size()
                     ? realResult.positions().get(i)
                     : null;

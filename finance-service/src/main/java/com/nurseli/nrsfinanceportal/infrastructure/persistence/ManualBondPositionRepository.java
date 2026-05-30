@@ -19,6 +19,8 @@ public interface ManualBondPositionRepository extends JpaRepository<ManualBondPo
 
     List<ManualBondPosition> findByUser_IdAndStatusOrderByBuyDateDesc(Long userId, BondPositionStatus status);
 
+    boolean existsByUser_IdAndStatus(Long userId, BondPositionStatus status);
+
     Optional<ManualBondPosition> findByIdAndUser_Id(Long id, Long userId);
 
     @Modifying

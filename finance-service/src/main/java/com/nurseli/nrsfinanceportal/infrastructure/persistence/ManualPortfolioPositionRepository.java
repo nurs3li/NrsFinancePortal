@@ -17,6 +17,9 @@ public interface ManualPortfolioPositionRepository extends JpaRepository<ManualP
 
     List<ManualPortfolioPosition> findByUserIdOrderByBuyDateAsc(Long userId);
 
+    @Query("SELECT DISTINCT p.user.id FROM ManualPortfolioPosition p ORDER BY p.user.id")
+    List<Long> findDistinctUserIds();
+
     List<ManualPortfolioPosition> findByUser_IdAndStatusOrderByBuyDateAsc(Long userId, ManualPositionStatus status);
 
     Optional<ManualPortfolioPosition> findByIdAndUser_Id(Long id, Long userId);

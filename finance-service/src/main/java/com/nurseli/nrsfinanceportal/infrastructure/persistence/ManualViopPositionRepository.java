@@ -19,6 +19,8 @@ public interface ManualViopPositionRepository extends JpaRepository<ManualViopPo
 
     List<ManualViopPosition> findByUser_IdAndStatusOrderByEntryDateDesc(Long userId, ViopPositionStatus status);
 
+    boolean existsByUser_IdAndStatus(Long userId, ViopPositionStatus status);
+
     Optional<ManualViopPosition> findByIdAndUser_Id(Long id, Long userId);
 
     @Modifying

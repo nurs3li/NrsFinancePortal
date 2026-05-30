@@ -1887,7 +1887,7 @@
   "users" : [ {
     "username" : "nrsadmin",
     "enabled" : true,
-    "email" : "admin@nrs.local",
+    "email" : "nurseli.yildiz555@gmail.com",
     "emailVerified" : true,
     "firstName" : "NRS",
     "lastName" : "Admin",
@@ -1895,13 +1895,13 @@
     "realmRoles" : [ "ADMIN" ],
     "credentials" : [ {
       "type" : "password",
-      "value" : "NrsAdmin123!",
+      "value" : "123456789",
       "temporary" : false
     } ]
   }, {
     "username" : "testuser",
     "enabled" : true,
-    "email" : "test@nrs.local",
+    "email" : "softwode@gmail.com",
     "emailVerified" : true,
     "firstName" : "Test",
     "lastName" : "User",
@@ -1909,7 +1909,7 @@
     "realmRoles" : [ "USER" ],
     "credentials" : [ {
       "type" : "password",
-      "value" : "TestUser123!",
+      "value" : "123456789",
       "temporary" : false
     } ]
   }, {

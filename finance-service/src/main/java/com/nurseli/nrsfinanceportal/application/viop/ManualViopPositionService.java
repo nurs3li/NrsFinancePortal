@@ -69,11 +69,23 @@ public class ManualViopPositionService {
      */
     @Transactional(readOnly = true)
     public ViopPositionSummaryDto summaryForUser(User user) {
-        Map<String, BigDecimal> prices = priceResolver.loadLatestPricesBySymbol();
-        ViopFxRates fxRates = loadFxRates();
+        return summaryForUser(user, null);
+    }
+
+    /**
+     * {@code summaryForUser} — Dashboard özeti için paylaşılan FX snapshot ile VIOP KPI hesaplar.
+     */
+    @Transactional(readOnly = true)
+    public ViopPositionSummaryDto summaryForUser(User user, MarketDataClient.LatestPricingSnapshot fxPricing) {
         LocalDate today = LocalDate.now(TZ);
         List<ManualViopPosition> open = repository.findByUser_IdAndStatusOrderByEntryDateDesc(
                 user.getId(), ViopPositionStatus.OPEN);
+        if (open.isEmpty()) {
+            return emptyViopSummary();
+        }
+
+        Map<String, BigDecimal> prices = priceResolver.loadLatestPricesBySymbol();
+        ViopFxRates fxRates = loadFxRates(fxPricing);
 
         BigDecimal totalMargin = BigDecimal.ZERO;
         BigDecimal totalPnl = BigDecimal.ZERO;
@@ -144,9 +156,31 @@ public class ManualViopPositionService {
         );
     }
 
+    private static ViopPositionSummaryDto emptyViopSummary() {
+        return new ViopPositionSummaryDto(
+                0,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                0,
+                0,
+                0,
+                BigDecimal.ZERO,
+                0,
+                null,
+                null,
+                null,
+                false
+        );
+    }
+
     private ViopFxRates loadFxRates() {
+        return loadFxRates(null);
+    }
+
+    private ViopFxRates loadFxRates(MarketDataClient.LatestPricingSnapshot fxPricing) {
         try {
-            var snap = marketDataClient.loadLatestPricing();
+            var snap = fxPricing != null ? fxPricing : marketDataClient.loadLatestPricing();
             BigDecimal usdTry = marketDataClient.getPriceTry(AssetType.FX, "USDTRY", snap);
             BigDecimal eurTry = marketDataClient.getPriceTry(AssetType.FX, "EURTRY", snap);
             return new ViopFxRates(usdTry, eurTry);

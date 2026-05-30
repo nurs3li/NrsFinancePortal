@@ -14,8 +14,11 @@ import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.application.ManualPortfolioService;
 import com.nurseli.nrsfinanceportal.application.UnifiedPortfolioService;
+import com.nurseli.nrsfinanceportal.api.dto.ManualPortfolioPageResponse;
+import com.nurseli.nrsfinanceportal.application.CurrentUserResolver;
 import com.nurseli.nrsfinanceportal.application.portfolio.ManualPortfolioInsightsService;
 import com.nurseli.nrsfinanceportal.application.portfolio.ManualPortfolioViewAssembler;
+import com.nurseli.nrsfinanceportal.application.portfolio.materialized.ManualPortfolioReadService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -37,6 +40,18 @@ public class PortfolioController {
     private final UnifiedPortfolioService unifiedPortfolioService;
     private final ManualPortfolioViewAssembler manualPortfolioViewAssembler;
     private final ManualPortfolioInsightsService manualPortfolioInsightsService;
+    private final ManualPortfolioReadService manualPortfolioReadService;
+    private final CurrentUserResolver currentUserResolver;
+
+    /**
+     * {@code manualPortfolioPage} — Spot portföy sayfası için positions + summary + insights + 6M grafik tek yanıtta.
+     */
+    @GetMapping("/manual/page/me")
+    @PreAuthorize("hasAnyRole('USER','ADMIN')")
+    public ApiResponse<ManualPortfolioPageResponse> manualPortfolioPage() {
+        Long userId = currentUserResolver.getCurrentUserId();
+        return ApiResponse.success(manualPortfolioReadService.getPageBundle(userId));
+    }
 
     /**
      * {@code addManualPosition} — Yeni manuel portfolio pozisyonu oluşturur.
@@ -56,7 +71,8 @@ public class PortfolioController {
     @GetMapping("/manual/me")
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<List<ManualPortfolioView>> myManualPositions() {
-        return ApiResponse.success(manualPortfolioViewAssembler.toViews(manualPortfolioService.listMine()));
+        Long userId = currentUserResolver.getCurrentUserId();
+        return ApiResponse.success(manualPortfolioReadService.getViews(userId));
     }
 
     /**
@@ -114,7 +130,8 @@ public class PortfolioController {
     @GetMapping("/manual/summary/me")
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<ManualPortfolioSummaryView> manualSummary() {
-        return ApiResponse.success(manualPortfolioService.summaryMine());
+        Long userId = currentUserResolver.getCurrentUserId();
+        return ApiResponse.success(manualPortfolioReadService.getSummary(userId));
     }
 
     /**
@@ -126,7 +143,8 @@ public class PortfolioController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        return ApiResponse.success(manualPortfolioService.timeseriesMine(from, to));
+        Long userId = currentUserResolver.getCurrentUserId();
+        return ApiResponse.success(manualPortfolioReadService.getTimeseries(userId, from, to));
     }
 
     /**
@@ -262,7 +280,8 @@ public class PortfolioController {
     @GetMapping("/manual/insights/me")
     @PreAuthorize("hasAnyRole('USER','ADMIN')")
     public ApiResponse<ManualPortfolioInsightsResponse> manualInsightsMe() {
-        return ApiResponse.success(manualPortfolioInsightsService.insightsForCurrentUser());
+        Long userId = currentUserResolver.getCurrentUserId();
+        return ApiResponse.success(manualPortfolioReadService.getInsights(userId));
     }
 
     /**

@@ -64,6 +64,8 @@ public class MarketDataClient {
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<List<DebtHistoryRow>>> DEBT_HISTORY_ENVELOPE =
             new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiEnvelope<List<BistLatestRow>>> BIST_LATEST_ENVELOPE =
+            new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<BistLatestPage>> BIST_PAGE_ENVELOPE =
             new ParameterizedTypeReference<>() {};
     private static final ParameterizedTypeReference<ApiEnvelope<InflationHistoryBody>> CPI_HISTORY_ENVELOPE =
@@ -100,9 +102,6 @@ public class MarketDataClient {
             BigDecimal volume,
             String source,
             String dataQuality) {}
-
-    private static final ParameterizedTypeReference<List<BistLatestRow>> BIST_LATEST_LIST =
-            new ParameterizedTypeReference<>() {};
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record BistHistRow(LocalDate date, BigDecimal close, BigDecimal adjustedClose) {}
@@ -230,6 +229,7 @@ public class MarketDataClient {
     private static final ZoneId VIOP_ZONE = ZoneId.of("Europe/Istanbul");
 
     private final WebClient marketDataWebClient;
+    private final MarketDataHotCache hotCache;
 
     @Value("${market-data.internal-backfill-token:}")
     private String internalBackfillToken;
@@ -239,6 +239,10 @@ public class MarketDataClient {
      * çoklu sembol döngülerinde her satır için ayrı HTTP yapılmasını önler.
      */
     public LatestPricingSnapshot loadLatestPricing() {
+        return hotCache.latestPricing(this::loadLatestPricingUncached);
+    }
+
+    private LatestPricingSnapshot loadLatestPricingUncached() {
         Mono<Map<String, MarketPriceLatestDto>> fx = latestMono("/api/market/doviz/latest");
         Mono<Map<String, MarketPriceLatestDto>> metals = latestMono("/api/market/metals/latest");
         Mono<Map<String, MarketPriceLatestDto>> crypto = latestMono("/api/market/crypto/latest");
@@ -604,18 +608,10 @@ public class MarketDataClient {
      * BIST latest satır listesini market-data'dan çeker.
      */
     public List<BistLatestRow> getBistLatestRows() {
-        try {
-            List<BistLatestRow> rows = marketDataWebClient.get()
-                    .uri("/api/market/equities/bist/latest")
-                    .retrieve()
-                    .bodyToMono(BIST_LATEST_LIST)
-                    .timeout(REQUEST_TIMEOUT)
-                    .onErrorReturn(List.of())
-                    .block(REQUEST_TIMEOUT.plusSeconds(2));
-            return rows != null ? rows : List.of();
-        } catch (RuntimeException ignored) {
-            return List.of();
-        }
+        return blockListEnvelope(
+                "/api/market/equities/bist/latest",
+                BIST_LATEST_ENVELOPE,
+                REQUEST_TIMEOUT.plusSeconds(2));
     }
 
     /**
@@ -751,14 +747,16 @@ public class MarketDataClient {
      * VİOP latest kontrat satırlarını listeler.
      */
     public List<ViopLatestRow> getViopLatestRows() {
-        return blockListEnvelope("/api/market/viop/latest", VIOP_LATEST_ENVELOPE, REQUEST_TIMEOUT.plusSeconds(10));
+        return hotCache.viopLatest(
+                () -> blockListEnvelope("/api/market/viop/latest", VIOP_LATEST_ENVELOPE, REQUEST_TIMEOUT.plusSeconds(10)));
     }
 
     /**
      * Borç/tahvil latest satırlarını listeler.
      */
     public List<DebtLatestRow> getDebtLatestRows() {
-        return blockListEnvelope("/api/market/debt/latest", DEBT_LATEST_ENVELOPE, REQUEST_TIMEOUT.plusSeconds(2));
+        return hotCache.debtLatest(
+                () -> blockListEnvelope("/api/market/debt/latest", DEBT_LATEST_ENVELOPE, REQUEST_TIMEOUT.plusSeconds(2)));
     }
 
     /**
@@ -943,6 +941,10 @@ public class MarketDataClient {
         if (from == null || to == null || to.isBefore(from)) {
             return CpiIndexLookup.empty();
         }
+        return hotCache.cpiLookup(from, to, () -> loadCpiIndexLookupUncached(from, to));
+    }
+
+    private CpiIndexLookup loadCpiIndexLookupUncached(LocalDate from, LocalDate to) {
         YearMonth ymFrom = YearMonth.from(from);
         YearMonth ymTo = YearMonth.from(to);
         try {

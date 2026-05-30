@@ -66,7 +66,8 @@ public class RateLimitFilter implements Filter {
 
         // 1b) Portföy snapshot / manuel zaman serisi okuma — dashboard yüklemede 429 önlemek için GET muaf
         if ("GET".equals(method) && (ApiPaths.startsWithLegacyOrV1(path, "/api/portfolio/snapshots")
-                || ApiPaths.startsWithLegacyOrV1(path, "/api/portfolio/manual/timeseries"))) {
+                || ApiPaths.startsWithLegacyOrV1(path, "/api/portfolio/manual/timeseries")
+                || ApiPaths.matchesLegacyOrV1(path, "/api/portfolio/manual/page/me"))) {
             chain.doFilter(request, response);
             return;
         }
