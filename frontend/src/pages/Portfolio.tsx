@@ -36,6 +36,7 @@ import {
 import {
     evaluatePortfolioInsightNotifications,
     getManualPortfolioInsights,
+    getManualPortfolioPage,
     getManualPositions,
     getManualSummary,
     getManualTimeseries,
@@ -626,7 +627,7 @@ export function Portfolio() {
     const qc = useQueryClient();
     const navigate = useNavigate();
     const { user } = useAuth();
-    const { tokens } = useTheme();
+    const { tokens, theme } = useTheme();
     const { t, lang } = useLanguage();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
     const manualRef = useRef<ManualInvestmentAnalysisSectionHandle>(null);
@@ -649,38 +650,79 @@ export function Portfolio() {
         priceCurrency?: string | null;
     } | null>(null);
 
-    const invalidateManualPage = useCallback(async () => {
-        await qc.invalidateQueries({ queryKey: manualPortfolioKeys.all });
-        await qc.invalidateQueries({ queryKey: manualPortfolioKeys.insights() });
-        await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-segment'] });
-        await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-hold'] });
-        await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-hold-segment'] });
-        await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-lifecycle-pnl'] });
-        await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-lifecycle-pnl-segment'] });
-        await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-pnl'] });
-        await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-pnl-segment'] });
-        await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-overlay'] });
-        await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-overlay'] });
-        await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-real-return-pnl'] });
-        await qc.invalidateQueries({ queryKey: ['manual', 'timeseries-real-return-overlay'] });
-        await qc.invalidateQueries({ queryKey: ['market', 'dashboard'] });
+    const invalidateManualCharts = useCallback(() => {
+        void qc.invalidateQueries({ queryKey: manualPortfolioKeys.insights() });
+        void qc.invalidateQueries({ queryKey: [...manualPortfolioKeys.all, 'timeseries'] });
+        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-segment'] });
+        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-hold'] });
+        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-hold-segment'] });
+        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-lifecycle-pnl'] });
+        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-lifecycle-pnl-segment'] });
+        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-pnl'] });
+        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-pnl-segment'] });
+        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-overlay'] });
+        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-overlay'] });
+        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-real-return-pnl'] });
+        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-real-return-overlay'] });
+        void qc.invalidateQueries({ queryKey: ['market', 'dashboard'] });
     }, [qc]);
 
-    const summaryQuery = useQuery({
-        queryKey: manualPortfolioKeys.summary(),
-        queryFn: getManualSummary,
+    const invalidateManualPage = useCallback(() => {
+        void qc.invalidateQueries({ queryKey: manualPortfolioKeys.page() });
+        void qc.invalidateQueries({ queryKey: manualPortfolioKeys.positions() });
+        void qc.invalidateQueries({ queryKey: manualPortfolioKeys.summary() });
+        invalidateManualCharts();
+    }, [qc, invalidateManualCharts]);
+
+    const pageQuery = useQuery({
+        queryKey: manualPortfolioKeys.page(),
+        queryFn: async () => {
+            const page = await getManualPortfolioPage();
+            qc.setQueryData(manualPortfolioKeys.positions(), page.positions);
+            qc.setQueryData(manualPortfolioKeys.summary(), page.summary);
+            if (page.insights) {
+                qc.setQueryData(manualPortfolioKeys.insights(), page.insights);
+            }
+            if (page.timeseries?.range === '6M' && page.timeseries.points?.length) {
+                qc.setQueryData(manualPortfolioKeys.timeseries('6M'), page.timeseries.points);
+            }
+            return page;
+        },
+        staleTime: 90_000,
+        refetchOnWindowFocus: false,
+        retry: 1,
     });
 
-    const positionsQuery = useQuery({
+    const positionsFallbackQuery = useQuery({
         queryKey: manualPortfolioKeys.positions(),
         queryFn: getManualPositions,
+        staleTime: 90_000,
+        refetchOnWindowFocus: false,
+        enabled: pageQuery.data === undefined && !pageQuery.isError,
     });
+
+    const summaryFallbackQuery = useQuery({
+        queryKey: manualPortfolioKeys.summary(),
+        queryFn: getManualSummary,
+        staleTime: 90_000,
+        refetchOnWindowFocus: false,
+        enabled: pageQuery.data === undefined && !pageQuery.isError,
+    });
+
+    const coreDataReady =
+        pageQuery.data !== undefined ||
+        (summaryFallbackQuery.data !== undefined && positionsFallbackQuery.data !== undefined);
+    const bundled6MTimeseries =
+        pageQuery.data?.timeseries?.range === '6M' ? pageQuery.data.timeseries.points : undefined;
+    const bundledInsights = pageQuery.data?.insights ?? undefined;
 
     const insightsQuery = useQuery({
         queryKey: manualPortfolioKeys.insights(),
         queryFn: getManualPortfolioInsights,
-        enabled: (positionsQuery.data?.length ?? 0) > 0,
-        staleTime: 60_000,
+        enabled: coreDataReady && (pageQuery.data?.positions?.length ?? 0) > 0 && bundledInsights == null,
+        initialData: bundledInsights,
+        staleTime: 120_000,
+        refetchOnWindowFocus: false,
     });
 
     const evaluateInsightsMutation = useMutation({
@@ -721,8 +763,8 @@ export function Portfolio() {
         return () => window.clearTimeout(timer);
     }, [evaluationSuccessCount]);
 
-    const summary = summaryQuery.data;
-    const positions = positionsQuery.data ?? [];
+    const summary = pageQuery.data?.summary ?? summaryFallbackQuery.data;
+    const positions = pageQuery.data?.positions ?? positionsFallbackQuery.data ?? [];
     const insights = insightsQuery.data;
     const insightSummary = insights?.summary;
 
@@ -758,6 +800,10 @@ export function Portfolio() {
             const end = new Date();
             return getManualTimeseries(timeseriesFromYmd, formatLocalYmd(end));
         },
+        enabled: coreDataReady && !(snapRange === '6M' && bundled6MTimeseries != null),
+        initialData: snapRange === '6M' ? bundled6MTimeseries : undefined,
+        staleTime: 60_000,
+        refetchOnWindowFocus: false,
     });
 
     const segmentTimeseriesQueries = useQueries({
@@ -912,8 +958,7 @@ export function Portfolio() {
     }, [chartSeriesMode]);
 
     const refetchAll = useCallback(() => {
-        void summaryQuery.refetch();
-        void positionsQuery.refetch();
+        void pageQuery.refetch();
         void timeseriesQuery.refetch();
         void realReturnTsQuery.refetch();
         void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-segment'] });
@@ -925,7 +970,7 @@ export function Portfolio() {
         void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-pnl-segment'] });
         void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-overlay'] });
         void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-overlay'] });
-    }, [summaryQuery, positionsQuery, timeseriesQuery, qc]);
+    }, [pageQuery, timeseriesQuery, qc]);
 
     useRefetchOnFocus(refetchAll);
     usePolling(refetchAll, 60_000);
@@ -1215,7 +1260,7 @@ export function Portfolio() {
                   ? realReturnTsQuery.isLoading
                   : chartUsesTimeseries
                     ? timeseriesQuery.isLoading
-                    : positionsQuery.isLoading;
+                    : pageQuery.isLoading;
     const chartError =
         chartSeriesMode === 'soldHoldHypothetical' && soldHoldTsQuery.isError
             ? soldHoldTsQuery.error
@@ -1499,7 +1544,7 @@ export function Portfolio() {
         if (!window.confirm(t('portfolio.confirmDelete', 'Bu manuel pozisyonu silmek istediğinize emin misiniz?'))) return;
         try {
             await financeClient.delete(`/api/portfolio/manual/${id}`);
-            await invalidateManualPage();
+            invalidateManualPage();
         } catch (err: unknown) {
             alert(readFinanceApiError(err).message || t('portfolio.deleteFailed', 'Pozisyon silinemedi'));
         }
@@ -1510,17 +1555,44 @@ export function Portfolio() {
         color: tokens.text,
     };
 
-    const loading = summaryQuery.isLoading && positionsQuery.isLoading;
+    const blockingLoading =
+        !pageQuery.isError &&
+        pageQuery.data === undefined &&
+        positionsFallbackQuery.data === undefined &&
+        (pageQuery.isPending || positionsFallbackQuery.isPending);
+    const summaryLoading = summary === undefined && (pageQuery.isPending || summaryFallbackQuery.isPending);
     const pageError =
-        summaryQuery.error || positionsQuery.isError
-            ? readFinanceApiError(summaryQuery.error ?? positionsQuery.error).message
-            : null;
+        pageQuery.isError && positionsFallbackQuery.isError
+            ? readFinanceApiError(pageQuery.error ?? positionsFallbackQuery.error).message
+            : pageQuery.isError && !positionsFallbackQuery.data
+              ? readFinanceApiError(pageQuery.error).message
+              : null;
 
-    if (loading) {
+    if (blockingLoading) {
         return (
-            <div className="portfolio-page" style={pageStyle}>
-                <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{t('portfolio.analysisTitle', 'Spot Portföyüm')}</h1>
-                <p style={{ color: tokens.textMuted }}>{t('common.loading', 'Yükleniyor...')}</p>
+            <div
+                className="portfolio-page portfolio-page--loading"
+                style={{
+                    ...pageStyle,
+                    '--skeleton-base': theme === 'dark' ? 'rgba(71, 85, 105, 0.28)' : 'rgba(148, 163, 184, 0.16)',
+                    '--skeleton-highlight': theme === 'dark' ? 'rgba(100, 116, 139, 0.48)' : 'rgba(148, 163, 184, 0.32)',
+                } as CSSProperties}
+            >
+                <header className="pf-dash-header">
+                    <div className="pf-dash-header-text">
+                        <h1 className="pf-dash-title">{t('portfolio.analysisTitle', 'Spot Portföyüm')}</h1>
+                        <div className="portfolio-skeleton-line portfolio-skeleton-line--sub" />
+                    </div>
+                </header>
+                <div className="portfolio-skeleton-kpis">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="portfolio-skeleton-kpi">
+                            <div className="portfolio-skeleton-line portfolio-skeleton-line--label" />
+                            <div className="portfolio-skeleton-line portfolio-skeleton-line--value" />
+                        </div>
+                    ))}
+                </div>
+                <div className="portfolio-skeleton-chart" aria-hidden />
             </div>
         );
     }
@@ -1709,7 +1781,11 @@ export function Portfolio() {
                 </div>
             ) : null}
 
-            <div className="pf-kpi-grid portfolio-fade-in portfolio-fade-in--delay-1">
+            <div
+                className="pf-kpi-grid portfolio-fade-in portfolio-fade-in--delay-1"
+                aria-busy={summaryLoading}
+                style={summaryLoading ? { opacity: 0.55 } : undefined}
+            >
                 <button
                     type="button"
                     className={`pf-stat-card pf-stat-card--kpi-click ${chartSeriesMode === 'cost' ? 'pf-stat-card--kpi-active' : ''}`}
@@ -1924,7 +2000,7 @@ export function Portfolio() {
                                       ? realReturnTsQuery.isFetching
                                       : chartUsesTimeseries
                                         ? timeseriesQuery.isFetching
-                                        : positionsQuery.isFetching) ? (
+                                        : pageQuery.isFetching) ? (
                                 <span className="pf-chart-fetching" style={{ color: tokens.textMuted }}>
                                     {t('portfolio.chartRefreshing', 'Güncelleniyor…')}
                                 </span>
@@ -2562,13 +2638,13 @@ export function Portfolio() {
                             'Açık pozisyonların gerçekleşmemiş K/Z değeri; aynı semboldeki lotlar toplanır. Kar edenler ve zarar edenler TRY tutarına göre sıralanır.',
                         )}
                     </p>
-                    {positionsQuery.isLoading ? (
+                    {pageQuery.isLoading ? (
                         <p className="pf-empty-state" style={{ color: tokens.textMuted }}>
                             {t('common.loading', 'Yükleniyor…')}
                         </p>
-                    ) : positionsQuery.isError ? (
+                    ) : pageQuery.isError ? (
                         <p className="pf-empty-state" style={{ color: tokens.error }}>
-                            {readFinanceApiError(positionsQuery.error).message}
+                            {readFinanceApiError(pageQuery.error).message}
                         </p>
                     ) : pnlRankRows.pos.length === 0 && pnlRankRows.neg.length === 0 ? (
                         <div className="pf-empty-state pf-empty-state--boxed" style={{ borderColor: tokens.border, color: tokens.textMuted }}>
@@ -2953,7 +3029,7 @@ export function Portfolio() {
                     error: tokens.error,
                 }}
                 locale={locale}
-                onPortfolioMutated={invalidateManualPage}
+                onPortfolioMutated={invalidateManualCharts}
             />
             {priceAlertTarget ? (
                 <PriceAlertModal

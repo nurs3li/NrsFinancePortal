@@ -1,5 +1,8 @@
 package com.nurseli.nrsfinanceportal.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.math.BigDecimal;
 
 /**
@@ -23,22 +26,23 @@ public class ManualPortfolioSummaryView {
     private final String biggestMissedOpportunitySymbol;
     private final BigDecimal biggestMissedProfit;
 
+    @JsonCreator
     public ManualPortfolioSummaryView(
-            int totalPositions,
-            int openPositions,
-            int soldPositions,
-            BigDecimal totalInvested,
-            BigDecimal currentOpenValue,
-            BigDecimal realizedProfit,
-            BigDecimal unrealizedProfit,
-            BigDecimal holdValueTodayForSold,
-            BigDecimal missedProfit,
-            BigDecimal totalNominalProfit,
-            BigDecimal totalNominalReturnPct,
-            String bestPositionSymbol,
-            BigDecimal bestPositionReturnPct,
-            String biggestMissedOpportunitySymbol,
-            BigDecimal biggestMissedProfit
+            @JsonProperty("totalPositions") int totalPositions,
+            @JsonProperty("openPositions") int openPositions,
+            @JsonProperty("soldPositions") int soldPositions,
+            @JsonProperty("totalInvested") BigDecimal totalInvested,
+            @JsonProperty("currentOpenValue") BigDecimal currentOpenValue,
+            @JsonProperty("realizedProfit") BigDecimal realizedProfit,
+            @JsonProperty("unrealizedProfit") BigDecimal unrealizedProfit,
+            @JsonProperty("holdValueTodayForSold") BigDecimal holdValueTodayForSold,
+            @JsonProperty("missedProfit") BigDecimal missedProfit,
+            @JsonProperty("totalNominalProfit") BigDecimal totalNominalProfit,
+            @JsonProperty("totalNominalReturnPct") BigDecimal totalNominalReturnPct,
+            @JsonProperty("bestPositionSymbol") String bestPositionSymbol,
+            @JsonProperty("bestPositionReturnPct") BigDecimal bestPositionReturnPct,
+            @JsonProperty("biggestMissedOpportunitySymbol") String biggestMissedOpportunitySymbol,
+            @JsonProperty("biggestMissedProfit") BigDecimal biggestMissedProfit
     ) {
         this.totalPositions = totalPositions;
         this.openPositions = openPositions;

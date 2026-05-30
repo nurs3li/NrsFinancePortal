@@ -2738,9 +2738,46 @@
     }
 }
 
-.terminal-hero--spot-compact .terminal-hero-selector--with-inline-quote {
-    flex: 1 1 min(520px, 66vw);
-    max-width: min(560px, 66vw);
+/* Spot kategoriler: etiketler sıkışınca fiyat üstüne binmesin; fiyat adın hemen ardından başlasın. */
+.terminal-hero--spot-compact .terminal-hero-selector-row {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+}
+
+.terminal-hero--spot-compact .terminal-hero-selector-row > .terminal-hero-selector--with-inline-quote {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    justify-content: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.terminal-hero--spot-compact .terminal-hero-selector--with-inline-quote > div:first-child {
+    flex: 0 0 auto !important;
+    min-width: 0;
+    max-width: none;
+}
+
+.terminal-hero--spot-compact .terminal-hero-selector__meta {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.terminal-hero--spot-compact .terminal-hero-selector__meta-label {
+    white-space: nowrap;
+}
+
+.terminal-hero--spot-compact .terminal-hero-selector--with-inline-quote .terminal-hero-selector__quote {
+    flex: 0 0 auto;
+    margin-left: 0;
+}
+
+.terminal-hero--spot-compact .terminal-hero-horizons {
+    flex: 0 1 auto;
+    margin-left: auto;
 }
 
 .terminal-hero--spot-compact .terminal-hero-hl-snippet {
@@ -2897,6 +2934,10 @@
 .terminal-hero-selector__meta-symbol {
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.terminal-hero-selector__meta-label {
+    white-space: nowrap;
 }
 
 .terminal-hero-selector__meta-title,
@@ -4413,6 +4454,298 @@
         min-height: 260px;
     }
 
+    /* Piyasa listesi — yatay kaydır + sabit enstrüman şeridi */
+    .terminal-left-column .terminal-market-list-body {
+        overflow: visible;
+    }
+
+    /*
+     * Dış çerçeve (yuvarlak köşeli dikey kenar) scroll-host’ta sabit kalır;
+     * yatay kaydırma yalnızca içteki table-wrap’te olur.
+     */
+    .terminal-left-column .terminal-market-list-scroll-host,
+    .terminal-market-list-expand-dialog .terminal-market-list-scroll-host {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        max-width: 100%;
+        border: 1px solid var(--terminal-border);
+        border-radius: 10px;
+        background-color: var(--terminal-card-bg);
+    }
+
+    .terminal-left-column .terminal-market-list-scroll-host .terminal-table-wrap,
+    .terminal-market-list-expand-dialog .terminal-market-list-scroll-host .terminal-table-wrap,
+    .terminal-left-panel__inner .terminal-market-list-scroll-host .terminal-table-wrap:has(.terminal-data-table--picker-horizons) {
+        flex: none;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        background: transparent;
+        overflow-x: auto !important;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        touch-action: pan-x pan-y;
+    }
+
+    .terminal-data-table--picker-horizons {
+        table-layout: auto;
+        width: max-content;
+        min-width: 720px;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .terminal-data-table--picker-horizons th:nth-child(n),
+    .terminal-data-table--picker-horizons td:nth-child(n) {
+        width: auto;
+        max-width: none;
+    }
+
+    /* Satır çizgisi = inset gölge; dikey çizgiler ayrı border kurallarıyla */
+    .terminal-data-table--picker-horizons thead th,
+    .terminal-data-table--picker-horizons tbody td {
+        border-top: none;
+        border-bottom: none;
+        border-left: none;
+        border-right: none;
+        box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--terminal-border) 88%, transparent);
+    }
+
+    .terminal-left-column .terminal-market-list-scroll-host .terminal-market-list-pagination {
+        flex-shrink: 0;
+        border-top: 1px solid var(--terminal-border);
+        margin-top: 0;
+    }
+
+    .terminal-data-table--picker-horizons .terminal-picker-pin {
+        position: sticky;
+        z-index: 12;
+        background-color: var(--terminal-card-bg) !important;
+        background-clip: padding-box;
+        isolation: isolate;
+        box-sizing: border-box;
+        box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--terminal-border) 88%, transparent);
+    }
+
+    .terminal-data-table--picker-horizons thead .terminal-picker-pin {
+        z-index: 24;
+    }
+
+    .terminal-data-table--picker-horizons .terminal-picker-star-head,
+    .terminal-data-table--picker-horizons .terminal-picker-star-cell {
+        left: 0;
+        width: 30px;
+        min-width: 30px;
+        max-width: 30px;
+        box-sizing: border-box;
+    }
+
+    .terminal-data-table--picker-horizons .terminal-picker-cmp-head,
+    .terminal-data-table--picker-horizons .terminal-picker-cmp-cell {
+        left: 30px;
+        width: 28px;
+        min-width: 28px;
+        max-width: 28px;
+        box-sizing: border-box;
+    }
+
+    .terminal-data-table--picker-horizons .terminal-instrument-head,
+    .terminal-data-table--picker-horizons .terminal-instrument-cell {
+        left: 58px;
+        width: 124px;
+        min-width: 124px;
+        max-width: 124px;
+        z-index: 14;
+        position: sticky;
+        box-sizing: border-box;
+        /* Sabit şeritte dikey çizgi yok — yazının üstüne binmesin */
+        box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--terminal-border) 88%, transparent);
+    }
+
+    .terminal-market-list-scroll-host.is-scrolled-x .terminal-data-table--picker-horizons .terminal-instrument-head,
+    .terminal-market-list-scroll-host.is-scrolled-x .terminal-data-table--picker-horizons .terminal-instrument-cell,
+    .terminal-table-wrap.is-scrolled-x .terminal-data-table--picker-horizons .terminal-instrument-head,
+    .terminal-table-wrap.is-scrolled-x .terminal-data-table--picker-horizons .terminal-instrument-cell {
+        box-shadow:
+            inset 0 -1px 0 color-mix(in srgb, var(--terminal-border) 88%, transparent),
+            6px 0 14px -8px rgba(2, 6, 23, 0.45);
+    }
+
+    .terminal-data-table--picker-horizons thead .terminal-instrument-head {
+        z-index: 26;
+    }
+
+    .terminal-data-table--picker-horizons .terminal-instrument-head::after,
+    .terminal-data-table--picker-horizons .terminal-instrument-cell::after {
+        display: none;
+    }
+
+    /*
+     * Dikey çizgiler kaydırılan hücrelerin border'ı — tabloyla birlikte hareket eder.
+     * Ayırıcıyı fiyat sütununda border-left ile verme; kaydırınca Hafta/Ay üstüne biner.
+     */
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) thead th:nth-child(4),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) tbody td:nth-child(4) {
+        border-left: none;
+        border-right: 1px solid color-mix(in srgb, var(--terminal-border) 62%, transparent);
+    }
+
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) thead th:nth-child(5),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) tbody td:nth-child(5),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) thead th:nth-child(6),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) tbody td:nth-child(6),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) thead th:nth-child(7),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) tbody td:nth-child(7),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) thead th:nth-child(8),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) tbody td:nth-child(8) {
+        border-right: 1px solid color-mix(in srgb, var(--terminal-border) 62%, transparent);
+        border-left: none;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas thead th:nth-child(4),
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas tbody td:nth-child(4),
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas thead th:nth-child(5),
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas tbody td:nth-child(5) {
+        border-right: 1px solid color-mix(in srgb, var(--terminal-border) 62%, transparent);
+        border-left: none;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas thead th:nth-child(6),
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas tbody td:nth-child(6) {
+        border-left: none;
+        border-right: 1px solid color-mix(in srgb, var(--terminal-border) 62%, transparent);
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas thead th:nth-child(n + 7):not(.terminal-picker-pin),
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas tbody td:nth-child(n + 7):not(.terminal-picker-pin) {
+        border-right: 1px solid color-mix(in srgb, var(--terminal-border) 62%, transparent);
+        border-left: none;
+    }
+
+    /* Kaydırılan sütunlar: sabit şeridin altında kalsın, üst üste binmesin */
+    .terminal-data-table--picker-horizons thead th:not(.terminal-picker-pin),
+    .terminal-data-table--picker-horizons tbody td:not(.terminal-picker-pin) {
+        z-index: 0;
+    }
+
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) th:nth-child(4),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) td:nth-child(4) {
+        width: 86px;
+        min-width: 86px;
+        max-width: 86px;
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) th.terminal-horizon-pct-head,
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) td.terminal-horizon-pct,
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) th:nth-child(5),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) td:nth-child(5),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) th:nth-child(6),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) td:nth-child(6),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) th:nth-child(7),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) td:nth-child(7),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) th:nth-child(8),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) td:nth-child(8) {
+        display: table-cell;
+        width: 54px;
+        min-width: 54px;
+        max-width: 54px;
+        /* Dikey çizgiler sayının üstüne gelmesin */
+        padding-left: 10px;
+        padding-right: 10px;
+        box-sizing: border-box;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) th:nth-child(9),
+    .terminal-data-table--picker-horizons:not(.terminal-data-table--tefas) td:nth-child(9) {
+        width: 92px;
+        min-width: 92px;
+        max-width: 92px;
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    .terminal-data-table--picker-horizons .terminal-sort-th {
+        font-size: 10px;
+        justify-content: center;
+        white-space: nowrap;
+    }
+
+    .terminal-data-table--picker-horizons th.terminal-horizon-pct-head,
+    .terminal-data-table--picker-horizons td.terminal-horizon-pct {
+        font-size: 10px;
+        text-align: center;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(4),
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(4),
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(5),
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(5) {
+        width: 64px;
+        min-width: 64px;
+        max-width: 64px;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(6),
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(6) {
+        width: 80px;
+        min-width: 80px;
+        max-width: 80px;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas th:nth-child(n + 7),
+    .terminal-data-table--picker-horizons.terminal-data-table--tefas td:nth-child(n + 7) {
+        width: 50px;
+        min-width: 50px;
+        max-width: 50px;
+        display: table-cell;
+    }
+
+    .terminal-data-table--picker-horizons .terminal-instrument-cell {
+        overflow: hidden;
+        vertical-align: middle;
+    }
+
+    .terminal-data-table--picker-horizons .terminal-instrument-cell .viop-contract-code,
+    .terminal-data-table--picker-horizons .terminal-instrument-cell .tefas-fund-code,
+    .terminal-data-table--picker-horizons .terminal-instrument-cell .tefas-fund-instrument__name,
+    .terminal-data-table--picker-horizons .terminal-instrument-cell .viop-contract-sub {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .terminal-data-table--picker-horizons .terminal-instrument-cell > div {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .terminal-data-table--picker-horizons tbody tr:hover .terminal-picker-pin,
+    .terminal-data-table--picker-horizons tbody tr:hover td:not(.terminal-picker-pin),
+    .terminal-data-table--picker-horizons tbody tr:hover th:not(.terminal-picker-pin) {
+        background-color: var(--terminal-hover-bg);
+    }
+
+    .terminal-data-table--picker-horizons tbody tr.active .terminal-picker-pin,
+    .terminal-data-table--picker-horizons tbody tr.active td:not(.terminal-picker-pin) {
+        background-color: var(--terminal-active-row-bg);
+    }
+
+    .terminal-data-table--picker-horizons tbody tr:hover,
+    .terminal-data-table--picker-horizons tbody tr.active {
+        background: transparent;
+    }
+
     /* Piyasa listesi — kompakt, tablo yatay scroll */
     .terminal-equity-submarket {
         display: grid;
@@ -4436,19 +4769,6 @@
     .terminal-search {
         min-height: 2.5rem;
         font-size: 0.875rem;
-    }
-
-    .terminal-data-table--picker-horizons {
-        min-width: 560px;
-    }
-
-    .terminal-data-table--picker-horizons th:nth-child(6),
-    .terminal-data-table--picker-horizons td:nth-child(6),
-    .terminal-data-table--picker-horizons th:nth-child(7),
-    .terminal-data-table--picker-horizons td:nth-child(7),
-    .terminal-data-table--picker-horizons th:nth-child(8),
-    .terminal-data-table--picker-horizons td:nth-child(8) {
-        display: none;
     }
 }
 

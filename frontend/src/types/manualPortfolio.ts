@@ -201,3 +201,25 @@ export type PortfolioInsightNotificationEvaluateResult = {
     generatedCount: number;
     generatedTypes: string[];
 };
+
+export type ManualPortfolioPageTimeseries = {
+    range: string;
+    from: string;
+    to: string;
+    points: ManualPortfolioTimeseriesPoint[];
+};
+
+export type ManualPortfolioPageMeta = {
+    warmedAt?: string | null;
+    pricingAt?: string | null;
+    gapFillMs?: number;
+    warmStatus?: string;
+};
+
+export type ManualPortfolioPage = {
+    positions: ManualPortfolioView[];
+    summary: ManualSummary;
+    insights: ManualPortfolioInsights | null;
+    timeseries: ManualPortfolioPageTimeseries;
+    meta: ManualPortfolioPageMeta;
+};

@@ -11,7 +11,7 @@ import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClien
 import com.nurseli.nrsfinanceportal.infrastructure.kafka.event.NotificationRequestedEvent;
 import com.nurseli.nrsfinanceportal.application.CurrentUserResolver;
 import com.nurseli.nrsfinanceportal.application.ManualPortfolioService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,9 +24,7 @@ import java.util.Map;
 /**
  * finance-service manuel portfolio insight servisi — reel getiri, konsantrasyon, sağlık skoru ve bildirim değerlendirmesi üretir.
  */
-@RequiredArgsConstructor
 @Service
-
 public class ManualPortfolioInsightsService {
 
     private final ManualPortfolioService manualPortfolioService;
@@ -39,6 +37,38 @@ public class ManualPortfolioInsightsService {
     private final PortfolioHealthScoreService healthScoreService;
     private final PortfolioInsightNotificationEvaluator notificationEvaluator;
     private final PortfolioInsightNotificationPublisher notificationPublisher;
+
+    public ManualPortfolioInsightsService(
+            @Lazy ManualPortfolioService manualPortfolioService,
+            CurrentUserResolver currentUserResolver,
+            MarketDataClient marketDataClient,
+            ManualPortfolioNominalAnalysisCalculator nominalAnalysisCalculator,
+            ManualPortfolioRealReturnCalculator realReturnCalculator,
+            ManualPortfolioCpiSupport cpiSupport,
+            PortfolioConcentrationRiskService concentrationRiskService,
+            PortfolioHealthScoreService healthScoreService,
+            PortfolioInsightNotificationEvaluator notificationEvaluator,
+            PortfolioInsightNotificationPublisher notificationPublisher
+    ) {
+        this.manualPortfolioService = manualPortfolioService;
+        this.currentUserResolver = currentUserResolver;
+        this.marketDataClient = marketDataClient;
+        this.nominalAnalysisCalculator = nominalAnalysisCalculator;
+        this.realReturnCalculator = realReturnCalculator;
+        this.cpiSupport = cpiSupport;
+        this.concentrationRiskService = concentrationRiskService;
+        this.healthScoreService = healthScoreService;
+        this.notificationEvaluator = notificationEvaluator;
+        this.notificationPublisher = notificationPublisher;
+    }
+
+    /**
+     * {@code buildInsightsForPositions} — Materialized read warm-up için insight hesaplar.
+     */
+    @Transactional(readOnly = true)
+    public ManualPortfolioInsightsResponse buildInsightsForPositions(List<ManualPortfolioPosition> positions) {
+        return buildInsights(positions);
+    }
 
     /**
      * {@code insightsForCurrentUser} — Kullanıcının manuel portfolio insight özetini, skorunu ve mesajlarını hesaplar.
@@ -72,6 +102,9 @@ public class ManualPortfolioInsightsService {
     }
 
     private ManualPortfolioInsightsResponse buildInsights(List<ManualPortfolioPosition> positions) {
+        if (positions == null || positions.isEmpty()) {
+            return emptyInsights();
+        }
         CpiIndexLookup cpiLookup = cpiSupport.loadForPositions(positions);
         LatestPricingSnapshot pricing = marketDataClient.loadLatestPricing();
 
@@ -101,6 +134,36 @@ public class ManualPortfolioInsightsService {
         List<PortfolioInsightItemDto> insightItems = buildInsightItems(summary, concentration, health);
 
         return new ManualPortfolioInsightsResponse(summary, health, concentration, insightItems);
+    }
+
+    private static ManualPortfolioInsightsResponse emptyInsights() {
+        PortfolioInsightsSummaryDto summary = new PortfolioInsightsSummaryDto(
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                null,
+                null,
+                false,
+                "Manuel pozisyon yok."
+        );
+        PortfolioHealthScoreDto health = new PortfolioHealthScoreDto(
+                0,
+                "NEUTRAL",
+                "Değerlendirilecek pozisyon yok.",
+                List.of()
+        );
+        PortfolioConcentrationRiskDto concentration = new PortfolioConcentrationRiskDto(
+                null,
+                null,
+                null,
+                "LOW",
+                "Konsantrasyon riski hesaplanmadı."
+        );
+        return new ManualPortfolioInsightsResponse(summary, health, concentration, List.of());
     }
 
     private Map<AssetType, BigDecimal> openValueByAssetType(

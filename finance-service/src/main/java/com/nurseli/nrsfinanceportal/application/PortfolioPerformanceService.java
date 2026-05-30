@@ -40,7 +40,15 @@ public class PortfolioPerformanceService {
      */
     @Transactional(readOnly = true)
     public PortfolioPerformanceDto performanceForUser(User user) {
-        return computePerformance(unifiedPortfolioService.unifiedForUser(user));
+        return performanceForUser(user, marketDataClient.loadLatestPricing());
+    }
+
+    /**
+     * {@code performanceForUser} — Önceden yüklenmiş fiyat snapshot'ı ile performans hesaplar (dashboard özeti için tek market-data çağrısı).
+     */
+    @Transactional(readOnly = true)
+    public PortfolioPerformanceDto performanceForUser(User user, LatestPricingSnapshot pricing) {
+        return computePerformance(unifiedPortfolioService.unifiedForUser(user), pricing);
     }
 
     /**
@@ -71,7 +79,10 @@ public class PortfolioPerformanceService {
     }
 
     private PortfolioPerformanceDto computePerformance(List<UnifiedPortfolioItemView> portfolio) {
-        LatestPricingSnapshot pricing = marketDataClient.loadLatestPricing();
+        return computePerformance(portfolio, marketDataClient.loadLatestPricing());
+    }
+
+    private PortfolioPerformanceDto computePerformance(List<UnifiedPortfolioItemView> portfolio, LatestPricingSnapshot pricing) {
         List<PerformanceItemDto> items = new ArrayList<>();
 
         BigDecimal totalCost = BigDecimal.ZERO;

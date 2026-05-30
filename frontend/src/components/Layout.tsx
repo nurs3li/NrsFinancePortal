@@ -422,7 +422,8 @@ export function Layout() {
             {mobileMenuPanel}
 
             <main className="app-main">
-                <Outlet />
+                {/* pathname key: transition/suspense sirasinda eski route'un DOM'da kalmasini engeller */}
+                <Outlet key={location.pathname} />
             </main>
         </div>
     );

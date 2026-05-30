@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Moon, Sun } from 'lucide-react';
+import { Moon, Settings, Sun } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { readApiError } from '../api/envelope';
@@ -45,13 +45,73 @@ function parseOAuthErrorsFromLocation(): string | null {
     return mapLoginOAuthError(hp.get('error'), hp.get('error_description'));
 }
 
+type LandingPreferenceControlsProps = {
+    className?: string;
+    compact?: boolean;
+};
+
+function LandingPreferenceControls({ className = '', compact = false }: LandingPreferenceControlsProps) {
+    const { theme, setTheme } = useTheme();
+    const { lang, setLang, t } = useLanguage();
+    const iconSize = compact ? 14 : 16;
+
+    return (
+        <div
+            className={`landing-pref-panel${compact ? ' landing-pref-panel--compact' : ''}${className ? ` ${className}` : ''}`}
+            aria-label={t('landing.preferencePanel', 'Tema ve dil ayarları')}
+        >
+            <div className="landing-segment-control landing-segment-control--icons" role="group" aria-label={t('landing.themeSwitchLabel', 'Tema seçimi')}>
+                <button
+                    type="button"
+                    className={`landing-segment-btn landing-segment-btn--icon ${theme === 'light' ? 'is-active' : ''}`}
+                    onClick={() => setTheme('light')}
+                    aria-pressed={theme === 'light'}
+                    title={t('theme.light', 'Açık Tema')}
+                >
+                    <Sun size={iconSize} />
+                </button>
+                <button
+                    type="button"
+                    className={`landing-segment-btn landing-segment-btn--icon ${theme === 'dark' ? 'is-active' : ''}`}
+                    onClick={() => setTheme('dark')}
+                    aria-pressed={theme === 'dark'}
+                    title={t('theme.dark', 'Koyu Tema')}
+                >
+                    <Moon size={iconSize} />
+                </button>
+            </div>
+            <div className="landing-segment-control" role="group" aria-label={t('landing.langSwitchLabel', 'Dil seçimi')}>
+                <button
+                    type="button"
+                    className={`landing-segment-btn ${lang === 'tr' ? 'is-active' : ''}`}
+                    onClick={() => setLang('tr')}
+                    aria-pressed={lang === 'tr'}
+                    title={t('lang.turkish', 'Türkçe')}
+                >
+                    {compact ? 'TR' : t('lang.turkish', 'Türkçe')}
+                </button>
+                <button
+                    type="button"
+                    className={`landing-segment-btn ${lang === 'en' ? 'is-active' : ''}`}
+                    onClick={() => setLang('en')}
+                    aria-pressed={lang === 'en'}
+                    title={t('lang.english', 'English')}
+                >
+                    {compact ? 'ENG' : t('lang.english', 'English')}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 export function LandingPage() {
     const { loginWithCredentials, ready, isAuthenticated, role } = useAuth();
     const navigate = useNavigate();
-    const { lang, setLang, t } = useLanguage();
-    const { theme, setTheme } = useTheme();
+    const { t } = useLanguage();
     const [searchParams, setSearchParams] = useSearchParams();
     const [panelOpen, setPanelOpen] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const settingsRef = useRef<HTMLDivElement>(null);
     const [panelTab, setPanelTab] = useState<'register' | 'signin'>('signin');
     const [loginError, setLoginError] = useState<string | null>(null);
     const [loginBusy, setLoginBusy] = useState(false);
@@ -102,6 +162,24 @@ export function LandingPage() {
             }
         }
     }, [suspendedBanner, setSearchParams, t]);
+
+    useEffect(() => {
+        if (!settingsOpen) return;
+        const onPointerDown = (e: PointerEvent) => {
+            if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+                setSettingsOpen(false);
+            }
+        };
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setSettingsOpen(false);
+        };
+        document.addEventListener('pointerdown', onPointerDown);
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('pointerdown', onPointerDown);
+            document.removeEventListener('keydown', onKeyDown);
+        };
+    }, [settingsOpen]);
 
     useEffect(() => {
         const move = (e: MouseEvent) => {
@@ -240,6 +318,7 @@ export function LandingPage() {
     }
 
     return (
+        <>
         <div className="landing-root">
             <div className="landing-particles" aria-hidden>
                 {particles.map((i) => (
@@ -254,64 +333,55 @@ export function LandingPage() {
                     />
                 ))}
             </div>
-            <div
-                className="landing-cursor-glow"
-                style={{ left: cursor.x, top: cursor.y, opacity: panelOpen ? 0.15 : 0.45 }}
-            />
-            {trail.slice(-6).map((pt) => (
-                <span key={pt.id} className="landing-cursor-trail-dot" style={{ left: pt.x, top: pt.y }} />
-            ))}
+            {!panelOpen ? (
+                <>
+                    <div
+                        className="landing-cursor-glow"
+                        style={{ left: cursor.x, top: cursor.y, opacity: 0.45 }}
+                    />
+                    {trail.slice(-6).map((pt) => (
+                        <span key={pt.id} className="landing-cursor-trail-dot" style={{ left: pt.x, top: pt.y }} />
+                    ))}
+                </>
+            ) : null}
 
             <div className="landing-inner">
                 <header className="landing-header">
                     <a href="/" className="landing-brand" onClick={(e) => e.preventDefault()}>
                         <NrsBrandLockup />
                     </a>
-                    <nav className="landing-nav" aria-label="Main">
-                        <a href="#features">{t('landing.navFeatures', 'Özellikler')}</a>
-                        <a href="#architecture">{t('landing.navArchitecture', 'Altyapı')}</a>
-                    </nav>
-                    <div className="landing-header-actions">
-                        <div className="landing-pref-panel" aria-label={t('landing.preferencePanel', 'Tema ve dil ayarları')}>
-                            <div className="landing-segment-control landing-segment-control--icons" role="group" aria-label={t('landing.themeSwitchLabel', 'Tema seçimi')}>
-                                <button
-                                    type="button"
-                                    className={`landing-segment-btn landing-segment-btn--icon ${theme === 'light' ? 'is-active' : ''}`}
-                                    onClick={() => setTheme('light')}
-                                    aria-pressed={theme === 'light'}
-                                    title={t('theme.light', 'Açık Tema')}
+                    <div className="landing-header-top-end">
+                        <nav className="landing-nav" aria-label="Main">
+                            <a href="#features">{t('landing.navFeatures', 'Özellikler')}</a>
+                            <a href="#architecture">{t('landing.navArchitecture', 'Altyapı')}</a>
+                        </nav>
+                        <div className="landing-settings" ref={settingsRef}>
+                            <button
+                                type="button"
+                                className="landing-settings-trigger"
+                                onClick={() => setSettingsOpen((open) => !open)}
+                                aria-expanded={settingsOpen}
+                                aria-haspopup="dialog"
+                                aria-controls="landing-settings-menu"
+                                title={t('landing.settings', 'Ayarlar')}
+                            >
+                                <Settings size={18} aria-hidden />
+                                <span className="sr-only">{t('landing.settings', 'Ayarlar')}</span>
+                            </button>
+                            {settingsOpen ? (
+                                <div
+                                    id="landing-settings-menu"
+                                    className="landing-settings-menu"
+                                    role="dialog"
+                                    aria-label={t('landing.preferencePanel', 'Tema ve dil ayarları')}
                                 >
-                                    <Sun size={16} />
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`landing-segment-btn landing-segment-btn--icon ${theme === 'dark' ? 'is-active' : ''}`}
-                                    onClick={() => setTheme('dark')}
-                                    aria-pressed={theme === 'dark'}
-                                    title={t('theme.dark', 'Koyu Tema')}
-                                >
-                                    <Moon size={16} />
-                                </button>
-                            </div>
-                            <div className="landing-segment-control" role="group" aria-label={t('landing.langSwitchLabel', 'Dil seçimi')}>
-                                <button
-                                    type="button"
-                                    className={`landing-segment-btn ${lang === 'tr' ? 'is-active' : ''}`}
-                                    onClick={() => setLang('tr')}
-                                    aria-pressed={lang === 'tr'}
-                                >
-                                    {t('lang.turkish', 'Türkçe')}
-                                </button>
-                                <button
-                                    type="button"
-                                    className={`landing-segment-btn ${lang === 'en' ? 'is-active' : ''}`}
-                                    onClick={() => setLang('en')}
-                                    aria-pressed={lang === 'en'}
-                                >
-                                    {t('lang.english', 'English')}
-                                </button>
-                            </div>
+                                    <LandingPreferenceControls compact />
+                                </div>
+                            ) : null}
                         </div>
+                    </div>
+                    <div className="landing-header-cta">
+                        <LandingPreferenceControls className="landing-pref-panel--desktop" />
                         <button type="button" className="landing-btn-ghost" onClick={() => openPanel('signin')}>
                             {t('landing.btnLogin', 'Giriş Yap')}
                         </button>
@@ -350,6 +420,7 @@ export function LandingPage() {
                     <span>© {new Date().getFullYear()} NRS Finans Portalı</span>
                 </footer>
             </div>
+        </div>
 
             <div
                 className={`landing-overlay ${panelOpen ? 'open' : ''}`}
@@ -425,8 +496,7 @@ export function LandingPage() {
                                 />
                                 <button
                                     type="button"
-                                    className="landing-btn-ghost"
-                                    style={{ alignSelf: 'flex-start', fontSize: '0.8rem' }}
+                                    className="landing-btn-ghost landing-form-back-btn"
                                     onClick={() => {
                                         setLoginOtpStep(false);
                                         setLoginOtp('');
@@ -516,6 +586,6 @@ export function LandingPage() {
                     </div>
                 )}
             </aside>
-        </div>
+        </>
     );
 }

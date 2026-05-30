@@ -94,3 +94,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v32-manual-position-close-metadata.yaml
+
+  - include:
+      file: db/changelog/v33-manual-portfolio-materialized-read.yaml

@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useRef } from 'react';
 import { createChart } from 'lightweight-charts';
-import type { LogicalRange, Time } from 'lightweight-charts';
+import type { LogicalRange } from 'lightweight-charts';
 import { apiDatetimeToChartTime } from '../../lib/chartApiTime';
+import { chartTimeKey, normalizeChartLineSeries } from '../../lib/chartSeriesData';
 import { createChartResizeScheduler } from './chartResize';
 import { computeTerminalTimeScaleLayout, parseTerminalChartRange } from './terminalChartScale';
 
@@ -35,11 +36,6 @@ type Props = {
     };
     onCrosshairDate?: (dateYmd: string) => void;
 };
-
-function chartTimeKey(value: Time): string {
-    if (typeof value === 'number') return new Date(value * 1000).toISOString();
-    return String(value);
-}
 
 function SpotTerminalChartImpl({
     title,
@@ -254,11 +250,11 @@ function SpotTerminalChartImpl({
         const ma21Series = ma21SeriesRef.current;
         if (ma7Series) {
             ma7Series.applyOptions({ visible: showMa });
-            ma7Series.setData(showMa ? ma7.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+            ma7Series.setData(showMa ? normalizeChartLineSeries(ma7, toChartTime) : []);
         }
         if (ma21Series) {
             ma21Series.applyOptions({ visible: showMa });
-            ma21Series.setData(showMa ? ma21.map((p) => ({ time: toChartTime(p.time), value: p.value })) : []);
+            ma21Series.setData(showMa ? normalizeChartLineSeries(ma21, toChartTime) : []);
         }
 
         const widthPx = Math.max(320, chartRef.current?.clientWidth ?? 320);

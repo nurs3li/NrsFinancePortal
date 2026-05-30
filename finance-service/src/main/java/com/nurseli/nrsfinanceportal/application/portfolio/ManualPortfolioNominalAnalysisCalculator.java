@@ -25,12 +25,25 @@ public class ManualPortfolioNominalAnalysisCalculator {
     private final MarketDataClient marketDataClient;
 
     /**
+     * {@code loadLatestPricingSnapshot} — Özet/liste döngülerinde tek seferlik güncel fiyat haritası yükler.
+     */
+    public LatestPricingSnapshot loadLatestPricingSnapshot() {
+        return marketDataClient.loadLatestPricing();
+    }
+
+    /**
      * {@code compute} — Güncel piyasa fiyatıyla pozisyon nominal analiz DTO'sunu üretir.
      */
     public ManualPortfolioNominalAnalysis compute(ManualPortfolioPosition p) {
-        LatestPricingSnapshot snap = marketDataClient.loadLatestPricing();
+        return compute(p, marketDataClient.loadLatestPricing());
+    }
+
+    /**
+     * {@code compute} — Önceden yüklenmiş fiyat snapshot'ı ile nominal analiz (özet döngüsü için tek market-data çağrısı).
+     */
+    public ManualPortfolioNominalAnalysis compute(ManualPortfolioPosition p, LatestPricingSnapshot snap) {
         BigDecimal currentPrice = marketDataClient.getPriceTry(p.getType(), p.getSymbol(), snap);
-    if (currentPrice == null || currentPrice.signum() <= 0) {
+        if (currentPrice == null || currentPrice.signum() <= 0) {
             currentPrice = null;
         }
         return computeWithCurrentPrice(p, currentPrice);

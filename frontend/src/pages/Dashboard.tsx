@@ -20,7 +20,7 @@ import { usePolling } from '../hooks/usePolling';
 import { useDocumentVisibility } from '../hooks/useDocumentVisibility';
 import { manualPortfolioKeys } from '../queries/manualPortfolioKeys';
 import { getManualPortfolioInsights } from '../services/manualPortfolioApi';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
@@ -171,6 +171,19 @@ function marketTypeToSparkAssetClass(mt: MarketType): string {
     }
 }
 
+function latestMapsFromMarketDashboard(
+    dashboard: MarketDashboard | undefined,
+): Record<MarketType, Record<string, LatestPrice>> {
+    const latest = dashboard?.latest;
+    return {
+        FX: latest?.doviz ?? {},
+        METALS: latest?.metals ?? {},
+        CRYPTO: latest?.crypto ?? {},
+        FUNDS: latest?.funds ?? {},
+        EQUITY: latest?.stocks ?? {},
+    };
+}
+
 function sparklineClosesForDashboard(dashboard: MarketDashboard | undefined, symbol: string, assetClass: string): number[] {
     if (!dashboard) return [];
     const key = normalizeSymbolKey(symbol);
@@ -188,6 +201,14 @@ function buildFallbackTrendSparkline(price: number, changePercent: number, point
         const t = i / Math.max(points - 1, 1);
         return start + (safePrice - start) * t;
     });
+}
+
+function changePctFromSparkline(closes: number[]): number {
+    if (closes.length < 2) return 0;
+    const prev = closes[closes.length - 2];
+    const curr = closes[closes.length - 1];
+    if (!Number.isFinite(prev) || !Number.isFinite(curr) || prev === 0) return 0;
+    return ((curr - prev) / prev) * 100;
 }
 
 function normalizeTrendSparkline(values: number[], price: number, changePercent: number, points = 14): number[] {
@@ -259,6 +280,20 @@ type StarAsset = {
 };
 const STARRED_PAGE_SIZE = 7;
 const LATEST_NEWS_LIMIT = 7;
+const DASHBOARD_SUMMARY_KEY = ['dashboard', 'summary'] as const;
+const DASHBOARD_MARKET_KEY = ['dashboard', 'market'] as const;
+const DASHBOARD_STARRED_KEY = ['dashboard', 'starred'] as const;
+const DASHBOARD_SUMMARY_STORAGE = 'nrs.dashboard.summary.v1';
+
+function readStoredDashboardSummary(): SummaryResponse | undefined {
+    try {
+        const raw = sessionStorage.getItem(DASHBOARD_SUMMARY_STORAGE);
+        if (!raw) return undefined;
+        return JSON.parse(raw) as SummaryResponse;
+    } catch {
+        return undefined;
+    }
+}
 
 const DashboardKpiCard = memo(function DashboardKpiCard({
     label,
@@ -404,8 +439,9 @@ export function Dashboard() {
     const navigate = useNavigate();
     const { theme, tokens } = useTheme();
     const { t, lang } = useLanguage();
-    const [summary, setSummary] = useState<SummaryResponse | null>(null);
+    const qc = useQueryClient();
     const [starAssets, setStarAssets] = useState<StarAsset[]>([]);
+    const [starredResolved, setStarredResolved] = useState<StarredAssetsResponse['resolved']>([]);
     const [starredPage, setStarredPage] = useState(0);
     const [latestNews, setLatestNews] = useState<NewsItem[]>([]);
     const [newsLoading, setNewsLoading] = useState(false);
@@ -415,17 +451,73 @@ export function Dashboard() {
     const [newsDetailLoading, setNewsDetailLoading] = useState(false);
     const tabVisible = useDocumentVisibility();
 
+    const summaryQuery = useQuery({
+        queryKey: DASHBOARD_SUMMARY_KEY,
+        queryFn: async () => {
+            const res = await financeClient.get<SummaryResponse>('/api/dashboard/summary');
+            return unwrapAxiosData(res);
+        },
+        placeholderData: () => readStoredDashboardSummary(),
+        staleTime: 90_000,
+        gcTime: 10 * 60_000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
+    useEffect(() => {
+        if (summaryQuery.data) {
+            try {
+                sessionStorage.setItem(DASHBOARD_SUMMARY_STORAGE, JSON.stringify(summaryQuery.data));
+            } catch {
+                /* ignore quota */
+            }
+        }
+    }, [summaryQuery.data]);
+
+    const marketDashboardQuery = useQuery({
+        queryKey: DASHBOARD_MARKET_KEY,
+        queryFn: async () => {
+            const res = await financeClient.get<MarketDashboard>('/api/market/dashboard');
+            return unwrapPayload<MarketDashboard>(res.data);
+        },
+        enabled: starredResolved.length > 0,
+        staleTime: 5 * 60_000,
+        gcTime: 10 * 60_000,
+        refetchOnWindowFocus: false,
+    });
+
+    const starredListQuery = useQuery({
+        queryKey: DASHBOARD_STARRED_KEY,
+        queryFn: async () => {
+            const res = await financeClient.get<StarredAssetsResponse>('/api/me/starred-assets');
+            return unwrapPayload<StarredAssetsResponse>(res.data);
+        },
+        enabled: summaryQuery.isSuccess,
+        staleTime: 5 * 60_000,
+        gcTime: 10 * 60_000,
+        refetchOnWindowFocus: false,
+    });
+
+    const summary = summaryQuery.data ?? (summaryQuery.isError ? FALLBACK_SUMMARY : null);
+    const loading = summaryQuery.isPending && summaryQuery.data === undefined && !readStoredDashboardSummary();
+    const error =
+        summaryQuery.isError && summaryQuery.data === undefined
+            ? readFinanceBinaryErrorMessage(summaryQuery.error) ??
+              readApiError(summaryQuery.error).message ??
+              'Bilinmeyen hata'
+            : null;
+
+    const hasManualPositions = (summary?.portfolio?.categories?.length ?? 0) > 0;
+
     const insightsQuery = useQuery({
         queryKey: manualPortfolioKeys.insights(),
         queryFn: getManualPortfolioInsights,
-        staleTime: 60_000,
-        refetchInterval: tabVisible ? 180_000 : false,
+        enabled: summaryQuery.isSuccess && tabVisible && hasManualPositions,
+        staleTime: 120_000,
+        refetchInterval: summaryQuery.isSuccess && tabVisible && hasManualPositions ? 180_000 : false,
     });
 
     const insightSummary = insightsQuery.data?.summary;
-
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     const portfolioDistRef = useRef<HTMLDivElement>(null);
     /*
@@ -459,8 +551,6 @@ export function Dashboard() {
         return 0;
     };
 
-    const hasLoadedOnceRef = useRef(false);
-
     const unwrapAxiosData = <T,>(res: AxiosResponse<T>): T => {
         const body = res.data as unknown;
         if (body && typeof body === 'object' && 'data' in (body as object)) {
@@ -472,70 +562,23 @@ export function Dashboard() {
         return body as T;
     };
 
-    const fetchDashboard = useCallback(async (silent = false) => {
-        const showLoader = !silent || !hasLoadedOnceRef.current;
-        if (showLoader) setLoading(true);
-        if (!silent) setError(null);
-        try {
-            const summaryResult = await Promise.allSettled([
-                financeClient.get<SummaryResponse>('/api/dashboard/summary'),
-            ]);
-
-            if (summaryResult[0].status === 'fulfilled') {
-                setSummary(unwrapAxiosData(summaryResult[0].value));
-            } else {
-                if (!silent) {
-                    console.warn('Dashboard özet isteği başarısız', summaryResult[0].reason);
-                }
-                setSummary(FALLBACK_SUMMARY);
-            }
-
-            hasLoadedOnceRef.current = true;
-
-            if (showLoader) setLoading(false);
-
-            // İkinci aşama: her uç bağımsız — biri timeout/hata verse bile diğerlerini sıfırlama.
-            const settled = await Promise.allSettled([
-                marketClient.get<Record<string, LatestPrice>>('/api/market/doviz/latest'),
-                marketClient.get<Record<string, LatestPrice>>('/api/market/metals/latest'),
-                marketClient.get<Record<string, LatestPrice>>('/api/market/crypto/latest'),
-                marketClient.get<Record<string, LatestPrice>>('/api/market/funds/latest'),
-                marketClient.get<Record<string, LatestPrice>>('/api/market/equity/latest'),
-                financeClient.get<MarketDashboard>('/api/market/dashboard'),
-                financeClient.get<StarredAssetsResponse>('/api/me/starred-assets'),
-            ]);
-
-            const pickData = <T,>(i: number): T | undefined => {
-                const r = settled[i];
-                if (!r || r.status !== 'fulfilled') return undefined;
-                return unwrapPayload<T>((r.value as AxiosResponse<T>).data);
-            };
-
-            const fx = pickData<Record<string, LatestPrice>>(0) ?? {};
-            const metals = pickData<Record<string, LatestPrice>>(1) ?? {};
-            const crypto = pickData<Record<string, LatestPrice>>(2) ?? {};
-            const funds = pickData<Record<string, LatestPrice>>(3) ?? {};
-            const equity = pickData<Record<string, LatestPrice>>(4) ?? {};
-            const marketDashboard = pickData<MarketDashboard>(5);
-
-            const starred = pickData<StarredAssetsResponse>(6);
-
-            const mapByType: Record<MarketType, Record<string, LatestPrice>> = {
-                FX: fx,
-                METALS: metals,
-                CRYPTO: crypto,
-                FUNDS: funds,
-                EQUITY: equity,
-            };
-
-            const resolvedStars = starred?.resolved ?? [];
-            const starRows: StarAsset[] = resolvedStars.map((item) => {
+    const buildStarRowsForPage = useCallback(
+        (
+            resolved: StarredAssetsResponse['resolved'],
+            page: number,
+            marketDashboard: MarketDashboard | undefined,
+        ): StarAsset[] => {
+            const start = page * STARRED_PAGE_SIZE;
+            const slice = (resolved ?? []).slice(start, start + STARRED_PAGE_SIZE);
+            const mapByType = latestMapsFromMarketDashboard(marketDashboard);
+            return slice.map((item) => {
                 const marketType = item.marketType as MarketType;
                 const symbol = item.symbol;
                 const row = mapByType[marketType]?.[symbol];
                 const price = getPrice(row);
                 const ac = marketTypeToSparkAssetClass(marketType);
                 const sparkRaw = sparklineClosesForDashboard(marketDashboard, symbol, ac);
+                const change24h = Number(changePctFromSparkline(sparkRaw).toFixed(2));
                 return {
                     key: `${marketType}-${symbol}`,
                     label: formatAssetLabel(symbol, marketType),
@@ -543,57 +586,42 @@ export function Dashboard() {
                     marketType,
                     symbol,
                     price,
-                    change24h: 0,
-                    sparkline: normalizeTrendSparkline(sparkRaw, price, 0, 14),
+                    change24h,
+                    sparkline: normalizeTrendSparkline(sparkRaw, price, change24h, 14),
                 };
             });
-
-            const changeResults = await Promise.allSettled(
-                starRows.map((row) =>
-                    marketClient
-                        .get('/api/market/indicators', {
-                            params: { type: row.marketType, symbol: row.symbol, days: 7, ma: '7' },
-                        })
-                        .then((res) => {
-                            const close = res.data?.close ?? [];
-                            if (!Array.isArray(close) || close.length < 2) return 0;
-                            const prev = Number(close[close.length - 2]?.value ?? 0);
-                            const curr = Number(close[close.length - 1]?.value ?? 0);
-                            if (!prev) return 0;
-                            return ((curr - prev) / prev) * 100;
-                        })
-                )
-            );
-
-            setStarAssets(
-                starRows.map((row, idx) => {
-                    const pct =
-                        changeResults[idx].status === 'fulfilled'
-                            ? Number(changeResults[idx].value.toFixed(2))
-                            : 0;
-                    const ac = marketTypeToSparkAssetClass(row.marketType);
-                    const sparkRaw = sparklineClosesForDashboard(marketDashboard, row.symbol, ac);
-                    return {
-                        ...row,
-                        change24h: pct,
-                        sparkline: normalizeTrendSparkline(sparkRaw, row.price, pct, 14),
-                    };
-                })
-            );
-        } catch (err: unknown) {
-            const msg = readFinanceBinaryErrorMessage(err) ?? readApiError(err).message ?? 'Bilinmeyen hata';
-            if (!silent || !hasLoadedOnceRef.current) setError(msg);
-        } finally {
-            if (showLoader) setLoading(false);
-        }
-    }, []);
+        },
+        [getPrice],
+    );
 
     useEffect(() => {
-        fetchDashboard(false);
-    }, [fetchDashboard]);
+        if (!starredListQuery.data?.resolved) return;
+        setStarredResolved(starredListQuery.data.resolved);
+    }, [starredListQuery.data]);
 
-    useRefetchOnFocus(() => fetchDashboard(true));
-    usePolling(() => fetchDashboard(true), 180_000);
+    const starredPageCount = Math.max(1, Math.ceil(starredResolved.length / STARRED_PAGE_SIZE));
+    const starredPageSafe = Math.min(starredPage, starredPageCount - 1);
+
+    useEffect(() => {
+        setStarredPage((p) => Math.min(p, Math.max(0, starredPageCount - 1)));
+    }, [starredPageCount]);
+
+    useEffect(() => {
+        if (!starredResolved.length) {
+            setStarAssets([]);
+            return;
+        }
+        setStarAssets(buildStarRowsForPage(starredResolved, starredPageSafe, marketDashboardQuery.data));
+    }, [starredResolved, starredPageSafe, marketDashboardQuery.data, buildStarRowsForPage]);
+
+    const refreshDashboard = useCallback(() => {
+        void qc.invalidateQueries({ queryKey: DASHBOARD_SUMMARY_KEY });
+        void qc.invalidateQueries({ queryKey: DASHBOARD_STARRED_KEY });
+        void qc.invalidateQueries({ queryKey: DASHBOARD_MARKET_KEY });
+    }, [qc]);
+
+    useRefetchOnFocus(refreshDashboard);
+    usePolling(refreshDashboard, 180_000);
 
     const numberLocale = lang === 'en' ? 'en-US' : 'tr-TR';
     const formatMoney = useCallback(
@@ -651,16 +679,7 @@ export function Dashboard() {
     const displayFuturesPnl = useCountUp(futuresPnlTry);
     const displayPnlPct = useCountUp(Number(summary?.portfolio?.totalPnlPct ?? 0));
 
-    const starredPageCount = Math.max(1, Math.ceil(starAssets.length / STARRED_PAGE_SIZE));
-    const starredPageSafe = Math.min(starredPage, starredPageCount - 1);
-    const starredPageAssets = useMemo(() => {
-        const start = starredPageSafe * STARRED_PAGE_SIZE;
-        return starAssets.slice(start, start + STARRED_PAGE_SIZE);
-    }, [starAssets, starredPageSafe]);
-
-    useEffect(() => {
-        setStarredPage((p) => Math.min(p, Math.max(0, Math.ceil(starAssets.length / STARRED_PAGE_SIZE) - 1)));
-    }, [starAssets.length]);
+    const starredPageAssets = starAssets;
 
     const realReturnTry = useMemo(() => {
         if (insightSummary?.realReturnAvailable === true && Number.isFinite(Number(insightSummary.realReturn))) {
@@ -923,12 +942,12 @@ export function Dashboard() {
                             })
                         )}
                     </div>
-                    {starAssets.length > STARRED_PAGE_SIZE ? (
+                    {starredResolved.length > STARRED_PAGE_SIZE ? (
                         <div className="dashboard-starred-pagination" aria-live="polite">
                             <span className="dashboard-starred-pagination__count">
                                 {starredPageSafe * STARRED_PAGE_SIZE + 1}–
-                                {Math.min((starredPageSafe + 1) * STARRED_PAGE_SIZE, starAssets.length)} /{' '}
-                                {starAssets.length}
+                                {Math.min((starredPageSafe + 1) * STARRED_PAGE_SIZE, starredResolved.length)} /{' '}
+                                {starredResolved.length}
                             </span>
                             <div className="dashboard-starred-pagination__nav">
                                 <button

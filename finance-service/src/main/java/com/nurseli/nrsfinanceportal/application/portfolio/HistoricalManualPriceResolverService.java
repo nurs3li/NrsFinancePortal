@@ -109,6 +109,19 @@ public class HistoricalManualPriceResolverService {
      * {@code loadDailyCloseSeriesTry} — Belirtilen tarih aralığında günlük TRY kapanış fiyat serisini yükler.
      */
     public List<ManualChartPoint> loadDailyCloseSeriesTry(AssetType type, String symbol, LocalDate from, LocalDate to) {
+        return loadDailyCloseSeriesTry(type, symbol, from, to, marketDataClient.loadLatestPricing());
+    }
+
+    /**
+     * {@code loadDailyCloseSeriesTry} — Önceden yüklenmiş latest snapshot ile günlük TRY kapanış serisi (timeseries döngüsü).
+     */
+    public List<ManualChartPoint> loadDailyCloseSeriesTry(
+            AssetType type,
+            String symbol,
+            LocalDate from,
+            LocalDate to,
+            LatestPricingSnapshot snap
+    ) {
         if (type == null || symbol == null || symbol.isBlank() || from == null || to == null || to.isBefore(from)) {
             return List.of();
         }
@@ -117,9 +130,9 @@ public class HistoricalManualPriceResolverService {
     int maxLb = Math.max(1, resolveProperties.getMaxLookbackDays());
         long spanDays = ChronoUnit.DAYS.between(from, end) + 2;
         int allowed = AllowedHistoryDays.smallestCovering(spanDays + maxLb);
-        LatestPricingSnapshot snap = marketDataClient.loadLatestPricing();
+        LatestPricingSnapshot pricing = snap != null ? snap : marketDataClient.loadLatestPricing();
         List<MarketPriceHistoryDto> raw = loadHistory(type, symbol, from, end, maxLb, allowed);
-        FxContext fx = loadFxContext(type, symbol, allowed, snap);
+        FxContext fx = loadFxContext(type, symbol, allowed, pricing);
         NavigableMap<LocalDate, BigDecimal> byDay = aggregateLastPricePerDay(type, symbol, raw, fx);
         List<ManualChartPoint> out = new ArrayList<>();
         for (Map.Entry<LocalDate, BigDecimal> e : byDay.entrySet()) {
