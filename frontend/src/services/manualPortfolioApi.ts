@@ -6,6 +6,7 @@ import type {
     ManualPortfolioClosePayload,
     ManualPortfolioCreatePayload,
     ManualPortfolioInsights,
+    ManualPortfolioPage,
     ManualPortfolioTimeseriesPoint,
     ManualPortfolioView,
     ManualResolvedPrice,
@@ -18,6 +19,11 @@ export function unwrapFinanceSuccess<T>(res: AxiosResponse<unknown>): T {
 }
 
 export { readApiError as readFinanceApiError };
+
+export async function getManualPortfolioPage(): Promise<ManualPortfolioPage> {
+    const res = await financeClient.get('/api/portfolio/manual/page/me');
+    return unwrapFinanceSuccess<ManualPortfolioPage>(res);
+}
 
 export async function getManualPositions(): Promise<ManualPortfolioView[]> {
     const res = await financeClient.get('/api/portfolio/manual/me');

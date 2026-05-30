@@ -292,10 +292,44 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         return 'mia-pos';
     };
 
-    const invalidateManual = useCallback(async () => {
-        await qc.invalidateQueries({ queryKey: manualPortfolioKeys.all });
-        onPortfolioMutated();
-    }, [qc, onPortfolioMutated]);
+    const patchPositionsCache = useCallback(
+        (view: ManualPortfolioView) => {
+            qc.setQueryData<ManualPortfolioView[]>(manualPortfolioKeys.positions(), (old) => {
+                const list = old ?? [];
+                const idx = list.findIndex((p) => p.id === view.id);
+                if (idx >= 0) {
+                    const next = [...list];
+                    next[idx] = view;
+                    return next;
+                }
+                return [...list, view];
+            });
+        },
+        [qc],
+    );
+
+    const removePositionFromCache = useCallback(
+        (id: number) => {
+            qc.setQueryData<ManualPortfolioView[]>(manualPortfolioKeys.positions(), (old) =>
+                (old ?? []).filter((p) => p.id !== id),
+            );
+        },
+        [qc],
+    );
+
+    /** Özet/grafik arka planda yenilensin; modal kapanışını tam portföy refetch'i bekletmesin. */
+    const invalidateManual = useCallback(
+        (view?: ManualPortfolioView, removedId?: number) => {
+            if (view != null) {
+                patchPositionsCache(view);
+            } else if (removedId != null) {
+                removePositionFromCache(removedId);
+            }
+            void qc.invalidateQueries({ queryKey: manualPortfolioKeys.summary() });
+            onPortfolioMutated();
+        },
+        [qc, onPortfolioMutated, patchPositionsCache, removePositionFromCache],
+    );
 
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
     const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
@@ -525,9 +559,9 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
 
     const createMut = useMutation({
         mutationFn: createManualPosition,
-        onSuccess: async () => {
+        onSuccess: (view) => {
             setFormOpen(false);
-            await invalidateManual();
+            invalidateManual(view);
         },
         onError: (err) => {
             const { code, message } = readFinanceApiError(err);
@@ -546,9 +580,9 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
 
     const updateMut = useMutation({
         mutationFn: ({ id, body }: { id: number; body: Parameters<typeof updateManualPosition>[1] }) => updateManualPosition(id, body),
-        onSuccess: async () => {
+        onSuccess: (view) => {
             setFormOpen(false);
-            await invalidateManual();
+            invalidateManual(view);
         },
         onError: (err) => {
             const { code, message } = readFinanceApiError(err);
@@ -567,10 +601,10 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
 
     const closeMut = useMutation({
         mutationFn: ({ id, body }: { id: number; body: Parameters<typeof closeManualPosition>[1] }) => closeManualPosition(id, body),
-        onSuccess: async () => {
+        onSuccess: (view) => {
             setCloseOpen(false);
             setCloseId(null);
-            await invalidateManual();
+            invalidateManual(view);
         },
         onError: (err) => {
             const { code, message } = readFinanceApiError(err);
@@ -586,8 +620,8 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
 
     const deleteMut = useMutation({
         mutationFn: deleteManualPosition,
-        onSuccess: async () => {
-            await invalidateManual();
+        onSuccess: (_void, id) => {
+            invalidateManual(undefined, id);
         },
         onError: (err) => alert(readFinanceApiError(err).message),
     });
