@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -60,6 +61,20 @@ public class ManualPortfolioGapFillService {
                 gapFillInFlight.remove(userId);
             }
         });
+    }
+
+    /** Integration testlerinde arka plan gap-fill'in bitmesini beklemek için. */
+    public void awaitIdle(Duration timeout) throws InterruptedException {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (gapFillInFlight.isEmpty()) {
+                Thread.sleep(100);
+                if (gapFillInFlight.isEmpty()) {
+                    return;
+                }
+            }
+            Thread.sleep(25);
+        }
     }
 
     public long gapFillIfNeeded(Long userId, List<ManualPortfolioPosition> positions) {

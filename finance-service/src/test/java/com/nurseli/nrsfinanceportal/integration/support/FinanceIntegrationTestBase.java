@@ -1,5 +1,7 @@
 package com.nurseli.nrsfinanceportal.integration.support;
 
+import com.nurseli.nrsfinanceportal.application.portfolio.materialized.ManualPortfolioGapFillService;
+import com.nurseli.nrsfinanceportal.application.portfolio.materialized.ManualPortfolioWarmupService;
 import com.nurseli.nrsfinanceportal.domain.user.Role;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient;
@@ -25,6 +27,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -74,6 +77,12 @@ public abstract class FinanceIntegrationTestBase {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    private ManualPortfolioWarmupService manualPortfolioWarmupService;
+
+    @Autowired
+    private ManualPortfolioGapFillService manualPortfolioGapFillService;
+
     @MockitoBean
     private KafkaTemplate<String, Object> kafkaTemplate;
 
@@ -90,7 +99,8 @@ public abstract class FinanceIntegrationTestBase {
     protected User adminUser;
 
     @BeforeEach
-    void setUpIntegrationContext() {
+    void setUpIntegrationContext() throws InterruptedException {
+        awaitMaterializedBackgroundWork();
         IntegrationTestMarketStubs.stubPassiveMarketData(marketDataClient);
         doNothing().when(keycloakUserProfileClient).requireConfigured();
         doNothing().when(keycloakUserProfileClient).updateFullName(anyString(), any(), any());
@@ -111,7 +121,8 @@ public abstract class FinanceIntegrationTestBase {
     }
 
     @AfterEach
-    void resetIntegrationUserSuspensionState() {
+    void resetIntegrationUserSuspensionState() throws InterruptedException {
+        awaitMaterializedBackgroundWork();
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             userRepository.findByKeycloakUserId(TEST_KEYCLOAK_SUB).ifPresent(this::ensureLoginActive);
             userRepository.findByKeycloakUserId(TEST_ADMIN_SUB).ifPresent(this::ensureLoginActive);
@@ -123,6 +134,11 @@ public abstract class FinanceIntegrationTestBase {
             user.unsuspendLogin();
             userRepository.saveAndFlush(user);
         }
+    }
+
+    private void awaitMaterializedBackgroundWork() throws InterruptedException {
+        manualPortfolioWarmupService.awaitIdle(Duration.ofSeconds(5));
+        manualPortfolioGapFillService.awaitIdle(Duration.ofSeconds(5));
     }
 
     protected RequestPostProcessor integrationUserJwt() {

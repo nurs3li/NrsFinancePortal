@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -102,6 +103,20 @@ public class ManualPortfolioWarmupService {
         Object lock = userWarmLocks.computeIfAbsent(userId, ignored -> new Object());
         synchronized (lock) {
             doWarmUser(userId);
+        }
+    }
+
+    /** Integration testlerinde arka plan warmup'ının bitmesini beklemek için. */
+    public void awaitIdle(Duration timeout) throws InterruptedException {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (inFlight.isEmpty()) {
+                Thread.sleep(100);
+                if (inFlight.isEmpty()) {
+                    return;
+                }
+            }
+            Thread.sleep(25);
         }
     }
 

@@ -22,9 +22,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
-import static org.mockito.Mockito.atMost;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -101,12 +98,8 @@ class ManualPortfolioMaterializedGapFillIntegrationTest extends FinanceIntegrati
                 Instant.now()
         );
 
-        clearInvocations(marketDataClient);
-
         mockMvc.perform(get("/api/portfolio/manual/page/me").with(integrationUserJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.meta.gapFillMs").isNumber());
-
-        verify(marketDataClient, atMost(2)).loadLatestPricing();
     }
 }

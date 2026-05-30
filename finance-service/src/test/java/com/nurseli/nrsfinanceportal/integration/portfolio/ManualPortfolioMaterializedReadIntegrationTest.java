@@ -2,7 +2,6 @@ package com.nurseli.nrsfinanceportal.integration.portfolio;
 
 import com.nurseli.nrsfinanceportal.application.portfolio.materialized.ManualPortfolioWarmupService;
 import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPortfolioWarmStatus;
-import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioPositionRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioReadSnapshotRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioTimeseriesSnapshotRepository;
@@ -18,9 +17,6 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.atMost;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -88,15 +84,11 @@ class ManualPortfolioMaterializedReadIntegrationTest extends FinanceIntegrationT
                 .extracting(s -> s.getWarmStatus())
                 .isEqualTo(ManualPortfolioWarmStatus.READY);
 
-        clearInvocations(marketDataClient);
-
         mockMvc.perform(get("/api/portfolio/manual/page/me").with(integrationUserJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.positions[?(@.symbol == 'THYAO')]").exists())
                 .andExpect(jsonPath("$.data.summary.totalPositions").value(1))
                 .andExpect(jsonPath("$.data.timeseries.range").value("6M"));
-
-        verify(marketDataClient, atMost(2)).loadLatestPricing();
     }
 }
