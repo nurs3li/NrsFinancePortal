@@ -1,51 +1,59 @@
-# Gözlemlenebilirlik (Observability)
+<p align="center">
+  <img src="../../docs/assets/gifs/nrs-brand-hero.gif" alt="NRS Finance Portal" width="360" />
+</p>
 
-Finans Portalı **Madde 10–13** kapsamında OpenTelemetry, Prometheus, Grafana, OpenSearch ve Kafka log pipeline içerir.
+<p align="center"><strong>Languages / Diller:</strong> <a href="README.md">English</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
-## Bileşen özeti
+# Observability
 
-| Bileşen | Rol | URL (Docker) |
+NRS Finance Portal ships with an end-to-end observability stack: **OpenTelemetry**, **Prometheus**, **Grafana**, **Tempo**, **Kafka**, and **OpenSearch** (plus Dashboards).
+
+---
+
+## Component overview
+
+| Component | Role | URL (Docker) |
 |---------|-----|--------------|
-| **OpenTelemetry Collector** | Trace/metric toplama | OTLP :4318 |
-| **Prometheus** | Metrik depolama | http://localhost:9090 |
-| **Grafana** | Dashboard, Tempo trace | http://localhost:3001 |
-| **Tempo** | Distributed trace backend | :3200 |
-| **OpenSearch** | Log arama & indeks | http://localhost:9200 |
+| **OpenTelemetry Collector** | Trace/metric ingestion | OTLP http :4318 |
+| **Prometheus** | Metrics storage | http://localhost:9090 |
+| **Grafana** | Dashboards + Tempo UI | http://localhost:3001 |
+| **Tempo** | Distributed tracing backend | http://localhost:3200 |
+| **OpenSearch** | Log storage + search | http://localhost:9200 |
 | **OpenSearch Dashboards** | Log UI | http://localhost:5601 |
-| **Kafka** | Log ve event taşıyıcı | :9092 |
-| **log-consumer-service** | Log indeksleyici | :8087 |
+| **Kafka** | Event/log transport | :9092 |
+| **log-consumer-service** | Kafka → OpenSearch indexer | http://localhost:8087 |
 
 ---
 
-## Metrikler (Madde 11)
+## Metrics
 
-Spring Boot Actuator + Micrometer:
+Services expose metrics via Spring Boot Actuator + Micrometer:
 
 ```
 GET /actuator/health
 GET /actuator/prometheus
 ```
 
-Prometheus scrape: `infra/prometheus/prometheus.yml`
+Prometheus scrape configuration: `infra/prometheus/prometheus.yml`
 
-OTel collector metrik endpoint: `:8889`
+OTel Collector metrics endpoint: `:8889`
 
 ### Grafana dashboard
 
-- Dosya: `infra/grafana/dashboards/nrs-observability.json`
+- Dashboard JSON: `infra/grafana/dashboards/nrs-observability.json`
 - Provisioning: `infra/grafana/provisioning/`
-- Yerel giriş: admin / admin
-- Yerel geliştirmede anonymous viewer açık (audit iframe'leri için)
+- Local login: `admin / admin`
+- Local/demo: anonymous viewer may be enabled to support audit embeds
 
-Frontend admin audit sayfası Grafana panellerini embed eder (`VITE_GRAFANA_*` env).
+The Admin Audit screen in the frontend can embed Grafana panels (via `VITE_GRAFANA_*`).
 
 ---
 
-## Trace (Madde 10)
+## Traces
 
-Akış:
+Flow:
 
 ```
 Spring Boot (Micrometer OTel bridge)
@@ -61,49 +69,51 @@ Env (Docker):
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
 ```
 
-Log satırlarında `traceId` ve `spanId` alanları — OpenSearch'te korelasyon için.
+Application logs include `traceId` and `spanId` fields to enable correlation in OpenSearch.
 
 ---
 
-## Log pipeline (Madde 12–13)
+## Logs (Kafka → OpenSearch pipeline)
 
 ```
-Servis (finance / marketdata / notification)
-    → Log4j2 (JSON console + KafkaLog appender, INFO+ varsayılan)
+Service (finance / marketdata / notification)
+    → Log4j2 (JSON console + Kafka appender, default INFO+)
         → Kafka topic: application-logs
             → log-consumer-service (ApplicationLogsConsumer)
                 → OpenSearch index: application-logs-yyyy-MM-dd
-                    → OpenSearch Dashboards (filtreleme burada)
+                    → OpenSearch Dashboards (Discover)
 ```
 
-Konfigürasyon:
+Key configuration points:
 
 - Appender: `KafkaLogAppender` — finance, marketdata, notification
-- XML: `log4j2-spring.xml` — `APP_LOG_KAFKA_MIN_LEVEL` (varsayılan **INFO**)
+- Log4j2 config: `log4j2-spring.xml` — `APP_LOG_KAFKA_MIN_LEVEL` (default **INFO**)
 - Consumer: `log-consumer-service/.../ApplicationLogsConsumer.java`
 - Access log: `RequestLoggingFilter` — `[REQUEST] method uri status= durationMs=` (INFO)
 
-### Ortam değişkeni
+### Environment variable
 
-| Değişken | Varsayılan | Açıklama |
+| Variable | Default | Description |
 |----------|------------|----------|
-| `APP_LOG_KAFKA_MIN_LEVEL` | `INFO` | Kafka/OpenSearch'e giden minimum Log4j seviyesi. `WARN` = yalnızca uyarı/hata (eski davranış). |
+| `APP_LOG_KAFKA_MIN_LEVEL` | `INFO` | Minimum Log4j level forwarded to Kafka/OpenSearch. `WARN` forwards only warnings/errors. |
 
-Framework gürültüsü (kafka, hibernate, hikari) log4j2'de **WARN** ile sınırlı; iş ve `[REQUEST]` logları INFO ile merkeze gider.
+Framework noise (kafka, hibernate, hikari) is typically capped at **WARN**; business and `[REQUEST]` logs are forwarded at **INFO**.
 
-DEBUG merkeze **gitmez** (Root level INFO).
+> **Consistency:** [`log-consumer-service/README.md`](../../log-consumer-service/README.md) describes the same default (**INFO+**, not WARN+). Override with `APP_LOG_KAFKA_MIN_LEVEL`.
+
+DEBUG logs are not forwarded by default (root level INFO).
 
 ### OpenSearch Dashboards — Discover
 
 1. http://localhost:5601
 2. Index pattern: `application-logs-*`, time field: `timestamp`
-3. Time range: **Last 24 hours** (son 15 dk'da az kayıt olabilir)
-4. Örnek sorgular:
+3. Time range: **Last 24 hours**
+4. Example queries:
    - `level:INFO AND message:"[REQUEST]"`
    - `serviceName:"finance-service" AND level:ERROR`
    - `correlationId:"<uuid>"`
 
-### Log doğrulama
+### Log verification
 
 ```powershell
 curl "http://localhost:9200/_cat/indices?v" | findstr application-logs
@@ -113,22 +123,22 @@ curl "http://localhost:9200/_cat/indices?v" | findstr application-logs
 curl "http://localhost:9200/application-logs-*/_search?size=3&pretty"
 ```
 
-JSON log alanları: `serviceName`, `level`, `message`, `traceId`, `spanId`, `correlationId`, `userId`, `username`, `actionType`
+Common JSON fields: `serviceName`, `level`, `message`, `traceId`, `spanId`, `correlationId`, `userId`, `username`, `actionType`
 
 ---
 
-## Kabul kriterleri (smoke test)
+## Smoke test checklist
 
-| # | Kriter | Doğrulama |
+| # | Check | How to verify |
 |---|--------|-----------|
 | 1 | Request count | Grafana panel — `http_server_requests_seconds_count` |
 | 2 | Latency p95 | Grafana panel — sum/count ratio |
-| 3 | Error rate | status>=500 metrikleri |
+| 3 | Error rate | HTTP 5xx metrics / dashboards |
 | 4 | Service health | `/actuator/health`, `up` metric |
-| 5 | Trace uçtan uca | Grafana → Tempo datasource → trace drilldown |
-| 6 | Log correlation | OpenSearch'te traceId filtresi |
+| 5 | End-to-end tracing | Grafana → Tempo datasource → trace drilldown |
+| 6 | Log correlation | Filter by `traceId` in OpenSearch |
 
-Smoke komutları:
+Smoke commands:
 
 ```powershell
 docker compose config
@@ -141,30 +151,34 @@ curl http://localhost:8083/actuator/prometheus
 
 ---
 
-## Admin audit entegrasyonu
+## Admin audit integration
 
 finance-service admin audit API:
 
-- OpenSearch sorguları (audit log)
-- Grafana public URL template'leri
-- Tempo trace linkleri
+- OpenSearch queries (audit logs)
+- Grafana public URL templates
+- Tempo trace links
 
-Frontend: `AdminAudit.tsx` — embed paneller + harici Grafana linkleri.
+Frontend: `AdminAudit.tsx` — embedded panels + external Grafana links.
+
+<p align="center">
+  <img src="../assets/gifs/features/admin-audit-grafana.gif" alt="Admin audit — Grafana embed" width="720" />
+</p>
 
 Env: `APP_OBSERVABILITY_*`, `VITE_GRAFANA_*`
 
 ---
 
-## Üretim notları
+## Production notes
 
-Yerel compose'ta:
+In the local Docker Compose stack:
 
-- Grafana anonymous viewer **açık** — sadece demo/local
-- Keycloak `start-dev` — production profili değil
-- OpenSearch security plugin devre dışı
+- Grafana anonymous viewer may be **enabled** — demo/local only
+- Keycloak runs in a dev-friendly mode — not a production profile
+- OpenSearch security plugins may be disabled for local convenience
 
-Production'da TLS, auth ve anonymous Grafana kapatılmalıdır.
+In production, you should enable TLS, authentication/authorization, and disable anonymous Grafana access.
 
 ---
 
-[← Dokümantasyon hub](../README.md)
+[← Documentation hub](../README.md)
