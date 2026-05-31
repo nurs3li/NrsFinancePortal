@@ -1,57 +1,86 @@
-# marketdata
+<p align="center">
+  <img src="../docs/assets/gifs/nrs-brand-hero.gif" alt="NRS Finance Portal" width="360" />
+</p>
 
-Piyasa verisi mikroservisi — ingest, scheduler, REST API (BIST, VIOP, FX, kripto, TEFAS, enflasyon, banka kurları, eurobond).
+<p align="center"><strong>Languages / Diller:</strong> <a href="README.md">English</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
-## Özet
+# marketdata
 
-| Özellik | Değer |
+Market data microservice — ingestion + schedulers + REST API for BIST, VIOP, FX, crypto, TEFAS funds, macro (inflation/rates), bank FX rates, and eurobonds.
+
+---
+
+## Summary
+
+| Item | Value |
 |---------|-------|
 | **Java** | 21 |
 | **Spring Boot** | 3.5.5 |
-| **Veritabanı** | PostgreSQL `nrs_market` |
-| **Migration** | Liquibase |
+| **Database** | PostgreSQL `nrs_market` |
+| **Migrations** | Liquibase |
 | **Docker port** | 8083 |
-| **Yerel port** | 8086 |
+| **Local port** | 8086 |
 | **Swagger** | http://localhost:8083/swagger-ui.html |
 
 ---
 
-## Sorumluluklar
+## Responsibilities
 
-### Veri ingest
+### Data ingestion
 
-| Kaynak | Veri tipi |
+| Source | Data |
 |--------|-----------|
-| TCMB EVDS | Enflasyon, faiz, mevduat, eurobond, borç |
-| BIST / İş Yatırım | Hisse günlük mum |
-| VIOP CSV | Vadeli işlem fiyatları |
-| TEFAS | Fon fiyatları |
-| dovizborsa.com | Banka FX kurları |
-| FinHub / Yahoo / Stooq | ABD hisse, ETF |
-| CoinGecko | Kripto |
+| TCMB EVDS | Inflation, interest rates, deposits, eurobonds, debt |
+| BIST / İş Yatırım | Equity daily candles |
+| VIOP CSV | Futures prices (historical backfill) |
+| TEFAS | Fund prices |
+| dovizborsa.com | Bank FX rates |
+| FinHub / Yahoo / Stooq | US equities / ETFs |
+| CoinGecko | Crypto |
 
 ### REST API
 
-- `/api/market/**` — fiyat, tarihsel, VIOP, tahvil, fon, kripto
-- `/api/news/**` — finans haberleri
-- Admin/backfill endpoint'leri (internal token)
+- `/api/market/**` — quotes, historical data, VIOP, bonds, funds, crypto
+- `/api/news/**` — financial news
+
+### Access model
+
+| Scope | Auth | Examples |
+|-------|------|----------|
+| Public GET | None (JWT optional) | `/api/market/**`, `/api/news/**`, `/api/viop/**`, `/api/debt/**`, `/api/funds/**` |
+| Admin POST | JWT role ADMIN or OPS | `/api/admin/**` |
+| Internal | JWT ADMIN/OPS or token header | `/internal/**`, `/internal/market/backfill/**` |
+
+Swagger documents the full surface. See [`docs/api/endpoints.md`](../docs/api/endpoints.md).
+
+### `ops` profile — internal backfill
+
+Docker enables Spring profile **`docker,ops`**. `BackfillController` exposes `/internal/market/backfill/*`.
+
+When `NRS_INTERNAL_BACKFILL_TOKEN` (Compose) / `app.internal.backfill-token` is set, require header:
+
+```http
+X-Nrs-Internal-Token: <same value>
+```
+
+Documented in Compose as `NRS_INTERNAL_BACKFILL_TOKEN` (default local-docker token). **Not in `.env.example`** — add to `.env` to override; see root README env note.
 
 ---
 
-## Bağımlılıklar
+## Dependencies
 
-| Bileşen | Amaç |
+| Component | Purpose |
 |---------|------|
-| PostgreSQL `nrs_market` | Fiyat geçmişi, enstrüman metadata |
-| Redis | Market snapshot cache, rate limit |
-| Kafka | Log appender |
-| Keycloak | JWT (opsiyonel admin endpoint'ler) |
+| PostgreSQL `nrs_market` | Price history and instrument metadata |
+| Redis | Snapshot caching and rate limiting |
+| Kafka | Log appender pipeline |
+| Keycloak | JWT (optional for admin endpoints) |
 
 ---
 
-## Çalıştırma
+## Run
 
 ### Docker Compose
 
@@ -59,49 +88,91 @@ Piyasa verisi mikroservisi — ingest, scheduler, REST API (BIST, VIOP, FX, krip
 docker compose up -d market-data-service
 ```
 
-İlk açılışta bootstrap scheduler'lar EVDS backfill çalıştırabilir — `EVDS_API_KEY` `.env` içinde olmalı.
+On first boot, bootstrap schedulers may run EVDS backfills — make sure `EVDS_API_KEY` is set in the repo root `.env` for macro panels.
 
-### Yerel
+Service URL: http://localhost:8083  
+Swagger UI: http://localhost:8083/swagger-ui.html
+
+Health:
+
+```powershell
+curl http://localhost:8083/actuator/health
+```
+
+Verify data quickly (examples):
+
+```powershell
+# OpenAPI JSON (machine-readable)
+curl http://localhost:8083/v3/api-docs > $null
+
+# A couple of representative endpoints (paths may vary by module)
+curl "http://localhost:8083/api/market/dashboard"
+curl "http://localhost:8083/api/market/bank-rates"
+```
+
+### Local (optional)
 
 ```powershell
 docker compose up -d market-data-service
 ```
 
-Port: **8086** (`application.yml`)
+Local port: **8086** (`application.yml`)
 
 ---
 
 ## Test
 
-CI’da `mvn test -pl marketdata`. Yerel: `curl http://localhost:8083/actuator/health`
+CI: `mvn test -pl marketdata`  
+Local smoke: `curl http://localhost:8083/actuator/health`
 
-Testcontainers: PostgreSQL + Redis integration test paketi.
+Integration tests use Testcontainers (PostgreSQL + Redis).
 
 ---
 
-## Önemli yapılandırma
+## Troubleshooting
 
-| Env | Açıklama |
+<details>
+<summary><strong>Macro panels are empty</strong></summary>
+
+- Ensure `EVDS_API_KEY` is set in the repo root `.env`
+- Restart the service after changing env vars:
+
+```powershell
+docker compose up -d --force-recreate market-data-service
+```
+
+</details>
+
+<details>
+<summary><strong>First boot feels slow</strong></summary>
+
+Backfills and scheduler warm-up may run on first start. Check logs:
+
+```powershell
+docker compose logs -f market-data-service
+```
+
+</details>
+
+---
+
+## Configuration (key env vars)
+
+| Env | Description |
 |-----|----------|
-| `EVDS_API_KEY` | TCMB makro veri (kritik) |
-| `FINHUB_API_KEY` | ABD hisse |
-| `COINGECKO_API_KEY` | Kripto (opsiyonel) |
-| `MARKET_BIST_ENABLED` | BIST ingest |
-| `TEFAS_ENABLED` | TEFAS fon |
-| `VIOP_BACKFILL_ENABLED` | CSV backfill |
+| `EVDS_API_KEY` | TCMB EVDS macro data (recommended/important for macro panels) |
+| `FINHUB_API_KEY` | US equities data (optional) |
+| `COINGECKO_API_KEY` | Crypto (optional) |
+| `MARKET_BIST_ENABLED` | Toggle BIST ingestion |
+| `TEFAS_ENABLED` | Toggle TEFAS fund ingestion |
 
-Detay: `application.yml`, `application-docker.yml`, repo `.env.example`
-
----
-
-## VIOP CSV artifact
-
-VIOP geçmiş verisi: `artifacts/viop/` — compose volume ile mount edilir.
+See also: `application.yml`, `application-docker.yml`, and the repo root `.env.example`.
 
 ---
 
-## Dokümantasyon
+## Documentation
 
-- [Kök README](../README.md)
-- [Mimari](../docs/architecture.md)
+- [Root README](../README.md)
+- [Architecture](../docs/architecture.md)
 - [API](../docs/api/README.md)
+- [Quick endpoint reference](../docs/api/endpoints.md)

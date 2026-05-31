@@ -1,58 +1,73 @@
-# notification-service
+<p align="center">
+  <img src="../docs/assets/gifs/nrs-brand-hero.gif" alt="NRS Finance Portal" width="360" />
+</p>
 
-Bildirim ve e-posta mikroservisi — Kafka event tüketimi, in-app bildirim, Gmail OAuth e-posta.
+<p align="center"><strong>Languages / Diller:</strong> <a href="README.md">English</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
-## Özet
+# notification-service
 
-| Özellik | Değer |
+Notification & email microservice — consumes Kafka events, stores in-app notifications, and optionally delivers HTML emails via Gmail OAuth.
+
+---
+
+## Summary
+
+| Item | Value |
 |---------|-------|
 | **Java** | 21 |
 | **Spring Boot** | 3.5.5 |
-| **Veritabanı** | PostgreSQL `nrs_finance` (notification tabloları) |
-| **Migration** | Liquibase |
+| **Database** | PostgreSQL `nrs_finance` (notification tables) |
+| **Migrations** | Liquibase |
 | **Docker port** | 8089 |
 | **Swagger** | http://localhost:8089/swagger-ui.html |
 
 ---
 
-## Sorumluluklar
+## Responsibilities
 
-- Kafka'dan bildirim event'lerini tüketir
-- Kullanıcıya in-app bildirim kaydeder ve listeler
-- Gmail OAuth ile HTML e-posta gönderir (Portföy AI raporu, price alert vb.)
-- finance-service internal API ile kullanıcı e-posta adresi çözümleme (S2S JWT)
+- Consume notification events from Kafka
+- Persist notifications for the in-app inbox and expose them via REST
+- Optionally send HTML emails (Portfolio AI report, price alerts, etc.) via Gmail OAuth
+- Resolve user email addresses through `finance-service` internal API using S2S (service-to-service) JWT
 
 ---
 
-## Bağımlılıklar
+## Dependencies
 
-| Bileşen | Amaç |
+| Component | Purpose |
 |---------|------|
-| PostgreSQL | Bildirim kayıtları |
-| Kafka | Event consumer |
-| Keycloak | JWT + S2S token |
-| finance-service | Kullanıcı bilgisi (`FINANCE_BASE_URL`) |
-| Gmail API | E-posta gönderimi (opsiyonel) |
+| PostgreSQL | Notification persistence |
+| Kafka | Event source |
+| Keycloak | JWT validation + S2S tokens |
+| finance-service | User/account data (`FINANCE_BASE_URL`) |
+| Gmail API | Email delivery (optional) |
 
 ---
 
-## Çalıştırma
+## Run
 
-### Docker Compose
+### Docker Compose (recommended)
 
 ```powershell
 docker compose up -d notification-service
 ```
 
-Port: **8089**
+Service URL: http://localhost:8089  
+Swagger UI: http://localhost:8089/swagger-ui.html
+
+Health:
+
+```powershell
+curl http://localhost:8089/actuator/health
+```
 
 ---
 
-## E-posta yapılandırması (opsiyonel)
+## Email configuration (optional)
 
-`.env`:
+Define these in the repo root `.env` (see [`.env.example`](../.env.example)):
 
 ```env
 GMAIL_CLIENT_ID=...
@@ -64,26 +79,47 @@ FINANCE_BASE_URL=http://localhost:8085
 KEYCLOAK_NOTIFICATION_S2S_SECRET=...
 ```
 
-Gmail yapılandırması yoksa in-app bildirimler çalışır; e-posta gönderimi devre dışı kalır.
+If Gmail credentials are not provided, **in-app notifications continue to work**, while email delivery is disabled.
+
+### Key variables
+
+| Variable | Required | Notes |
+|----------|----------|------|
+| `FINANCE_BASE_URL` | Yes (for email features) | Used to resolve user email addresses |
+| `KEYCLOAK_NOTIFICATION_S2S_SECRET` | Yes (for S2S) | Client secret for service-to-service access token |
+| `GMAIL_*` | No | Required only if you want emails to be sent |
 
 ---
 
 ## Test
 
-CI’da `mvn test -pl notification-service`. Yerel: servis health + bildirim akışı manuel doğrulama.
+- CI: `mvn test -pl notification-service`
+- Local smoke: check `/actuator/health`, then trigger a notification flow from the UI or via the upstream service that emits events.
 
 ---
 
 ## API
 
-- `GET /api/v1/notifications` — kullanıcı bildirimleri
-- `PATCH /api/v1/notifications/{id}/read` — okundu işaretle
-- Internal: `/internal/email/**` — finance-service çağrıları (S2S)
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/v1/notifications/me` | Paginated inbox (`?unreadOnly=true`) |
+| GET | `/api/v1/notifications/me/unread-count` | Unread count |
+| PATCH | `/api/v1/notifications/{id}/read` | Mark read |
+| POST | `/api/notifications/internal/email/send` | S2S direct email `{ "to", "subject", "body" }` → 202 |
+
+### Kafka
+
+| Topic | Role |
+|-------|------|
+| `notification-events` | Consumed by `NotificationEventConsumer` → in-app notifications |
+
+Email setup (Gmail OAuth): [`docs/email-setup.md`](../docs/email-setup.md)
 
 ---
 
-## Dokümantasyon
+## Documentation
 
-- [Kök README](../README.md)
+- [Root README](../README.md)
 - [API](../docs/api/README.md)
-- [Güvenlik — S2S](../docs/security/README.md)
+- [Email setup (Gmail OAuth)](../docs/email-setup.md)
+- [Security — S2S](../docs/security/README.md)

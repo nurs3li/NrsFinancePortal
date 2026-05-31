@@ -1,30 +1,30 @@
-# Güvenlik — Keycloak, JWT, 2FA
+<p align="center">
+  <img src="../../docs/assets/gifs/nrs-brand-hero.gif" alt="NRS Finance Portal" width="360" />
+</p>
 
-Finans Portalı **Madde 8–9** kapsamında Keycloak tabanlı kimlik doğrulama ve opsiyonel TOTP (2FA) desteği sunar.
-
----
-
-## Mimari özet
-
-```
-┌──────────────┐         ┌─────────────────┐
-│ React SPA    │ login   │ Keycloak 24     │
-│ keycloak-js  │◄───────►│ realm:          │
-└──────┬───────┘  JWT    │ nrs-finance     │
-       │ Bearer          └────────┬────────┘
-       ▼                          │ issuer-uri
-┌──────────────┐                  │
-│ Spring Boot  │◄─────────────────┘
-│ Resource     │  JWT doğrulama
-│ Server       │  role claims
-└──────────────┘
-```
+<p align="center"><strong>Languages / Diller:</strong> <a href="README.md">English</a> · <a href="README.tr.md">Türkçe</a></p>
 
 ---
 
-## Keycloak yapılandırması
+# Security — Keycloak, JWT, 2FA (TOTP)
 
-| Öğe | Değer |
+NRS Finance Portal uses **Keycloak-based authentication** with **JWT** for service authorization and optional **TOTP-based 2FA**.
+
+---
+
+## Architecture overview
+
+<p align="center">
+  <img src="../assets/images/architecture/05-security-architecture.png" alt="Security architecture — React SPA, Keycloak 24, Spring Boot Resource Server" width="820" />
+</p>
+
+**Flow:** Frontend (`keycloak-js`) ↔ Keycloak login → JWT → API calls with `Bearer` token → Spring Boot validates via `issuer-uri` and role claims.
+
+---
+
+## Keycloak configuration
+
+| Item | Value |
 |-----|-------|
 | Docker URL | http://localhost:8081 |
 | Realm | `nrs-finance` |
@@ -32,63 +32,63 @@ Finans Portalı **Madde 8–9** kapsamında Keycloak tabanlı kimlik doğrulama 
 | Frontend client | `nrs-frontend` |
 | Backend client | `nrs-finance-backend` (admin / S2S) |
 
-Compose başlangıcında realm otomatik import edilir (`start-dev --import-realm`).
+The realm is automatically imported on startup (`start-dev --import-realm`).
 
 ### Admin console
 
 - URL: http://localhost:8081
-- Kullanıcı: `.env` → `KEYCLOAK_ADMIN` (varsayılan `admin`)
-- Şifre: `.env` → `KEYCLOAK_ADMIN_PASSWORD`
+- Username: `.env` → `KEYCLOAK_ADMIN` (default `admin`)
+- Password: `.env` → `KEYCLOAK_ADMIN_PASSWORD`
 
 ---
 
-## JWT akışı (Madde 8)
+## JWT flow
 
-1. Kullanıcı frontend'de giriş yapar.
-2. Keycloak `access_token` (JWT) döner.
-3. Axios interceptor her isteğe `Authorization: Bearer <token>` ekler.
-4. Backend `spring.security.oauth2.resourceserver.jwt.issuer-uri` ile token imzasını doğrular.
-5. `@PreAuthorize`, `RoleProtectedRoute` ile rol kontrolü.
+1. The user signs in from the frontend.
+2. Keycloak returns an `access_token` (JWT).
+3. The frontend attaches `Authorization: Bearer <token>` to API calls (Axios interceptor).
+4. Backend services validate the token signature using `spring.security.oauth2.resourceserver.jwt.issuer-uri`.
+5. Role-based access is enforced via `@PreAuthorize` and frontend route guards.
 
-Roller (örnek): `USER`, `ADMIN`
+Example roles: `USER`, `ADMIN`
 
-Backend config: `SecurityConfig.java`  
+Backend: `SecurityConfig.java`  
 Frontend: `auth/AuthContext.tsx`, `auth/RoleProtectedRoute.tsx`
 
 ---
 
-## 2FA / TOTP (Madde 9)
+## 2FA / TOTP
 
-**Davranış:** Kullanıcı **Ayarlar → İki faktörlü doğrulama** kartından TOTP'yi etkinleştirir. Zorunlu değildir; açan kullanıcı girişte OTP girer.
+**Behavior:** Users enable TOTP from **Settings → Two-factor authentication**. It is optional by default; once enabled, login requires OTP verification.
 
-### Bileşenler
+### Components
 
-| Katman | Dosya / servis |
+| Layer | File / service |
 |--------|----------------|
 | API | `UserTotpController` — `/api/v1/users/me/totp` |
-| Servis | `UserTotpService`, `UserTotpCredentialStore` (Redis) |
-| Login | `PublicLoginService` — portal TOTP veya Keycloak OTP |
+| Service | `UserTotpService`, `UserTotpCredentialStore` (Redis) |
+| Login | `PublicLoginService` — portal TOTP or Keycloak OTP |
 | Keycloak | `KeycloakTotpLoginPolicyService`, `CONFIGURE_TOTP` action |
 | Frontend | `SettingsTwoFactorCard.tsx`, `totpApi.ts` |
 
-### Kütüphane
+### Library
 
-`dev.samstevens.totp` — TOTP generate/verify
+`dev.samstevens.totp` — TOTP generation/verification
 
-### Ortam değişkenleri
+### Environment variables
 
 ```env
-KEYCLOAK_SECURITY_OTP_ENFORCEMENT_ENABLED=false   # varsayılan: opsiyonel 2FA
+KEYCLOAK_SECURITY_OTP_ENFORCEMENT_ENABLED=false   # default: optional 2FA
 KEYCLOAK_SECURITY_REQUIRED_ACTION=CONFIGURE_TOTP
 ```
 
-Admin rolü için OTP enforcement ayrı yapılandırılabilir (`KEYCLOAK_SECURITY_ENFORCED_ROLES`).
+OTP enforcement can be configured per role (see `KEYCLOAK_SECURITY_ENFORCED_ROLES`).
 
 ---
 
-## Remember Me & oturum süreleri
+## Remember-me & session lifetimes
 
-Keycloak realm SSO ayarları finance-service tarafından senkronize edilebilir:
+Keycloak realm SSO settings can be synchronized by `finance-service`:
 
 ```env
 KEYCLOAK_SECURITY_REMEMBER_ME_ENFORCEMENT_ENABLED=true
@@ -99,35 +99,84 @@ KEYCLOAK_SECURITY_ACCESS_TOKEN_LIFESPAN=PT5M
 
 ---
 
-## Servisler arası (S2S) güvenlik
+## Service-to-service (S2S) security
 
-notification-service → finance-service internal API:
+`notification-service` → `finance-service` internal API:
 
 - Client credentials / S2S token
 - `S2SAccessTokenService`, `KEYCLOAK_NOTIFICATION_S2S_SECRET`
 
 ---
 
-## Public endpoint'ler
+## Public endpoints
 
-Kayıt ve login JWT gerektirmez:
+Registration, login, and password reset do not require JWT:
 
-- `PublicRegistrationController`
-- `PublicLoginController`
+- `PublicRegistrationController` — `/api/public/register/**`
+- `PublicLoginController` — `/api/public/login`, `/api/public/token/**`
+- `PublicPasswordResetController` — `/api/public/password-reset/**` (email OTP → Keycloak password update)
 
-Rate limiting: `RateLimitFilter` (Redis tabanlı)
+Password reset uses the same Gmail notification pipeline as registration (not Keycloak SMTP). Codes are stored in Redis with a 60s resend cooldown.
 
----
+Rate limiting: `RateLimitFilter` (Redis-backed)
 
-## Güvenlik checklist (değerlendirme)
-
-- [ ] Keycloak :8081 erişilebilir
-- [ ] Login → JWT ile korumalı endpoint 200
-- [ ] JWT olmadan `/api/v1/users/me` → 401
-- [ ] Admin sayfası USER rolü ile → 403
-- [ ] 2FA: Ayarlardan etkinleştir → sonraki login'de OTP
-- [ ] Swagger Authorize ile JWT test
+Details: [`email-setup.md`](../email-setup.md) (Gmail pipeline, not Keycloak SMTP)
 
 ---
 
-[← Dokümantasyon hub](../README.md)
+## Admin login suspension
+
+Admins can suspend portal login for a user (Keycloak + local DB):
+
+| Method | Path | Effect |
+|--------|------|--------|
+| POST | `/api/admin/users/{userId}/suspend-login` | Sets `loginSuspended`, Keycloak `enabled=false`, optional `{ "reason" }` |
+| POST | `/api/admin/users/{userId}/unsuspend-login` | Re-enables login |
+
+Implementation:
+
+- `AdminUserSuspensionController` — admin API
+- `UserLoginSuspensionService` — business rules (**ADMIN role users cannot be suspended**; admin cannot suspend self)
+- `FrozenUserAccessFilter` — returns **403** `USER_LOGIN_SUSPENDED` on authenticated requests for suspended users
+- Kafka `notification-events` — user notified of suspend/unsuspend
+
+Frontend: Admin → Users (`AdminUsersAndAccounts.tsx`); suspended login shows banner on landing (`?suspended=1`).
+
+<p align="center">
+  <img src="../assets/gifs/features/admin-suspend-user.gif" alt="Admin suspend login flow" width="720" />
+</p>
+
+---
+
+## marketdata public read (no JWT)
+
+For frontend market terminal, many **GET** routes under `/api/market/**`, `/api/news/**`, `/api/viop/**`, etc. are **permitAll** (see `marketdata/.../SecurityConfig.java`). Admin POST routes and `/internal/**` require JWT roles **ADMIN** or **OPS**.
+
+---
+
+## Production warnings (local Compose)
+
+| Topic | Local demo behaviour |
+|-------|---------------------|
+| Keycloak mode | `start-dev --import-realm` — **not production** — see [`ops/keycloak-bootstrap.md`](../ops/keycloak-bootstrap.md) |
+| Demo passwords | `nrsadmin` / `testuser` in realm JSON |
+| Brute force | `bruteForceProtected: false` in imported realm |
+| Email | Keycloak SMTP **empty** — portal uses Gmail via `notification-service` |
+| Grafana | Anonymous viewer may be enabled for audit embeds (local only) |
+
+---
+
+## Security smoke checklist
+
+- [ ] Keycloak is reachable at :8081
+- [ ] Login → a JWT-protected endpoint returns 200
+- [ ] Without JWT, `/api/v1/users/me` returns 401
+- [ ] Admin page with `USER` role returns 403
+- [ ] Enable 2FA in Settings → next login requires OTP
+- [ ] Swagger UI “Authorize” works with `Bearer <token>`
+- [ ] (If Gmail configured) Password reset: landing → Forgot password → complete flow
+- [ ] (Admin) Suspend `testuser` → login blocked → unsuspend restores access
+
+---
+
+[← Documentation hub](../README.md)

@@ -1,82 +1,121 @@
-# Frontend — NRS Finans Portalı
+<p align="center">
+  <img src="../docs/assets/gifs/nrs-brand-hero.gif" alt="NRS Finance Portal" width="360" />
+</p>
+
+<p align="center"><strong>Languages / Diller:</strong> <a href="README.md">English</a> · <a href="README.tr.md">Türkçe</a></p>
+
+---
+
+# Frontend — NRS Finance Portal
 
 React 19 + TypeScript + Vite 7 single-page application.
 
 ---
 
-## Özet
+## Summary
 
-| Özellik | Değer |
+| Item | Value |
 |---------|-------|
 | **Framework** | React 19 |
 | **Build** | Vite 7 |
 | **State / data** | TanStack Query 5 |
 | **Routing** | React Router 7 |
 | **Auth** | keycloak-js 26 |
-| **Docker port** | 3000 (Vite dev container) |
-| **Yerel dev port** | 5173 |
+| **App URL (Docker stack)** | http://localhost:3000 |
+| **Local port (optional)** | 5173 |
 
 ---
 
-## Sayfalar (route'lar)
+## Routes
 
-| Path | Sayfa | Açıklama |
+| Path | Page | Description |
 |------|-------|----------|
-| `/` | Landing / redirect | Giriş yapmamış kullanıcı |
-| `/login` | Login redirect | Keycloak akışı |
-| `/dashboard` | Dashboard | Ana özet |
-| `/market` | Piyasa terminali | Canlı fiyat, grafikler |
-| `/market/heatmap` | Heatmap | Sektör ısı haritası |
-| `/market/macro` | Makro zeka | Enflasyon, faiz, eurobond |
-| `/market/bank-rates` | Banka kurları | Karşılaştırma tablosu |
-| `/portfolio` | Portföy | Manuel pozisyonlar |
-| `/portfolio/ai-analysis` | Portföy AI | AI analiz raporu |
-| `/simulation` | Simülasyon | Geçmiş yatırım simülasyonu |
-| `/viop-bond-analysis` | VİOP / Tahvil | Analiz ve pozisyon |
-| `/notifications` | Bildirimler | In-app inbox |
-| `/settings` | Ayarlar | Profil, 2FA, bildirim tercihleri |
-| `/admin/users` | Admin | Kullanıcı yönetimi (ADMIN) |
-| `/admin/audit` | Admin audit | Log + Grafana embed |
+| `/` | Landing / redirect | Unauthenticated entry — **Register** and **Forgot password** live here (not separate routes) |
+| `/login` | Login redirect | Keycloak login flow |
+| `/dashboard` | Dashboard | Overview & KPIs |
+| `/news` | News | Financial news feed (marketdata) |
+| `/market` | Market terminal | Live quotes & charts |
+| `/market/heatmap` | Heatmap | Sector heatmap |
+| `/market/macro` | Macro | Inflation, rates, eurobonds |
+| `/market/bank-rates` | Bank FX rates | Comparison table |
+| `/portfolio` | Portfolio | Manual positions |
+| `/portfolio/ai-analysis` | Portfolio AI | AI report (`OPENAI_API_KEY`) |
+| `/simulation` | Simulation | Historical “what-if” scenarios |
+| `/viop-bond-analysis` | VIOP / Bonds | Analysis & positions |
+| `/notifications` | Notifications | In-app inbox |
+| `/settings` | Settings | Profile, 2FA, notification prefs |
+| `/admin/users` | Admin | User management (ADMIN) — suspend/unsuspend login |
+| `/admin/audit` | Admin audit | Logs + Grafana embeds |
 
-Route tanımları: `src/App.tsx`
+### Redirect routes (no dedicated page)
+
+| Path | Redirects to |
+|------|----------------|
+| `/market/advanced` | `/market` |
+| `/trade`, `/transactions`, `/wallet` | `/portfolio` |
+| `/admin` | `/admin/users` |
+| `/admin/accounts`, `/admin/settings`, `/admin/market-ops` | `/admin/users` |
+
+**Landing flows (in-page, not routes):**
+
+- **Register** — email verification via `finance-service` `/api/public/register` (needs `GMAIL_*`)
+- **Forgot password** — Sign-in tab → email → code → new password via `/api/public/password-reset/*`
+
+Route definitions: `src/App.tsx`, landing panel: `src/pages/LandingPage.tsx`
+
+<p align="center">
+  <img src="../docs/assets/gifs/features/registration-email-flow.gif" alt="Registration flow" width="720" />
+</p>
+
+<p align="center">
+  <img src="../docs/assets/gifs/features/password-reset-flow.gif" alt="Password reset flow" width="720" />
+</p>
+
+<p align="center">
+  <img src="../docs/assets/gifs/features/market-terminal-browse.gif" alt="Market terminal" width="720" />
+</p>
+
+<p align="center">
+  <img src="../docs/assets/gifs/features/simulation-run.gif" alt="Simulation run" width="720" />
+</p>
 
 ---
 
-## Klasör yapısı
+## Project structure
 
 ```
 src/
 ├── api/              # Axios client, JWT interceptor, API versioning
 ├── auth/             # Keycloak, ProtectedRoute, RoleGuard
 ├── components/       # Domain UI (market, viopBond, macro, simulation, …)
-├── pages/            # Route sayfaları
-├── services/         # Backend API çağrıları
-├── hooks/            # Paylaşılan React hooks
+├── pages/            # Route pages
+├── services/         # Backend API calls
+├── hooks/            # Shared React hooks
 ├── queries/          # TanStack Query cache keys
-├── types/            # TypeScript tipleri
-├── i18n/             # TR / EN çeviriler
+├── types/            # TypeScript types
+├── i18n/             # TR / EN translations
 ├── theme/            # Dark/light theme
 ├── providers/        # QueryProvider
-├── utils/ + lib/     # Yardımcı fonksiyonlar
+├── utils/ + lib/     # Utilities
 ├── App.tsx
 └── main.tsx
 ```
 
 ---
 
-## Kurulum
+## Run
 
-### Docker (önerilen — Keycloak redirect uyumlu)
+### Docker Compose (recommended)
 
-Repo kökünden:
+From the repo root:
 
 ```powershell
-docker compose up -d frontend-dev
+docker compose up -d
 ```
 
-→ http://localhost:3000
+Open: http://localhost:3000
 
-### Yerel
+### Local (optional)
 
 ```powershell
 cd frontend
@@ -86,15 +125,15 @@ npm run dev
 
 → http://localhost:5173
 
-> Keycloak redirect URI genelde `http://localhost:3000/*` olarak yapılandırılmıştır. Yerel `:5173` redirect hatası verebilir.
+> Keycloak redirect URIs are commonly configured for `http://localhost:3000/*`. If you use `:5173`, update the client redirect URIs in Keycloak accordingly.
 
 ---
 
-## Ortam değişkenleri
+## Environment variables
 
-`VITE_*` değişkenleri repo kökü `.env` veya `frontend/.env` dosyasından okunur.
+`VITE_*` variables are loaded from the repo root `.env` or `frontend/.env`.
 
-| Değişken | Docker varsayılan |
+| Variable | Default (Docker stack) |
 |----------|-------------------|
 | `VITE_API_URL` | http://localhost:8085 |
 | `VITE_MARKET_API_URL` | http://localhost:8083 |
@@ -104,47 +143,47 @@ npm run dev
 | `VITE_KEYCLOAK_CLIENT_ID` | nrs-frontend |
 | `VITE_API_VERSION` | v1 |
 
-Grafana embed (admin audit): `VITE_GRAFANA_*` — `docker-compose.yml` frontend-dev bölümü.
+Grafana embeds (Admin Audit): `VITE_GRAFANA_*` (see `docker-compose.yml`).
 
 ---
 
-## Komutlar
+## Commands
 
 ```powershell
-npm run dev      # Geliştirme sunucusu
+npm run dev      # Local development server
 npm run build    # Production build → dist/
 npm run lint     # ESLint
-npm test         # Vitest unit testleri
-npm run preview  # Build önizleme
+npm test         # Vitest unit tests
+npm run preview  # Preview the production build
 ```
 
 ---
 
 ## Test
 
-Vitest — `src/**/*.test.ts`:
+Vitest tests live under `src/**/*.test.ts` (examples):
 
-- Hesaplama: `viopBondCalculations`, `marketPurchasingPower`
+- Calculations: `viopBondCalculations`, `marketPurchasingPower`
 - API: `apiVersion`, `macroRatesApi`
 
 ```powershell
 npm test
 ```
 
-Component/E2E testleri kapsam dışı — backend test ağırlıklı proje standardı.
+Component/E2E tests are currently out of scope (backend-heavy testing strategy).
 
 ---
 
-## Production imajı
+## Production image
 
-`frontend/Dockerfile` — nginx ile statik `dist/` servisi.
+`frontend/Dockerfile` serves the static `dist/` via nginx.
 
-Yerel demo: `docker-compose.yml` → `frontend-dev` (Vite HMR, kaynak bind mount).
+The Docker stack is the recommended way to run the UI end-to-end with Keycloak and backend services.
 
 ---
 
-## Dokümantasyon
+## Documentation
 
-- [Kök README](../README.md)
-- [Güvenlik — Keycloak](../docs/security/README.md)
+- [Root README](../README.md)
+- [Security (Keycloak)](../docs/security/README.md)
 - [API](../docs/api/README.md)

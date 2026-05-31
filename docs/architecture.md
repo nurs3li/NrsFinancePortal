@@ -1,197 +1,166 @@
-# Sistem mimarisi
+<p align="center">
+  <img src="assets/gifs/nrs-brand-hero.gif" alt="NRS Finance Portal" width="360" />
+</p>
 
-NRS Finans Portalı **event-driven**, **gözlemlenebilir** ve **kimlik merkezli** bir mikroservis mimarisi kullanır.
+<p align="center"><strong>Languages / Diller:</strong> <a href="architecture.md">English</a> · <a href="architecture.tr.md">Türkçe</a></p>
 
 ---
 
-## 1. Mimari prensipler
+# System architecture
 
-| Prensip | Uygulama |
+NRS Finance Portal uses an **event-driven**, **observable**, and **identity-centric** microservice architecture.
+
+<p align="center">
+  <img src="assets/gifs/architecture-overview.gif" alt="Architecture overview" width="720" />
+</p>
+
+---
+
+## 1. Architecture principles
+
+| Principle | How it is applied |
 |---------|----------|
-| **Katmanlı mimari** | `api` → `application` → `domain` → `infrastructure` |
-| **Ayrık veritabanları** | `nrs_finance` (portal) ve `nrs_market` (piyasa) |
-| **Merkezi kimlik** | Keycloak — tüm servisler JWT resource server |
-| **Async loglama** | Log4j2 → Kafka → OpenSearch (request path'i bloklamaz) |
-| **Cache** | Redis — rate limit, market snapshot, notification dedup |
-| **API versiyonlama** | `/api/v1/...` (+ geriye dönük legacy path) |
+| **Layered architecture** | `api` → `application` → `domain` → `infrastructure` |
+| **Separate databases** | `nrs_finance` (portal) and `nrs_market` (market data) |
+| **Centralized identity** | Keycloak — services act as JWT OAuth2 Resource Servers |
+| **Async logging** | Log4j2 → Kafka → OpenSearch (does not block request path) |
+| **Caching** | Redis — rate limiting, market snapshots, notification dedup |
+| **API versioning** | `/api/v1/...` (+ backward-compatible legacy paths where needed) |
 
 ---
 
-## 2. Bileşen diyagramı
+## 2. Component diagram
 
-```mermaid
-flowchart LR
-    subgraph Users
-        U[Kullanıcı / Admin]
-    end
-
-    subgraph Presentation
-        FE[React Frontend]
-    end
-
-    subgraph Gateway_IAM
-        KC[Keycloak]
-    end
-
-    subgraph Core
-        FIN[finance-service]
-        MKT[marketdata]
-        NOT[notification-service]
-    end
-
-    subgraph Async
-        KF[Kafka]
-        LC[log-consumer]
-    end
-
-    subgraph Persistence
-        PG1[(nrs_finance)]
-        PG2[(nrs_market)]
-        RD[Redis]
-        OS[OpenSearch]
-    end
-
-    U --> FE
-    FE --> KC
-    FE --> FIN
-    FE --> MKT
-    FE --> NOT
-    FIN --> KC
-    FIN --> PG1
-    FIN --> RD
-    FIN --> MKT
-    FIN --> NOT
-    MKT --> PG2
-    MKT --> RD
-    NOT --> PG1
-    NOT --> KF
-    FIN -.-> KF
-    MKT -.-> KF
-    NOT -.-> KF
-    KF --> LC --> OS
-```
+![Component diagram](./assets/images/architecture/02-component-diagram.png)
 
 ---
 
-## 3. Servis sorumlulukları
+## 3. Service responsibilities
 
 ### finance-service
 
-- Kullanıcı profili, kayıt (public API), admin kullanıcı yönetimi
-- Manuel portföy, VIOP/tahvil pozisyonları
-- Simülasyon, price alert, Portföy AI
-- Market terminal proxy (marketdata'ya delegasyon)
-- Admin audit log sorguları (OpenSearch)
-- Keycloak admin entegrasyonu (rol, OTP policy)
+- User profile, registration (public API), admin user management
+- Manual portfolio, VIOP/bond positions
+- Simulation, price alerts, Portfolio AI
+- Market terminal proxy (delegates to `marketdata`)
+- Admin audit log queries (OpenSearch)
+- Keycloak admin integrations (roles, OTP policy)
 
 ### marketdata
 
-- Dış kaynaklardan veri ingest: TCMB EVDS, BIST, VIOP CSV, TEFAS, banka kurları, FinHub, CoinGecko vb.
-- REST API: fiyat, tarihsel veri, enflasyon, faiz, eurobond
-- Zamanlanmış görevler (scheduler) ve startup backfill
-- Liquibase: `nrs_market` şeması
+- Data ingestion from external providers: TCMB EVDS, BIST, VIOP CSV, TEFAS, bank FX rates, FinHub, CoinGecko, etc.
+- REST API: prices, historical data, inflation, rates, eurobonds
+- Scheduled jobs (scheduler) and startup backfills
+- Liquibase-managed `nrs_market` schema
 
 ### notification-service
 
-- Kafka event tüketimi → in-app bildirim
-- Gmail OAuth ile e-posta gönderimi
-- S2S JWT (finance-service → notification internal API)
+- Kafka event consumption → in-app notifications
+- Email delivery via Gmail OAuth
+- Service-to-service JWT (finance-service → notification internal API)
 
 ### log-consumer-service
 
-- Kafka topic `application-logs` dinler
-- Günlük index: `application-logs-yyyy-MM-dd` → OpenSearch
-- Transaction/event mesajları (varsa) ayrı consumer'lar
+- Consumes Kafka topic `application-logs`
+- Daily indices: `application-logs-yyyy-MM-dd` → OpenSearch
+- Additional consumers for transactions/events (if enabled)
 
 ### frontend
 
 - SPA — React Router, TanStack Query
-- Keycloak JS adapter — token refresh, role guard
-- Grafana panel embed (admin audit)
+- Keycloak JS adapter — token refresh, role guards
+- Grafana panel embeds (admin audit)
 
 ---
 
-## 4. İstek akışı örneği — portföy listesi
+## 4. Example request flow — portfolio list
 
-```
-1. Kullanıcı /portfolio sayfasını açar
-2. React: financeClient.get('/api/v1/portfolio/...')
-3. Axios interceptor: Authorization: Bearer <JWT>
-4. finance-service SecurityFilterChain: JWT doğrula (Keycloak issuer)
-5. PortfolioController → PortfolioService → Repository
-6. PostgreSQL nrs_finance sorgusu
-7. ApiResponse envelope JSON döner
-8. React state güncellenir, UI render
-```
-
-Paralel: Log4j2 JSON satırı → Kafka (WARN+) → log-consumer → OpenSearch.
-
-Trace: Micrometer OTel bridge → OTel Collector → Tempo → Grafana.
+![Request flow — portfolio list](./assets/images/architecture/04-request-flow-portfolio.png)
 
 ---
 
-## 5. Güvenlik mimarisi
+## 5. Security architecture
 
-```
-┌─────────────┐     password / OTP      ┌──────────────┐
-│   Frontend  │ ───────────────────────►│  Keycloak    │
-│             │◄──── access_token ──────│  realm:      │
-└──────┬──────┘                         │  nrs-finance │
-       │ JWT Bearer                     └──────────────┘
-       ▼
-┌─────────────┐
-│ finance /   │
-│ market /    │  @PreAuthorize, role claims, rate limit
-│ notification│
-└─────────────┘
-```
+![Security architecture — Keycloak + JWT](./assets/images/architecture/05-security-architecture.png)
 
-**2FA:** Kullanıcı TOTP secret'ını etkinleştirir → login'de OTP istenir. Zorunlu değildir.
-
-Detay: [security/README.md](./security/README.md)
+Details: [security/README.md](./security/README.md)
 
 ---
 
-## 6. Veri ve migration
+## 6. Data & migrations
 
-| Veritabanı | Migration aracı | Changelog konumu |
+| Database | Migration tool | Changelog location |
 |------------|-------------------|------------------|
 | nrs_finance | Liquibase | `finance-service/.../db/changelog/` |
 | nrs_market | Liquibase | `marketdata/.../db/changelog/` |
-| notification şeması | Liquibase | `notification-service/.../db/changelog/` |
+| notification schema | Liquibase | `notification-service/.../db/changelog/` |
 
-`spring.jpa.hibernate.ddl-auto: none` — şema yalnızca Liquibase ile yönetilir.
+`spring.jpa.hibernate.ddl-auto: none` — schemas are managed via Liquibase only.
 
 ---
 
-## 7. Gözlemlenebilirlik
+## Manual portfolio — materialized read path
 
-| Sinyal | Araç | Erişim |
+`finance-service` optimizes manual portfolio dashboards using a **materialized read** layer (high level):
+
+| Concern | Component |
+|---------|-----------|
+| Price tree / cache warmup | `ManualPortfolioWarmupService`, `ManualPortfolioPriceTreeLoader` |
+| Read APIs | `ManualPortfolioReadService` (used by `PortfolioController`) |
+| Value snapshots | `PortfolioValueSnapshot`, snapshot triggers on position changes |
+| Gap-fill | Incremental warmup heals missing history when new symbols are added |
+
+This is internal to `finance-service`; the frontend calls standard `/api/v1/portfolio/**` endpoints.
+
+<p align="center">
+  <img src="assets/gifs/features/portfolio-manual-position.gif" alt="Manual portfolio — add position" width="720" />
+</p>
+
+---
+
+## Frontend → three backend bases
+
+The SPA talks to three APIs (see `frontend/.env` / `VITE_*`):
+
+| Backend | Default URL | Examples |
+|---------|-------------|----------|
+| finance-service | http://localhost:8085 | Portfolio, auth, admin, simulation |
+| marketdata | http://localhost:8083 | Market terminal, macro, news (many public GETs) |
+| notification-service | http://localhost:8089 | In-app notifications inbox |
+
+Keycloak (http://localhost:8081) handles login tokens; Grafana embeds use `VITE_GRAFANA_*`.
+
+---
+
+## Events & notifications (Kafka)
+
+`finance-service` publishes to Kafka topic **`notification-events`** via `NotificationEventKafkaPublisher` (direct publish — **no transactional outbox** in this codebase). `notification-service` consumes and persists in-app notifications; optional email uses Gmail.
+
+---
+
+## 7. Observability
+
+| Signal | Tooling | Access |
 |--------|------|--------|
-| Metrik | Prometheus + Actuator | :9090, `/actuator/prometheus` |
-| Dashboard | Grafana | :3001 |
-| Trace | OTel → Tempo | Grafana Tempo datasource |
-| Log | OpenSearch | :9200, Dashboards :5601 |
-| Korelasyon | `traceId`, `spanId`, `correlationId` in JSON logs | OpenSearch filter |
+| Metrics | Prometheus + Actuator | :9090, `/actuator/prometheus` |
+| Dashboards | Grafana | :3001 |
+| Traces | OTel → Tempo | Grafana Tempo datasource |
+| Logs | OpenSearch | :9200, Dashboards :5601 |
+| Correlation | `traceId`, `spanId`, `correlationId` in JSON logs | OpenSearch filters |
 
-Detay: [observability/README.md](./observability/README.md)
-
----
-
-## 8. Docker Compose topolojisi
-
-Tüm bileşenler `docker-compose.yml` ile tanımlıdır. Bağımlılık sırası (basitleştirilmiş):
-
-```
-postgres, redis, kafka, keycloak, opensearch
-    → market-data-service (health)
-        → finance-service
-    → notification-service
-    → log-consumer-service
-    → frontend-dev
-    → otel-collector, prometheus, grafana, tempo
-```
+Details: [observability/README.md](./observability/README.md)
 
 ---
 
-[← Dokümantasyon hub](./README.md) · [Kurulum →](./getting-started.md)
+## 8. Docker Compose topology
+
+<p align="center">
+  <img src="assets/gifs/system-architecture.gif" alt="System architecture animation" width="900" />
+</p>
+
+![Docker Compose topology](./assets/images/architecture/08-compose-topology.png)
+
+
+
+
+[← Documentation hub](./README.md) · [Getting started →](./getting-started.md)
