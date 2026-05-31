@@ -12,15 +12,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,7 +49,7 @@ class PublicPasswordResetServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(redis.opsForValue()).thenReturn(valueOps);
+        lenient().when(redis.opsForValue()).thenReturn(valueOps);
         service = new PublicPasswordResetService(
                 redis,
                 registrationEmailSender,
@@ -67,8 +67,8 @@ class PublicPasswordResetServiceTest {
 
         service.requestCode(EMAIL);
 
-        verify(valueOps).set(eq("password-reset:cooldown:" + EMAIL), eq("1"), anyLong(), eq(TimeUnit.SECONDS));
-        verify(valueOps).set(eq("password-reset:code:" + EMAIL), any(String.class), anyLong(), eq(TimeUnit.SECONDS));
+        verify(valueOps).set(eq("password-reset:cooldown:" + EMAIL), eq("1"), eq(Duration.ofSeconds(60)));
+        verify(valueOps).set(eq("password-reset:code:" + EMAIL), any(String.class), eq(Duration.ofMinutes(10)));
         verify(registrationEmailSender).sendPasswordResetVerificationCode(eq(EMAIL), any(String.class));
     }
 
@@ -80,7 +80,7 @@ class PublicPasswordResetServiceTest {
         service.requestCode(EMAIL);
 
         verify(registrationEmailSender, never()).sendPasswordResetVerificationCode(any(), any());
-        verify(valueOps, never()).set(eq("password-reset:code:" + EMAIL), any(), anyLong(), any());
+        verify(valueOps, never()).set(eq("password-reset:code:" + EMAIL), any(), any(Duration.class));
     }
 
     @Test
@@ -101,7 +101,7 @@ class PublicPasswordResetServiceTest {
 
         service.verifyCode(EMAIL, "123456");
 
-        verify(valueOps).set(eq("password-reset:verified:" + EMAIL), eq(KEYCLOAK_ID), anyLong(), eq(TimeUnit.SECONDS));
+        verify(valueOps).set(eq("password-reset:verified:" + EMAIL), eq(KEYCLOAK_ID), eq(Duration.ofMinutes(10)));
         verify(redis).delete("password-reset:code:" + EMAIL);
     }
 

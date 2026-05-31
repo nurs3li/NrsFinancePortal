@@ -282,37 +282,17 @@ export function bumpSummaryInAllCaches(
 
     qc: QueryClient,
 
-    view: ManualPortfolioView,
+    _view: ManualPortfolioView,
 
-    mode: SummaryMode,
+    _mode: SummaryMode,
 
-    previousView?: ManualPortfolioView,
+    _previousView?: ManualPortfolioView,
 
 ) {
 
     const prev = readSummaryFromCaches(qc);
 
     if (!prev) return;
-
-
-
-    let next = prev;
-
-    if (mode === 'update' && previousView) {
-
-        next = bumpSummaryForView(next, previousView, 'remove');
-
-        next = bumpSummaryForView(next, view, 'add');
-
-    } else if (mode === 'add') {
-
-        next = bumpSummaryForView(next, view, 'add');
-
-    } else if (mode === 'remove') {
-
-        next = bumpSummaryForView(next, view, 'remove');
-
-    }
 
     writeSummaryToCaches(qc, recomputeSummaryFromViews(readPositionsFromCaches(qc)));
 

@@ -9,6 +9,7 @@ import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioPo
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioReadSnapshotRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioTimeseriesSnapshotRepository;
 import com.nurseli.nrsfinanceportal.integration.support.FinanceIntegrationTestBase;
+import com.nurseli.nrsfinanceportal.integration.support.IntegrationTestMarketStubs;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,6 +56,7 @@ class ManualPortfolioTimeseriesSanityIntegrationTest extends FinanceIntegrationT
 
     @BeforeEach
     void cleanMaterializedState() {
+        IntegrationTestMarketStubs.stubBistPortfolioWarmupSymbols(marketDataClient);
         TransactionTemplate cleanup = new TransactionTemplate(transactionManager);
         cleanup.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         cleanup.executeWithoutResult(status -> {
