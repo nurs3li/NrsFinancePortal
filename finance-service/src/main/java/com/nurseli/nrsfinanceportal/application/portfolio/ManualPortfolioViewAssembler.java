@@ -54,4 +54,20 @@ public class ManualPortfolioViewAssembler {
     public ManualPortfolioView toView(ManualPortfolioPosition position) {
         return toViews(List.of(position)).getFirst();
     }
+
+    /**
+     * Warmup beklerken hızlı yanıt: tek pricing yüklemesi, CPI/reel getiri hesabı yok.
+     */
+    public List<ManualPortfolioView> toPlaceholderViews(List<ManualPortfolioPosition> positions) {
+        if (positions == null || positions.isEmpty()) {
+            return List.of();
+        }
+        LatestPricingSnapshot pricing = marketDataClient.loadLatestPricing();
+        List<ManualPortfolioView> views = new ArrayList<>(positions.size());
+        for (ManualPortfolioPosition p : positions) {
+            var nominal = nominalAnalysisCalculator.compute(p, pricing);
+            views.add(ManualPortfolioView.from(p, nominal, null));
+        }
+        return views;
+    }
     }

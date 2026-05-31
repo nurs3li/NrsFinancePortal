@@ -105,15 +105,17 @@ Verify data quickly (examples):
 # OpenAPI JSON (machine-readable)
 curl http://localhost:8083/v3/api-docs > $null
 
-# A couple of representative endpoints (paths may vary by module)
-curl "http://localhost:8083/api/market/dashboard"
+# Public GET examples on this service (dashboard is on finance-service :8085, JWT required)
 curl "http://localhost:8083/api/market/bank-rates"
+curl "http://localhost:8083/api/market/macro/inflation/latest"
 ```
 
 ### Local (optional)
 
+From the repository root (Postgres, Redis, Kafka must be reachable):
+
 ```powershell
-docker compose up -d market-data-service
+mvn spring-boot:run -pl marketdata
 ```
 
 Local port: **8086** (`application.yml`)

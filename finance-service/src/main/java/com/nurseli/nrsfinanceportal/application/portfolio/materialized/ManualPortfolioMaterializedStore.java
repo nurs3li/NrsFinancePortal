@@ -25,7 +25,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ManualPortfolioMaterializedStore {
 
+    /** @deprecated Legacy page bundle key; prefer {@link #SERIES_VALUE_1Y}. */
     public static final String SERIES_VALUE_6M = "VALUE:6M";
+    public static final String SERIES_VALUE_1Y = "VALUE:1Y";
     public static final String SERIES_VALUE_ALL = "VALUE:ALL";
 
     private final ManualPortfolioReadSnapshotRepository readSnapshotRepository;
@@ -151,6 +153,33 @@ public class ManualPortfolioMaterializedStore {
         return timeseriesSnapshotRepository.findById(new ManualPortfolioTimeseriesSnapshot.IdKey(userId, seriesKey))
                 .filter(row -> fingerprint.equals(row.getPositionsFingerprint()))
                 .map(row -> jsonCodec.readTimeseriesPoints(row.getPointsJson()));
+    }
+
+    /** Artımlı birleştirme için fingerprint eşleşmesi olmadan mevcut seriyi okur. */
+    @Transactional(readOnly = true)
+    public Optional<List<ManualPortfolioTimeseriesPointDto>> findTimeseriesIgnoringFingerprint(
+            Long userId,
+            String seriesKey
+    ) {
+        return timeseriesSnapshotRepository.findById(new ManualPortfolioTimeseriesSnapshot.IdKey(userId, seriesKey))
+                .map(row -> jsonCodec.readTimeseriesPoints(row.getPointsJson()))
+                .filter(points -> points != null && !points.isEmpty());
+    }
+
+    /** ADD merge kaynağı: yalnızca beklenen önceki portföy fingerprint'i ile eşleşen seri. */
+    @Transactional(readOnly = true)
+    public Optional<List<ManualPortfolioTimeseriesPointDto>> findTimeseriesForMerge(
+            Long userId,
+            String seriesKey,
+            String expectedPreviousFingerprint
+    ) {
+        if (expectedPreviousFingerprint == null || expectedPreviousFingerprint.isBlank()) {
+            return Optional.empty();
+        }
+        return timeseriesSnapshotRepository.findById(new ManualPortfolioTimeseriesSnapshot.IdKey(userId, seriesKey))
+                .filter(row -> expectedPreviousFingerprint.equals(row.getPositionsFingerprint()))
+                .map(row -> jsonCodec.readTimeseriesPoints(row.getPointsJson()))
+                .filter(points -> points != null && !points.isEmpty());
     }
 
     @Transactional

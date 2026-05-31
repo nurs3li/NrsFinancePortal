@@ -29,6 +29,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmailIgnoreCaseAndIdNot(@Param("email") String email, @Param("id") Long id);
 
     Optional<User> findByKeycloakUserId(String keycloakUserId);
+
+    @Query("SELECT u FROM User u WHERE LOWER(u.email) = LOWER(:email)")
+    Optional<User> findByEmailIgnoreCase(@Param("email") String email);
+
+    @Query("SELECT u FROM User u WHERE LOWER(u.username) = LOWER(:username)")
+    Optional<User> findByUsernameIgnoreCase(@Param("username") String username);
     List<User> findByRole(Role role);
 
     long countByRole(Role role);

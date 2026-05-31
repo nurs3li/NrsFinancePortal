@@ -141,8 +141,8 @@ If you want to demo the platform quickly, start with these groups:
 |------|------------|--------|
 | Auth / user | `/api/v1/users/me`, `/api/public/register`, `/api/public/password-reset/**` | finance |
 | Portfolio | `/api/v1/portfolio/**` | finance |
-| Market | `/api/market/**`, `/api/news/**` | marketdata |
-| Bank FX rates | `/api/market/bank-rates/**` | marketdata |
+| Market dashboard / terminal | `/api/market/dashboard`, `/api/market/terminal/**` | finance (JWT) |
+| Market data (public GET) | `/api/market/bank-rates/**`, `/api/market/macro/**`, `/api/news/**` | marketdata |
 | Notifications | `/api/v1/notifications/**` | notification |
 | Admin | `/api/admin/**` | finance |
 | Health | `/actuator/health` | all services |

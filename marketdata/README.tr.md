@@ -105,15 +105,17 @@ Veriyi hızlı doğrulama (örnekler):
 # OpenAPI JSON (makine okunur)
 curl http://localhost:8083/v3/api-docs > $null
 
-# Birkaç temsili endpoint (yollar modüle göre değişebilir)
-curl "http://localhost:8083/api/market/dashboard"
+# Bu servisteki public GET örnekleri (dashboard finance-service :8085 üzerinde, JWT gerekir)
 curl "http://localhost:8083/api/market/bank-rates"
+curl "http://localhost:8083/api/market/macro/inflation/latest"
 ```
 
 ### Yerel (isteğe bağlı)
 
+Depo kökünden (Postgres, Redis, Kafka erişilebilir olmalı):
+
 ```powershell
-docker compose up -d market-data-service
+mvn spring-boot:run -pl marketdata
 ```
 
 Yerel port: **8086** (`application.yml`)

@@ -62,6 +62,7 @@ public class AuditContextMdcFilter extends OncePerRequestFilter {
         if (uri == null) return "OTHER";
         String path = ApiPaths.legacyFromRequest(uri);
         if (path.contains("/api/public/register")) return "REGISTRATION";
+        if (path.contains("/api/public/password-reset")) return "PASSWORD_RESET";
         if (path.contains("/api/admin/")) return "ADMIN";
         if (path.contains("/api/users/me") && ("PATCH".equals(method) || "PUT".equals(method))) return "PROFILE";
         if (path.contains("/api/users/")) return "USER_ADMIN";

@@ -279,7 +279,45 @@ type StarAsset = {
     sparkline: number[];
 };
 const STARRED_PAGE_SIZE = 7;
+const EMPTY_STARRED_RESOLVED: StarredAssetsResponse['resolved'] = [];
 const LATEST_NEWS_LIMIT = 7;
+
+function getLatestPrice(row: LatestPrice | null | undefined): number {
+    if (!row || row.status === 'NO_DATA') return 0;
+    if (row.buyPrice != null) return Number(row.buyPrice);
+    if (row.sellPrice != null) return Number(row.sellPrice);
+    if (row.price != null) return Number(row.price);
+    return 0;
+}
+
+function buildStarRowsForPage(
+    resolved: StarredAssetsResponse['resolved'],
+    page: number,
+    marketDashboard: MarketDashboard | undefined,
+): StarAsset[] {
+    const start = page * STARRED_PAGE_SIZE;
+    const slice = (resolved ?? []).slice(start, start + STARRED_PAGE_SIZE);
+    const mapByType = latestMapsFromMarketDashboard(marketDashboard);
+    return slice.map((item) => {
+        const marketType = item.marketType as MarketType;
+        const symbol = item.symbol;
+        const row = mapByType[marketType]?.[symbol];
+        const price = getLatestPrice(row);
+        const ac = marketTypeToSparkAssetClass(marketType);
+        const sparkRaw = sparklineClosesForDashboard(marketDashboard, symbol, ac);
+        const change24h = Number(changePctFromSparkline(sparkRaw).toFixed(2));
+        return {
+            key: `${marketType}-${symbol}`,
+            label: formatAssetLabel(symbol, marketType),
+            code: symbol,
+            marketType,
+            symbol,
+            price,
+            change24h,
+            sparkline: normalizeTrendSparkline(sparkRaw, price, change24h, 14),
+        };
+    });
+}
 const DASHBOARD_SUMMARY_KEY = ['dashboard', 'summary'] as const;
 const DASHBOARD_MARKET_KEY = ['dashboard', 'market'] as const;
 const DASHBOARD_STARRED_KEY = ['dashboard', 'starred'] as const;
@@ -440,8 +478,6 @@ export function Dashboard() {
     const { theme, tokens } = useTheme();
     const { t, lang } = useLanguage();
     const qc = useQueryClient();
-    const [starAssets, setStarAssets] = useState<StarAsset[]>([]);
-    const [starredResolved, setStarredResolved] = useState<StarredAssetsResponse['resolved']>([]);
     const [starredPage, setStarredPage] = useState(0);
     const [latestNews, setLatestNews] = useState<NewsItem[]>([]);
     const [newsLoading, setNewsLoading] = useState(false);
@@ -474,18 +510,6 @@ export function Dashboard() {
         }
     }, [summaryQuery.data]);
 
-    const marketDashboardQuery = useQuery({
-        queryKey: DASHBOARD_MARKET_KEY,
-        queryFn: async () => {
-            const res = await financeClient.get<MarketDashboard>('/api/market/dashboard');
-            return unwrapPayload<MarketDashboard>(res.data);
-        },
-        enabled: starredResolved.length > 0,
-        staleTime: 5 * 60_000,
-        gcTime: 10 * 60_000,
-        refetchOnWindowFocus: false,
-    });
-
     const starredListQuery = useQuery({
         queryKey: DASHBOARD_STARRED_KEY,
         queryFn: async () => {
@@ -493,6 +517,20 @@ export function Dashboard() {
             return unwrapPayload<StarredAssetsResponse>(res.data);
         },
         enabled: summaryQuery.isSuccess,
+        staleTime: 5 * 60_000,
+        gcTime: 10 * 60_000,
+        refetchOnWindowFocus: false,
+    });
+
+    const starredResolved = starredListQuery.data?.resolved ?? EMPTY_STARRED_RESOLVED;
+
+    const marketDashboardQuery = useQuery({
+        queryKey: DASHBOARD_MARKET_KEY,
+        queryFn: async () => {
+            const res = await financeClient.get<MarketDashboard>('/api/market/dashboard');
+            return unwrapPayload<MarketDashboard>(res.data);
+        },
+        enabled: starredResolved.length > 0,
         staleTime: 5 * 60_000,
         gcTime: 10 * 60_000,
         refetchOnWindowFocus: false,
@@ -543,14 +581,6 @@ export function Dashboard() {
         return fallbackIconMap[marketType] ?? fallbackIconMap.DEFAULT;
     };
 
-    const getPrice = (row: LatestPrice | null | undefined): number => {
-        if (!row || row.status === 'NO_DATA') return 0;
-        if (row.buyPrice != null) return Number(row.buyPrice);
-        if (row.sellPrice != null) return Number(row.sellPrice);
-        if (row.price != null) return Number(row.price);
-        return 0;
-    };
-
     const unwrapAxiosData = <T,>(res: AxiosResponse<T>): T => {
         const body = res.data as unknown;
         if (body && typeof body === 'object' && 'data' in (body as object)) {
@@ -562,57 +592,23 @@ export function Dashboard() {
         return body as T;
     };
 
-    const buildStarRowsForPage = useCallback(
-        (
-            resolved: StarredAssetsResponse['resolved'],
-            page: number,
-            marketDashboard: MarketDashboard | undefined,
-        ): StarAsset[] => {
-            const start = page * STARRED_PAGE_SIZE;
-            const slice = (resolved ?? []).slice(start, start + STARRED_PAGE_SIZE);
-            const mapByType = latestMapsFromMarketDashboard(marketDashboard);
-            return slice.map((item) => {
-                const marketType = item.marketType as MarketType;
-                const symbol = item.symbol;
-                const row = mapByType[marketType]?.[symbol];
-                const price = getPrice(row);
-                const ac = marketTypeToSparkAssetClass(marketType);
-                const sparkRaw = sparklineClosesForDashboard(marketDashboard, symbol, ac);
-                const change24h = Number(changePctFromSparkline(sparkRaw).toFixed(2));
-                return {
-                    key: `${marketType}-${symbol}`,
-                    label: formatAssetLabel(symbol, marketType),
-                    code: symbol,
-                    marketType,
-                    symbol,
-                    price,
-                    change24h,
-                    sparkline: normalizeTrendSparkline(sparkRaw, price, change24h, 14),
-                };
-            });
-        },
-        [getPrice],
-    );
-
-    useEffect(() => {
-        if (!starredListQuery.data?.resolved) return;
-        setStarredResolved(starredListQuery.data.resolved);
-    }, [starredListQuery.data]);
-
     const starredPageCount = Math.max(1, Math.ceil(starredResolved.length / STARRED_PAGE_SIZE));
     const starredPageSafe = Math.min(starredPage, starredPageCount - 1);
 
     useEffect(() => {
-        setStarredPage((p) => Math.min(p, Math.max(0, starredPageCount - 1)));
+        setStarredPage((p) => {
+            const maxPage = Math.max(0, starredPageCount - 1);
+            return p > maxPage ? maxPage : p;
+        });
     }, [starredPageCount]);
 
-    useEffect(() => {
-        if (!starredResolved.length) {
-            setStarAssets([]);
-            return;
-        }
-        setStarAssets(buildStarRowsForPage(starredResolved, starredPageSafe, marketDashboardQuery.data));
-    }, [starredResolved, starredPageSafe, marketDashboardQuery.data, buildStarRowsForPage]);
+    const starAssets = useMemo(
+        () =>
+            starredResolved.length
+                ? buildStarRowsForPage(starredResolved, starredPageSafe, marketDashboardQuery.data)
+                : [],
+        [starredResolved, starredPageSafe, marketDashboardQuery.data],
+    );
 
     const refreshDashboard = useCallback(() => {
         void qc.invalidateQueries({ queryKey: DASHBOARD_SUMMARY_KEY });

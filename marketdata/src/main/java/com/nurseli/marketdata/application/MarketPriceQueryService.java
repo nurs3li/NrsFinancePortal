@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.application;
 
+import com.nurseli.marketdata.application.crypto.CryptoDailyOhlcUtil;
 import com.nurseli.marketdata.api.dto.BatchHistoryResponse;
 import com.nurseli.marketdata.api.dto.CandlePointResponse;
 import com.nurseli.marketdata.api.dto.CryptoHistoryCoverageResponse;
@@ -332,6 +333,7 @@ public class MarketPriceQueryService {
         if (!candles.isEmpty()) {
             if (useTickGapFillForLookbackDays(days)) {
                 candles = mergeDailyPreferDailyFillGapsFromTicks(symbol, candles, start.toLocalDate(), end.toLocalDate());
+                candles = enrichFlatCryptoCandlesFromTicks(symbol, candles, start.toLocalDate(), to);
             }
             return toHistoryFromCandles(candles);
         }
@@ -526,7 +528,11 @@ public class MarketPriceQueryService {
                 }
                 List<CandlePointResponse> cryptoCandles = toCryptoCandles(symbol, from, to);
                 if (!cryptoCandles.isEmpty()) {
-                    series.put(symbol, fillTickGaps ? mergeDailyPreferDailyFillGapsFromTicks(symbol, cryptoCandles, from, to) : cryptoCandles);
+                    if (fillTickGaps) {
+                        cryptoCandles = mergeDailyPreferDailyFillGapsFromTicks(symbol, cryptoCandles, from, to);
+                        cryptoCandles = enrichFlatCryptoCandlesFromTicks(symbol, cryptoCandles, from, to);
+                    }
+                    series.put(symbol, cryptoCandles);
                     continue;
                 }
             }
@@ -910,6 +916,54 @@ public class MarketPriceQueryService {
         return new ArrayList<>(merged.values());
     }
 
+    private List<CandlePointResponse> enrichFlatCryptoCandlesFromTicks(
+            String symbol,
+            List<CandlePointResponse> dailyPreferred,
+            LocalDate fromInclusive,
+            LocalDate toInclusive
+    ) {
+        if (symbol == null || symbol.isBlank() || dailyPreferred == null || dailyPreferred.isEmpty()) {
+            return dailyPreferred == null ? List.of() : dailyPreferred;
+        }
+        if (fromInclusive == null || toInclusive == null || fromInclusive.isAfter(toInclusive)) {
+            return dailyPreferred;
+        }
+        LocalDateTime rangeStart = fromInclusive.atStartOfDay();
+        LocalDateTime rangeEnd = toInclusive.plusDays(1).atStartOfDay().minusNanos(1);
+        List<MarketPriceHistory> raw = repository.findBySymbolAndTimestampBetweenOrderByTimestampAsc(
+                symbol.trim().toUpperCase(), rangeStart, rangeEnd);
+        List<CandlePointResponse> tickDaily = toDailyCandles(raw);
+        if (tickDaily.isEmpty()) {
+            return dailyPreferred;
+        }
+        Map<LocalDate, CandlePointResponse> tickByDay = tickDaily.stream()
+                .filter(c -> c != null && c.t() != null)
+                .collect(Collectors.toMap(c -> c.t().toLocalDate(), c -> c, (a, b) -> b));
+
+        List<CandlePointResponse> enriched = new ArrayList<>(dailyPreferred.size());
+        for (CandlePointResponse daily : dailyPreferred) {
+            if (daily == null || daily.t() == null) {
+                continue;
+            }
+            CandlePointResponse tick = tickByDay.get(daily.t().toLocalDate());
+            if (tick != null
+                    && isFlatCandlePoint(daily)
+                    && !isFlatCandlePoint(tick)) {
+                enriched.add(tick);
+            } else {
+                enriched.add(daily);
+            }
+        }
+        return enriched;
+    }
+
+    private static boolean isFlatCandlePoint(CandlePointResponse candle) {
+        if (candle == null) {
+            return true;
+        }
+        return CryptoDailyOhlcUtil.isFlatPrices(candle.o(), candle.h(), candle.l(), candle.c());
+    }
+
     private List<MarketPriceHistoryResponse> toHistoryFromCandles(List<CandlePointResponse> candles) {
         return toHistoryFromCandles(candles, "SYSTEM");
     }
@@ -1093,6 +1147,9 @@ public class MarketPriceQueryService {
         } else if (useTickGapFillForLookbackDays(days)
                 && (type == MarketType.EQUITY || type == MarketType.CRYPTO || type == MarketType.FX)) {
             candles = mergeDailyPreferDailyFillGapsFromTicks(symbol, candles, start.toLocalDate(), end.toLocalDate());
+            if (type == MarketType.CRYPTO) {
+                candles = enrichFlatCryptoCandlesFromTicks(symbol, candles, start.toLocalDate(), end.toLocalDate());
+            }
         }
         if (candles.isEmpty()) {
             throw new InvalidRequestException("Gosterge hesaplamak icin en az 1 gunluk veri gerekli.");

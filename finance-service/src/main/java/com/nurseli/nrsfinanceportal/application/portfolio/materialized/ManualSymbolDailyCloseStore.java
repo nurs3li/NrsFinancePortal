@@ -64,6 +64,14 @@ public class ManualSymbolDailyCloseStore {
         return tree;
     }
 
+    @Transactional
+    public void deleteForUser(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        repository.deleteByUserId(userId);
+    }
+
     @Transactional(readOnly = true)
     public Optional<LocalDate> findLatestDate(Long userId, AssetType assetType, String symbol) {
         if (userId == null || assetType == null || symbol == null || symbol.isBlank()) {

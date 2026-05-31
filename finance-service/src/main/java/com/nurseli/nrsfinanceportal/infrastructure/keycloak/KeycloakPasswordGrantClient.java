@@ -46,6 +46,7 @@ public class KeycloakPasswordGrantClient {
         }
         form.add("username", username.trim());
         form.add("password", password);
+        form.add("scope", "openid profile email");
 
         Integer status = keycloakAdminWebClient
                 .post()

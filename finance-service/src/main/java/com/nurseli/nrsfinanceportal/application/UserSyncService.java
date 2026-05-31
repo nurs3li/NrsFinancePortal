@@ -129,6 +129,16 @@ public class UserSyncService {
                 .toList();
     }
 
+    /**
+     * {@code extractSubject} — Access token JWT payload'ından Keycloak user ID (sub) çıkarır.
+     */
+    public String extractSubject(String accessToken) {
+        if (!StringUtils.hasText(accessToken)) {
+            return null;
+        }
+        return text(parseJwtPayload(accessToken), "sub");
+    }
+
     private JsonNode parseJwtPayload(String accessToken) {
         try {
             String[] parts = accessToken.split("\\.");

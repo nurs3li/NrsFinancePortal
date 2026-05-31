@@ -85,7 +85,7 @@ Taban: `http://localhost:8083`
 
 | Desen | Örnekler |
 |-------|----------|
-| `/api/market/**` | Dashboard, terminal, banka kurları, makro |
+| `/api/market/**` | Banka kurları, makro, kripto, döviz, geçmiş, hisse |
 | `/api/news/**` | Haberler |
 | `/api/funds/**`, `/api/viop/**`, `/api/debt/**` | Fon, VİOP, tahvil |
 

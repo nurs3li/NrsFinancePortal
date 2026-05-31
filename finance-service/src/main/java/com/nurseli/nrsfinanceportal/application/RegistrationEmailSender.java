@@ -70,6 +70,28 @@ public class RegistrationEmailSender {
         log.info("[PROFILE_EMAIL_CODE] verification mail sent to={}", targetEmail);
     }
 
+    /**
+     * {@code sendPasswordResetVerificationCode} — Şifre sıfırlama doğrulama kodunu gönderir.
+     */
+    public void sendPasswordResetVerificationCode(String targetEmail, String code) {
+        if (!tokenProvider.isConfigured()) {
+            throw new IllegalStateException("Şifre sıfırlama maili için Keycloak admin konfigürasyonu eksik");
+        }
+        String baseUrl = notificationClientProperties.getBaseUrl();
+        String subject = "NRS Finance Şifre Sıfırlama Kodu";
+        String body = """
+                Merhaba,
+
+                Şifre sıfırlama doğrulama kodunuz: %s
+
+                Kod 10 dakika içinde geçerliliğini kaybeder.
+                Bu işlemi siz yapmadıysanız bu e-postayı yok sayabilirsiniz.
+                """.formatted(code);
+
+        postEmail(baseUrl, new EmailSendPayload(targetEmail, subject, body));
+        log.info("[PASSWORD_RESET_CODE] verification mail sent to={}", targetEmail);
+    }
+
     private void postEmail(String baseUrl, EmailSendPayload payload) {
         keycloakAdminWebClient
                 .post()
