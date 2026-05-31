@@ -64,6 +64,8 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 ApiPaths.v1FromLegacy("/api/public/register/**"),
                                 "/api/public/register/**",
+                                ApiPaths.v1FromLegacy("/api/public/password-reset/**"),
+                                "/api/public/password-reset/**",
                                 ApiPaths.v1FromLegacy("/api/public/login"),
                                 "/api/public/login",
                                 ApiPaths.v1FromLegacy("/api/public/login/**"),

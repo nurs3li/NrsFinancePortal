@@ -184,7 +184,7 @@ public class ManualPortfolioService {
         validateCore(p);
 
         ManualPortfolioPosition saved = manualRepo.save(p);
-        onPositionChanged(user.getId());
+        onPositionChanged(user.getId(), saved.getId(), com.nurseli.nrsfinanceportal.application.portfolio.materialized.WarmupTrigger.ADD);
         return saved;
     }
 
@@ -349,8 +349,16 @@ public class ManualPortfolioService {
     }
 
     private void onPositionChanged(Long userId) {
+        onPositionChanged(userId, null, com.nurseli.nrsfinanceportal.application.portfolio.materialized.WarmupTrigger.FULL);
+    }
+
+    private void onPositionChanged(
+            Long userId,
+            Long positionId,
+            com.nurseli.nrsfinanceportal.application.portfolio.materialized.WarmupTrigger trigger
+    ) {
         invalidateReadCache(userId);
-        manualPortfolioWarmupService.scheduleWarmup(userId);
+        manualPortfolioWarmupService.scheduleWarmup(userId, trigger, positionId);
         scheduleManualSnapshot(userId);
     }
 
@@ -431,7 +439,7 @@ public class ManualPortfolioService {
         if (segment.isEmpty()) {
             return List.of();
         }
-        return buildManualTimeseries(posList, segment, from, to, userId, true);
+        return buildManualTimeseries(posList, segment, from, to, userId, true, true);
     }
 
     /**
@@ -451,7 +459,7 @@ public class ManualPortfolioService {
         if (open.isEmpty()) {
             return List.of();
         }
-        return buildManualTimeseries(open, open, from, to, userId, true);
+        return buildManualTimeseries(open, open, from, to, userId, true, true);
     }
 
     /**
@@ -479,7 +487,7 @@ public class ManualPortfolioService {
         if (segment.isEmpty()) {
             return List.of();
         }
-        return buildManualTimeseries(open, segment, from, to, userId, true);
+        return buildManualTimeseries(open, segment, from, to, userId, true, true);
     }
 
     private static List<ManualPortfolioPosition> listOpenPositions(List<ManualPortfolioPosition> all) {
@@ -547,7 +555,8 @@ public class ManualPortfolioService {
             LocalDate from,
             LocalDate to,
             Long userId,
-            boolean preferDbPrices
+            boolean preferDbPrices,
+            boolean allowMdsFallback
     ) {
         if (from == null || to == null || to.isBefore(from)) {
             return List.of();
@@ -597,7 +606,7 @@ public class ManualPortfolioService {
                 .map(k -> new ManualPortfolioPriceTreeLoader.SymbolKey(k.type(), k.symbol()))
                 .collect(java.util.stream.Collectors.toSet());
         Map<String, NavigableMap<LocalDate, BigDecimal>> priceTrees =
-                loadPriceTreesForKeys(userId, loaderKeys, histFrom, end, preferDbPrices);
+                loadPriceTreesForKeys(userId, loaderKeys, histFrom, end, preferDbPrices, true);
 
         long spanDays = ChronoUnit.DAYS.between(effectiveFrom, end) + 1;
         int step = (int) Math.max(1, Math.ceil(spanDays / (double) MANUAL_TS_MAX_POINTS));
@@ -798,7 +807,7 @@ public class ManualPortfolioService {
                 .map(k -> new ManualPortfolioPriceTreeLoader.SymbolKey(k.type(), k.symbol()))
                 .collect(java.util.stream.Collectors.toSet());
         Map<String, NavigableMap<LocalDate, BigDecimal>> priceTrees =
-                loadPriceTreesForKeys(userId, loaderKeys, histFrom, end, true);
+                loadPriceTreesForKeys(userId, loaderKeys, histFrom, end, true, true);
 
         long spanDays = ChronoUnit.DAYS.between(effectiveFrom, end) + 1;
         int step = (int) Math.max(1, Math.ceil(spanDays / (double) MANUAL_TS_MAX_POINTS));
@@ -882,7 +891,7 @@ public class ManualPortfolioService {
                 .map(k -> new ManualPortfolioPriceTreeLoader.SymbolKey(k.type(), k.symbol()))
                 .collect(java.util.stream.Collectors.toSet());
         Map<String, NavigableMap<LocalDate, BigDecimal>> priceTrees =
-                loadPriceTreesForKeys(userId, loaderKeys, histFrom, end, true);
+                loadPriceTreesForKeys(userId, loaderKeys, histFrom, end, true, true);
 
         long spanDays = ChronoUnit.DAYS.between(effectiveFrom, end) + 1;
         int step = (int) Math.max(1, Math.ceil(spanDays / (double) MANUAL_TS_MAX_POINTS));
@@ -1025,7 +1034,11 @@ public class ManualPortfolioService {
     }
 
     public ReadBundle buildReadBundleForUser(Long userId) {
-        return buildReadBundleInternal(userId);
+        ManualPortfolioReadCache.ReadBundle cached = manualPortfolioReadCache.getOrLoad(userId, () -> {
+            ReadBundle bundle = buildReadBundleInternal(userId);
+            return new ManualPortfolioReadCache.ReadBundle(bundle.positions(), bundle.summary(), bundle.views());
+        });
+        return new ReadBundle(cached.positions(), cached.summary(), cached.views());
     }
 
     public ManualPortfolioSummaryView emptySummary() {
@@ -1063,7 +1076,30 @@ public class ManualPortfolioService {
             LocalDate to,
             Long userId
     ) {
-        return buildManualTimeseries(axisScope, valueScope, from, to, userId, true);
+        return buildManualTimeseries(axisScope, valueScope, from, to, userId, true, true);
+    }
+
+    /**
+     * Artımlı timeseries: valueScope yalnızca değişen pozisyon(lar); axisScope portföy penceresi için.
+     */
+    public List<ManualPortfolioTimeseriesPointDto> buildTimeseriesForPositionsSubset(
+            List<ManualPortfolioPosition> axisScope,
+            List<ManualPortfolioPosition> valueScope,
+            LocalDate from,
+            LocalDate to,
+            Long userId
+    ) {
+        return buildManualTimeseries(axisScope, valueScope, from, to, userId, true, true);
+    }
+
+    public List<ManualPortfolioTimeseriesPointDto> buildTimeseriesDbOnlyRead(
+            List<ManualPortfolioPosition> axisScope,
+            List<ManualPortfolioPosition> valueScope,
+            LocalDate from,
+            LocalDate to,
+            Long userId
+    ) {
+        return buildManualTimeseries(axisScope, valueScope, from, to, userId, true, false);
     }
 
     public List<ManualPortfolioTimeseriesPointDto> timeseriesForPositions(
@@ -1074,7 +1110,7 @@ public class ManualPortfolioService {
             Long userId,
             boolean preferDbPrices
     ) {
-        return buildManualTimeseries(axisScope, valueScope, from, to, userId, preferDbPrices);
+        return buildManualTimeseries(axisScope, valueScope, from, to, userId, preferDbPrices, true);
     }
 
     private Map<String, NavigableMap<LocalDate, BigDecimal>> loadPriceTreesForKeys(
@@ -1082,7 +1118,8 @@ public class ManualPortfolioService {
             Set<ManualPortfolioPriceTreeLoader.SymbolKey> keys,
             LocalDate histFrom,
             LocalDate end,
-            boolean preferDb
+            boolean preferDb,
+            boolean allowMdsFallback
     ) {
         if (keys.isEmpty()) {
             return Map.of();
@@ -1095,13 +1132,15 @@ public class ManualPortfolioService {
                 NavigableMap<LocalDate, BigDecimal> tree = dbTrees.get(k.cacheKey());
                 return tree != null && !tree.isEmpty();
             });
-            if (!complete) {
+            if (!complete && allowMdsFallback) {
                 LatestPricingSnapshot snap = nominalAnalysisCalculator.loadLatestPricingSnapshot();
                 byCacheKey = priceTreeLoader.loadFromMdsParallel(userId, keys, histFrom, end, snap, true);
             }
-        } else {
+        } else if (allowMdsFallback) {
             LatestPricingSnapshot snap = nominalAnalysisCalculator.loadLatestPricingSnapshot();
             byCacheKey = priceTreeLoader.loadFromMdsParallel(userId, keys, histFrom, end, snap, userId != null);
+        } else {
+            byCacheKey = Map.of();
         }
         Map<String, NavigableMap<LocalDate, BigDecimal>> out = new HashMap<>();
         for (ManualPortfolioPriceTreeLoader.SymbolKey k : keys) {

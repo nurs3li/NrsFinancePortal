@@ -2,13 +2,17 @@ package com.nurseli.nrsfinanceportal.application;
 
 import com.nurseli.nrsfinanceportal.infrastructure.keycloak.KeycloakAdminTokenProvider;
 import com.nurseli.nrsfinanceportal.infrastructure.keycloak.KeycloakRealmSecurityClient;
+import com.nurseli.nrsfinanceportal.infrastructure.keycloak.KeycloakTotpCredentialClient;
 import com.nurseli.nrsfinanceportal.infrastructure.keycloak.KeycloakUserLookupClient;
+import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+
+import java.util.Locale;
 
 /**
  * finance-service TOTP giriş politikası — 2FA yalnızca kullanıcı kurduysa istenir, otomatik CONFIGURE_TOTP zorunluluğu temizlenir.
@@ -24,7 +28,9 @@ public class KeycloakTotpLoginPolicyService {
     private final KeycloakAdminTokenProvider tokenProvider;
     private final KeycloakUserLookupClient userLookupClient;
     private final KeycloakRealmSecurityClient realmSecurityClient;
+    private final KeycloakTotpCredentialClient keycloakTotpCredentialClient;
     private final UserTotpCredentialStore totpCredentialStore;
+    private final UserRepository userRepository;
 
     /**
      * {@code resolveKeycloakUserId} — Kullanıcı adı veya e-postadan Keycloak user ID'sini çözümler.
@@ -44,7 +50,10 @@ public class KeycloakTotpLoginPolicyService {
      * {@code prepareLogin} — Giriş öncesi TOTP kayıtlı değilse CONFIGURE_TOTP required action'ını temizler.
      */
     public void prepareLogin(String usernameOrEmail) {
-        resolveUserId(usernameOrEmail).ifPresent(this::clearTotpSetupIfNotEnrolled);
+        resolveUserId(usernameOrEmail).ifPresent(userId -> {
+            clearTotpSetupIfNotEnrolled(userId);
+            removeOrphanKeycloakOtpWhenPortalEnrolled(userId);
+        });
     }
 
     /**
@@ -61,6 +70,36 @@ public class KeycloakTotpLoginPolicyService {
         return resolveUserId(usernameOrEmail)
                 .map(this::requiresOtpForUser)
                 .orElse(false);
+    }
+
+    /**
+     * {@code requiresOtpForKeycloakUserId} — Bilinen Keycloak user ID için OTP zorunluluğunu kontrol eder.
+     */
+    public boolean requiresOtpForKeycloakUserId(String keycloakUserId) {
+        if (!StringUtils.hasText(keycloakUserId)) {
+            return false;
+        }
+        return requiresOtpForUser(keycloakUserId.trim());
+    }
+
+    /**
+     * {@code usesPortalTotpOnly} — Portal Redis TOTP etkinse giriş yalnızca portalda doğrulanır.
+     */
+    public boolean usesPortalTotpOnly(String keycloakUserId) {
+        return StringUtils.hasText(keycloakUserId) && totpCredentialStore.hasSecret(keycloakUserId);
+    }
+
+    private void removeOrphanKeycloakOtpWhenPortalEnrolled(String keycloakUserId) {
+        if (!totpCredentialStore.hasSecret(keycloakUserId) || !hasOtpCredential(keycloakUserId)) {
+            return;
+        }
+        try {
+            keycloakTotpCredentialClient.deleteOtpCredentials(keycloakUserId);
+            log.info("[LOGIN_POLICY] removed_orphan_keycloak_otp userId={}", keycloakUserId);
+        } catch (Exception ex) {
+            log.warn("[LOGIN_POLICY] orphan_keycloak_otp_cleanup_failed userId={} reason={}",
+                    keycloakUserId, ex.getMessage());
+        }
     }
 
     private boolean requiresOtpForUser(String keycloakUserId) {
@@ -97,10 +136,18 @@ public class KeycloakTotpLoginPolicyService {
             return java.util.Optional.empty();
         }
         String trimmed = usernameOrEmail.trim();
+        String normalized = trimmed.contains("@")
+                ? trimmed.toLowerCase(Locale.ROOT)
+                : trimmed;
         String userId = trimmed.contains("@")
-                ? userLookupClient.findUserIdByEmail(trimmed)
-                : userLookupClient.findUserIdByUsername(trimmed);
-        return java.util.Optional.ofNullable(userId);
+                ? userLookupClient.findUserIdByEmail(normalized)
+                : userLookupClient.findUserIdByUsername(normalized);
+        if (StringUtils.hasText(userId)) {
+            return java.util.Optional.of(userId);
+        }
+        return trimmed.contains("@")
+                ? userRepository.findByEmailIgnoreCase(normalized).map(u -> u.getKeycloakUserId())
+                : userRepository.findByUsernameIgnoreCase(normalized).map(u -> u.getKeycloakUserId());
     }
 
     /**

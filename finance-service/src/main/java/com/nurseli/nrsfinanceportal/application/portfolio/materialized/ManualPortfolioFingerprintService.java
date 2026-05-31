@@ -26,6 +26,16 @@ public class ManualPortfolioFingerprintService {
         return compute(positionRepository.findByUserIdOrderByBuyDateAsc(userId));
     }
 
+    public String computeExcluding(List<ManualPortfolioPosition> positions, Long excludePositionId) {
+        if (excludePositionId == null || positions == null || positions.isEmpty()) {
+            return compute(positions);
+        }
+        List<ManualPortfolioPosition> filtered = positions.stream()
+                .filter(p -> p.getId() != null && !excludePositionId.equals(p.getId()))
+                .toList();
+        return compute(filtered);
+    }
+
     public String compute(List<ManualPortfolioPosition> positions) {
         if (positions == null || positions.isEmpty()) {
             return hashString("empty");

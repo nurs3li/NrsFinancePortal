@@ -11,6 +11,7 @@ import reactor.core.publisher.Mono;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.Locale;
 
 /**
  * Keycloak kullanıcı arama ve kimlik çözümleme.
@@ -52,8 +53,10 @@ public class KeycloakUserLookupClient {
             return null;
         }
         String trimmed = usernameOrEmail.trim();
-        String field = trimmed.contains("@") ? "email" : "username";
-        return findUserByField(field, trimmed);
+        if (trimmed.contains("@")) {
+            return findUserByField("email", trimmed.toLowerCase(Locale.ROOT));
+        }
+        return findUserByField("username", trimmed);
     }
 
     /**

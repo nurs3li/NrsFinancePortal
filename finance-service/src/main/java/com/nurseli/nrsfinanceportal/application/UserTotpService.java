@@ -104,11 +104,9 @@ public class UserTotpService {
         }
 
         totpCredentialStore.saveSecret(keycloakUserId, secret);
-        try {
-            keycloakTotpCredentialClient.registerTotpSecret(keycloakUserId, secret);
-        } catch (Exception ex) {
-            // Keycloak Admin OTP kaydÄ± her sÃ¼rÃ¼mde gÃ¼venilir deÄŸil; portal Redis kaydÄ± yeterli.
-        }
+        // 2FA yalnızca portal Redis'inde tutulur. Keycloak OTP credential girişi bozar
+        // (reset-password + type=otp güvenilir değil; kapat/aç sonrası şifre hatası üretir).
+        keycloakTotpCredentialClient.deleteOtpCredentials(keycloakUserId);
         String requiredAction = requiredActionAlias();
         keycloakRealmSecurityClient.removeRequiredActionIfPresent(keycloakUserId, requiredAction);
         redis.delete(setupKey(keycloakUserId));

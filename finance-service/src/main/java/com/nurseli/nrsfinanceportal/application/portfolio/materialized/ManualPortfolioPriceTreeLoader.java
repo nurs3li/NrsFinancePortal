@@ -3,6 +3,7 @@ package com.nurseli.nrsfinanceportal.application.portfolio.materialized;
 import com.nurseli.nrsfinanceportal.application.portfolio.HistoricalManualPriceResolverService;
 import com.nurseli.nrsfinanceportal.application.portfolio.HistoricalManualPriceResolverService.ManualChartPoint;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
+import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPortfolioPosition;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient.LatestPricingSnapshot;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
@@ -88,6 +90,96 @@ public class ManualPortfolioPriceTreeLoader {
                 .toArray(CompletableFuture[]::new);
         CompletableFuture.allOf(tasks).join();
         return out;
+    }
+
+    public void loadMissingDailyCloses(
+            Long userId,
+            List<ManualPortfolioPosition> positions,
+            LocalDate end,
+            LatestPricingSnapshot pricingSnapshot
+    ) {
+        loadMissingDailyCloses(userId, positions, end, pricingSnapshot, null);
+    }
+
+    /**
+     * Sembol başına eksik günlük kapanışları yükler; mevcut DB cache'i portföy geneli earliestBuy ile yeniden çekmez.
+     * {@code rangeFloor} verilirse (ör. 6M başlangıcı) yeni semboller için MDS aralığı bu tarihten önceye inmez.
+     */
+    public void loadMissingDailyCloses(
+            Long userId,
+            List<ManualPortfolioPosition> positions,
+            LocalDate end,
+            LatestPricingSnapshot pricingSnapshot,
+            LocalDate rangeFloor
+    ) {
+        if (userId == null || positions == null || positions.isEmpty() || end == null) {
+            return;
+        }
+        LocalDate today = end;
+        Map<SymbolKey, LocalDate> requiredFromByKey = new HashMap<>();
+        for (ManualPortfolioPosition p : positions) {
+            if (p.getType() == null || p.getSymbol() == null || p.getSymbol().isBlank() || p.getBuyDate() == null) {
+                continue;
+            }
+            SymbolKey key = new SymbolKey(p.getType(), p.getSymbol().trim());
+            LocalDate requiredFrom = p.getBuyDate().minusDays(14);
+            if (rangeFloor != null && requiredFrom.isBefore(rangeFloor)) {
+                requiredFrom = rangeFloor;
+            }
+            requiredFromByKey.merge(key, requiredFrom, (a, b) -> a.isBefore(b) ? a : b);
+        }
+        if (requiredFromByKey.isEmpty()) {
+            return;
+        }
+
+        Map<SymbolKey, LocalDate[]> rangesToLoad = new HashMap<>();
+        for (Map.Entry<SymbolKey, LocalDate> entry : requiredFromByKey.entrySet()) {
+            SymbolKey key = entry.getKey();
+            LocalDate requiredFrom = entry.getValue();
+            Optional<LocalDate> latestCached = dailyCloseStore.findLatestDate(userId, key.type(), key.symbol());
+            boolean hasRequiredStart = !dailyCloseStore
+                    .loadRange(userId, key.type(), key.symbol(), requiredFrom, requiredFrom)
+                    .isEmpty();
+
+            if (latestCached.isEmpty()) {
+                rangesToLoad.put(key, new LocalDate[]{requiredFrom, today});
+                continue;
+            }
+            LocalDate loadFrom = null;
+            if (!hasRequiredStart) {
+                loadFrom = requiredFrom;
+            } else if (latestCached.get().isBefore(today.minusDays(1))) {
+                loadFrom = latestCached.get().plusDays(1);
+            }
+            if (loadFrom != null && !loadFrom.isAfter(today)) {
+                rangesToLoad.put(key, new LocalDate[]{loadFrom, today});
+            }
+        }
+
+        if (rangesToLoad.isEmpty()) {
+            return;
+        }
+
+        LatestPricingSnapshot snap = pricingSnapshot;
+        CompletableFuture<?>[] tasks = rangesToLoad.entrySet().stream()
+                .map(entry -> CompletableFuture.runAsync(() -> {
+                    SymbolKey key = entry.getKey();
+                    LocalDate histFrom = entry.getValue()[0];
+                    LocalDate histTo = entry.getValue()[1];
+                    try {
+                        List<ManualChartPoint> pts = priceResolver.loadDailyCloseSeriesTry(
+                                key.type(), key.symbol(), histFrom, histTo, snap);
+                        if (!pts.isEmpty()) {
+                            dailyCloseStore.upsertSeries(userId, key.type(), key.symbol(), pts);
+                        }
+                    } catch (RuntimeException ex) {
+                        log.warn("[MANUAL_PRICE_TREE] incremental load failed type={} symbol={} from={}: {}",
+                                key.type(), key.symbol(), histFrom, ex.toString());
+                    }
+                }, executor))
+                .toArray(CompletableFuture[]::new);
+        CompletableFuture.allOf(tasks).join();
+        log.info("[MANUAL_PRICE_TREE] incremental user={} symbols={}", userId, rangesToLoad.size());
     }
 
     public static String priceTreeKey(AssetType type, String symbol) {

@@ -3,13 +3,14 @@ package com.nurseli.nrsfinanceportal.application;
 import com.nurseli.nrsfinanceportal.api.exception.ApiBusinessException;
 import com.nurseli.nrsfinanceportal.api.response.ApiErrorCode;
 import com.nurseli.nrsfinanceportal.domain.user.User;
-import com.nurseli.nrsfinanceportal.infrastructure.keycloak.KeycloakPasswordGrantClient;
 import com.nurseli.nrsfinanceportal.infrastructure.keycloak.KeycloakTokenClient;
 import com.nurseli.nrsfinanceportal.infrastructure.keycloak.KeycloakTokenResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+
+import java.util.Locale;
 
 /**
  * finance-service public login servisi — Keycloak token alımı, OTP politikası ve kullanıcı provizyonunu birleştirir.
@@ -20,7 +21,6 @@ import org.springframework.util.StringUtils;
 public class PublicLoginService {
 
     private final KeycloakTokenClient keycloakTokenClient;
-    private final KeycloakPasswordGrantClient passwordGrantClient;
     private final UserSyncService userSyncService;
     private final KeycloakTotpLoginPolicyService loginPolicy;
     private final UserTotpCredentialStore totpCredentialStore;
@@ -54,7 +54,7 @@ public class PublicLoginService {
     "Kullanıcı adı ve şifre zorunludur.");
         }
 
-        String loginId = usernameOrEmail.trim();
+        String loginId = normalizeLoginId(usernameOrEmail);
         String keycloakLoginName = loginPolicy.resolveLoginUsername(loginId);
         String keycloakUserId = loginPolicy.resolveKeycloakUserId(loginId).orElse(null);
         String keycloakOtp = otp;
@@ -63,10 +63,6 @@ public class PublicLoginService {
         if (!StringUtils.hasText(otp)) {
             loginPolicy.prepareLogin(loginId);
             if (loginPolicy.requiresOtpForLogin(loginId)) {
-                if (!passwordGrantClient.verifyCredentials(keycloakLoginName, password)) {
-                    throw new ApiBusinessException(HttpStatus.UNAUTHORIZED, ApiErrorCode.INVALID_CREDENTIALS,
-                            "Kullanıcı adı veya şifre hatalı.");
-                }
                 return PublicLoginResult.otpRequired("İki aşamalı doğrulama kodu gerekli.");
             }
         } else if (keycloakUserId != null && totpCredentialStore.hasSecret(keycloakUserId)) {
@@ -81,6 +77,12 @@ public class PublicLoginService {
         try {
             KeycloakTokenResponse tokens = keycloakTokenClient.obtainTokens(
                     keycloakLoginName, password, keycloakOtp, rememberMe);
+            if (!portalOtpVerified && !StringUtils.hasText(otp)) {
+                String authenticatedUserId = userSyncService.extractSubject(tokens.accessToken());
+                if (loginPolicy.requiresOtpForKeycloakUserId(authenticatedUserId)) {
+                    return PublicLoginResult.otpRequired("İki aşamalı doğrulama kodu gerekli.");
+                }
+            }
             User user = userSyncService.provisionFromAccessToken(tokens.accessToken());
             if (user.isLoginSuspended()) {
                 throw new ApiBusinessException(HttpStatus.FORBIDDEN, ApiErrorCode.ACCESS_DENIED,
@@ -90,7 +92,7 @@ public class PublicLoginService {
         } catch (KeycloakTokenClient.KeycloakTokenException ex) {
             if (portalOtpVerified) {
                 throw new ApiBusinessException(HttpStatus.UNAUTHORIZED, ApiErrorCode.INVALID_CREDENTIALS,
-                        "Doğrulama kodu kabul edildi ancak şifre Keycloak ile eşleşmiyor. Şifreyi kontrol edip baştan deneyin.");
+                        "Doğrulama kodu kabul edildi. Şifre hatalı — «Şifremi unuttum» ile belirlediğiniz güncel şifreyi girin.");
             }
             if (!StringUtils.hasText(otp)
                     && ex.error().kind() == KeycloakTokenClient.TokenErrorKind.INVALID_CREDENTIALS
@@ -124,7 +126,7 @@ public class PublicLoginService {
             String message) {
         if (portalOtpVerified) {
             throw new ApiBusinessException(HttpStatus.UNAUTHORIZED, ApiErrorCode.INVALID_CREDENTIALS,
-                    "Doğrulama kodu kabul edildi ancak şifre Keycloak ile eşleşmiyor. Şifreyi kontrol edip baştan deneyin.");
+                    "Doğrulama kodu kabul edildi. Şifre hatalı — «Şifremi unuttum» ile belirlediğiniz güncel şifreyi girin.");
         }
         if (otpProvided) {
             throw new ApiBusinessException(HttpStatus.UNAUTHORIZED, ApiErrorCode.INVALID_CREDENTIALS,
@@ -135,6 +137,14 @@ public class PublicLoginService {
         }
         throw new ApiBusinessException(HttpStatus.UNAUTHORIZED, ApiErrorCode.INVALID_CREDENTIALS,
                 "Kullanıcı adı veya şifre hatalı.");
+    }
+
+    private static String normalizeLoginId(String usernameOrEmail) {
+        if (!StringUtils.hasText(usernameOrEmail)) {
+            return "";
+        }
+        String trimmed = usernameOrEmail.trim();
+        return trimmed.contains("@") ? trimmed.toLowerCase(Locale.ROOT) : trimmed;
     }
 
     /**

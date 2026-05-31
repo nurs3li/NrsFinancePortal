@@ -19,4 +19,9 @@ public class CryptoHistoryBackfillProperties {
      * Son N güne ait mum sayısı bu eşiğe ulaştıysa sembol için OHLC isteği atlanır (yeniden başlatmada gereksiz çağrı önleme).
      */
     private int skipSymbolIfCandleCountAtLeast = 340;
+    /**
+     * Startup'ta düz (O=H=L=C) kripto mumlarını CoinGecko /ohlc ile arka planda onar.
+     * Prod'da bir kez onarım sonrası false yapılabilir.
+     */
+    private boolean repairFlatCandlesOnStartup = true;
 }
