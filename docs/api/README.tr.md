@@ -137,8 +137,8 @@ Platformu hızlıca göstermek istiyorsanız bu gruplarla başlayın:
 |------|------------|--------|
 | Auth / kullanıcı | `/api/v1/users/me`, `/api/public/register`, `/api/public/password-reset/**` | finance |
 | Portföy | `/api/v1/portfolio/**` | finance |
-| Piyasa | `/api/market/**`, `/api/news/**` | marketdata |
-| Banka döviz kurları | `/api/market/bank-rates/**` | marketdata |
+| Piyasa dashboard / terminal | `/api/market/dashboard`, `/api/market/terminal/**` | finance (JWT) |
+| Piyasa verisi (public GET) | `/api/market/bank-rates/**`, `/api/market/macro/**`, `/api/news/**` | marketdata |
 | Bildirimler | `/api/v1/notifications/**` | notification |
 | Admin | `/api/admin/**` | finance |
 | Sağlık | `/actuator/health` | tüm servisler |

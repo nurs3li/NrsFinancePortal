@@ -88,7 +88,7 @@ Configured in `marketdata/.../SecurityConfig.java`:
 
 | Pattern | Examples |
 |---------|----------|
-| `/api/market/**`, `/api/v1/market/**` | Dashboard, terminal, bank rates, macro |
+| `/api/market/**`, `/api/v1/market/**` | Bank rates, macro, crypto, FX, history, equity |
 | `/api/news/**` | Financial news |
 | `/api/funds/**`, `/api/fund/**` | TEFAS funds |
 | `/api/viop/**` | VIOP |
