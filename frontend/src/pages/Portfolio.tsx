@@ -3,7 +3,6 @@ import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAx
 import { useMutation, useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { manualPortfolioKeys } from '../queries/manualPortfolioKeys';
-import { financeClient } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
@@ -49,12 +48,14 @@ import {
     getManualOpenUnrealizedPnlSegment,
     getManualRealReturnPnlTimeseries,
     getManualRealReturnPnlSegment,
+    deleteManualPosition,
     readFinanceApiError,
 } from '../services/manualPortfolioApi';
+import { applyManualPortfolioMutation, mergePendingPageWithOptimisticCache } from '../utils/manualPortfolioCachePatch';
 import { PfHelpTerm } from '../components/portfolio/PfHelpTerm';
 import { PositionRealReturnDetailGrid } from '../components/portfolio/PositionRealReturnDetailGrid';
 import { notificationKeys } from '../queries/notificationKeys';
-import type { ManualPortfolioTimeseriesPoint, ManualPortfolioView } from '../types/manualPortfolio';
+import type { ManualPortfolioPage, ManualPortfolioTimeseriesPoint, ManualPortfolioView } from '../types/manualPortfolio';
 import {
     buildConcentrationRiskLine,
     buildRadarRiskFacts,
@@ -64,6 +65,41 @@ import {
     resolveHealthScore,
 } from '../utils/portfolioSmartAnalysis';
 type SnapRange = '1M' | '3M' | '6M' | '1Y' | 'ALL';
+
+const MANUAL_PORTFOLIO_PAGE_STORAGE = 'nrs.manual-portfolio.page.v1';
+
+function readStoredManualPortfolioPage(): ManualPortfolioPage | undefined {
+    try {
+        const raw = sessionStorage.getItem(MANUAL_PORTFOLIO_PAGE_STORAGE);
+        if (!raw) return undefined;
+        const stored = JSON.parse(raw) as Pick<ManualPortfolioPage, 'positions' | 'summary' | 'meta'>;
+        if (!stored.positions || !stored.summary) return undefined;
+        return {
+            positions: stored.positions,
+            summary: stored.summary,
+            insights: null,
+            timeseries: { range: '1Y', from: '', to: '', points: [] },
+            meta: stored.meta ?? { warmStatus: 'PENDING' },
+        };
+    } catch {
+        return undefined;
+    }
+}
+
+function writeStoredManualPortfolioPage(page: ManualPortfolioPage) {
+    try {
+        sessionStorage.setItem(
+            MANUAL_PORTFOLIO_PAGE_STORAGE,
+            JSON.stringify({
+                positions: page.positions,
+                summary: page.summary,
+                meta: page.meta,
+            }),
+        );
+    } catch {
+        /* ignore quota */
+    }
+}
 
 type ChartSeriesMode =
     | 'value'
@@ -256,6 +292,19 @@ function buildChartPointsFromTimeseries(
         }
     }
     return out;
+}
+
+function filterTimeseriesFromYmd(
+    rows: ManualPortfolioTimeseriesPoint[],
+    fromYmd: string,
+): ManualPortfolioTimeseriesPoint[] {
+    const from = fromYmd.trim();
+    if (!from || !rows.length) return rows;
+    return rows.filter((r) => String(r.date ?? '').trim() >= from);
+}
+
+function isBundledPrimaryTimeseriesRange(range: string | undefined): boolean {
+    return range === '1Y' || range === '6M';
 }
 
 function snapRangeStart(range: SnapRange): Date {
@@ -632,7 +681,8 @@ export function Portfolio() {
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
     const manualRef = useRef<ManualInvestmentAnalysisSectionHandle>(null);
 
-    const [snapRange, setSnapRange] = useState<SnapRange>('6M');
+    const [chartWarmPollToken, setChartWarmPollToken] = useState(0);
+    const [snapRange, setSnapRange] = useState<SnapRange>('1Y');
     const [chartSeriesMode, setChartSeriesMode] = useState<ChartSeriesMode>('value');
     const [positionCountVariant, setPositionCountVariant] = useState<PositionCountVariant>('open');
     const [tablePage, setTablePage] = useState(0);
@@ -650,48 +700,33 @@ export function Portfolio() {
         priceCurrency?: string | null;
     } | null>(null);
 
-    const invalidateManualCharts = useCallback(() => {
-        void qc.invalidateQueries({ queryKey: manualPortfolioKeys.insights() });
-        void qc.invalidateQueries({ queryKey: [...manualPortfolioKeys.all, 'timeseries'] });
-        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-segment'] });
-        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-hold'] });
-        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-hold-segment'] });
-        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-lifecycle-pnl'] });
-        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-lifecycle-pnl-segment'] });
-        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-pnl'] });
-        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-pnl-segment'] });
-        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-overlay'] });
-        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-overlay'] });
-        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-real-return-pnl'] });
-        void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-real-return-overlay'] });
-        void qc.invalidateQueries({ queryKey: ['market', 'dashboard'] });
-    }, [qc]);
-
-    const invalidateManualPage = useCallback(() => {
-        void qc.invalidateQueries({ queryKey: manualPortfolioKeys.page() });
-        void qc.invalidateQueries({ queryKey: manualPortfolioKeys.positions() });
-        void qc.invalidateQueries({ queryKey: manualPortfolioKeys.summary() });
-        invalidateManualCharts();
-    }, [qc, invalidateManualCharts]);
-
     const pageQuery = useQuery({
         queryKey: manualPortfolioKeys.page(),
         queryFn: async () => {
-            const page = await getManualPortfolioPage();
+            const optimisticPage = qc.getQueryData<ManualPortfolioPage>(manualPortfolioKeys.page());
+            const rawPage = await getManualPortfolioPage();
+            const page = mergePendingPageWithOptimisticCache(rawPage, optimisticPage);
             qc.setQueryData(manualPortfolioKeys.positions(), page.positions);
             qc.setQueryData(manualPortfolioKeys.summary(), page.summary);
             if (page.insights) {
                 qc.setQueryData(manualPortfolioKeys.insights(), page.insights);
             }
-            if (page.timeseries?.range === '6M' && page.timeseries.points?.length) {
-                qc.setQueryData(manualPortfolioKeys.timeseries('6M'), page.timeseries.points);
+            if (page.timeseries && isBundledPrimaryTimeseriesRange(page.timeseries.range) && page.timeseries.points?.length) {
+                qc.setQueryData(manualPortfolioKeys.timeseries('1Y'), page.timeseries.points);
             }
             return page;
         },
+        placeholderData: () => readStoredManualPortfolioPage(),
         staleTime: 90_000,
         refetchOnWindowFocus: false,
         retry: 1,
     });
+
+    useEffect(() => {
+        if (pageQuery.data && !pageQuery.isPlaceholderData) {
+            writeStoredManualPortfolioPage(pageQuery.data);
+        }
+    }, [pageQuery.data, pageQuery.isPlaceholderData]);
 
     const positionsFallbackQuery = useQuery({
         queryKey: manualPortfolioKeys.positions(),
@@ -712,9 +747,13 @@ export function Portfolio() {
     const coreDataReady =
         pageQuery.data !== undefined ||
         (summaryFallbackQuery.data !== undefined && positionsFallbackQuery.data !== undefined);
-    const bundled6MTimeseries =
-        pageQuery.data?.timeseries?.range === '6M' ? pageQuery.data.timeseries.points : undefined;
+    const bundledBaseTimeseries =
+        pageQuery.data?.timeseries && isBundledPrimaryTimeseriesRange(pageQuery.data.timeseries.range)
+            ? pageQuery.data.timeseries.points
+            : undefined;
     const bundledInsights = pageQuery.data?.insights ?? undefined;
+    const pageWarmStatus = pageQuery.data?.meta?.warmStatus;
+    const hasBundledBasePoints = (bundledBaseTimeseries?.length ?? 0) > 0;
 
     const insightsQuery = useQuery({
         queryKey: manualPortfolioKeys.insights(),
@@ -770,6 +809,13 @@ export function Portfolio() {
 
     const earliestBuyYmd = useMemo(() => earliestBuyYmdFromPositions(positions), [positions]);
 
+    const oneYearStartYmd = useMemo(() => formatLocalYmd(snapRangeStart('1Y')), []);
+
+    const needsAllHistoryFetch = useMemo(
+        () => snapRange === 'ALL' && earliestBuyYmd != null && earliestBuyYmd < oneYearStartYmd,
+        [snapRange, earliestBuyYmd, oneYearStartYmd],
+    );
+
     const earliestOpenBuyYmd = useMemo(() => earliestBuyYmdAmongOpenPositions(positions), [positions]);
 
     const earliestSellYmd = useMemo(() => earliestSellYmdFromPositions(positions), [positions]);
@@ -798,13 +844,135 @@ export function Portfolio() {
         queryKey: timeseriesQueryKey,
         queryFn: async () => {
             const end = new Date();
-            return getManualTimeseries(timeseriesFromYmd, formatLocalYmd(end));
+            const data = await getManualTimeseries(timeseriesFromYmd, formatLocalYmd(end));
+            if (data.length === 0) {
+                const prev = qc.getQueryData<ManualPortfolioTimeseriesPoint[]>(timeseriesQueryKey);
+                if (prev && prev.length > 0) {
+                    return prev;
+                }
+            }
+            return data;
         },
-        enabled: coreDataReady && !(snapRange === '6M' && bundled6MTimeseries != null),
-        initialData: snapRange === '6M' ? bundled6MTimeseries : undefined,
+        enabled:
+            coreDataReady &&
+            (needsAllHistoryFetch || !hasBundledBasePoints) &&
+            (pageWarmStatus === 'READY' || hasBundledBasePoints),
+        placeholderData: (prev) => prev,
         staleTime: 60_000,
         refetchOnWindowFocus: false,
     });
+
+    const refreshPrimaryChart = useCallback(() => {
+        setChartWarmPollToken((token) => token + 1);
+    }, []);
+
+    const primaryTimeseriesData = useMemo((): ManualPortfolioTimeseriesPoint[] => {
+        if (needsAllHistoryFetch) {
+            if ((timeseriesQuery.data?.length ?? 0) > 0) {
+                return timeseriesQuery.data ?? [];
+            }
+            const cached = qc.getQueryData<ManualPortfolioTimeseriesPoint[]>(timeseriesQueryKey);
+            return cached ?? [];
+        }
+
+        const base =
+            (hasBundledBasePoints && bundledBaseTimeseries ? bundledBaseTimeseries : undefined) ??
+            ((timeseriesQuery.data?.length ?? 0) > 0 ? timeseriesQuery.data : undefined) ??
+            qc.getQueryData<ManualPortfolioTimeseriesPoint[]>(manualPortfolioKeys.timeseries('1Y')) ??
+            [];
+
+        if (!base.length) {
+            return [];
+        }
+
+        if (snapRange === 'ALL') {
+            const fromYmd = earliestBuyYmd ?? formatLocalYmd(chartFallbackStartDaysAgo(new Date(), 7));
+            return filterTimeseriesFromYmd(base, fromYmd);
+        }
+
+        return filterTimeseriesFromYmd(base, formatLocalYmd(snapRangeStart(snapRange)));
+    }, [
+        needsAllHistoryFetch,
+        hasBundledBasePoints,
+        bundledBaseTimeseries,
+        timeseriesQuery.data,
+        timeseriesQueryKey,
+        snapRange,
+        earliestBuyYmd,
+        qc,
+    ]);
+
+    const chartHasPrimaryData = primaryTimeseriesData.length > 0;
+
+    useEffect(() => {
+        const usesPrimaryTimeseries =
+            chartSeriesMode !== 'positionCount' &&
+            chartSeriesMode !== 'unrealizedPnl' &&
+            chartSeriesMode !== 'realPnl' &&
+            chartSeriesMode !== 'soldHoldHypothetical' &&
+            chartSeriesMode !== 'soldLifecyclePnl';
+        if (!coreDataReady || positions.length === 0 || !usesPrimaryTimeseries || chartHasPrimaryData) {
+            return;
+        }
+
+        let attempts = 0;
+        let cancelled = false;
+        let timerId: number | undefined;
+
+        const pollOnce = (delayMs: number) => {
+            timerId = window.setTimeout(() => {
+                if (cancelled) return;
+                attempts += 1;
+                if (attempts > 15) return;
+
+                const page = qc.getQueryData<ManualPortfolioPage>(manualPortfolioKeys.page());
+                if (page?.meta?.warmStatus === 'READY') {
+                    const bundledLen = page?.timeseries?.points?.length ?? 0;
+                    const tsLen = qc.getQueryData<ManualPortfolioTimeseriesPoint[]>(timeseriesQueryKey)?.length ?? 0;
+                    if (bundledLen > 0 || tsLen > 0) return;
+                }
+
+                const bundledLen = page?.timeseries?.points?.length ?? 0;
+                const tsLen = qc.getQueryData<ManualPortfolioTimeseriesPoint[]>(timeseriesQueryKey)?.length ?? 0;
+                if (bundledLen > 0 || tsLen > 0) return;
+
+                if (pageQuery.isFetching || timeseriesQuery.isFetching) {
+                    pollOnce(delayMs);
+                    return;
+                }
+
+                void pageQuery.refetch();
+                if (page?.meta?.warmStatus === 'READY' && needsAllHistoryFetch) {
+                    void timeseriesQuery.refetch();
+                }
+
+                if (page?.meta?.warmStatus === 'READY') return;
+
+                const nextDelay = delayMs >= 8000 ? 8000 : delayMs === 1000 ? 3000 : delayMs === 3000 ? 5000 : 8000;
+                pollOnce(nextDelay);
+            }, delayMs);
+        };
+
+        pollOnce(1000);
+        return () => {
+            cancelled = true;
+            if (timerId != null) window.clearTimeout(timerId);
+        };
+    }, [
+        chartWarmPollToken,
+        chartHasPrimaryData,
+        chartSeriesMode,
+        coreDataReady,
+        pageQuery.isFetching,
+        pageQuery.refetch,
+        positions.length,
+        qc,
+        snapRange,
+        needsAllHistoryFetch,
+        timeseriesQuery.isFetching,
+        timeseriesQuery.refetch,
+        timeseriesQueryKey,
+    ]);
 
     const segmentTimeseriesQueries = useQueries({
         queries: chartOverlays.map((c) => ({
@@ -958,6 +1126,8 @@ export function Portfolio() {
     }, [chartSeriesMode]);
 
     const refetchAll = useCallback(() => {
+        const warmStatus = qc.getQueryData<ManualPortfolioPage>(manualPortfolioKeys.page())?.meta?.warmStatus;
+        if (warmStatus === 'PENDING') return;
         void pageQuery.refetch();
         void timeseriesQuery.refetch();
         void realReturnTsQuery.refetch();
@@ -970,7 +1140,7 @@ export function Portfolio() {
         void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-pnl-segment'] });
         void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-sold-overlay'] });
         void qc.invalidateQueries({ queryKey: ['manual', 'timeseries-open-unrealized-overlay'] });
-    }, [pageQuery, timeseriesQuery, qc]);
+    }, [pageQuery, timeseriesQuery, realReturnTsQuery, qc]);
 
     useRefetchOnFocus(refetchAll);
     usePolling(refetchAll, 60_000);
@@ -1179,12 +1349,12 @@ export function Portfolio() {
         }
         const eb = earliestBuyYmdFromPositions(positions);
         const eRows = earliestTimeseriesYmdFromRows(
-            chartSeriesMode === 'realPnl' ? (realReturnTsQuery.data ?? []) : (timeseriesQuery.data ?? []),
+            chartSeriesMode === 'realPnl' ? (realReturnTsQuery.data ?? []) : primaryTimeseriesData,
         );
         const ymd = minYmdNullable(eb, eRows);
         if (!ymd) return { start: chartFallbackStartDaysAgo(end, 7), end };
         return { start: ymdToLocalStartOfDay(ymd), end };
-    }, [snapRange, chartSeriesMode, positionCountVariant, positions, timeseriesQuery.data, realReturnTsQuery.data]);
+    }, [snapRange, chartSeriesMode, positionCountVariant, positions, primaryTimeseriesData, realReturnTsQuery.data]);
 
     const chartPoints = useMemo(() => {
         if (chartSeriesMode === 'positionCount') {
@@ -1201,8 +1371,8 @@ export function Portfolio() {
         ) {
             return [];
         }
-        return buildChartPointsFromTimeseries(timeseriesQuery.data ?? [], chartSeriesMode, locale);
-    }, [chartSeriesMode, positionCountVariant, positions, chartRangeBounds.start, chartRangeBounds.end, locale, timeseriesQuery.data]);
+        return buildChartPointsFromTimeseries(primaryTimeseriesData, chartSeriesMode, locale);
+    }, [chartSeriesMode, positionCountVariant, positions, chartRangeBounds.start, chartRangeBounds.end, locale, primaryTimeseriesData]);
 
     const chartUsesTimeseries =
         chartSeriesMode !== 'positionCount' &&
@@ -1249,6 +1419,12 @@ export function Portfolio() {
         });
     }, [chartUsesTimeseries, chartOverlays, chartPoints, segmentTimeseriesQueries, chartSeriesForOverlay, locale]);
 
+    const chartWarmingUp =
+        chartUsesTimeseries &&
+        !chartHasPrimaryData &&
+        positions.length > 0 &&
+        pageWarmStatus === 'PENDING';
+
     const chartLoading =
         chartSeriesMode === 'soldHoldHypothetical'
             ? soldHoldTsQuery.isLoading
@@ -1259,7 +1435,7 @@ export function Portfolio() {
                 : chartSeriesMode === 'realPnl'
                   ? realReturnTsQuery.isLoading
                   : chartUsesTimeseries
-                    ? timeseriesQuery.isLoading
+                    ? timeseriesQuery.isLoading || chartWarmingUp
                     : pageQuery.isLoading;
     const chartError =
         chartSeriesMode === 'soldHoldHypothetical' && soldHoldTsQuery.isError
@@ -1542,9 +1718,12 @@ export function Portfolio() {
 
     const deleteManual = async (id: number) => {
         if (!window.confirm(t('portfolio.confirmDelete', 'Bu manuel pozisyonu silmek istediğinize emin misiniz?'))) return;
+        const removed = positions.find((p) => p.id === id);
+        if (!removed) return;
         try {
-            await financeClient.delete(`/api/portfolio/manual/${id}`);
-            invalidateManualPage();
+            await deleteManualPosition(id);
+            applyManualPortfolioMutation(qc, removed, 'remove');
+            refreshPrimaryChart();
         } catch (err: unknown) {
             alert(readFinanceApiError(err).message || t('portfolio.deleteFailed', 'Pozisyon silinemedi'));
         }
@@ -1559,6 +1738,7 @@ export function Portfolio() {
         !pageQuery.isError &&
         pageQuery.data === undefined &&
         positionsFallbackQuery.data === undefined &&
+        !readStoredManualPortfolioPage() &&
         (pageQuery.isPending || positionsFallbackQuery.isPending);
     const summaryLoading = summary === undefined && (pageQuery.isPending || summaryFallbackQuery.isPending);
     const pageError =
@@ -2009,7 +2189,7 @@ export function Portfolio() {
                         <div className="pf-chart-tabs-row">
                             {chartSeriesMode !== 'soldHoldHypothetical' && chartSeriesMode !== 'soldLifecyclePnl' ? (
                                 <div className="pf-range-tabs" role="tablist" aria-label={t('portfolio.chartRangeAria', 'Dönem')}>
-                                    {(['1M', '3M', '6M', '1Y', 'ALL'] as SnapRange[]).map((r) => (
+                                    {(['1Y', '6M', '3M', '1M', 'ALL'] as SnapRange[]).map((r) => (
                                         <button
                                             key={r}
                                             type="button"
@@ -3029,7 +3209,7 @@ export function Portfolio() {
                     error: tokens.error,
                 }}
                 locale={locale}
-                onPortfolioMutated={invalidateManualCharts}
+                onPortfolioMutated={refreshPrimaryChart}
             />
             {priceAlertTarget ? (
                 <PriceAlertModal

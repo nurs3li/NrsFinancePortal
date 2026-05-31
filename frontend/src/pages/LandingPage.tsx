@@ -5,6 +5,11 @@ import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { readApiError } from '../api/envelope';
 import { financeClient, readFinanceBinaryErrorMessage } from '../api/client';
+import {
+    completePasswordReset,
+    requestPasswordResetCode,
+    verifyPasswordResetCode,
+} from '../services/passwordResetApi';
 import { NrsBrandLockup } from '../components/NrsBrandLockup';
 import { LandingHeroCarousel } from '../components/landing/LandingHeroCarousel';
 import { LandingFeaturesFlip } from '../components/landing/LandingFeaturesFlip';
@@ -120,6 +125,14 @@ export function LandingPage() {
     const [loginOtp, setLoginOtp] = useState('');
     const [loginRemember, setLoginRemember] = useState(false);
     const [loginOtpStep, setLoginOtpStep] = useState(false);
+    const [forgotStep, setForgotStep] = useState<'email' | 'code' | 'password' | null>(null);
+    const [forgotEmail, setForgotEmail] = useState('');
+    const [forgotCode, setForgotCode] = useState('');
+    const [forgotNewPassword, setForgotNewPassword] = useState('');
+    const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
+    const [forgotBusy, setForgotBusy] = useState(false);
+    const [forgotError, setForgotError] = useState<string | null>(null);
+    const [forgotMessage, setForgotMessage] = useState<string | null>(null);
     const [registerBusy, setRegisterBusy] = useState(false);
     const [registerMessage, setRegisterMessage] = useState<string | null>(null);
     const [registerError, setRegisterError] = useState<string | null>(null);
@@ -209,15 +222,27 @@ export function LandingPage() {
         };
     }, []);
 
+    const resetForgotPassword = useCallback(() => {
+        setForgotStep(null);
+        setForgotEmail('');
+        setForgotCode('');
+        setForgotNewPassword('');
+        setForgotConfirmPassword('');
+        setForgotBusy(false);
+        setForgotError(null);
+        setForgotMessage(null);
+    }, []);
+
     const openPanel = useCallback((tab: 'register' | 'signin') => {
         setPanelTab(tab);
         setPanelOpen(true);
         setLoginError(null);
         setLoginOtpStep(false);
         setLoginOtp('');
+        resetForgotPassword();
         setRegisterError(null);
         setRegisterMessage(null);
-    }, []);
+    }, [resetForgotPassword]);
 
     useEffect(() => {
         if (!ready || !isAuthenticated) return;
@@ -252,12 +277,90 @@ export function LandingPage() {
         } catch (err: unknown) {
             const msg = readFinanceBinaryErrorMessage(err) ?? t('landing.loginFailed', 'Giriş başarısız.');
             setLoginError(msg);
-            if (loginOtpStep && /şifre/i.test(msg)) {
-                setLoginOtpStep(false);
-                setLoginOtp('');
-            }
         } finally {
             setLoginBusy(false);
+        }
+    };
+
+    const requestForgotCode = async () => {
+        setForgotError(null);
+        setForgotMessage(null);
+        if (!forgotEmail.trim()) {
+            setForgotError(t('landing.registerEmailRequired', 'Lütfen e-posta girin.'));
+            return;
+        }
+        setForgotBusy(true);
+        try {
+            const msg = await requestPasswordResetCode(forgotEmail.trim());
+            setForgotMessage(msg);
+            setForgotStep('code');
+        } catch (err: unknown) {
+            setForgotError(readApiError(err).message || 'Kod gönderilemedi.');
+        } finally {
+            setForgotBusy(false);
+        }
+    };
+
+    const verifyForgotCode = async () => {
+        setForgotError(null);
+        setForgotMessage(null);
+        if (!forgotCode.trim()) {
+            setForgotError(t('landing.forgotCodeRequired', 'Doğrulama kodunu girin.'));
+            return;
+        }
+        setForgotBusy(true);
+        try {
+            const msg = await verifyPasswordResetCode(forgotEmail.trim(), forgotCode.trim());
+            setForgotMessage(msg);
+            setForgotStep('password');
+        } catch (err: unknown) {
+            setForgotError(readApiError(err).message || 'Kod doğrulanamadı.');
+        } finally {
+            setForgotBusy(false);
+        }
+    };
+
+    const completeForgotReset = async () => {
+        setForgotError(null);
+        setForgotMessage(null);
+        if (!forgotNewPassword || !forgotConfirmPassword) {
+            setForgotError(t('landing.forgotFillPasswords', 'Lütfen yeni şifre alanlarını doldurun.'));
+            return;
+        }
+        if (forgotNewPassword !== forgotConfirmPassword) {
+            setForgotError(t('landing.passwordMismatch', 'Şifreler eşleşmiyor.'));
+            return;
+        }
+        setForgotBusy(true);
+        try {
+            const result = await completePasswordReset(
+                forgotEmail.trim(),
+                forgotNewPassword,
+                forgotConfirmPassword
+            );
+            setForgotMessage(result.message ?? t('landing.forgotDone', 'Şifreniz güncellendi.'));
+            setLoginUsername(result.username);
+            setLoginPassword(forgotNewPassword);
+            setLoginOtp('');
+            setLoginOtpStep(false);
+            setLoginError(null);
+            const loginResult = await loginWithCredentials({
+                usernameOrEmail: result.username,
+                password: forgotNewPassword,
+                rememberMe: false,
+            });
+            if (loginResult.otpRequired) {
+                resetForgotPassword();
+                setForgotStep(null);
+                setLoginOtpStep(true);
+                return;
+            }
+            resetForgotPassword();
+            setPanelOpen(false);
+        } catch (err: unknown) {
+            setForgotError(readApiError(err).message || readFinanceBinaryErrorMessage(err) || 'Şifre güncellenemedi.');
+        } finally {
+            setForgotBusy(false);
         }
     };
 
@@ -451,6 +554,7 @@ export function LandingPage() {
                         onClick={() => {
                             setPanelTab('signin');
                             setRegisterError(null);
+                            resetForgotPassword();
                         }}
                     >
                         {t('landing.tabSignin', 'Giriş')}
@@ -458,6 +562,102 @@ export function LandingPage() {
                 </div>
 
                 {panelTab === 'signin' ? (
+                    forgotStep ? (
+                        <div className="landing-form">
+                            {forgotStep === 'email' ? (
+                                <p style={{ fontSize: '0.85rem', color: 'var(--landing-silver-muted)', margin: 0 }}>
+                                    {t(
+                                        'landing.forgotEmailIntro',
+                                        'Kayıtlı e-posta adresinize doğrulama kodu göndereceğiz.'
+                                    )}
+                                </p>
+                            ) : null}
+                            {forgotError ? <div className="landing-alert">{forgotError}</div> : null}
+                            {forgotMessage ? <div className="landing-alert ok">{forgotMessage}</div> : null}
+
+                            {forgotStep === 'email' ? (
+                                <>
+                                    <label htmlFor="forgot-email">{t('landing.email', 'E-posta')}</label>
+                                    <input
+                                        id="forgot-email"
+                                        type="email"
+                                        value={forgotEmail}
+                                        onChange={(e) => setForgotEmail(e.target.value)}
+                                        autoComplete="email"
+                                    />
+                                    <button
+                                        type="button"
+                                        className="landing-btn-primary"
+                                        disabled={forgotBusy}
+                                        onClick={() => void requestForgotCode()}
+                                    >
+                                        {forgotBusy ? '…' : t('landing.sendCode', 'Doğrulama kodu gönder')}
+                                    </button>
+                                </>
+                            ) : null}
+
+                            {forgotStep === 'code' ? (
+                                <>
+                                    <label htmlFor="forgot-code">{t('landing.code', 'Doğrulama kodu')}</label>
+                                    <input
+                                        id="forgot-code"
+                                        value={forgotCode}
+                                        onChange={(e) => setForgotCode(e.target.value)}
+                                        autoComplete="one-time-code"
+                                        inputMode="numeric"
+                                        maxLength={6}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="landing-btn-primary"
+                                        disabled={forgotBusy}
+                                        onClick={() => void verifyForgotCode()}
+                                    >
+                                        {forgotBusy ? '…' : t('landing.forgotVerifyCode', 'Doğrula')}
+                                    </button>
+                                </>
+                            ) : null}
+
+                            {forgotStep === 'password' ? (
+                                <>
+                                    <label htmlFor="forgot-new-pass">{t('landing.forgotNewPassword', 'Yeni şifre')}</label>
+                                    <input
+                                        id="forgot-new-pass"
+                                        type="password"
+                                        value={forgotNewPassword}
+                                        onChange={(e) => setForgotNewPassword(e.target.value)}
+                                        autoComplete="new-password"
+                                    />
+                                    <label htmlFor="forgot-confirm-pass">
+                                        {t('landing.forgotConfirmPassword', 'Yeni şifre (tekrar)')}
+                                    </label>
+                                    <input
+                                        id="forgot-confirm-pass"
+                                        type="password"
+                                        value={forgotConfirmPassword}
+                                        onChange={(e) => setForgotConfirmPassword(e.target.value)}
+                                        autoComplete="new-password"
+                                    />
+                                    <button
+                                        type="button"
+                                        className="landing-btn-primary"
+                                        disabled={forgotBusy}
+                                        onClick={() => void completeForgotReset()}
+                                    >
+                                        {forgotBusy ? '…' : t('landing.forgotSubmit', 'Tamam')}
+                                    </button>
+                                </>
+                            ) : null}
+
+                            <button
+                                type="button"
+                                className="landing-btn-ghost landing-form-back-btn"
+                                onClick={resetForgotPassword}
+                            >
+                                {t('landing.forgotBackToSignin', 'Girişe dön')}
+                            </button>
+                        </div>
+                    ) : (
                     <div className="landing-form">
                         <p style={{ fontSize: '0.85rem', color: 'var(--landing-silver-muted)', margin: 0 }}>
                             {t(
@@ -483,8 +683,37 @@ export function LandingPage() {
                             autoComplete="current-password"
                             disabled={loginOtpStep}
                         />
+                        {!loginOtpStep ? (
+                            <button
+                                type="button"
+                                className="landing-btn-ghost landing-form-back-btn"
+                                style={{ alignSelf: 'flex-start', marginTop: '-0.25rem' }}
+                                onClick={() => {
+                                    setForgotStep('email');
+                                    setForgotEmail(loginUsername.includes('@') ? loginUsername : '');
+                                    setForgotError(null);
+                                    setForgotMessage(null);
+                                    if (!loginUsername.includes('@')) {
+                                        setForgotMessage(
+                                            t(
+                                                'landing.forgotUseRegisteredEmail',
+                                                'Kayıtlı e-posta adresinizi girin (kullanıcı adı değil).'
+                                            )
+                                        );
+                                    }
+                                }}
+                            >
+                                {t('landing.forgotPassword', 'Şifremi unuttum')}
+                            </button>
+                        ) : null}
                         {loginOtpStep ? (
                             <>
+                                <p style={{ fontSize: '0.8rem', color: 'var(--landing-silver-muted)', margin: '0 0 0.25rem' }}>
+                                    {t(
+                                        'landing.loginOtpPasswordHint',
+                                        'Şifre, kayıt veya «Şifremi unuttum» ile en son belirlediğiniz şifre olmalıdır.'
+                                    )}
+                                </p>
                                 <label htmlFor="login-otp">{t('landing.loginOtp', 'İki aşamalı doğrulama kodu')}</label>
                                 <input
                                     id="login-otp"
@@ -525,6 +754,7 @@ export function LandingPage() {
                             {loginBusy ? '…' : loginOtpStep ? t('landing.loginSubmitOtp', 'Doğrula ve giriş yap') : t('landing.loginSubmit', 'Giriş yap')}
                         </button>
                     </div>
+                    )
                 ) : (
                     <div className="landing-form">
                         <label htmlFor="reg-email">{t('landing.email', 'E-posta')}</label>

@@ -13,6 +13,10 @@ import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, X
 import { BookOpen, Info, LineChart as LineChartIcon, Plus, Search, X } from 'lucide-react';
 import { manualPortfolioKeys } from '../../queries/manualPortfolioKeys';
 import {
+    applyManualPortfolioMutation,
+    applyManualPortfolioDeleteById,
+} from '../../utils/manualPortfolioCachePatch';
+import {
     closeManualPosition,
     createManualPosition,
     deleteManualPosition,
@@ -247,10 +251,16 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     const positionsQuery = useQuery({
         queryKey: manualPortfolioKeys.positions(),
         queryFn: getManualPositions,
+        enabled: surface === 'full',
+        staleTime: 90_000,
+        refetchOnWindowFocus: false,
     });
     const summaryQuery = useQuery({
         queryKey: manualPortfolioKeys.summary(),
         queryFn: getManualSummary,
+        enabled: surface === 'full',
+        staleTime: 90_000,
+        refetchOnWindowFocus: false,
     });
     const insightsQuery = useQuery({
         queryKey: manualPortfolioKeys.insights(),
@@ -269,8 +279,8 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         },
     });
 
-    const positions = positionsQuery.data ?? [];
-    const summary = summaryQuery.data;
+    const positions = positionsQuery.data ?? qc.getQueryData<ManualPortfolioView[]>(manualPortfolioKeys.positions()) ?? [];
+    const summary = summaryQuery.data ?? qc.getQueryData(manualPortfolioKeys.summary());
     const insights = insightsQuery.data;
     const insightSummary = insights?.summary;
     const tefasRows = tefasFundsQuery.data?.items ?? [];
@@ -292,43 +302,17 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         return 'mia-pos';
     };
 
-    const patchPositionsCache = useCallback(
-        (view: ManualPortfolioView) => {
-            qc.setQueryData<ManualPortfolioView[]>(manualPortfolioKeys.positions(), (old) => {
-                const list = old ?? [];
-                const idx = list.findIndex((p) => p.id === view.id);
-                if (idx >= 0) {
-                    const next = [...list];
-                    next[idx] = view;
-                    return next;
-                }
-                return [...list, view];
-            });
-        },
-        [qc],
-    );
-
-    const removePositionFromCache = useCallback(
-        (id: number) => {
-            qc.setQueryData<ManualPortfolioView[]>(manualPortfolioKeys.positions(), (old) =>
-                (old ?? []).filter((p) => p.id !== id),
-            );
-        },
-        [qc],
-    );
-
-    /** Özet/grafik arka planda yenilensin; modal kapanışını tam portföy refetch'i bekletmesin. */
-    const invalidateManual = useCallback(
-        (view?: ManualPortfolioView, removedId?: number) => {
-            if (view != null) {
-                patchPositionsCache(view);
-            } else if (removedId != null) {
-                removePositionFromCache(removedId);
-            }
-            void qc.invalidateQueries({ queryKey: manualPortfolioKeys.summary() });
+    const afterPortfolioMutated = useCallback(
+        (view: ManualPortfolioView, mode: 'add' | 'update' | 'remove', previousView?: ManualPortfolioView) => {
+            applyManualPortfolioMutation(qc, view, mode, previousView);
             onPortfolioMutated();
         },
-        [qc, onPortfolioMutated, patchPositionsCache, removePositionFromCache],
+        [qc, onPortfolioMutated],
+    );
+
+    const positionsFromCache = useCallback(
+        () => qc.getQueryData<ManualPortfolioView[]>(manualPortfolioKeys.positions()) ?? [],
+        [qc],
     );
 
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
@@ -561,7 +545,7 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         mutationFn: createManualPosition,
         onSuccess: (view) => {
             setFormOpen(false);
-            invalidateManual(view);
+            afterPortfolioMutated(view, 'add');
         },
         onError: (err) => {
             const { code, message } = readFinanceApiError(err);
@@ -582,7 +566,8 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         mutationFn: ({ id, body }: { id: number; body: Parameters<typeof updateManualPosition>[1] }) => updateManualPosition(id, body),
         onSuccess: (view) => {
             setFormOpen(false);
-            invalidateManual(view);
+            const previousView = positionsFromCache().find((p) => p.id === view.id);
+            afterPortfolioMutated(view, 'update', previousView);
         },
         onError: (err) => {
             const { code, message } = readFinanceApiError(err);
@@ -604,7 +589,8 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
         onSuccess: (view) => {
             setCloseOpen(false);
             setCloseId(null);
-            invalidateManual(view);
+            const previousView = positionsFromCache().find((p) => p.id === view.id);
+            afterPortfolioMutated(view, 'update', previousView);
         },
         onError: (err) => {
             const { code, message } = readFinanceApiError(err);
@@ -621,7 +607,13 @@ export const ManualInvestmentAnalysisSection = forwardRef<ManualInvestmentAnalys
     const deleteMut = useMutation({
         mutationFn: deleteManualPosition,
         onSuccess: (_void, id) => {
-            invalidateManual(undefined, id);
+            const removed = positionsFromCache().find((p) => p.id === id);
+            if (removed) {
+                afterPortfolioMutated(removed, 'remove');
+            } else {
+                applyManualPortfolioDeleteById(qc, id);
+                onPortfolioMutated();
+            }
         },
         onError: (err) => alert(readFinanceApiError(err).message),
     });
