@@ -1000,6 +1000,16 @@
     .sim-summary-grid {
         grid-template-columns: 1fr;
     }
+
+    .sim-page {
+        max-width: 100%;
+        overflow-x: clip;
+        padding: 12px;
+    }
+
+    .sim-chart-panel .recharts-responsive-container {
+        min-height: clamp(220px, 42vh, 360px);
+    }
 }
 
 [data-theme='light'] .sim-chart-mode-btn,

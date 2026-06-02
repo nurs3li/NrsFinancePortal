@@ -741,6 +741,11 @@ export function AdminAudit() {
                     .audit-grafana-grid {
                         grid-template-columns: 1fr;
                     }
+                    .audit-grafana-card iframe {
+                        min-height: 200px;
+                        width: 100%;
+                        max-width: 100%;
+                    }
                 }
                 .audit-discovery-input {
                     box-sizing: border-box;

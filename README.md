@@ -36,34 +36,18 @@
 
 ## Contents
 
-1. [Who is this for?](#who-is-this-for)
-2. [Quick start summary](#quick-start-summary)
-3. [Product overview](#product-overview)
-4. [Tech stack](#tech-stack)
-5. [System architecture](#system-architecture)
-6. [Getting started (Docker)](#getting-started-docker)
-7. [Environment variables](#environment-variables)
-8. [Services, ports, and URLs](#services-ports-and-urls)
-9. [Repository layout](#repository-layout)
-10. [Testing](#testing)
-11. [Requirements compliance](#requirements-compliance)
-12. [Documentation map](#documentation-map)
-13. [Troubleshooting](#troubleshooting)
-
----
-
-## Who is this for?
-
-This README is designed for reviewers and developers who are new to the project and want to:
-
-- Clone the repository and **bring the full stack up with Docker**
-- Access the frontend and APIs
-- Validate key infrastructure components (Swagger, Grafana, OpenSearch, etc.)
-- Understand how the system is wired (security, observability, and service boundaries)
-
-Deeper topics and implementation details live under [`docs/`](docs/README.md).
-
-For **layer-by-layer verification**, smoke tests, and local test commands, see [`docs/getting-started.md`](docs/getting-started.md).
+1. [Quick start summary](#quick-start-summary)
+2. [Product overview](#product-overview)
+3. [Tech stack](#tech-stack)
+4. [System architecture](#system-architecture)
+5. [Getting started (Docker)](#getting-started-docker)
+6. [Environment variables](#environment-variables)
+7. [Services, ports, and URLs](#services-ports-and-urls)
+8. [Repository layout](#repository-layout)
+9. [Testing](#testing)
+10. [Requirements compliance](#requirements-compliance)
+11. [Documentation map](#documentation-map)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 

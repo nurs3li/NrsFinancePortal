@@ -19,9 +19,14 @@ export function createChartResizeScheduler(onResize: () => void): {
             const ro = new ResizeObserver(schedule);
             ro.observe(el);
             window.addEventListener('resize', schedule);
+            const vv = window.visualViewport;
+            vv?.addEventListener('resize', schedule);
+            vv?.addEventListener('scroll', schedule);
             return () => {
                 ro.disconnect();
                 window.removeEventListener('resize', schedule);
+                vv?.removeEventListener('resize', schedule);
+                vv?.removeEventListener('scroll', schedule);
                 if (raf != null) {
                     cancelAnimationFrame(raf);
                     raf = null;
@@ -56,10 +61,15 @@ export function useChartContainerSize(ref: RefObject<HTMLElement | null>): { wid
         const ro = new ResizeObserver(schedule);
         ro.observe(el);
         window.addEventListener('resize', schedule);
+        const vv = window.visualViewport;
+        vv?.addEventListener('resize', schedule);
+        vv?.addEventListener('scroll', schedule);
 
         return () => {
             ro.disconnect();
             window.removeEventListener('resize', schedule);
+            vv?.removeEventListener('resize', schedule);
+            vv?.removeEventListener('scroll', schedule);
             if (raf != null) cancelAnimationFrame(raf);
         };
     }, []);

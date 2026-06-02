@@ -260,12 +260,22 @@ export function Layout() {
                     </li>
                 </ul>
                 <div className="app-mobile-menu__footer">
-                    <div className="app-mobile-menu__user">
-                        <span className="app-mobile-menu__user-name">
-                            {user?.username ?? user?.email ?? '—'}
+                    <NavLink
+                        to="/settings"
+                        className={({ isActive }) =>
+                            `app-mobile-menu__user${isActive ? ' is-active' : ''}`
+                        }
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        aria-label={t('nav.settings', 'Ayarlar')}
+                    >
+                        <Settings size={18} className="app-mobile-menu__user-icon" aria-hidden />
+                        <span className="app-mobile-menu__user-text">
+                            <span className="app-mobile-menu__user-name">
+                                {user?.username ?? user?.email ?? '—'}
+                            </span>
+                            <span className="app-mobile-menu__user-role">{role ?? user?.role ?? 'USER'}</span>
                         </span>
-                        <span className="app-mobile-menu__user-role">{role ?? user?.role ?? 'USER'}</span>
-                    </div>
+                    </NavLink>
                     <HeaderThemeLangSwitch
                         theme={theme}
                         toggleTheme={toggleTheme}

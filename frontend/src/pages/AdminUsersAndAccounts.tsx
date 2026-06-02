@@ -5,6 +5,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useAuth } from '../auth/AuthContext';
 import { Eye, Settings, UserPlus, X, Ban, UserCheck, Trash2 } from 'lucide-react';
+import './AdminUsersAndAccounts.css';
 
 type UserRow = { id: number; username: string; email: string; role: string; loginSuspended?: boolean };
 
@@ -133,15 +134,16 @@ export function AdminUsersAndAccounts() {
     const KEYCLOAK_REALM = import.meta.env.VITE_KEYCLOAK_REALM || 'nrs-finance';
     const KEYCLOAK_CLIENT_ID = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'nrs-frontend';
 
-    const pageStyle: React.CSSProperties = { padding: 24, background: tokens.bg, color: tokens.text, minHeight: '100%', fontFamily: 'Inter, Roboto, Arial, sans-serif' };
-    const titleStyle: React.CSSProperties = { fontSize: '1.75rem', fontWeight: 700, marginBottom: 4, color: tokens.text };
-    const sectionTitleStyle: React.CSSProperties = { fontSize: '1.05rem', fontWeight: 600, marginTop: 20, marginBottom: 10, color: tokens.text };
+    const pageThemeStyle: React.CSSProperties = {
+        background: tokens.bg,
+        color: tokens.text,
+        ['--admin-border' as string]: tokens.border,
+    };
     const mutedStyle: React.CSSProperties = { color: tokens.textMuted, fontSize: '0.84rem' };
     const cardStyle: React.CSSProperties = { padding: 14, borderRadius: 8, background: tokens.bgCard, border: `1px solid ${tokens.border}`, boxShadow: '0 8px 22px rgba(0,0,0,0.12)' };
-    const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' };
-    const thStyle: React.CSSProperties = { textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${tokens.border}`, color: tokens.textMuted, background: 'transparent', fontSize: '0.8rem' };
-    const tdStyle: React.CSSProperties = { padding: '8px 10px', borderBottom: `1px solid ${tokens.tableBorder}` };
-    const btnStyle: React.CSSProperties = { padding: '6px 10px', marginRight: 8, borderRadius: 8, border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: tokens.text, cursor: 'pointer', fontSize: '0.82rem' };
+    const thStyle: React.CSSProperties = { borderBottom: `1px solid ${tokens.border}`, color: tokens.textMuted, background: 'transparent' };
+    const tdStyle: React.CSSProperties = { borderBottom: `1px solid ${tokens.tableBorder}` };
+    const btnStyle: React.CSSProperties = { border: `1px solid ${tokens.border}`, background: tokens.bgCard, color: tokens.text };
 
     const formatMoney = (v: number | undefined | null) => `₺${Number(v ?? 0).toLocaleString(lang === 'en' ? 'en-US' : 'tr-TR', { maximumFractionDigits: 2 })}`;
 
@@ -171,29 +173,25 @@ export function AdminUsersAndAccounts() {
         }));
     };
 
+    const scrollHint = t('admin.tableScrollHint', 'Geniş tablo — yatay kaydırabilirsiniz');
+
     return (
-        <div style={pageStyle}>
-            <style>{`
-                @keyframes adminInspectIn {
-                    0% { opacity: 0; transform: translateY(8px) scale(0.98); }
-                    100% { opacity: 1; transform: translateY(0) scale(1); }
-                }
-            `}</style>
-            <h1 style={titleStyle}>{t('nav.userManagement', 'Kullanıcı Yönetimi')}</h1>
-            <p style={mutedStyle}>
+        <div className="admin-page" style={pageThemeStyle}>
+            <h1 className="admin-page__title">{t('nav.userManagement', 'Kullanıcı Yönetimi')}</h1>
+            <p className="admin-page__subtitle" style={mutedStyle}>
                 {t(
                     'admin.usersPageSubtitle',
                     'Keycloak realm rolleri ile uyumlu kullanıcı listesi. Rol ataması (USER) Keycloak admin client gerektirir.',
                 )}
             </p>
 
-            <div style={{ ...cardStyle, marginTop: 14, marginBottom: 18, position: 'relative' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="admin-page__card" style={{ ...cardStyle, marginTop: 14, marginBottom: 18, position: 'relative' }}>
+                <div className="admin-page__tools-header">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Settings size={16} color={tokens.accent} />
                         <strong style={{ color: tokens.text }}>{t('admin.toolsTitle', 'Yönetici araçları')}</strong>
                     </div>
-                    <button style={{ ...btnStyle, marginRight: 0 }} onClick={() => setShowTools((v) => !v)}>
+                    <button type="button" className="admin-page__btn admin-page__btn--last" style={btnStyle} onClick={() => setShowTools((v) => !v)}>
                         {t('admin.toolsToggle', 'Araçlar')}
                     </button>
                 </div>
@@ -215,14 +213,18 @@ export function AdminUsersAndAccounts() {
 
             {error && <p style={{ color: tokens.error, marginBottom: 16 }}>{t('news.errorPrefix', 'Hata')}: {error}</p>}
 
-            <h2 style={sectionTitleStyle}>{t('admin.users', 'Kullanıcılar')}</h2>
-            <div style={cardStyle}>
+            <h2 className="admin-page__section-title">{t('admin.users', 'Kullanıcılar')}</h2>
+            <div className="admin-page__card" style={cardStyle}>
                 {loadingUsers ? (
                     <p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p>
                 ) : users.length === 0 ? (
                     <p style={mutedStyle}>{t('admin.userNotFound', 'Kullanıcı bulunamadı.')}</p>
                 ) : (
-                    <table style={tableStyle}>
+                    <div
+                        className="admin-page__table-wrap"
+                        data-scroll-hint={scrollHint}
+                    >
+                    <table className="admin-page__table">
                         <thead>
                         <tr>
                             <th style={thStyle}>{t('admin.colId', 'ID')}</th>
@@ -237,10 +239,10 @@ export function AdminUsersAndAccounts() {
                         <tbody>
                         {users.map((u) => (
                             <tr key={u.id} style={{ borderBottom: `1px solid ${tokens.border}` }}>
-                                <td style={tdStyle}>{u.id}</td>
-                                <td style={tdStyle}>{u.username ?? '—'}</td>
-                                <td style={tdStyle}>{u.email ?? '—'}</td>
-                                <td style={tdStyle}>
+                                <td style={tdStyle} data-label={t('admin.colId', 'ID')}>{u.id}</td>
+                                <td style={tdStyle} data-label={t('admin.colUsername', 'Kullanıcı adı')}>{u.username ?? '—'}</td>
+                                <td style={tdStyle} data-label={t('admin.colEmail', 'E-posta')}>{u.email ?? '—'}</td>
+                                <td style={tdStyle} data-label={t('admin.colRole', 'Yetki')}>
                                     {u.role === 'ADMIN' && adminUserCount <= 1 ? (
                                         <span style={{ color: tokens.textMuted, fontSize: '0.82rem' }} title={t('admin.singleAdminHint', 'Sistemde tek yönetici varken rol düşürülemez; ADMIN atanamaz')}>
                                             ADMIN <span style={{ opacity: 0.85 }}>({t('admin.adminFixed', 'sabit')})</span>
@@ -256,14 +258,11 @@ export function AdminUsersAndAccounts() {
                                                 handleAssignRealmRole(u.id, next);
                                                 e.target.value = '';
                                             }}
+                                            className="admin-page__select"
                                             style={{
-                                                padding: '6px 8px',
-                                                borderRadius: 8,
                                                 border: `1px solid ${tokens.border}`,
                                                 background: tokens.inputBg ?? tokens.bgCard,
                                                 color: tokens.text,
-                                                fontSize: '0.82rem',
-                                                minWidth: 180,
                                             }}
                                         >
                                             <option value="">{t('admin.demoteSelectPlaceholder', 'ADMIN → düşürmek için seç…')}</option>
@@ -279,25 +278,22 @@ export function AdminUsersAndAccounts() {
                                                 if (next === u.role) return;
                                                 handleAssignRealmRole(u.id, next);
                                             }}
+                                            className="admin-page__select"
                                             style={{
-                                                padding: '6px 8px',
-                                                borderRadius: 8,
                                                 border: `1px solid ${tokens.border}`,
                                                 background: tokens.inputBg ?? tokens.bgCard,
                                                 color: tokens.text,
-                                                fontSize: '0.82rem',
-                                                minWidth: 160,
                                             }}
                                         >
                                             <option value="USER">USER</option>
                                         </select>
                                     )}
                                 </td>
-                                <td style={tdStyle}>
+                                <td style={tdStyle} data-label={t('admin.userLoginColumn', 'Giriş')}>
                                     {u.role === 'ADMIN' || u.id === currentUser?.id ? (
                                         <span style={{ ...mutedStyle, fontSize: '0.8rem' }}>—</span>
                                     ) : (
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                                        <div className="admin-page__actions-row">
                                             {u.loginSuspended && (
                                                 <span
                                                     style={{
@@ -343,9 +339,11 @@ export function AdminUsersAndAccounts() {
                                         </div>
                                     )}
                                 </td>
-                                <td style={tdStyle}>
+                                <td style={tdStyle} data-label={t('admin.colInspection', 'İnceleme')}>
                                     <button
-                                        style={{ ...btnStyle, marginRight: 0 }}
+                                        type="button"
+                                        className="admin-page__btn admin-page__btn--last"
+                                        style={btnStyle}
                                         onClick={() => openInspection(u.id)}
                                         title={t('admin.inspectTitleTooltip', 'Kullanıcı detaylı inceleme')}
                                     >
@@ -353,15 +351,15 @@ export function AdminUsersAndAccounts() {
                                         {t('admin.inspectBtn', 'İncele')}
                                     </button>
                                 </td>
-                                <td style={tdStyle}>
+                                <td style={tdStyle} data-label={t('admin.colActions', 'İşlemler')}>
                                     {u.role === 'ADMIN' || u.id === currentUser?.id ? (
                                         <span style={{ ...mutedStyle, fontSize: '0.8rem' }}>—</span>
                                     ) : (
                                         <button
                                             type="button"
+                                            className="admin-page__btn admin-page__btn--last"
                                             style={{
                                                 ...btnStyle,
-                                                marginRight: 0,
                                                 borderColor: tokens.error,
                                                 color: tokens.error,
                                             }}
@@ -377,32 +375,28 @@ export function AdminUsersAndAccounts() {
                         ))}
                         </tbody>
                     </table>
+                    </div>
                 )}
             </div>
 
             {inspectUserId != null && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.52)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+                <div className="admin-page__inspect-backdrop">
                     <div
+                        className="admin-page__inspect-panel"
                         style={{
-                            width: 'min(1000px, 94vw)',
-                            maxHeight: '88vh',
-                            overflowY: 'auto',
                             background: tokens.bgCard,
-                            borderRadius: 14,
                             border: `1px solid ${tokens.border}`,
                             boxShadow: '0 18px 40px rgba(0,0,0,0.25)',
-                            padding: 18,
-                            animation: 'adminInspectIn 220ms ease',
                         }}
                     >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <div className="admin-page__inspect-header">
                             <div>
                                 <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>{t('admin.inspectTitle', 'Kullanıcı detaylı inceleme')}</div>
                                 <div style={mutedStyle}>
                                     {inspectData?.username ?? '...'} • {inspectData?.email ?? '...'} • {inspectData?.role ?? '...'}
                                 </div>
                             </div>
-                            <button style={{ ...btnStyle, marginRight: 0 }} onClick={() => { setInspectUserId(null); setInspectData(null); }}>
+                            <button type="button" className="admin-page__btn admin-page__btn--last" style={btnStyle} onClick={() => { setInspectUserId(null); setInspectData(null); }}>
                                 <X size={14} />
                             </button>
                         </div>
@@ -410,15 +404,15 @@ export function AdminUsersAndAccounts() {
                         {inspectLoading ? (
                             <p style={mutedStyle}>{t('common.loading', 'Yükleniyor...')}</p>
                         ) : inspectData?.role === 'USER' ? (
-                            <div style={{ display: 'grid', gap: 12 }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+                            <div className="admin-page__inspect-grid">
+                                <div className="admin-page__inspect-kpis">
                                     <div style={cardStyle}><div style={mutedStyle}>{t('admin.inspectTotalPortfolio', 'Toplam portföy değeri')}</div><div style={{ fontWeight: 800, marginTop: 4 }}>{formatMoney(inspectData.dashboardSummary?.portfolio?.totalValueTry)}</div></div>
                                     <div style={cardStyle}><div style={mutedStyle}>{t('admin.inspectDashboardSummary', 'Özet (dashboard)')}</div><div style={{ fontWeight: 800, marginTop: 4 }}>{formatMoney(inspectData.dashboardSummary?.totalPortfolioValueTry)}</div></div>
                                 </div>
 
                                 <div style={{ ...cardStyle, padding: 12 }}>
                                     <div style={{ fontWeight: 700, marginBottom: 8 }}>{t('admin.inspectPortfolioDist', 'Portföy — dağılım')}</div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 220px) 1fr', alignItems: 'center', gap: 12 }}>
+                                    <div className="admin-page__inspect-dist">
                                         <div style={{ display: 'flex', justifyContent: 'center' }}>
                                             {(() => {
                                                 const slices = portfolioSlices(inspectData);

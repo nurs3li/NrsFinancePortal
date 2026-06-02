@@ -185,6 +185,24 @@
     .heatmap-detail-treemap .terminal-treemap-host {
         min-height: 180px;
     }
+
+    .heatmap-detail-card__toolbar label {
+        flex: 1 1 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+    }
+
+    .heatmap-detail-card__toolbar select {
+        margin-left: 0;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .heatmap-detail-card--sticky {
+        position: static;
+    }
 }
 
 @media (min-width: 768px) {
