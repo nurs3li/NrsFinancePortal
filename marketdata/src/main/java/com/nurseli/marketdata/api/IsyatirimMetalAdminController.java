@@ -2,7 +2,7 @@ package com.nurseli.marketdata.api;
 
 import com.nurseli.marketdata.api.dto.IsyatirimMetalBackfillResponse;
 import com.nurseli.marketdata.api.exception.InvalidRequestException;
-import com.nurseli.marketdata.application.IsyatirimMetalUsdBackfillService;
+import com.nurseli.marketdata.application.ingest.IsyatirimMetalUsdBackfillService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;

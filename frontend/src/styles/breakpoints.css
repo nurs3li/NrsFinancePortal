@@ -1,0 +1,19 @@
+/**
+ * Ortak responsive breakpoint token'ları.
+ * Yeni @media kurallarında tercih: max-width: calc(var(--bp-tablet) - 1px) vb.
+ */
+:root {
+    --bp-phone-sm: 400px;
+    --bp-phone: 480px;
+    --bp-phone-lg: 640px;
+    --bp-tablet: 768px;
+    --bp-desktop: 1024px;
+    --bp-wide: 1280px;
+}
+
+/* Layout shell ile hizalı: tablet altı = mobil compact */
+@media (max-width: 1023px) {
+    :root {
+        --layout-mobile: 1;
+    }
+}

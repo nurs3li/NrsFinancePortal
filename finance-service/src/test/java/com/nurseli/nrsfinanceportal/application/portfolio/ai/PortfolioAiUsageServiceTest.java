@@ -2,7 +2,8 @@ package com.nurseli.nrsfinanceportal.application.portfolio.ai;
 
 import com.nurseli.nrsfinanceportal.api.exception.ApiBusinessException;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.PortfolioAiAnalysisRepository;
-import com.nurseli.nrsfinanceportal.application.CurrentUserResolver;
+import com.nurseli.nrsfinanceportal.application.user.CurrentUserResolver;
+import com.nurseli.nrsfinanceportal.config.PortfolioAiModuleProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

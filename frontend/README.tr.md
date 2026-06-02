@@ -12,6 +12,15 @@ React 19 + TypeScript + Vite 7 tek sayfa uygulaması.
 
 ---
 
+## Mobil (telefon) uyumluluk
+
+- Desteklenen minimum genişlik: **320px**
+- Test viewport önerisi: **375×667**, **390×844**, **360×800** (portrait)
+- Mobil shell: `Layout.css` (`<1024px` hamburger menü), global sıkılaştırma: `src/styles/mobile-compact.css`
+- Kontrol listesi: [`docs/mobile-test-matrix.md`](docs/mobile-test-matrix.md)
+
+---
+
 ## Özet
 
 | Öğe | Değer |

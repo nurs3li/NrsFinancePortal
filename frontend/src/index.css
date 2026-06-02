@@ -40,6 +40,22 @@ body {
 
 #root {
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+img,
+svg,
+canvas,
+iframe {
+  max-width: 100%;
+}
+
+@media (max-width: 1023px) {
+  .app-main {
+    max-width: 100%;
+    overflow-x: clip;
+  }
 }
 
 h1 {

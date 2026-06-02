@@ -970,7 +970,7 @@
 .vb-modal {
     width: calc(100vw - 24px);
     max-width: calc(100vw - 24px);
-    max-height: 90vh;
+    max-height: min(90dvh, calc(100vh - 24px));
     overflow: hidden;
     display: flex;
     flex-direction: column;

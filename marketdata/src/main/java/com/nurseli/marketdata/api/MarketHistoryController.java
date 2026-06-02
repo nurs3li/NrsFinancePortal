@@ -1,7 +1,7 @@
 package com.nurseli.marketdata.api;
 
 import com.nurseli.marketdata.api.dto.BatchHistoryResponse;
-import com.nurseli.marketdata.application.MarketPriceQueryService;
+import com.nurseli.marketdata.application.query.MarketPriceQueryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

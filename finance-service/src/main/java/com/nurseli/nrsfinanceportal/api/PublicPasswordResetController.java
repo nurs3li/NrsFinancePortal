@@ -1,8 +1,8 @@
 package com.nurseli.nrsfinanceportal.api;
 
 import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
-import com.nurseli.nrsfinanceportal.application.PublicPasswordResetService;
-import com.nurseli.nrsfinanceportal.application.PublicPasswordResetService.PasswordResetResult;
+import com.nurseli.nrsfinanceportal.application.auth.PublicPasswordResetService;
+import com.nurseli.nrsfinanceportal.application.auth.PublicPasswordResetService.PasswordResetResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;

@@ -4772,6 +4772,29 @@
     }
 }
 
+@media (max-width: 479px) {
+    .terminal-card.market-chart-card .terminal-chart-surface {
+        height: clamp(220px, 45vh, 320px);
+        min-height: 220px;
+    }
+
+    .terminal-left-panel__inner .terminal-table-wrap:has(.terminal-data-table--picker-horizons),
+    .terminal-table-wrap:has(.terminal-data-table--picker-horizons) {
+        overscroll-behavior-x: contain;
+    }
+
+    .terminal-category-scroll-shell--chart-range,
+    .terminal-category-scroll-shell--chart-mode {
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .terminal-card.market-chart-card .terminal-controls__chart-toolbar {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+}
+
 @media (max-width: 400px) {
     .terminal-left-column .terminal-macro-info-grid,
     .terminal-macro-info-grid,

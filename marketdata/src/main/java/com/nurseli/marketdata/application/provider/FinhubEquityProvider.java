@@ -2,7 +2,7 @@ package com.nurseli.marketdata.application.provider;
 
 import com.nurseli.marketdata.api.dto.MarketPriceHistoryResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceLatestResponse;
-import com.nurseli.marketdata.application.MarketPriceQueryService;
+import com.nurseli.marketdata.application.query.MarketPriceQueryService;
 import org.springframework.stereotype.Component;
 
 import java.util.List;

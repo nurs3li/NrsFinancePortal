@@ -10,7 +10,7 @@ import com.nurseli.nrsfinanceportal.api.dto.pricealert.PriceAlertDto;
 import com.nurseli.nrsfinanceportal.api.dto.pricealert.PriceAlertPageResponse;
 import com.nurseli.nrsfinanceportal.api.dto.pricealert.PriceAlertUpdateRequest;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.PriceAlertRepository;
-import com.nurseli.nrsfinanceportal.application.CurrentUserResolver;
+import com.nurseli.nrsfinanceportal.application.user.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;

@@ -4,7 +4,7 @@ import com.nurseli.nrsfinanceportal.config.RateLimitProperties;
 import com.nurseli.nrsfinanceportal.api.dto.MarketOverviewResponse;
 import com.nurseli.nrsfinanceportal.infrastructure.kafka.NotificationEventKafkaPublisher;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
-import com.nurseli.nrsfinanceportal.application.MarketOverviewService;
+import com.nurseli.nrsfinanceportal.application.market.MarketOverviewService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;

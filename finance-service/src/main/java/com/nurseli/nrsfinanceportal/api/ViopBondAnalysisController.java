@@ -2,7 +2,7 @@ package com.nurseli.nrsfinanceportal.api;
 
 import com.nurseli.nrsfinanceportal.api.dto.ViopBondCombinedSummaryDto;
 import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
-import com.nurseli.nrsfinanceportal.application.ViopBondAnalysisSummaryService;
+import com.nurseli.nrsfinanceportal.application.viopbond.ViopBondAnalysisSummaryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;

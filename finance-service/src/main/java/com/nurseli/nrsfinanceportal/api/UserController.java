@@ -2,8 +2,8 @@ package com.nurseli.nrsfinanceportal.api;
 
 import com.nurseli.nrsfinanceportal.api.dto.UserResponse;
 import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
-import com.nurseli.nrsfinanceportal.application.CurrentUserResolver;
-import com.nurseli.nrsfinanceportal.application.UserService;
+import com.nurseli.nrsfinanceportal.application.user.CurrentUserResolver;
+import com.nurseli.nrsfinanceportal.application.user.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;

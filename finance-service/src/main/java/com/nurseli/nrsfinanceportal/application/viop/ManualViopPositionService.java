@@ -10,7 +10,7 @@ import com.nurseli.nrsfinanceportal.api.dto.viop.*;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualViopPositionRepository;
-import com.nurseli.nrsfinanceportal.application.CurrentUserResolver;
+import com.nurseli.nrsfinanceportal.application.user.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;

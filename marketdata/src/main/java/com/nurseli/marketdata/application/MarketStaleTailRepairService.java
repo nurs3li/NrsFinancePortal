@@ -1,5 +1,12 @@
 package com.nurseli.marketdata.application;
 
+import com.nurseli.marketdata.application.ingest.CryptoPriceIngestService;
+import com.nurseli.marketdata.application.ingest.DebtIngestService;
+import com.nurseli.marketdata.application.ingest.EquityPriceIngestService;
+import com.nurseli.marketdata.application.ingest.IsYatirimMetalUsdIngestService;
+import com.nurseli.marketdata.application.ingest.MarketPriceIngestService;
+import com.nurseli.marketdata.application.ingest.MetalHistoryWarmupService;
+import com.nurseli.marketdata.application.ingest.MetalPriceIngestService;
 import com.nurseli.marketdata.api.dto.MarketType;
 import com.nurseli.marketdata.config.MarketStaleTailProperties;
 import com.nurseli.marketdata.config.MarketMetalsIsyatirimProperties;

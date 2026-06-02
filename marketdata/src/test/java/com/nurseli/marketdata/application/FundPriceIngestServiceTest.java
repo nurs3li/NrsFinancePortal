@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.application;
 
+import com.nurseli.marketdata.application.ingest.FundPriceIngestService;
 import com.nurseli.marketdata.config.EtfProperties;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.infrastructure.finhub.FinHubClient;

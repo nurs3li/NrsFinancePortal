@@ -1,6 +1,6 @@
 package com.nurseli.marketdata.application.scheduler;
 
-import com.nurseli.marketdata.application.TefasFundIngestService;
+import com.nurseli.marketdata.application.ingest.TefasFundIngestService;
 import com.nurseli.marketdata.config.TefasProperties;
 import com.nurseli.marketdata.infrastructure.persistence.TefasFundProfileRepository;
 import lombok.RequiredArgsConstructor;

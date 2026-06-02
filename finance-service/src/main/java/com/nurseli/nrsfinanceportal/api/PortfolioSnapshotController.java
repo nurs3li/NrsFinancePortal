@@ -3,7 +3,7 @@ package com.nurseli.nrsfinanceportal.api;
 import com.nurseli.nrsfinanceportal.api.dto.PortfolioSnapshotPointDto;
 import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.portfolio.SnapshotTriggerType;
-import com.nurseli.nrsfinanceportal.application.PortfolioSnapshotQueryService;
+import com.nurseli.nrsfinanceportal.application.dashboard.PortfolioSnapshotQueryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;

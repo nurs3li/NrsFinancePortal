@@ -1,6 +1,6 @@
 package com.nurseli.marketdata.application.scheduler;
 
-import com.nurseli.marketdata.application.IsYatirimMetalUsdIngestService;
+import com.nurseli.marketdata.application.ingest.IsYatirimMetalUsdIngestService;
 import com.nurseli.marketdata.config.MarketMetalsIsyatirimProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

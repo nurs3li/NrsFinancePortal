@@ -1,6 +1,6 @@
 package com.nurseli.marketdata.application.scheduler;
 
-import com.nurseli.marketdata.application.ViopMarketDataService;
+import com.nurseli.marketdata.application.viop.ViopMarketDataService;
 import com.nurseli.marketdata.config.MarketViopProperties;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;

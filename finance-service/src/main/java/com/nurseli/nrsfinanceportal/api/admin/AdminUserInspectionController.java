@@ -5,7 +5,7 @@ import com.nurseli.nrsfinanceportal.api.dto.DashboardSummaryResponse;
 import com.nurseli.nrsfinanceportal.domain.user.Role;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
-import com.nurseli.nrsfinanceportal.application.DashboardSummaryService;
+import com.nurseli.nrsfinanceportal.application.dashboard.DashboardSummaryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;

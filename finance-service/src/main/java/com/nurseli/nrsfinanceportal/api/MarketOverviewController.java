@@ -1,7 +1,7 @@
 package com.nurseli.nrsfinanceportal.api;
 
 import com.nurseli.nrsfinanceportal.api.dto.MarketOverviewResponse;
-import com.nurseli.nrsfinanceportal.application.MarketOverviewService;
+import com.nurseli.nrsfinanceportal.application.market.MarketOverviewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;

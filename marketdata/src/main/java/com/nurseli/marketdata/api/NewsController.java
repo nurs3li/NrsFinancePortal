@@ -2,8 +2,8 @@ package com.nurseli.marketdata.api;
 
 import com.nurseli.marketdata.api.dto.NewsArticleImageDto;
 import com.nurseli.marketdata.api.dto.NewsResponse;
-import com.nurseli.marketdata.application.NewsArticleMediaService;
-import com.nurseli.marketdata.application.NewsQueryService;
+import com.nurseli.marketdata.application.news.NewsArticleMediaService;
+import com.nurseli.marketdata.application.query.NewsQueryService;
 import com.nurseli.marketdata.domain.news.NewsCategory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;

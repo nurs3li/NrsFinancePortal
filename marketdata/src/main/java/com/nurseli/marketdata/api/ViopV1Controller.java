@@ -1,7 +1,7 @@
 package com.nurseli.marketdata.api;
 
 import com.nurseli.marketdata.api.dto.ViopMarketWatchResponse;
-import com.nurseli.marketdata.application.ViopQueryService;
+import com.nurseli.marketdata.application.viop.ViopQueryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

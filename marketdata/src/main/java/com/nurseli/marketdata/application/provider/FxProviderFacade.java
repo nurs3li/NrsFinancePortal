@@ -2,7 +2,7 @@ package com.nurseli.marketdata.application.provider;
 
 import com.nurseli.marketdata.api.dto.MarketPriceLatestResponse;
 import com.nurseli.marketdata.api.dto.PriceQuality;
-import com.nurseli.marketdata.application.MarketPriceQueryService;
+import com.nurseli.marketdata.application.query.MarketPriceQueryService;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
 

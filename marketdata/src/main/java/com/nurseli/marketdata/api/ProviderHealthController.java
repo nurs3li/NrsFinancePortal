@@ -1,7 +1,7 @@
 package com.nurseli.marketdata.api;
 
 import com.nurseli.marketdata.api.dto.ProviderHealthDto;
-import com.nurseli.marketdata.application.ProviderHealthService;
+import com.nurseli.marketdata.application.query.ProviderHealthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;

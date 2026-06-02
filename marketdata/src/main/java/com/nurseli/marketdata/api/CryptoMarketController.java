@@ -2,7 +2,7 @@ package com.nurseli.marketdata.api;
 
 import com.nurseli.marketdata.api.dto.CryptoHistoryCoverageResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceHistoryResponse;
-import com.nurseli.marketdata.application.MarketPriceQueryService;
+import com.nurseli.marketdata.application.query.MarketPriceQueryService;
 import com.nurseli.marketdata.domain.price.CryptoSymbolMapping;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;

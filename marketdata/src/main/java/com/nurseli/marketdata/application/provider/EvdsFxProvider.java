@@ -4,7 +4,7 @@ import com.nurseli.marketdata.api.dto.MarketPriceHistoryResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceLatestResponse;
 import com.nurseli.marketdata.api.dto.DataQualityFlag;
 import com.nurseli.marketdata.api.dto.PriceQuality;
-import com.nurseli.marketdata.application.MarketPriceQueryService;
+import com.nurseli.marketdata.application.query.MarketPriceQueryService;
 import com.nurseli.marketdata.infrastructure.evds.EvdsClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

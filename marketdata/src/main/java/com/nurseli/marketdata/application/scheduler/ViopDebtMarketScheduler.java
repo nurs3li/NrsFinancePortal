@@ -1,6 +1,6 @@
 package com.nurseli.marketdata.application.scheduler;
 
-import com.nurseli.marketdata.application.DebtIngestService;
+import com.nurseli.marketdata.application.ingest.DebtIngestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;

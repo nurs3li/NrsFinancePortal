@@ -1,12 +1,12 @@
 package com.nurseli.marketdata.api;
 
 import com.nurseli.marketdata.api.dto.DebtHistoryWarmupResponse;
-import com.nurseli.marketdata.application.CryptoHistoryWarmupService;
-import com.nurseli.marketdata.application.DebtHistoryWarmupService;
-import com.nurseli.marketdata.application.FundPriceIngestService;
-import com.nurseli.marketdata.application.IsyatirimMetalUsdBackfillService;
-import com.nurseli.marketdata.application.MarketPriceBackfillService;
-import com.nurseli.marketdata.application.ViopBackfillRunner;
+import com.nurseli.marketdata.application.ingest.CryptoHistoryWarmupService;
+import com.nurseli.marketdata.application.ingest.DebtHistoryWarmupService;
+import com.nurseli.marketdata.application.ingest.FundPriceIngestService;
+import com.nurseli.marketdata.application.ingest.IsyatirimMetalUsdBackfillService;
+import com.nurseli.marketdata.application.ingest.MarketPriceBackfillService;
+import com.nurseli.marketdata.application.ingest.ViopBackfillRunner;
 import com.nurseli.marketdata.application.bist.BistEquityBackfillService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

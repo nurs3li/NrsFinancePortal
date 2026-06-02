@@ -1,5 +1,8 @@
 package com.nurseli.marketdata.application;
 
+import com.nurseli.marketdata.application.ingest.IsYatirimMetalUsdIngestService;
+import com.nurseli.marketdata.application.ingest.MetalHistoryWarmupService;
+import com.nurseli.marketdata.application.ingest.MetalPriceIngestService;
 import com.nurseli.marketdata.config.MarketMetalsHistoryWarmupProperties;
 import com.nurseli.marketdata.domain.metal.PreciousMetalUsdCatalog;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;

@@ -3,7 +3,7 @@ package com.nurseli.marketdata.api;
 import com.nurseli.marketdata.api.dto.DebtHistoryCoverageResponse;
 import com.nurseli.marketdata.api.dto.DebtInstrumentResponse;
 import com.nurseli.marketdata.api.dto.DebtSnapshotResponse;
-import com.nurseli.marketdata.application.DebtQueryService;
+import com.nurseli.marketdata.application.query.DebtQueryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;

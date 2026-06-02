@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.application;
 
+import com.nurseli.marketdata.application.ingest.CryptoPriceIngestService;
 import com.nurseli.marketdata.application.crypto.CryptoDailyOhlcUtil;
 import com.nurseli.marketdata.config.CryptoHistoryBackfillProperties;
 import com.nurseli.marketdata.domain.price.CryptoDailyCandle;
