@@ -1,8 +1,8 @@
 package com.nurseli.nrsfinanceportal.api;
 
 import com.nurseli.nrsfinanceportal.api.dto.DashboardSummaryResponse;
-import com.nurseli.nrsfinanceportal.application.CurrentUserResolver;
-import com.nurseli.nrsfinanceportal.application.DashboardSummaryService;
+import com.nurseli.nrsfinanceportal.application.user.CurrentUserResolver;
+import com.nurseli.nrsfinanceportal.application.dashboard.DashboardSummaryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;

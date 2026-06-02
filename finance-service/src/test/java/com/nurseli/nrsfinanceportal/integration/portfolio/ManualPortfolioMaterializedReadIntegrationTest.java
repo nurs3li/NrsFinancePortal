@@ -6,6 +6,7 @@ import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioPo
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioReadSnapshotRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioTimeseriesSnapshotRepository;
 import com.nurseli.nrsfinanceportal.integration.support.FinanceIntegrationTestBase;
+import com.nurseli.nrsfinanceportal.integration.support.IntegrationTestMarketStubs;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
+
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -47,6 +50,7 @@ class ManualPortfolioMaterializedReadIntegrationTest extends FinanceIntegrationT
 
     @BeforeEach
     void cleanMaterializedState() {
+        IntegrationTestMarketStubs.stubBistPortfolioWarmupSymbols(marketDataClient);
         TransactionTemplate cleanup = new TransactionTemplate(transactionManager);
         cleanup.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         cleanup.executeWithoutResult(status -> {
@@ -230,10 +234,17 @@ class ManualPortfolioMaterializedReadIntegrationTest extends FinanceIntegrationT
 
         assertThat(positionRepository.findById(id)).isEmpty();
 
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+        TestTransaction.start();
+
+        warmupService.awaitIdle(Duration.ofSeconds(15));
+        entityManager.clear();
+
         mockMvc.perform(get("/api/portfolio/manual/page/me").with(integrationUserJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.meta.warmStatus").value("PENDING"))
+                .andExpect(jsonPath("$.data.meta.warmStatus").value("READY"))
                 .andExpect(jsonPath("$.data.summary.totalPositions").value(0))
                 .andExpect(jsonPath("$.data.positions[?(@.id == " + id + ")]").doesNotExist())
                 .andExpect(jsonPath("$.data.positions[?(@.symbol == 'THYAO')]").doesNotExist());

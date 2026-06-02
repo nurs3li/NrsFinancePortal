@@ -4,7 +4,7 @@ import com.nurseli.nrsfinanceportal.api.dto.TotpConfirmRequest;
 import com.nurseli.nrsfinanceportal.api.dto.TotpSetupDto;
 import com.nurseli.nrsfinanceportal.api.dto.TotpStatusDto;
 import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
-import com.nurseli.nrsfinanceportal.application.UserTotpService;
+import com.nurseli.nrsfinanceportal.application.user.UserTotpService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

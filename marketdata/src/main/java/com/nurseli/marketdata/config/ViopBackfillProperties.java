@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "app.viop.backfill")
 @Data
 public class ViopBackfillProperties {
-    /** Uygulama açılışında {@link com.nurseli.marketdata.application.ViopBackfillRunner} bir kez çalıştırır. */
+    /** Uygulama açılışında {@link com.nurseli.marketdata.application.ingest.ViopBackfillRunner} bir kez çalıştırır. */
     private boolean enabled = false;
     private String dir = "artifacts/viop";
     private String pattern = "viop_*.csv";

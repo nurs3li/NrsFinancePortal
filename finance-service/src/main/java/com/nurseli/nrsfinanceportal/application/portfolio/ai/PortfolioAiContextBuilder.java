@@ -11,7 +11,7 @@ import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPortfolioPosition;
 import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPositionStatus;
 import com.nurseli.nrsfinanceportal.domain.portfolio.ai.PortfolioAiConcentrationLevel;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient;
-import com.nurseli.nrsfinanceportal.application.ManualPortfolioService;
+import com.nurseli.nrsfinanceportal.application.portfolio.ManualPortfolioService;
 import com.nurseli.nrsfinanceportal.application.portfolio.ManualPortfolioInsightsService;
 import com.nurseli.nrsfinanceportal.application.portfolio.ManualPortfolioNominalAnalysisCalculator;
 import org.springframework.stereotype.Component;

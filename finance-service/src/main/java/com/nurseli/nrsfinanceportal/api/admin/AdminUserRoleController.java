@@ -2,7 +2,7 @@ package com.nurseli.nrsfinanceportal.api.admin;
 
 import com.nurseli.nrsfinanceportal.api.dto.AssignRoleRequest;
 import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
-import com.nurseli.nrsfinanceportal.application.UserRealmRoleAssignmentService;
+import com.nurseli.nrsfinanceportal.application.user.UserRealmRoleAssignmentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

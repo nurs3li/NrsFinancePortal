@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.application;
 
+import com.nurseli.marketdata.application.ingest.DebtIngestService;
 import com.nurseli.marketdata.application.debt.DebtCouponFrequencyPersistence;
 import com.nurseli.marketdata.config.EvdsProperties;
 import com.nurseli.marketdata.domain.debt.DebtInstrument;

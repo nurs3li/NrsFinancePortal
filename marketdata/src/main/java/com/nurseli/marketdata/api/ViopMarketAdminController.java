@@ -2,7 +2,7 @@ package com.nurseli.marketdata.api;
 
 import com.nurseli.marketdata.api.dto.ViopHistoryResponse;
 import com.nurseli.marketdata.api.dto.ViopMarketSnapshotDto;
-import com.nurseli.marketdata.application.ViopMarketDataService;
+import com.nurseli.marketdata.application.viop.ViopMarketDataService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;

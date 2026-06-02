@@ -1,5 +1,7 @@
 package com.nurseli.marketdata.application;
 
+import com.nurseli.marketdata.application.viop.ViopMarketDataService;
+import com.nurseli.marketdata.application.viop.ViopQueryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nurseli.marketdata.api.dto.ViopPriceAtResponse;
 import com.nurseli.marketdata.config.MarketViopProperties;

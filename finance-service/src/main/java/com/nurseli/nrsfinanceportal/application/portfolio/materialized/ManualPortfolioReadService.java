@@ -4,7 +4,7 @@ package com.nurseli.nrsfinanceportal.application.portfolio.materialized;
 
 import com.nurseli.nrsfinanceportal.api.dto.*;
 
-import com.nurseli.nrsfinanceportal.application.ManualPortfolioService;
+import com.nurseli.nrsfinanceportal.application.portfolio.ManualPortfolioService;
 
 import com.nurseli.nrsfinanceportal.application.portfolio.ManualPortfolioInsightsService;
 
@@ -458,6 +458,20 @@ public class ManualPortfolioReadService {
 
     ) {
 
+        if (positions.isEmpty()) {
+
+            return new FastPendingData(
+
+                    List.of(),
+
+                    manualPortfolioService.emptySummary(),
+
+                    null
+
+            );
+
+        }
+
         if (snapshotOpt.isPresent()
 
                 && currentFingerprint.equals(snapshotOpt.get().getPositionsFingerprint())) {
@@ -479,20 +493,6 @@ public class ManualPortfolioReadService {
                 log.debug("[MANUAL_READ] stale snapshot unreadable user={}: {}", userId, ex.getMessage());
 
             }
-
-        }
-
-        if (positions.isEmpty()) {
-
-            return new FastPendingData(
-
-                    List.of(),
-
-                    manualPortfolioService.emptySummary(),
-
-                    null
-
-            );
 
         }
 

@@ -1,9 +1,9 @@
 package com.nurseli.marketdata.application.bootstrap;
 
-import com.nurseli.marketdata.application.CryptoPriceIngestService;
-import com.nurseli.marketdata.application.MarketPriceIngestService;
-import com.nurseli.marketdata.application.MetalPriceIngestService;
-import com.nurseli.marketdata.application.NewsIngestService;
+import com.nurseli.marketdata.application.ingest.CryptoPriceIngestService;
+import com.nurseli.marketdata.application.ingest.MarketPriceIngestService;
+import com.nurseli.marketdata.application.ingest.MetalPriceIngestService;
+import com.nurseli.marketdata.application.ingest.NewsIngestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;

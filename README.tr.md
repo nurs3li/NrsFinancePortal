@@ -35,34 +35,18 @@
 
 ## İçindekiler
 
-1. [Kimler için?](#kimler-için)
-2. [Hızlı başlangıç özeti](#hızlı-başlangıç-özeti)
-3. [Ürün özeti](#ürün-özeti)
-4. [Teknoloji yığını](#teknoloji-yığını)
-5. [Sistem mimarisi](#sistem-mimarisi)
-6. [Başlarken (Docker)](#başlarken-docker)
-7. [Ortam değişkenleri](#ortam-değişkenleri)
-8. [Servisler, portlar ve URL'ler](#servisler-portlar-ve-urller)
-9. [Depo yapısı](#depo-yapısı)
-10. [Test](#test)
-11. [Proje isterleri uyumu](#proje-isterleri-uyumu)
-12. [Dokümantasyon haritası](#dokümantasyon-haritası)
-13. [Sorun giderme](#sorun-giderme)
-
----
-
-## Kimler için?
-
-Bu README, projeye yeni gelen ve şunları yapmak isteyen inceleyiciler ve geliştiriciler içindir:
-
-- Depoyu klonlamak ve **tam yığını Docker ile ayağa kaldırmak**
-- Frontend ve API'lere erişmek
-- Temel altyapı bileşenlerini doğrulamak (Swagger, Grafana, OpenSearch vb.)
-- Sistemin nasıl bağlandığını anlamak (güvenlik, gözlemlenebilirlik, servis sınırları)
-
-Daha derin konular ve uygulama ayrıntıları [`docs/`](docs/README.tr.md) altındadır.
-
-**Katman katman doğrulama**, smoke test ve yerel test komutları için [`docs/getting-started.tr.md`](docs/getting-started.tr.md) dosyasına bakın.
+1. [Hızlı başlangıç özeti](#hızlı-başlangıç-özeti)
+2. [Ürün özeti](#ürün-özeti)
+3. [Teknoloji yığını](#teknoloji-yığını)
+4. [Sistem mimarisi](#sistem-mimarisi)
+5. [Başlarken (Docker)](#başlarken-docker)
+6. [Ortam değişkenleri](#ortam-değişkenleri)
+7. [Servisler, portlar ve URL'ler](#servisler-portlar-ve-urller)
+8. [Depo yapısı](#depo-yapısı)
+9. [Test](#test)
+10. [Proje isterleri uyumu](#proje-isterleri-uyumu)
+11. [Dokümantasyon haritası](#dokümantasyon-haritası)
+12. [Sorun giderme](#sorun-giderme)
 
 ---
 

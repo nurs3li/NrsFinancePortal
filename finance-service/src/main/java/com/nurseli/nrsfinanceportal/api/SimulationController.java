@@ -4,7 +4,7 @@ import com.nurseli.nrsfinanceportal.api.dto.SimulationResponseDto;
 import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
 import com.nurseli.nrsfinanceportal.domain.asset.AssetType;
 import com.nurseli.nrsfinanceportal.domain.asset.SimulationDisplayCurrency;
-import com.nurseli.nrsfinanceportal.application.SimulationService;
+import com.nurseli.nrsfinanceportal.application.simulation.SimulationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;

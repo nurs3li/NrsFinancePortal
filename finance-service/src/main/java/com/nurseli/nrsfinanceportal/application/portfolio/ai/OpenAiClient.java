@@ -2,6 +2,7 @@ package com.nurseli.nrsfinanceportal.application.portfolio.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nurseli.nrsfinanceportal.config.OpenAiProperties;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Qualifier;

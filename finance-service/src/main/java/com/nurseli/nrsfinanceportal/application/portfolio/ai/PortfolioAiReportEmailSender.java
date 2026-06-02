@@ -9,7 +9,7 @@ import com.nurseli.nrsfinanceportal.api.exception.ApiBusinessException;
 import com.nurseli.nrsfinanceportal.api.response.ApiErrorCode;
 import com.nurseli.nrsfinanceportal.config.NotificationClientProperties;
 import com.nurseli.nrsfinanceportal.infrastructure.keycloak.KeycloakAdminTokenProvider;
-import com.nurseli.nrsfinanceportal.application.RegistrationEmailSender;
+import com.nurseli.nrsfinanceportal.application.auth.RegistrationEmailSender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;

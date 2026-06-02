@@ -2,7 +2,7 @@ package com.nurseli.marketdata.api;
 
 import com.nurseli.marketdata.api.dto.TefasFundHistoryPointDto;
 import com.nurseli.marketdata.api.dto.TefasFundPageDto;
-import com.nurseli.marketdata.application.TefasFundService;
+import com.nurseli.marketdata.application.query.TefasFundService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

@@ -1,8 +1,8 @@
 package com.nurseli.marketdata.application.bootstrap;
 
 import com.nurseli.marketdata.api.dto.DebtHistoryCoverageResponse;
-import com.nurseli.marketdata.application.DebtHistoryWarmupService;
-import com.nurseli.marketdata.application.MetalHistoryWarmupService;
+import com.nurseli.marketdata.application.ingest.DebtHistoryWarmupService;
+import com.nurseli.marketdata.application.ingest.MetalHistoryWarmupService;
 import com.nurseli.marketdata.application.deposit.DepositRatesIngestService;
 import com.nurseli.marketdata.application.eurobond.EurobondEvdsIngestService;
 import com.nurseli.marketdata.application.eurobond.EurobondInstrumentIngestService;

@@ -8,7 +8,7 @@ import com.nurseli.nrsfinanceportal.domain.portfolio.ai.PortfolioAiEmailDelivery
 import com.nurseli.nrsfinanceportal.domain.portfolio.ai.PortfolioAiEmailDeliveryFrequency;
 import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.PortfolioAiEmailDeliveryRepository;
-import com.nurseli.nrsfinanceportal.application.CurrentUserResolver;
+import com.nurseli.nrsfinanceportal.application.user.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;

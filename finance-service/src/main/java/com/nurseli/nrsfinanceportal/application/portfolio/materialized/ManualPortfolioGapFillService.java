@@ -3,7 +3,7 @@ package com.nurseli.nrsfinanceportal.application.portfolio.materialized;
 import com.nurseli.nrsfinanceportal.api.dto.ManualPortfolioInsightsResponse;
 import com.nurseli.nrsfinanceportal.api.dto.ManualPortfolioSummaryView;
 import com.nurseli.nrsfinanceportal.api.dto.ManualPortfolioView;
-import com.nurseli.nrsfinanceportal.application.ManualPortfolioService;
+import com.nurseli.nrsfinanceportal.application.portfolio.ManualPortfolioService;
 import com.nurseli.nrsfinanceportal.application.portfolio.ManualPortfolioViewAssembler;
 import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPortfolioPosition;
 import com.nurseli.nrsfinanceportal.domain.portfolio.ManualPortfolioWarmStatus;

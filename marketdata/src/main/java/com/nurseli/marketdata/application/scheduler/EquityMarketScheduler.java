@@ -1,6 +1,6 @@
 package com.nurseli.marketdata.application.scheduler;
 
-import com.nurseli.marketdata.application.EquityPriceIngestService;
+import com.nurseli.marketdata.application.ingest.EquityPriceIngestService;
 import com.nurseli.marketdata.config.EquityInitialSeedProperties;
 import com.nurseli.marketdata.config.EquityProperties;
 import com.nurseli.marketdata.domain.price.EquityDailyCandle;

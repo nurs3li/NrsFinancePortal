@@ -1,7 +1,7 @@
 package com.nurseli.marketdata.api.realtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nurseli.marketdata.application.MarketLiveSnapshotService;
+import com.nurseli.marketdata.application.query.MarketLiveSnapshotService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;

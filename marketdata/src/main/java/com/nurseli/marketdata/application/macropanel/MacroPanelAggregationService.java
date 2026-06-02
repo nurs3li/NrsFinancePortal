@@ -23,7 +23,7 @@ import com.nurseli.marketdata.config.EvdsProperties;
 import com.nurseli.marketdata.config.EvdsSeriesLogicalNames;
 import com.nurseli.marketdata.config.InflationCpiProperties;
 import com.nurseli.marketdata.config.InflationPpiProperties;
-import com.nurseli.marketdata.application.DebtQueryService;
+import com.nurseli.marketdata.application.query.DebtQueryService;
 import com.nurseli.marketdata.domain.inflation.InflationIndicatorType;
 import com.nurseli.marketdata.domain.loan.LoanRateSubtype;
 import com.nurseli.marketdata.infrastructure.evds.EvdsDebtClient;

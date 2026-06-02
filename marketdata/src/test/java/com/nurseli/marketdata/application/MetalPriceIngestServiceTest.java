@@ -1,5 +1,6 @@
 package com.nurseli.marketdata.application;
 
+import com.nurseli.marketdata.application.ingest.MetalPriceIngestService;
 import com.nurseli.marketdata.domain.price.MarketPriceHistory;
 import com.nurseli.marketdata.infrastructure.coingecko.CoinGeckoMetalClient;
 import com.nurseli.marketdata.infrastructure.persistence.MarketPriceHistoryRepository;

@@ -7,7 +7,7 @@ import com.nurseli.nrsfinanceportal.api.dto.UpdateUserProfileRequest;
 import com.nurseli.nrsfinanceportal.api.dto.UpdateUsernameRequest;
 import com.nurseli.nrsfinanceportal.api.dto.UserResponse;
 import com.nurseli.nrsfinanceportal.api.response.ApiResponse;
-import com.nurseli.nrsfinanceportal.application.UserProfileService;
+import com.nurseli.nrsfinanceportal.application.user.UserProfileService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

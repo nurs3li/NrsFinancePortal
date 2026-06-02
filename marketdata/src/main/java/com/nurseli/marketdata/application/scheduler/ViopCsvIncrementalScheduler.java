@@ -1,6 +1,6 @@
 package com.nurseli.marketdata.application.scheduler;
 
-import com.nurseli.marketdata.application.ViopBackfillRunner;
+import com.nurseli.marketdata.application.ingest.ViopBackfillRunner;
 import com.nurseli.marketdata.config.ViopBackfillProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

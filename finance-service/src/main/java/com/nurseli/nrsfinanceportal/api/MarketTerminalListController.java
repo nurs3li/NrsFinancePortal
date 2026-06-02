@@ -1,7 +1,7 @@
 package com.nurseli.nrsfinanceportal.api;
 
 import com.nurseli.nrsfinanceportal.api.dto.MarketTerminalListPageResponse;
-import com.nurseli.nrsfinanceportal.application.MarketTerminalListService;
+import com.nurseli.nrsfinanceportal.application.market.MarketTerminalListService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;

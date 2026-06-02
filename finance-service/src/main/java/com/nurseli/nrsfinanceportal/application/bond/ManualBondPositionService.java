@@ -10,7 +10,7 @@ import com.nurseli.nrsfinanceportal.api.dto.bond.*;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.CpiIndexLookup;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualBondPositionRepository;
-import com.nurseli.nrsfinanceportal.application.CurrentUserResolver;
+import com.nurseli.nrsfinanceportal.application.user.CurrentUserResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;

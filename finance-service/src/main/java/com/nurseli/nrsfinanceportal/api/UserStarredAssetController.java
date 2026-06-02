@@ -2,7 +2,7 @@ package com.nurseli.nrsfinanceportal.api;
 
 import com.nurseli.nrsfinanceportal.api.dto.StarredAssetsResponse;
 import com.nurseli.nrsfinanceportal.api.dto.StarredAssetsUpdateRequest;
-import com.nurseli.nrsfinanceportal.application.UserStarredAssetService;
+import com.nurseli.nrsfinanceportal.application.user.UserStarredAssetService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;

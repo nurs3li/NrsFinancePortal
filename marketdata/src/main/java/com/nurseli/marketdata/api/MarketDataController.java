@@ -2,7 +2,7 @@ package com.nurseli.marketdata.api;
 
 import com.nurseli.marketdata.api.dto.MarketPriceHistoryResponse;
 import com.nurseli.marketdata.api.dto.MarketPriceLatestResponse;
-import com.nurseli.marketdata.application.MarketPriceQueryService;
+import com.nurseli.marketdata.application.query.MarketPriceQueryService;
 import com.nurseli.marketdata.application.provider.FxProviderFacade;
 import com.nurseli.marketdata.application.provider.ProviderRegistry;
 import com.nurseli.marketdata.application.provider.FxProvider;
