@@ -116,13 +116,15 @@ src/
 
 ### Docker Compose (önerilen)
 
-Depo kökünden:
+Depo kökünden (`.env` içinde `COMPOSE_PROFILES=production` → nginx, port 3000):
 
 ```powershell
-docker compose up -d
+docker compose up -d --build
 ```
 
 Açın: http://localhost:3000
+
+Vite HMR: `.env` içinde `COMPOSE_PROFILES=dev` veya `docker compose --profile dev up -d` (`production` ile aynı anda açmayın).
 
 ### Yerel (isteğe bağlı)
 

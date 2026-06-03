@@ -361,11 +361,43 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-  # Vite geliştirme sunucusu (HMR, kaynak klasör bind mount). Üretim nginx imajı compose’ta yok; dağıtım için frontend/Dockerfile kullanılır.
-  # Host 3000 → konteyner 5173: tarayıcı `http://localhost:3000` ile Keycloak redirect_uri (genelde 3000) ile aynı kök olur.
-  # 3000 başka süreçte kullanılıyorsa (eski nginx nrs-frontend vb.) önce durdur veya bu mapping’i çakışmayacak porta çek.
+  # Frontend: COMPOSE_PROFILES=production (varsayılan) → nginx | dev → Vite HMR. Yalnızca bir profil; ikisi 3000’i paylaşır.
+  # Tarayıcı http://localhost:3000 — Keycloak redirect_uri buna göre ayarlı.
   # API çağrıları tarayıcıdan gider; VITE_* host’tan erişilebilir olmalı (örn. localhost:8085).
+  frontend:
+    profiles: [production]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8085}
+        VITE_API_VERSION: ${VITE_API_VERSION:-v1}
+        VITE_MARKET_API_URL: ${VITE_MARKET_API_URL:-http://localhost:8083}
+        VITE_NOTIFICATION_API_URL: ${VITE_NOTIFICATION_API_URL:-http://localhost:8089}
+        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-http://localhost:8081}
+        VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-nrs-finance}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-nrs-frontend}
+        VITE_GRAFANA_SOLO_BASE: ${VITE_GRAFANA_SOLO_BASE:-http://localhost:3001/d-solo/nrs-observability/nrs-observability}
+        VITE_GRAFANA_ORG_ID: ${VITE_GRAFANA_ORG_ID:-1}
+        VITE_GRAFANA_AUDIT_PANEL_REQUEST_VOLUME: ${VITE_GRAFANA_AUDIT_PANEL_REQUEST_VOLUME:-1}
+        VITE_GRAFANA_AUDIT_PANEL_ERROR_RATE: ${VITE_GRAFANA_AUDIT_PANEL_ERROR_RATE:-2}
+        VITE_GRAFANA_AUDIT_PANEL_P95_RESPONSE: ${VITE_GRAFANA_AUDIT_PANEL_P95_RESPONSE:-}
+        VITE_GRAFANA_AUDIT_PANEL_SERVICE_HEALTH: ${VITE_GRAFANA_AUDIT_PANEL_SERVICE_HEALTH:-4}
+        VITE_GRAFANA_AUDIT_PANEL_TEMPO_SPAN_RATE: ${VITE_GRAFANA_AUDIT_PANEL_TEMPO_SPAN_RATE:-}
+        VITE_GRAFANA_AUDIT_PANEL_TEMPO_NODE_GRAPH: ${VITE_GRAFANA_AUDIT_PANEL_TEMPO_NODE_GRAPH:-}
+        VITE_GRAFANA_TEMPO_EXPLORE_DRILLDOWN_URL: ${VITE_GRAFANA_TEMPO_EXPLORE_DRILLDOWN_URL:-}
+        VITE_GRAFANA_TEMPO_EXPLORE_NODE_GRAPH_URL: ${VITE_GRAFANA_TEMPO_EXPLORE_NODE_GRAPH_URL:-}
+        VITE_GRAFANA_SERVICE_MAP_TRACE_URL_TEMPLATE: ${VITE_GRAFANA_SERVICE_MAP_TRACE_URL_TEMPLATE:-}
+    container_name: nrs-frontend
+    ports:
+      - "3000:80"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   frontend-dev:
+    profiles: [dev]
     image: node:22-alpine
     working_dir: /app
     container_name: nrs-frontend-dev
