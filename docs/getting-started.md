@@ -50,6 +50,7 @@ Edit `.env`. Reference: [`.env.example`](../.env.example)
 | **Optional** | `FINHUB_API_KEY` | US equities / ETF data |
 | **Optional** | `OPENAI_API_KEY`, `OPENAI_MODEL` | Portfolio AI analysis |
 | **Optional** | `GMAIL_*`, `NOTIFICATION_TEST_EMAIL` | Email notifications via notification-service — setup: [`email-setup.md`](./email-setup.md) |
+| **Optional** | `COMPOSE_PROFILES` | `production` (nginx, default) or `dev` (Vite HMR) |
 | **Optional** | `VITE_*` | Frontend URLs — Docker defaults usually work |
 | **Optional** | `APP_LOG_KAFKA_MIN_LEVEL` | Default `INFO`; set `WARN` to reduce log volume in OpenSearch |
 
@@ -71,7 +72,9 @@ docker compose up -d --build market-data-service
 docker compose up -d --build
 ```
 
-**Expected time:** first run typically takes 5–15 minutes (Maven builds + migrations + Keycloak realm import).
+Ensure `.env` includes `COMPOSE_PROFILES=production` (from [`.env.example`](../.env.example)) so the nginx frontend starts on port 3000. For Vite HMR, use `COMPOSE_PROFILES=dev` or `docker compose --profile dev up -d` — enable only one profile at a time.
+
+**Expected time:** first run typically takes 5–15 minutes (Maven builds + migrations + Keycloak realm import). The first nginx frontend image build may add 1–3 minutes.
 
 Follow progress:
 
@@ -85,7 +88,7 @@ docker compose logs -f --tail=100
 postgres, redis, kafka, keycloak, opensearch          (base)
   → market-data-service                               (healthcheck)
     → finance-service
-  → notification-service, log-consumer-service, frontend-dev   (parallel)
+  → notification-service, log-consumer-service, frontend (production) or frontend-dev (dev profile)   (parallel)
   → otel-collector, prometheus, grafana, tempo
 ```
 
@@ -326,7 +329,10 @@ docker compose down -v
 | Macro panels are blank | Set `EVDS_API_KEY`, then `docker compose up -d --build market-data-service` |
 | Swagger **401** | **Authorize** → `Bearer <access_token>` after frontend login |
 | Frontend/Keycloak redirect errors | Use http://localhost:3000 (not :5173) |
-| `frontend-dev` slow on first start | First `npm ci` runs inside the container — wait for the Vite server to finish |
+| No UI on port 3000 | Set `COMPOSE_PROFILES=production` or `dev` in `.env` (not both); `docker compose ps` should show `nrs-frontend` or `nrs-frontend-dev` |
+| **Login failed** after switching to `production` | `finance-service` must be **Up (healthy)**; stop stale `nrs-frontend-dev` on port 3000 (`docker stop nrs-frontend-dev`), then `docker compose up -d`; verify `http://localhost:8085/actuator/health` |
+| `frontend` (nginx) slow first build | Image runs `npm run build` — wait for build to finish, then open http://localhost:3000 |
+| `frontend-dev` slow on first start (dev profile) | First `npm ci` runs inside the container — wait for the Vite server to finish |
 | Registration / password-reset email not sent | Configure Gmail OAuth — [`email-setup.md`](./email-setup.md); check `notification-service` health |
 | No "forgot password" page URL | Flow is inside landing **Sign in** tab, not a separate route |
 | Login shows "account suspended" | Admin suspended user — test with `unsuspend-login` or use another account |

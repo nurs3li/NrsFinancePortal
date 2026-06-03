@@ -57,8 +57,9 @@
 |---|---|
 | **Requirements** | Git + Docker Desktop (**8 GB RAM** recommended) |
 | **1. Clone & env** | `git clone` → `copy .env.example .env` (Windows) or `cp .env.example .env` (macOS/Linux) → set at least `POSTGRES_PASSWORD` |
-| **2. Start** | `docker compose up -d --build` (first run **5–15 min**) |
+| **2. Start** | `docker compose up -d --build` (first run **5–15 min**; nginx frontend via `COMPOSE_PROFILES=production` in `.env`) |
 | **3. Open** | http://localhost:3000 |
+| **Frontend dev** | Set `COMPOSE_PROFILES=dev` in `.env`, or `docker compose --profile dev up -d` (Vite HMR; do not enable `production` at the same time) |
 | **4. Demo login** | `testuser` / `123456789` (user) or `nrsadmin` / `123456789` (admin) — see [Step 5](#step-5--open-the-app) |
 
 > Demo passwords are for **local development only**; change them in production.
@@ -184,7 +185,7 @@ What gets started (high level):
 docker compose ps
 ```
 
-Expected container names in the `NAME` column include `nrs-finance`, `nrs-market-data`, `nrs-postgres`, `nrs-keycloak`, `nrs-frontend-dev`, and others — all **running** or **healthy**.
+Expected container names in the `NAME` column include `nrs-finance`, `nrs-market-data`, `nrs-postgres`, `nrs-keycloak`, `nrs-frontend` (default nginx) or `nrs-frontend-dev` (Vite dev profile), and others — all **running** or **healthy**.
 
 > On first startup, `market-data-service` may show **starting** for 5–10 minutes — this is normal. `finance-service` waits for market-data to become healthy; if finance keeps restarting, check `docker compose logs market-data-service` first.
 
@@ -289,7 +290,8 @@ Full reference: [`.env.example`](.env.example)
 |----------|---------|----------|
 | `OPENAI_API_KEY` | No | Enables Portfolio AI analysis (optional) |
 | `GMAIL_*` | No | Enables email delivery from `notification-service` (optional) |
-| `VITE_*` | No | Frontend runtime configuration (Docker defaults usually work) |
+| `COMPOSE_PROFILES` | No | `production` (nginx UI, default) or `dev` (Vite HMR) — see [`.env.example`](.env.example) |
+| `VITE_*` | No | Frontend URLs (build-time for nginx; runtime for Vite dev) |
 
 > **Note:** Some variables are set in `docker-compose.yml` or service `application-docker.yml` but not listed in `.env.example`. To override them locally, add them to `.env` (Compose passes them through). Examples: `KEYCLOAK_SECURITY_*`, `PORTFOLIO_AI_DAILY_LIMIT`, `NRS_INTERNAL_BACKFILL_TOKEN`, `MARKET_DATA_INTERNAL_BACKFILL_TOKEN`. See [`docker-compose.yml`](docker-compose.yml) and module READMEs.
 
@@ -303,7 +305,8 @@ Docker Compose automatically loads the `.env` file from the repo root; no additi
 
 | Component | Host port | Swagger / UI |
 |---------|------------|--------------|
-| **Frontend** | 3000 | http://localhost:3000 |
+| **Frontend** (nginx, `production` profile) | 3000 | http://localhost:3000 |
+| **Frontend dev** (Vite, `dev` profile) | 3000 | http://localhost:3000 |
 | **finance-service** | 8085 | http://localhost:8085/swagger-ui.html |
 | **marketdata** | 8083 | http://localhost:8083/swagger-ui.html |
 | **notification-service** | 8089 | http://localhost:8089/swagger-ui.html |

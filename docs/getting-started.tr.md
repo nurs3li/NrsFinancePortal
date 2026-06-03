@@ -50,6 +50,7 @@ cp .env.example .env
 | **Opsiyonel** | `FINHUB_API_KEY` | ABD hisse / ETF verisi |
 | **Opsiyonel** | `OPENAI_API_KEY`, `OPENAI_MODEL` | Portföy AI analizi |
 | **Opsiyonel** | `GMAIL_*`, `NOTIFICATION_TEST_EMAIL` | E-posta bildirimleri — kurulum: [`email-setup.tr.md`](./email-setup.tr.md) |
+| **Opsiyonel** | `COMPOSE_PROFILES` | `production` (nginx, varsayılan) veya `dev` (Vite HMR) |
 | **Opsiyonel** | `VITE_*` | Frontend URL'leri — Docker varsayılanları genelde yeterli |
 | **Opsiyonel** | `APP_LOG_KAFKA_MIN_LEVEL` | Varsayılan `INFO`; OpenSearch hacmini azaltmak için `WARN` |
 
@@ -71,7 +72,9 @@ docker compose up -d --build market-data-service
 docker compose up -d --build
 ```
 
-**Beklenen süre:** ilk çalıştırma genelde 5–15 dakika (Maven build + migration + Keycloak realm import).
+`.env` dosyasında `COMPOSE_PROFILES=production` olmalı ([`.env.example`](../.env.example)) — nginx frontend 3000 portunda açılır. Vite HMR için `COMPOSE_PROFILES=dev` veya `docker compose --profile dev up -d`; aynı anda yalnızca bir profil.
+
+**Beklenen süre:** ilk çalıştırma genelde 5–15 dakika (Maven build + migration + Keycloak realm import). İlk nginx frontend imaj derlemesi ek 1–3 dakika sürebilir.
 
 İlerlemeyi izleyin:
 
@@ -85,7 +88,7 @@ docker compose logs -f --tail=100
 postgres, redis, kafka, keycloak, opensearch          (temel)
   → market-data-service                               (healthcheck)
     → finance-service
-  → notification-service, log-consumer-service, frontend-dev   (paralel)
+  → notification-service, log-consumer-service, frontend (production) veya frontend-dev (dev profili)   (paralel)
   → otel-collector, prometheus, grafana, tempo
 ```
 
@@ -323,10 +326,13 @@ docker compose down -v
 | Port **5432** meşgul | Yerel PostgreSQL'i kapatın veya compose port eşlemesini değiştirin |
 | `finance-service` unhealthy / restarting | `docker compose logs market-data-service` — market servisi önce healthy olmalı |
 | Giriş yapamıyorum | Demo: `testuser` / `123456789` veya landing'den **Kayıt** akışı |
+| **Giriş başarısız** (`production` profiline geçince) | `docker compose ps`: `finance-service` **Up (healthy)** olmalı; `nrs-frontend-dev` hâlâ 3000’deyse `docker stop nrs-frontend-dev` → `docker compose up -d frontend`; ardından `curl http://localhost:8085/actuator/health` |
 | Makro paneller boş | `EVDS_API_KEY` tanımlayın, sonra `docker compose up -d --build market-data-service` |
 | Swagger **401** | Frontend girişinden sonra **Authorize** → `Bearer <access_token>` |
 | Frontend/Keycloak redirect hatası | http://localhost:3000 kullanın (`:5173` değil) |
-| `frontend-dev` ilk açılışta yavaş | Konteyner içinde ilk `npm ci` çalışır — Vite sunucusunun bitmesini bekleyin |
+| 3000’de UI yok | `.env` içinde `COMPOSE_PROFILES=production` veya `dev` (ikisi birden değil); `docker compose ps` → `nrs-frontend` veya `nrs-frontend-dev` |
+| `frontend` (nginx) ilk build yavaş | İmaj içinde `npm run build` — bitince http://localhost:3000 |
+| `frontend-dev` ilk açılışta yavaş (dev profili) | Konteyner içinde ilk `npm ci` çalışır — Vite sunucusunun bitmesini bekleyin |
 | Kayıt / şifre sıfırlama maili gitmiyor | Gmail OAuth — [`email-setup.tr.md`](./email-setup.tr.md); `notification-service` health |
 | "Şifremi unuttum" sayfası yok | Akış landing **Giriş** sekmesinde, ayrı route değil |
 | "Hesap askıya alındı" mesajı | Admin suspend — `unsuspend-login` veya başka hesap |

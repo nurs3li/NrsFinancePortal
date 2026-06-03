@@ -56,8 +56,9 @@
 |---|---|
 | **Gerekenler** | Git + Docker Desktop (**8 GB RAM** önerilir) |
 | **1. Klon & ortam** | `git clone` → `copy .env.example .env` (Windows) veya `cp .env.example .env` (macOS/Linux) → en az `POSTGRES_PASSWORD` ayarlayın |
-| **2. Başlat** | `docker compose up -d --build` (ilk sefer **5–15 dk**) |
+| **2. Başlat** | `docker compose up -d --build` (ilk sefer **5–15 dk**; `.env` içinde `COMPOSE_PROFILES=production` → nginx) |
 | **3. Aç** | http://localhost:3000 |
+| **Frontend dev** | `.env` içinde `COMPOSE_PROFILES=dev` veya `docker compose --profile dev up -d` (Vite HMR; `production` ile aynı anda açmayın) |
 | **4. Demo giriş** | `testuser` / `123456789` (kullanıcı) veya `nrsadmin` / `123456789` (admin) — bkz. [Adım 5](#adım-5--uygulamayı-açma) |
 
 > Demo şifreler yalnızca **yerel geliştirme** içindir; production'da değiştirin.
@@ -183,7 +184,7 @@ Başlatılanlar (yüksek seviye):
 docker compose ps
 ```
 
-`NAME` sütununda beklenen konteyner adları: `nrs-finance`, `nrs-market-data`, `nrs-postgres`, `nrs-keycloak`, `nrs-frontend-dev` vb. — hepsi **running** veya **healthy**.
+`NAME` sütununda beklenen konteyner adları: `nrs-finance`, `nrs-market-data`, `nrs-postgres`, `nrs-keycloak`, `nrs-frontend` (varsayılan nginx) veya `nrs-frontend-dev` (dev profili) vb. — hepsi **running** veya **healthy**.
 
 > İlk açılışta `market-data-service` 5–10 dakika **starting** görünebilir — normal. `finance-service`, market-data sağlıklı olana kadar bekler; finance sürekli yeniden başlıyorsa önce `docker compose logs market-data-service` kontrol edin.
 
@@ -288,7 +289,8 @@ Tam referans: [`.env.example`](.env.example)
 |----------|---------|----------|
 | `OPENAI_API_KEY` | Hayır | Portföy AI analizini etkinleştirir (isteğe bağlı) |
 | `GMAIL_*` | Hayır | `notification-service` üzerinden e-posta iletimi (isteğe bağlı) |
-| `VITE_*` | Hayır | Frontend çalışma zamanı yapılandırması (Docker varsayılanları genelde yeterli) |
+| `COMPOSE_PROFILES` | Hayır | `production` (nginx UI, varsayılan) veya `dev` (Vite HMR) — bkz. [`.env.example`](.env.example) |
+| `VITE_*` | Hayır | Frontend URL'leri (nginx için build-time; Vite dev için runtime) |
 
 > **Not:** Bazı değişkenler `docker-compose.yml` veya servis `application-docker.yml` içinde tanımlıdır, `.env.example`'da listelenmemiş olabilir. Yerelde geçersiz kılmak için `.env`'e ekleyin. Örnekler: `KEYCLOAK_SECURITY_*`, `PORTFOLIO_AI_DAILY_LIMIT`, `NRS_INTERNAL_BACKFILL_TOKEN`, `MARKET_DATA_INTERNAL_BACKFILL_TOKEN`. Bkz. [`docker-compose.yml`](docker-compose.yml) ve modül README'leri.
 
@@ -302,7 +304,8 @@ Docker Compose, depo kökündeki `.env` dosyasını otomatik yükler; ek volume 
 
 | Bileşen | Host portu | Swagger / UI |
 |---------|------------|--------------|
-| **Frontend** | 3000 | http://localhost:3000 |
+| **Frontend** (nginx, `production` profili) | 3000 | http://localhost:3000 |
+| **Frontend dev** (Vite, `dev` profili) | 3000 | http://localhost:3000 |
 | **finance-service** | 8085 | http://localhost:8085/swagger-ui.html |
 | **marketdata** | 8083 | http://localhost:8083/swagger-ui.html |
 | **notification-service** | 8089 | http://localhost:8089/swagger-ui.html |

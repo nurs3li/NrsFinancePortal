@@ -107,13 +107,15 @@ src/
 
 ### Docker Compose (recommended)
 
-From the repo root:
+From the repo root (`.env` should set `COMPOSE_PROFILES=production` for nginx on port 3000):
 
 ```powershell
-docker compose up -d
+docker compose up -d --build
 ```
 
 Open: http://localhost:3000
+
+For Vite HMR: `COMPOSE_PROFILES=dev` in `.env`, or `docker compose --profile dev up -d` (do not enable `production` at the same time).
 
 ### Local (optional)
 
