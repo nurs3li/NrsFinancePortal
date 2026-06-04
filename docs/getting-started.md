@@ -2,6 +2,18 @@
   <img src="assets/gifs/nrs-brand-hero.gif" alt="NRS Finance Portal" width="360" />
 </p>
 
+<p align="center">
+  <a href="https://app.nrs-financeportal.com/">
+    <img alt="NRS Finance Portal — live app" src="https://img.shields.io/badge/🚀_NRS_Finance_Portal-EXPLORE_LIVE-22c55e?style=for-the-badge&labelColor=0f172a" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://app.nrs-financeportal.com/"><strong>▶ NRS FINANCE PORTAL — EXPLORE LIVE</strong></a>
+  <br />
+  <sub><a href="https://app.nrs-financeportal.com/">app.nrs-financeportal.com</a></sub>
+</p>
+
 <p align="center"><strong>Languages / Diller:</strong> <a href="getting-started.md">English</a> · <a href="getting-started.tr.md">Türkçe</a></p>
 
 ---

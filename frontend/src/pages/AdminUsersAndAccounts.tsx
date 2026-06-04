@@ -46,6 +46,15 @@ export function AdminUsersAndAccounts() {
     const [inspectUserId, setInspectUserId] = useState<number | null>(null);
     const [inspectLoading, setInspectLoading] = useState(false);
     const [inspectData, setInspectData] = useState<AdminUserInspection | null>(null);
+    const [showCreateUser, setShowCreateUser] = useState(false);
+    const [createUserBusy, setCreateUserBusy] = useState(false);
+    const [createForm, setCreateForm] = useState({
+        username: '',
+        email: '',
+        password: '',
+        firstName: '',
+        lastName: '',
+    });
 
     const adminUserCount = useMemo(() => users.filter((u) => u.role === 'ADMIN').length, [users]);
 
@@ -113,6 +122,7 @@ export function AdminUsersAndAccounts() {
             .then(() => reloadUsers())
             .catch((err) => {
                 setError(readApiError(err).message || t('admin.deleteUserFailed', 'Kullanıcı silinemedi'));
+                void reloadUsers().catch(() => undefined);
             })
             .finally(() => setActionLoading(null));
     };
@@ -130,9 +140,33 @@ export function AdminUsersAndAccounts() {
             .finally(() => setActionLoading(null));
     };
 
-    const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8081';
-    const KEYCLOAK_REALM = import.meta.env.VITE_KEYCLOAK_REALM || 'nrs-finance';
-    const KEYCLOAK_CLIENT_ID = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'nrs-frontend';
+    const handleCreateUser = () => {
+        const { username, email, password, firstName, lastName } = createForm;
+        if (!username.trim() || !email.trim() || !password.trim()) {
+            setError(t('admin.createUserRequired', 'Kullanıcı adı, e-posta ve şifre zorunludur.'));
+            return;
+        }
+        setCreateUserBusy(true);
+        setError(null);
+        financeClient
+            .post('/api/admin/users', {
+                username: username.trim(),
+                email: email.trim(),
+                password,
+                role: 'USER',
+                firstName: firstName.trim() || undefined,
+                lastName: lastName.trim() || undefined,
+            })
+            .then(() => {
+                setShowCreateUser(false);
+                setCreateForm({ username: '', email: '', password: '', firstName: '', lastName: '' });
+                return reloadUsers();
+            })
+            .catch((err) => {
+                setError(readApiError(err).message || t('admin.createUserFailed', 'Kullanıcı oluşturulamadı'));
+            })
+            .finally(() => setCreateUserBusy(false));
+    };
 
     const pageThemeStyle: React.CSSProperties = {
         background: tokens.bg,
@@ -198,10 +232,11 @@ export function AdminUsersAndAccounts() {
                 {showTools && (
                     <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <button
+                            type="button"
                             style={btnStyle}
                             onClick={() => {
-                                const redirectUri = encodeURIComponent(window.location.origin + '/admin/users');
-                                window.open(`${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/registrations?client_id=${KEYCLOAK_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=openid`, '_blank');
+                                setError(null);
+                                setShowCreateUser(true);
                             }}
                         >
                             <UserPlus size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
@@ -378,6 +413,108 @@ export function AdminUsersAndAccounts() {
                     </div>
                 )}
             </div>
+
+            {showCreateUser && (
+                <div className="admin-page__inspect-backdrop">
+                    <div
+                        className="admin-page__inspect-panel admin-page__create-user-panel"
+                        style={{
+                            background: tokens.bgCard,
+                            border: `1px solid ${tokens.border}`,
+                            boxShadow: '0 18px 40px rgba(0,0,0,0.25)',
+                        }}
+                    >
+                        <div className="admin-page__inspect-header">
+                            <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>{t('admin.createUserTitle', 'Yeni kullanıcı')}</div>
+                            <button
+                                type="button"
+                                className="admin-page__btn admin-page__btn--last"
+                                style={btnStyle}
+                                disabled={createUserBusy}
+                                onClick={() => setShowCreateUser(false)}
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                        <p style={{ ...mutedStyle, marginTop: 0 }}>
+                            {t(
+                                'admin.createUserHint',
+                                'Kullanıcı Keycloak üzerinden oluşturulur (USER rolü). İlk girişte TOTP yapılandırması istenir.',
+                            )}
+                        </p>
+                        <div className="admin-page__create-user-form">
+                            <label style={mutedStyle}>
+                                {t('admin.colUsername', 'Kullanıcı adı')}
+                                <input
+                                    className="admin-page__create-user-input"
+                                    style={{ borderColor: tokens.border, background: tokens.bg, color: tokens.text }}
+                                    value={createForm.username}
+                                    onChange={(e) => setCreateForm((f) => ({ ...f, username: e.target.value }))}
+                                    autoComplete="off"
+                                />
+                            </label>
+                            <label style={mutedStyle}>
+                                {t('admin.colEmail', 'E-posta')}
+                                <input
+                                    type="email"
+                                    className="admin-page__create-user-input"
+                                    style={{ borderColor: tokens.border, background: tokens.bg, color: tokens.text }}
+                                    value={createForm.email}
+                                    onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                                    autoComplete="off"
+                                />
+                            </label>
+                            <label style={mutedStyle}>
+                                {t('admin.createUserPassword', 'Şifre (min. 8 karakter)')}
+                                <input
+                                    type="password"
+                                    className="admin-page__create-user-input"
+                                    style={{ borderColor: tokens.border, background: tokens.bg, color: tokens.text }}
+                                    value={createForm.password}
+                                    onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
+                                    autoComplete="new-password"
+                                />
+                            </label>
+                            <label style={mutedStyle}>
+                                {t('admin.createUserFirstName', 'Ad (isteğe bağlı)')}
+                                <input
+                                    className="admin-page__create-user-input"
+                                    style={{ borderColor: tokens.border, background: tokens.bg, color: tokens.text }}
+                                    value={createForm.firstName}
+                                    onChange={(e) => setCreateForm((f) => ({ ...f, firstName: e.target.value }))}
+                                />
+                            </label>
+                            <label style={mutedStyle}>
+                                {t('admin.createUserLastName', 'Soyad (isteğe bağlı)')}
+                                <input
+                                    className="admin-page__create-user-input"
+                                    style={{ borderColor: tokens.border, background: tokens.bg, color: tokens.text }}
+                                    value={createForm.lastName}
+                                    onChange={(e) => setCreateForm((f) => ({ ...f, lastName: e.target.value }))}
+                                />
+                            </label>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+                            <button
+                                type="button"
+                                style={btnStyle}
+                                disabled={createUserBusy}
+                                onClick={() => setShowCreateUser(false)}
+                            >
+                                {t('common.cancel', 'İptal')}
+                            </button>
+                            <button
+                                type="button"
+                                className="admin-page__btn admin-page__btn--primary"
+                                disabled={createUserBusy}
+                                onClick={handleCreateUser}
+                            >
+                                {createUserBusy ? t('common.loading', 'Yükleniyor...') : t('admin.createUserSubmit', 'Oluştur')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {inspectUserId != null && (
                 <div className="admin-page__inspect-backdrop">

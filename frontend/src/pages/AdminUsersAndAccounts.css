@@ -7,6 +7,7 @@
     max-width: 100%;
     min-width: 0;
     overflow-x: clip;
+    --admin-border: rgba(148, 163, 184, 0.35);
 }
 
 .admin-page__title {
@@ -110,6 +111,27 @@
     max-width: 100%;
 }
 
+.admin-page__create-user-panel {
+    max-width: 420px;
+    width: 100%;
+}
+
+.admin-page__create-user-form {
+    display: grid;
+    gap: 10px;
+}
+
+.admin-page__create-user-input {
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid;
+    font-size: 0.875rem;
+    box-sizing: border-box;
+}
+
 .admin-page__inspect-backdrop {
     position: fixed;
     inset: 0;
@@ -203,7 +225,7 @@
         margin-bottom: 12px;
         padding: 12px;
         border-radius: 10px;
-        border: 1px solid var(--admin-border, rgba(148, 163, 184, 0.35));
+        border: 1px solid var(--admin-border);
     }
 
     .admin-page__table td {

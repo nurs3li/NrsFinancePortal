@@ -71,7 +71,7 @@ public interface ManualSymbolDailyCloseRepository extends JpaRepository<ManualSy
             @Param("fetchedAt") Instant fetchedAt
     );
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM ManualSymbolDailyClose c WHERE c.user.id = :userId")
     void deleteByUserId(@Param("userId") Long userId);
 }
