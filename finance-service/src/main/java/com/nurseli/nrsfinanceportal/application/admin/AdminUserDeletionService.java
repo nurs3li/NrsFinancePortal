@@ -5,6 +5,9 @@ import com.nurseli.nrsfinanceportal.domain.user.User;
 import com.nurseli.nrsfinanceportal.infrastructure.keycloak.KeycloakUserDeletionClient;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualBondPositionRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioPositionRepository;
+import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioReadSnapshotRepository;
+import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualPortfolioTimeseriesSnapshotRepository;
+import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualSymbolDailyCloseRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.ManualViopPositionRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.PortfolioAiAnalysisRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.PortfolioAiEmailDeliveryRepository;
@@ -12,6 +15,7 @@ import com.nurseli.nrsfinanceportal.infrastructure.persistence.PortfolioValueSna
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.PriceAlertRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserRepository;
 import com.nurseli.nrsfinanceportal.infrastructure.persistence.UserStarredAssetRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -36,9 +40,13 @@ public class AdminUserDeletionService {
     private final PortfolioValueSnapshotRepository portfolioValueSnapshotRepository;
     private final PortfolioAiAnalysisRepository portfolioAiAnalysisRepository;
     private final PortfolioAiEmailDeliveryRepository portfolioAiEmailDeliveryRepository;
+    private final ManualPortfolioReadSnapshotRepository manualPortfolioReadSnapshotRepository;
+    private final ManualPortfolioTimeseriesSnapshotRepository manualPortfolioTimeseriesSnapshotRepository;
+    private final ManualSymbolDailyCloseRepository manualSymbolDailyCloseRepository;
+    private final EntityManager entityManager;
 
     /**
-     * {@code deleteUser} — Hedef kullanıcının portal kayıtlarını (portfolio, bond, VIOP, snapshot, price alert, AI analiz vb.) siler, Keycloak'tan kullanıcıyı kaldırır ve yerel User satırını siler; son admin ve kendi hesabı silinemez.
+     * {@code deleteUser} — Hedef kullanıcının portal kayıtlarını siler, yerel User satırını kaldırır, ardından Keycloak kullanıcısını siler; son admin ve kendi hesabı silinemez.
      */
     @Transactional
     public void deleteUser(Long userId, String adminKeycloakSub) {
@@ -67,6 +75,9 @@ public class AdminUserDeletionService {
 
         String keycloakUserId = target.getKeycloakUserId();
         purgePortalData(userId);
+        entityManager.flush();
+        userRepository.delete(target);
+        entityManager.flush();
 
         try {
             keycloakUserDeletionClient.deleteUser(keycloakUserId);
@@ -74,8 +85,6 @@ public class AdminUserDeletionService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "Keycloak kullanıcı silme başarısız: " + e.getMessage(), e);
         }
-
-        userRepository.delete(target);
     }
 
     /**
@@ -87,8 +96,11 @@ public class AdminUserDeletionService {
         manualPortfolioPositionRepository.deleteByUser_Id(userId);
         manualBondPositionRepository.deleteByUser_Id(userId);
         manualViopPositionRepository.deleteByUser_Id(userId);
-    portfolioValueSnapshotRepository.deleteByUser_Id(userId);
+        portfolioValueSnapshotRepository.deleteByUser_Id(userId);
         portfolioAiEmailDeliveryRepository.deleteByUser_Id(userId);
         portfolioAiAnalysisRepository.deleteByUser_Id(userId);
+        manualPortfolioTimeseriesSnapshotRepository.deleteByUserId(userId);
+        manualSymbolDailyCloseRepository.deleteByUserId(userId);
+        manualPortfolioReadSnapshotRepository.deleteById(userId);
     }
 }
