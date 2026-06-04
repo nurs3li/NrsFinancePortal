@@ -15,7 +15,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -55,7 +54,7 @@ class ManualPortfolioTimeseriesSanityIntegrationTest extends FinanceIntegrationT
     private PlatformTransactionManager transactionManager;
 
     @BeforeEach
-    void cleanMaterializedState() {
+    void cleanMaterializedState() throws InterruptedException {
         IntegrationTestMarketStubs.stubBistPortfolioWarmupSymbols(marketDataClient);
         TransactionTemplate cleanup = new TransactionTemplate(transactionManager);
         cleanup.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -65,6 +64,7 @@ class ManualPortfolioTimeseriesSanityIntegrationTest extends FinanceIntegrationT
             positionRepository.deleteByUser_Id(testUser.getId());
         });
         entityManager.clear();
+        awaitMaterializedBackgroundWork();
     }
 
     @Test
@@ -103,11 +103,11 @@ class ManualPortfolioTimeseriesSanityIntegrationTest extends FinanceIntegrationT
                                 """))
                 .andExpect(status().isOk());
 
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-        TestTransaction.start();
+        commitOpenTestTransaction();
+        awaitMaterializedBackgroundWork();
 
         warmupService.warmUser(testUser.getId());
+        awaitMaterializedBackgroundWork();
         assertThat(timeseriesSnapshotRepository.findByUserId(testUser.getId())).isNotEmpty();
 
         var positions = positionRepository.findByUserIdOrderByBuyDateAsc(testUser.getId());
@@ -115,13 +115,12 @@ class ManualPortfolioTimeseriesSanityIntegrationTest extends FinanceIntegrationT
         for (var p : positions) {
             mockMvc.perform(delete("/api/portfolio/manual/{id}", p.getId()).with(integrationUserJwt()))
                     .andExpect(status().isOk());
+            commitOpenTestTransaction();
+            awaitMaterializedBackgroundWork();
         }
 
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-        TestTransaction.start();
-
         warmupService.warmUser(testUser.getId());
+        awaitMaterializedBackgroundWork();
         assertThat(timeseriesSnapshotRepository.findByUserId(testUser.getId())).isEmpty();
 
         mockMvc.perform(post("/api/portfolio/manual")
@@ -140,11 +139,11 @@ class ManualPortfolioTimeseriesSanityIntegrationTest extends FinanceIntegrationT
                                 """, buyDate)))
                 .andExpect(status().isOk());
 
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-        TestTransaction.start();
+        commitOpenTestTransaction();
+        awaitMaterializedBackgroundWork();
 
         warmupService.warmUser(testUser.getId());
+        awaitMaterializedBackgroundWork();
 
         var snapshot = readSnapshotRepository.findById(testUser.getId()).orElseThrow();
         assertThat(snapshot.getWarmStatus()).isEqualTo(ManualPortfolioWarmStatus.READY);

@@ -15,7 +15,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -53,16 +52,18 @@ class ManualPortfolioIncrementalWarmupIntegrationTest extends FinanceIntegration
     private PlatformTransactionManager transactionManager;
 
     @BeforeEach
-    void cleanMaterializedState() {
+    void cleanMaterializedState() throws InterruptedException {
         IntegrationTestMarketStubs.stubBistPortfolioWarmupSymbols(marketDataClient);
         TransactionTemplate cleanup = new TransactionTemplate(transactionManager);
         cleanup.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         cleanup.executeWithoutResult(status -> {
             timeseriesSnapshotRepository.deleteByUserId(testUser.getId());
+            dailyCloseRepository.deleteByUserId(testUser.getId());
             readSnapshotRepository.deleteById(testUser.getId());
             positionRepository.deleteByUser_Id(testUser.getId());
         });
         entityManager.clear();
+        awaitMaterializedBackgroundWork();
     }
 
     @Test
@@ -83,11 +84,11 @@ class ManualPortfolioIncrementalWarmupIntegrationTest extends FinanceIntegration
                                 """))
                 .andExpect(status().isOk());
 
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-        TestTransaction.start();
+        commitOpenTestTransaction();
+        awaitMaterializedBackgroundWork();
 
         warmupService.warmUser(testUser.getId());
+        awaitMaterializedBackgroundWork();
 
         int thyaoRowsBefore = dailyCloseRepository.findRange(
                 testUser.getId(),
@@ -114,11 +115,11 @@ class ManualPortfolioIncrementalWarmupIntegrationTest extends FinanceIntegration
                                 """))
                 .andExpect(status().isOk());
 
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-        TestTransaction.start();
+        commitOpenTestTransaction();
+        awaitMaterializedBackgroundWork();
 
         warmupService.warmUser(testUser.getId());
+        awaitMaterializedBackgroundWork();
 
         var snapshot = readSnapshotRepository.findById(testUser.getId()).orElseThrow();
         assertThat(snapshot.getWarmStatus()).isEqualTo(ManualPortfolioWarmStatus.READY);

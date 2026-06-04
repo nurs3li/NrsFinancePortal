@@ -136,9 +136,18 @@ public abstract class FinanceIntegrationTestBase {
         }
     }
 
-    private void awaitMaterializedBackgroundWork() throws InterruptedException {
-        manualPortfolioWarmupService.awaitIdle(Duration.ofSeconds(5));
+    protected void awaitMaterializedBackgroundWork() throws InterruptedException {
+        manualPortfolioWarmupService.awaitIdle(Duration.ofSeconds(15));
         manualPortfolioGapFillService.awaitIdle(Duration.ofSeconds(5));
+    }
+
+    /** MockMvc POST/DELETE sonrası afterCommit ile tetiklenen async warmup'ın bitmesini bekler. */
+    protected void commitOpenTestTransaction() {
+        if (org.springframework.test.context.transaction.TestTransaction.isActive()) {
+            org.springframework.test.context.transaction.TestTransaction.flagForCommit();
+            org.springframework.test.context.transaction.TestTransaction.end();
+            org.springframework.test.context.transaction.TestTransaction.start();
+        }
     }
 
     protected RequestPostProcessor integrationUserJwt() {
