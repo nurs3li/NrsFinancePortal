@@ -19,8 +19,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.time.Duration;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -217,9 +215,8 @@ class ManualPortfolioMaterializedReadIntegrationTest extends FinanceIntegrationT
 
         long id = IntegrationTestJson.readLongId(created.getResponse().getContentAsString(), "$.data.id");
 
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-        TestTransaction.start();
+        commitOpenTestTransaction();
+        awaitMaterializedBackgroundWork();
 
         warmupService.warmUser(testUser.getId());
 
@@ -234,11 +231,8 @@ class ManualPortfolioMaterializedReadIntegrationTest extends FinanceIntegrationT
 
         assertThat(positionRepository.findById(id)).isEmpty();
 
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-        TestTransaction.start();
-
-        warmupService.awaitIdle(Duration.ofSeconds(15));
+        commitOpenTestTransaction();
+        awaitMaterializedBackgroundWork();
         entityManager.clear();
 
         mockMvc.perform(get("/api/portfolio/manual/page/me").with(integrationUserJwt()))
