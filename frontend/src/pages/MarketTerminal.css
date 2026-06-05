@@ -1907,11 +1907,19 @@
     align-items: center;
     justify-content: center;
     padding: 4px;
+    min-width: 28px;
+    min-height: 28px;
     border: none;
     background: transparent;
     cursor: pointer;
     border-radius: 6px;
     color: inherit;
+    flex-shrink: 0;
+}
+.terminal-star-btn svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
 }
 
 .terminal-star-btn:hover:not(:disabled) {
@@ -3478,14 +3486,15 @@
 /* Yüzdeler toplamı 100% (9 sütun: yıldız | karşılaştır | enstrüman | fiyat | 4×horizon | trend) */
 .terminal-data-table--picker-horizons th:nth-child(1),
 .terminal-data-table--picker-horizons td:nth-child(1) {
-    width: 2.75%;
-    min-width: 26px;
+    width: 5.5%;
+    min-width: 52px;
     max-width: none;
-    padding-left: 2px;
-    padding-right: 1px;
+    padding-left: 4px;
+    padding-right: 4px;
     text-align: center;
     vertical-align: middle;
     box-sizing: border-box;
+    overflow: visible;
 }
 
 .terminal-data-table--picker-horizons th:nth-child(2),
@@ -3652,6 +3661,54 @@
 .terminal-data-table--picker-horizons .terminal-picker-star-cell {
     text-align: center;
     vertical-align: middle;
+    overflow: visible;
+}
+.terminal-data-table--picker-horizons .terminal-picker-star-cell > span {
+    display: inline-flex;
+    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: nowrap;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-star-head span[aria-hidden] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    font-size: 13px;
+    line-height: 1;
+}
+
+/* Yıldız + alarm — karşılaştırma butonu ile aynı kutu/ikon ölçüsü (22px / 13px) */
+.terminal-data-table--picker-horizons .terminal-picker-star-cell .terminal-star-btn {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    padding: 0;
+    margin: 0;
+    border-radius: 5px;
+    color: var(--terminal-text-muted, #94a3b8);
+    transition:
+        background 0.14s ease,
+        color 0.14s ease;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-star-cell .terminal-star-btn svg {
+    width: 13px;
+    height: 13px;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-star-cell .terminal-star-btn:hover:not(:disabled) {
+    background: var(--terminal-hover-bg, rgba(148, 163, 184, 0.14));
+    color: var(--terminal-text, #e2e8f0);
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-star-cell .terminal-star-btn:focus-visible {
+    outline: 2px solid var(--terminal-accent, #3b82f6);
+    outline-offset: 1px;
 }
 
 .terminal-data-table--picker-horizons .terminal-picker-cmp-head {

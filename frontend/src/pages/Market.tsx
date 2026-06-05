@@ -5412,7 +5412,7 @@ export function Market() {
                                             >
                                                 <td className="terminal-picker-star-cell terminal-picker-pin" onClick={(e) => e.stopPropagation()}>
                                                     {sk ? (
-                                                        <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                                                        <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center', flexShrink: 0 }}>
                                                         <button
                                                             type="button"
                                                             className="terminal-star-btn"
@@ -5421,7 +5421,8 @@ export function Market() {
                                                             onClick={(e) => handleStarToggle(e, row.symbol, row.category)}
                                                         >
                                                             <Star
-                                                                size={14}
+                                                                size={13}
+                                                                strokeWidth={2.2}
                                                                 fill={starFilled ? tokens.accent : 'transparent'}
                                                                 color={starFilled ? tokens.accent : tokens.textMuted}
                                                             />
@@ -5454,7 +5455,7 @@ export function Market() {
                                                                 }
                                                             }}
                                                         >
-                                                            <Bell size={14} color={tokens.textMuted} />
+                                                            <Bell size={13} strokeWidth={2.2} color={tokens.textMuted} />
                                                         </button>
                                                         </span>
                                                     ) : (
