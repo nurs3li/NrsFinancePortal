@@ -2,18 +2,6 @@
   <img src="assets/gifs/nrs-brand-hero.gif" alt="NRS Finance Portal" width="360" />
 </p>
 
-<p align="center">
-  <a href="https://app.nrs-financeportal.com/">
-    <img alt="NRS Finans Portalı — canlı ortam" src="https://img.shields.io/badge/🚀_NRS_Finans_Portalı-CANLIDA_INCELE-22c55e?style=for-the-badge&labelColor=0f172a" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://app.nrs-financeportal.com/"><strong>▶ NRS FİNANS PORTALI — CANLIDA İNCELE</strong></a>
-  <br />
-  <sub><a href="https://app.nrs-financeportal.com/">app.nrs-financeportal.com</a></sub>
-</p>
-
 <p align="center"><strong>Languages / Diller:</strong> <a href="getting-started.md">English</a> · <a href="getting-started.tr.md">Türkçe</a></p>
 
 ---
