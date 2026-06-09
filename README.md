@@ -1,3 +1,7 @@
+<p>
+  <img src="./docs/assets/gifs/architecture-overview.gif" alt="NRS Finance Portal — system architecture overview" width="100%" />
+</p>
+
 <p align="center">
   <img src="./docs/assets/gifs/nrs-brand-hero.gif" alt="NRS Finance Portal" width="420" />
 </p>
@@ -14,61 +18,79 @@
   <a href="https://github.com/nurs3li/NrsFinancePortal/actions/workflows/ci.yml">
     <img alt="CI" src="https://github.com/nurs3li/NrsFinancePortal/actions/workflows/ci.yml/badge.svg" />
   </a>
+  <a href="LICENSE">
+    <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg" />
+  </a>
   <img alt="Java 21" src="https://img.shields.io/badge/Java-21-orange?logo=openjdk&logoColor=white" />
   <img alt="Spring Boot 3.5.5" src="https://img.shields.io/badge/Spring%20Boot-3.5.5-6DB33F?logo=springboot&logoColor=white" />
   <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=000000" />
   <img alt="Docker Compose" src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" />
-  <img alt="Microservices" src="https://img.shields.io/badge/Architecture-Microservices-111827" />
 </p>
 
 <p align="center">
-  NRS Finance Portal is a modular finance platform that unifies portfolio management, live market monitoring,
-  inflation-adjusted (real) return analytics, investment simulations, price alerts, and production-grade observability
-  into a single, coherent experience.
+  Modular finance platform for portfolio management, live markets, real-return analytics, simulations, alerts, and production-grade observability — delivered as <strong>4 Spring Boot microservices</strong> + <strong>1 React SPA</strong> on Docker Compose.
 </p>
 
-<p align="center">
-  Instead of scattered market screens, manual spreadsheets, and disconnected tools, it consolidates decision support,
-  monitoring, and analytics workflows to enable faster and more reliable financial decisions.
-</p>
+### Key capabilities
+
+- **Multi-asset market terminal** — FX, crypto, equities, funds, VIOP, bonds
+- **Portfolio analytics** — manual positions, inflation-adjusted returns, concentration
+- **Investment simulation** — historical what-if scenarios
+- **Identity & security** — Keycloak JWT, optional TOTP 2FA
+- **Observability** — OpenTelemetry, Prometheus, Grafana, Tempo, centralized logs (Kafka → OpenSearch)
+- **Open APIs** — SpringDoc OpenAPI / Swagger per service
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/market-terminal-browse.gif" alt="Market terminal" width="100%" />
+    </td>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/simulation-run.gif" alt="Investment simulation" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/portfolio-manual-position.gif" alt="Portfolio — add manual position" width="100%" />
+    </td>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/portfolio-ai-report.gif" alt="Portfolio AI — analysis report" width="100%" />
+    </td>
+  </tr>
+</table>
 
 ---
 
 ## Contents
 
-1. [Quick start summary](#quick-start-summary)
+1. [Quick start](#quick-start)
 2. [Product overview](#product-overview)
 3. [Tech stack](#tech-stack)
 4. [System architecture](#system-architecture)
 5. [Getting started (Docker)](#getting-started-docker)
-6. [Environment variables](#environment-variables)
-7. [Services, ports, and URLs](#services-ports-and-urls)
-8. [Repository layout](#repository-layout)
-9. [Testing](#testing)
-10. [Requirements compliance](#requirements-compliance)
-11. [Documentation map](#documentation-map)
-12. [Troubleshooting](#troubleshooting)
+6. [Service endpoints](#service-endpoints)
+7. [Repository layout](#repository-layout)
+8. [Testing](#testing)
+9. [Documentation map](#documentation-map)
+10. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Quick start summary
+## Quick start
 
 | | |
 |---|---|
 | **Requirements** | Git + Docker Desktop (**8 GB RAM** recommended) |
-| **1. Clone & env** | `git clone` → `copy .env.example .env` (Windows) or `cp .env.example .env` (macOS/Linux) → set at least `POSTGRES_PASSWORD` |
-| **2. Start** | `docker compose up -d --build` (first run **5–15 min**; nginx frontend via `COMPOSE_PROFILES=production` in `.env`) |
+| **1. Clone & env** | `git clone` → `copy .env.example .env` → set at least `POSTGRES_PASSWORD` |
+| **2. Start** | `docker compose up -d --build` (first run **5–15 min**) |
 | **3. Open** | http://localhost:3000 |
-| **Frontend dev** | Set `COMPOSE_PROFILES=dev` in `.env`, or `docker compose --profile dev up -d` (Vite HMR; do not enable `production` at the same time) |
-| **4. Demo login** | `testuser` / `123456789` (user) or `nrsadmin` / `123456789` (admin) — see [Step 5](#step-5--open-the-app) |
+| **4. Demo login** | `testuser` / `123456789` (user) or `nrsadmin` / `123456789` (admin) |
 
-> Demo passwords are for **local development only**; change them in production.
+> Demo passwords are for **local development only**. Full walkthrough: [`docs/getting-started.md`](docs/getting-started.md).
 
 ---
 
 ## Product overview
-
-### User-facing modules
 
 | Module | What it does |
 |-------|-----------|
@@ -80,14 +102,6 @@
 | **Portfolio AI** | OpenAI-assisted portfolio analysis report (optional API key) |
 | **Notifications** | Price alerts and system notifications |
 | **Admin** | User management, audit logs, Grafana embed |
-
-### Technical view
-
-The system runs as **4 Spring Boot microservices** + **1 React SPA**, orchestrated via **Docker Compose**. Diagrams and animated overview: [`docs/architecture.md`](docs/architecture.md).
-
-**Authentication:** Keycloak realm `nrs-finance`. The frontend authenticates with `keycloak-js`; backend services validate JWTs as OAuth2 Resource Servers.
-
-**2FA:** TOTP is supported. Users enable it from **Settings**; it is optional by default.
 
 ---
 
@@ -111,22 +125,27 @@ The system runs as **4 Spring Boot microservices** + **1 React SPA**, orchestrat
 
 ## System architecture
 
-Component diagrams, request flows, and Compose topology: [`docs/architecture.md`](docs/architecture.md).
+Deep dive: [`docs/architecture.md`](docs/architecture.md) (component diagrams, request flows, security).
+
+<a href="docs/architecture.md">
+  <img src="./docs/assets/images/architecture/02-component-diagram.png" alt="Component diagram — click for architecture docs" width="100%" />
+</a>
+
+<a href="docs/security/README.md">
+  <img src="./docs/assets/images/architecture/05-security-architecture.png" alt="Security architecture — Keycloak + JWT" width="100%" />
+</a>
+
+<p>
+  <img src="./docs/assets/gifs/system-architecture.gif" alt="Docker Compose topology" width="100%" />
+</p>
 
 ---
 
 ## Getting started (Docker)
 
-Step-by-step GIFs, smoke tests, and the full verification checklist: [`docs/getting-started.md`](docs/getting-started.md).
+Full GIF walkthrough, smoke tests, and verification checklist: [`docs/getting-started.md`](docs/getting-started.md).
 
-### Prerequisites
-
-| Tool | Minimum version | Verify |
-|---------|---------------|----------------|
-| Git | 2.x | `git --version` |
-| Docker Desktop | 4.x (Compose v2) | `docker compose version` |
-
-> This repository is **Docker-first** for build, test (CI parity), and runtime. You typically do **not** need JDK/Maven/Node installed on the host unless you choose to run services outside Docker.
+**Prerequisites:** Git 2.x + Docker Desktop 4.x (`docker compose version`). Docker-first — no host JDK/Maven/Node required unless running services outside Compose.
 
 ### Step 1 — Clone
 
@@ -135,49 +154,20 @@ git clone https://github.com/nurs3li/NrsFinancePortal.git
 cd NrsFinancePortal
 ```
 
-<p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-01-clone.gif" alt="Getting started — step 1: clone" width="820" />
-</p>
-
-### Step 2 — Create your environment file
-
-```powershell
-copy .env.example .env
-```
-
-```bash
-cp .env.example .env
-```
-
-`.env.example` already defines `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` — in most cases you only need to change the password. Do not alter the default DB/user values unless you know what you are doing.
-
-| Priority | Variables | Notes |
-|----------|-----------|-------|
-| **Required** | `POSTGRES_PASSWORD` | Minimum to start the stack |
-| **Recommended** | `EVDS_API_KEY` | Macro/inflation/rates panels — [TCMB EVDS](https://evds3.tcmb.gov.tr/) |
-| **Optional** | `FINHUB_API_KEY`, `OPENAI_API_KEY`, `GMAIL_*` | US equities, Portfolio AI, email notifications |
-
-<p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-02-env.gif" alt="Getting started — step 2: environment file" width="820" />
-</p>
-
-### Step 3 — Start the full stack
-
-```powershell
-docker compose up -d --build
-```
-
-The first build can take **5–15 minutes** (Maven builds, Liquibase migrations, Keycloak realm import, and initial warm-up).
-
-What gets started (high level):
-
-- **Frontend** (React SPA)
-- **4 Spring Boot services**: `finance-service`, `market-data-service`, `notification-service`, `log-consumer-service`
-- **Infrastructure**: Postgres, Redis, Kafka, Keycloak, OpenSearch (+ Dashboards), Prometheus, Grafana, Tempo
-
-<p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-03-compose-up.gif" alt="Getting started — step 3: docker compose up" width="820" />
-</p>
+<table>
+<tr>
+<td valign="top" width="50%">
+<h3>Step 2 — Environment file</h3>
+<pre><code>copy .env.example .env</code></pre>
+<p>Change <code>POSTGRES_PASSWORD</code> only; keep default DB/user values. <strong>Required</strong> <code>POSTGRES_PASSWORD</code> · <strong>Recommended</strong> <code>EVDS_API_KEY</code> (<a href="https://evds3.tcmb.gov.tr/">TCMB EVDS</a>) · <strong>Optional</strong> <code>FINHUB_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>GMAIL_*</code></p>
+</td>
+<td valign="top" width="50%">
+<h3>Step 3 — Start stack</h3>
+<pre><code>docker compose up -d --build</code></pre>
+<p>First run <strong>5–15 min</strong>. Starts React SPA, 4 Spring services, Postgres, Redis, Kafka, Keycloak, OpenSearch, Prometheus, Grafana, Tempo.</p>
+</td>
+</tr>
+</table>
 
 ### Step 4 — Verify
 
@@ -185,143 +175,104 @@ What gets started (high level):
 docker compose ps
 ```
 
-Expected container names in the `NAME` column include `nrs-finance`, `nrs-market-data`, `nrs-postgres`, `nrs-keycloak`, `nrs-frontend` (default nginx) or `nrs-frontend-dev` (Vite dev profile), and others — all **running** or **healthy**.
+Expect `nrs-*` containers **running/healthy**. `market-data-service` may stay *starting* 5–10 min on first boot.
 
-> On first startup, `market-data-service` may show **starting** for 5–10 minutes — this is normal. `finance-service` waits for market-data to become healthy; if finance keeps restarting, check `docker compose logs market-data-service` first.
-
-Quick health checks:
-
-```powershell
-curl.exe http://localhost:8085/actuator/health
+<pre><code>curl.exe http://localhost:8085/actuator/health
 curl.exe http://localhost:8083/actuator/health
 curl.exe http://localhost:8089/actuator/health
 curl.exe http://localhost:8087/actuator/health
-```
+docker compose logs -f finance-service</code></pre>
 
-On Windows PowerShell, `curl` is often an alias for `Invoke-WebRequest`. Use `curl.exe` or:
+PowerShell: use `curl.exe` (not the `curl` alias). Details: [`docs/getting-started.md`](docs/getting-started.md).
 
-```powershell
-Invoke-RestMethod http://localhost:8085/actuator/health
-```
-
-Follow logs:
-
-```powershell
-docker compose logs -f finance-service
-```
-
-<p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-04-verify.gif" alt="Getting started — step 4: verify services" width="820" />
-</p>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/getting-started/step-01-clone.gif" alt="Step 1: clone" width="100%" />
+    </td>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/getting-started/step-02-env.gif" alt="Step 2: environment file" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/getting-started/step-03-compose-up.gif" alt="Step 3: docker compose up" width="100%" />
+    </td>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/getting-started/step-04-verify.gif" alt="Step 4: verify services" width="100%" />
+    </td>
+  </tr>
+</table>
 
 ### Step 5 — Open the app
 
-| # | URL | Expected |
-|---|-----|----------|
-| 1 | http://localhost:3000 | Landing / login |
-| 2 | http://localhost:8081 | Keycloak (realm: `nrs-finance`) |
-| 3 | http://localhost:8085/swagger-ui.html | finance-service Swagger UI |
-| 4 | http://localhost:8083/swagger-ui.html | marketdata Swagger UI |
-| 5 | http://localhost:3001 | Grafana (`admin` / `admin`) |
-| 6 | http://localhost:5601 | OpenSearch Dashboards |
-| 7 | http://localhost:8085/actuator/health | `{"status":"UP"}` |
+Open http://localhost:3000. Service URLs: [Service endpoints](#service-endpoints) below.
 
-#### Demo accounts (Keycloak realm import)
-
-| Account | Password | Role | What to test |
-|---------|----------|------|--------------|
-| `nrsadmin` | `123456789` | ADMIN | Admin menu, audit logs, user management |
-| `testuser` | `123456789` | USER | Dashboard, market, portfolio, simulation |
-
-**New user registration:** Keycloak self-registration is **disabled** (`registrationAllowed: false`). Register from the landing page at http://localhost:3000 → **Register** — portal flow with email verification code via `finance-service` `/api/public/register`.
-
-**Requires Gmail OAuth** (`GMAIL_*` in `.env`) for verification emails. Without it, use demo accounts above. Setup: [`docs/email-setup.md`](docs/email-setup.md).
-
-**Forgot password:** On the landing **Sign in** tab → **Forgot password** (not a separate URL). Flow: email → verification code → new password via `/api/public/password-reset/*`. Also requires Gmail OAuth — same [`docs/email-setup.md`](docs/email-setup.md).
-
-**Swagger:** Sign in at http://localhost:3000, then in Swagger UI click **Authorize** → `Bearer <access_token>` (token from browser session or Keycloak).
-
-> Demo passwords are for **local development only**; change them before any non-local deployment.
+| Account | Password | Role |
+|---------|----------|------|
+| `nrsadmin` | `123456789` | ADMIN |
+| `testuser` | `123456789` | USER |
 
 <p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-05-open-app.gif" alt="Getting started — step 5: open the app" width="820" />
+  <img src="./docs/assets/gifs/getting-started/step-05-open-app.gif" alt="Step 5: open the app and sign in" width="100%" />
 </p>
 
-### Step 6 — Stop
+<details>
+<summary><strong>Registration, password reset & 2FA (optional)</strong></summary>
 
-```powershell
-docker compose down
-```
+Requires <code>GMAIL_*</code> in <code>.env</code> for email flows — see <a href="docs/email-setup.md">docs/email-setup.md</a>. Swagger: sign in at http://localhost:3000, then <strong>Authorize</strong> → <code>Bearer &lt;access_token&gt;</code>.
 
-Remove volumes as well (warning: deletes data):
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/registration-email-flow.gif" alt="Registration flow" width="100%" />
+    </td>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/password-reset-flow.gif" alt="Password reset flow" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2">
+      <img src="./docs/assets/gifs/features/settings-totp-enable.gif" alt="Enable 2FA in Settings" width="50%" />
+    </td>
+  </tr>
+</table>
 
-```powershell
-docker compose down -v
-```
+</details>
 
-<p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-06-stop.gif" alt="Getting started — step 6: stop the stack" width="820" />
-</p>
+> Minimum env: `POSTGRES_PASSWORD`. Recommended: `EVDS_API_KEY`. Full reference: [`.env.example`](.env.example).
 
 ---
 
-## Environment variables
+## Service endpoints
 
-Full reference: [`.env.example`](.env.example)
+### Docker Compose (default stack)
 
-### Required
+<p align="center">
+  <a href="http://localhost:3000" title="Frontend (nginx, production profile)"><img alt="Portal :3000" src="https://img.shields.io/badge/:3000-Portal-61DAFB?style=flat-square&logo=react&logoColor=000" height="22" /></a>
+  <a href="http://localhost:3000" title="Frontend dev (Vite, dev profile)"><img alt="Vite :3000" src="https://img.shields.io/badge/:3000-Vite-646CFF?style=flat-square&logo=vite&logoColor=white" height="22" /></a>
+  <a href="http://localhost:8085/swagger-ui.html" title="finance-service Swagger UI"><img alt="finance :8085" src="https://img.shields.io/badge/:8085-finance-6DB33F?style=flat-square&logo=springboot&logoColor=white" height="22" /></a>
+  <a href="http://localhost:8083/swagger-ui.html" title="marketdata Swagger UI"><img alt="marketdata :8083" src="https://img.shields.io/badge/:8083-marketdata-6DB33F?style=flat-square&logo=springboot&logoColor=white" height="22" /></a>
+  <a href="http://localhost:8089/swagger-ui.html" title="notification-service Swagger UI"><img alt="notification :8089" src="https://img.shields.io/badge/:8089-notification-6DB33F?style=flat-square&logo=springboot&logoColor=white" height="22" /></a>
+  <a href="http://localhost:8087/swagger-ui.html" title="log-consumer-service Swagger UI"><img alt="log-consumer :8087" src="https://img.shields.io/badge/:8087-log--consumer-6DB33F?style=flat-square&logo=springboot&logoColor=white" height="22" /></a>
+  <a href="http://localhost:8081" title="Keycloak (realm: nrs-finance)"><img alt="Keycloak :8081" src="https://img.shields.io/badge/:8081-Keycloak-4D4D4D?style=flat-square&logo=keycloak&logoColor=white" height="22" /></a>
+</p>
+<p align="center">
+  <a href="http://localhost:5432" title="PostgreSQL"><img alt="Postgres :5432" src="https://img.shields.io/badge/:5432-Postgres-4169E1?style=flat-square&logo=postgresql&logoColor=white" height="22" /></a>
+  <a href="http://localhost:6379" title="Redis"><img alt="Redis :6379" src="https://img.shields.io/badge/:6379-Redis-DC382D?style=flat-square&logo=redis&logoColor=white" height="22" /></a>
+  <a href="http://localhost:9092" title="Kafka"><img alt="Kafka :9092" src="https://img.shields.io/badge/:9092-Kafka-231F20?style=flat-square&logo=apachekafka&logoColor=white" height="22" /></a>
+  <a href="http://localhost:9200" title="OpenSearch API"><img alt="OpenSearch :9200" src="https://img.shields.io/badge/:9200-OpenSearch-005EB8?style=flat-square&logo=opensearch&logoColor=white" height="22" /></a>
+  <a href="http://localhost:5601" title="OpenSearch Dashboards"><img alt="Dashboards :5601" src="https://img.shields.io/badge/:5601-Dashboards-005EB8?style=flat-square&logo=opensearch&logoColor=white" height="22" /></a>
+  <a href="http://localhost:9090" title="Prometheus"><img alt="Prometheus :9090" src="https://img.shields.io/badge/:9090-Prometheus-E6522C?style=flat-square&logo=prometheus&logoColor=white" height="22" /></a>
+  <a href="http://localhost:3001" title="Grafana (admin / admin)"><img alt="Grafana :3001" src="https://img.shields.io/badge/:3001-Grafana-F46800?style=flat-square&logo=grafana&logoColor=white" height="22" /></a>
+  <a href="http://localhost:3200" title="Tempo"><img alt="Tempo :3200" src="https://img.shields.io/badge/:3200-Tempo-F46800?style=flat-square&logo=grafana&logoColor=white" height="22" /></a>
+</p>
 
-| Variable | Required | Description |
-|----------|---------|----------|
-| `POSTGRES_DB` | Yes | Default: `nrs_finance` |
-| `POSTGRES_USER` | Yes | DB username |
-| `POSTGRES_PASSWORD` | Yes | DB password |
-
-### Recommended (data & richer UI)
-
-| Variable | Required | Description |
-|----------|---------|----------|
-| `EVDS_API_KEY` | No | TCMB EVDS macro data (recommended for macro panels) |
-| `FINHUB_API_KEY` | No | US equities / ETF data (optional) |
-
-### Optional (feature flags & integrations)
-
-| Variable | Required | Description |
-|----------|---------|----------|
-| `OPENAI_API_KEY` | No | Enables Portfolio AI analysis (optional) |
-| `GMAIL_*` | No | Enables email delivery from `notification-service` (optional) |
-| `COMPOSE_PROFILES` | No | `production` (nginx UI, default) or `dev` (Vite HMR) — see [`.env.example`](.env.example) |
-| `VITE_*` | No | Frontend URLs (build-time for nginx; runtime for Vite dev) |
-
-> **Note:** Some variables are set in `docker-compose.yml` or service `application-docker.yml` but not listed in `.env.example`. To override them locally, add them to `.env` (Compose passes them through). Examples: `KEYCLOAK_SECURITY_*`, `PORTFOLIO_AI_DAILY_LIMIT`, `NRS_INTERNAL_BACKFILL_TOKEN`, `MARKET_DATA_INTERNAL_BACKFILL_TOKEN`. See [`docker-compose.yml`](docker-compose.yml) and module READMEs.
-
-Docker Compose automatically loads the `.env` file from the repo root; no additional volume mapping is required.
-
----
-
-## Services, ports, and URLs
-
-### Docker Compose (default demo stack)
-
-| Component | Host port | Swagger / UI |
-|---------|------------|--------------|
-| **Frontend** (nginx, `production` profile) | 3000 | http://localhost:3000 |
-| **Frontend dev** (Vite, `dev` profile) | 3000 | http://localhost:3000 |
-| **finance-service** | 8085 | http://localhost:8085/swagger-ui.html |
-| **marketdata** | 8083 | http://localhost:8083/swagger-ui.html |
-| **notification-service** | 8089 | http://localhost:8089/swagger-ui.html |
-| **log-consumer-service** | 8087 | http://localhost:8087/swagger-ui.html |
-| **Keycloak** | 8081 | http://localhost:8081 |
-| **PostgreSQL** | 5432 | — |
-| **Redis** | 6379 | — |
-| **Kafka** | 9092 | — |
-| **OpenSearch** | 9200 | — |
-| **OpenSearch Dashboards** | 5601 | http://localhost:5601 |
-| **Prometheus** | 9090 | http://localhost:9090 |
-| **Grafana** | 3001 | http://localhost:3001 |
-| **Tempo** | 3200 | — |
-
-For service-specific ports, env vars, and Swagger URLs, see each **module README** (linked below). This root README covers the full-stack quick path only.
+<p align="center">
+  <a href="http://localhost:8085/swagger-ui.html">
+    <img src="./docs/assets/images/api/swagger-ui-finance.png" alt="finance-service Swagger UI" width="80%" />
+  </a>
+</p>
 
 | Module | README |
 |--------|--------|
@@ -331,7 +282,8 @@ For service-specific ports, env vars, and Swagger URLs, see each **module README
 | log-consumer-service | [log-consumer-service/README.md](log-consumer-service/README.md) |
 | frontend | [frontend/README.md](frontend/README.md) |
 
-### Local development ports (without Docker)
+<details>
+<summary><strong>Local development ports (without Docker)</strong></summary>
 
 | Service | Default port |
 |--------|-----------------|
@@ -340,6 +292,8 @@ For service-specific ports, env vars, and Swagger URLs, see each **module README
 | notification-service | 8089 |
 | log-consumer-service | 8090 |
 | frontend (Vite) | 5173 |
+
+</details>
 
 ---
 
@@ -350,86 +304,43 @@ NrsFinancePortal/
 ├── README.md                    ← GitHub landing page (this file)
 ├── .env.example                 ← Environment template
 ├── docker-compose.yml           ← Full stack definition
-├── pom.xml                      ← Maven parent (Java 21)
-│
 ├── frontend/                    ← React SPA
 ├── finance-service/             ← Core portal API
 ├── marketdata/                  ← Market data service
 ├── notification-service/        ← Notifications & email
 ├── log-consumer-service/        ← Kafka → OpenSearch log indexing
-│
-├── infra/                       ← Keycloak, Grafana, Prometheus, OTel, Postgres init
+├── infra/                       ← Keycloak, Grafana, Prometheus, OTel
 ├── docs/                        ← Technical documentation hub
-├── scripts/                     ← Dev scripts (e.g., maintenance SQL)
 └── .github/workflows/ci.yml     ← CI pipeline
 ```
 
-Backend layering (per service):
-
-```
-src/main/java/.../
-├── api/              # REST controller, DTO, GlobalExceptionHandler
-├── application/      # Business logic, use-case services
-├── domain/           # Entities, domain models
-├── infrastructure/   # JPA, Kafka, Keycloak, external API clients
-└── config/           # Spring configuration
-```
+Backend layering (`api` → `application` → `domain` → `infrastructure`): see [`docs/architecture.md`](docs/architecture.md).
 
 ---
 
 ## Testing
 
-### Layer 1 — Automated (CI)
+CI runs on every push/PR: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (backend Testcontainers, frontend lint/build, Docker smoke).
 
-GitHub Actions on every push/PR: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
-
-- 4 backend modules: `mvn test` with Testcontainers
-- Frontend: ESLint, Vitest, production build
-- Docker smoke build
-
-### Layer 2 — Manual smoke (reviewer)
-
-After the stack is up, verify core flows (full checklist in [`docs/getting-started.md` §5](docs/getting-started.md#5-functional-smoke-test)):
+**Smoke checklist** after `docker compose up`:
 
 - [ ] Sign in at http://localhost:3000 → **Dashboard** loads
 - [ ] **Market** → instrument list loads
 - [ ] **Portfolio** → page opens
 - [ ] (Admin) **Admin → Audit** → Grafana panel embeds
 
-### Layer 3 — Optional local tests (developer)
+<p align="center">
+  <img src="./docs/assets/gifs/features/admin-audit-grafana.gif" alt="Admin audit — Grafana embed" width="80%" />
+</p>
 
-Requires Docker Desktop running (Testcontainers) and JDK/Maven/Node on the host. Commands: [`docs/getting-started.md` §7](docs/getting-started.md#7-test-suite).
+<details>
+<summary><strong>Extended test suite & success criteria</strong></summary>
 
-Optional Javadoc generation:
+- Local `mvn test` / Vitest commands: [`docs/getting-started.md` §7](docs/getting-started.md#7-test-suite)
+- Setup complete: all 4 `/actuator/health` **UP**, Swagger UI loads, Grafana :3001 opens
+- Optional Javadoc: `docker run --rm -v "${PWD}:/app" -w /app maven:3.9-eclipse-temurin-21 mvn -q javadoc:javadoc -DskipTests`
 
-```powershell
-docker run --rm -v "${PWD}:/app" -w /app maven:3.9-eclipse-temurin-21 mvn -q javadoc:javadoc -DskipTests
-```
-
-### Success criteria (setup complete)
-
-- [ ] `docker compose ps` — critical services **running** / **healthy**
-- [ ] All 4 backend `/actuator/health` endpoints return **UP**
-- [ ] http://localhost:3000 — login works and **Dashboard** appears
-- [ ] At least one **Swagger UI** page loads (8085 or 8083)
-- [ ] http://localhost:3001 — **Grafana** opens
-- [ ] (Optional) OpenSearch Dashboards → `application-logs-*` index visible
-
----
-
-## Requirements compliance
-
-| Requirement | Where to verify |
-|-------------|-----------------|
-| **Item 21** — README & setup guide | This file + [`docs/getting-started.md`](docs/getting-started.md) |
-| **Item 22** — Unit / integration tests | [Testing](#testing) + CI badge + getting-started §7 |
-| **Item 14** — Docker Compose stack | [`docker-compose.yml`](docker-compose.yml) |
-| **Item 15** — Microservices architecture | [System architecture](#system-architecture) + [`docs/architecture.md`](docs/architecture.md) |
-| **Item 16** — REST API & Swagger | Service Swagger URLs above + [`docs/api/README.md`](docs/api/README.md) |
-| **Item 17** — Authentication (Keycloak/JWT) | [Demo accounts](#step-5--open-the-app) + [`docs/security/README.md`](docs/security/README.md) |
-| **Item 18** — Observability | Grafana :3001 + [`docs/observability/README.md`](docs/observability/README.md) |
-| **Item 19** — Centralized logging | Kafka → OpenSearch — getting-started §6 |
-| **Item 20** — CI pipeline | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
+</details>
 
 ---
 
@@ -438,14 +349,13 @@ docker run --rm -v "${PWD}:/app" -w /app maven:3.9-eclipse-temurin-21 mvn -q jav
 | Topic | File |
 |------|-------|
 | **Documentation hub** | [docs/README.md](docs/README.md) |
-| **Architecture deep-dive** | [docs/architecture.md](docs/architecture.md) · [TR](docs/architecture.tr.md) |
-| **Step-by-step setup & verification** | [docs/getting-started.md](docs/getting-started.md) · [TR](docs/getting-started.tr.md) |
+| **Architecture** | [docs/architecture.md](docs/architecture.md) · [TR](docs/architecture.tr.md) |
+| **Setup & verification** | [docs/getting-started.md](docs/getting-started.md) · [TR](docs/getting-started.tr.md) |
 | **REST API & OpenAPI** | [docs/api/README.md](docs/api/README.md) |
-| **Observability (Grafana, OTel, OpenSearch)** | [docs/observability/README.md](docs/observability/README.md) |
-| **Security (Keycloak, JWT, 2FA)** | [docs/security/README.md](docs/security/README.md) |
-| **Email setup (Gmail OAuth)** | [docs/email-setup.md](docs/email-setup.md) · [TR](docs/email-setup.tr.md) |
-| **Keycloak bootstrap (Compose)** | [docs/ops/keycloak-bootstrap.md](docs/ops/keycloak-bootstrap.md) · [TR](docs/ops/keycloak-bootstrap.tr.md) |
-| **API quick reference** | [docs/api/endpoints.md](docs/api/endpoints.md) · [TR](docs/api/endpoints.tr.md) |
+| **Observability** | [docs/observability/README.md](docs/observability/README.md) |
+| **Security** | [docs/security/README.md](docs/security/README.md) · [SECURITY.md](SECURITY.md) |
+| **Email setup** | [docs/email-setup.md](docs/email-setup.md) · [TR](docs/email-setup.tr.md) |
+| **Requirements compliance** | [docs/requirements-compliance.md](docs/requirements-compliance.md) · [TR](docs/requirements-compliance.tr.md) |
 
 ---
 
@@ -467,8 +377,6 @@ Stop the conflicting process or change the port mapping in `docker-compose.yml`.
 <details>
 <summary><strong>finance-service keeps restarting</strong></summary>
 
-It may be waiting for market-data to become healthy:
-
 ```powershell
 docker compose logs market-data-service
 docker compose logs finance-service
@@ -479,24 +387,34 @@ docker compose logs finance-service
 <details>
 <summary><strong>Market / macro panels are empty</strong></summary>
 
-Check whether `EVDS_API_KEY` is set in `.env`. Without a key, macro panels may remain empty.
+Set `EVDS_API_KEY` in `.env`. Without it, macro panels may remain empty.
 
 </details>
 
 <details>
 <summary><strong>Keycloak redirect_uri mismatch</strong></summary>
 
-Use the frontend at `http://localhost:3000`. If you run the UI on `:5173`, update the Keycloak client redirect URIs to include `http://localhost:5173/*`.
+Use http://localhost:3000. For Vite on `:5173`, add `http://localhost:5173/*` to Keycloak client redirect URIs.
 
 </details>
 
 <details>
 <summary><strong>Swagger 401 Unauthorized</strong></summary>
 
-In Swagger UI, click **Authorize** and paste `Bearer <access_token>` (after logging in via Keycloak).
+Sign in at http://localhost:3000, then **Authorize** → `Bearer <access_token>` in Swagger UI.
 
 </details>
 
 ---
 
-**Maintainer:** NRS Finance Portal team · educational/demo delivery scope
+<p align="center">
+  <strong>NRS Finance Portal</strong> · MIT License · <a href="SECURITY.md">Security</a>
+</p>
+
+<p align="center">
+  <em>Demo / educational platform — not investment advice. Market data may be delayed or synthetic in local environments.</em>
+</p>
+
+<p align="center">
+  <strong>Maintainer:</strong> NRS Finance Portal team
+</p>

@@ -1,3 +1,7 @@
+<p>
+  <img src="./docs/assets/gifs/architecture-overview.gif" alt="NRS Finance Portal — mimari özeti" width="100%" />
+</p>
+
 <p align="center">
   <img src="./docs/assets/gifs/nrs-brand-hero.gif" alt="NRS Finance Portal" width="420" />
 </p>
@@ -14,60 +18,79 @@
   <a href="https://github.com/nurs3li/NrsFinancePortal/actions/workflows/ci.yml">
     <img alt="CI" src="https://github.com/nurs3li/NrsFinancePortal/actions/workflows/ci.yml/badge.svg" />
   </a>
+  <a href="LICENSE">
+    <img alt="Lisans: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg" />
+  </a>
   <img alt="Java 21" src="https://img.shields.io/badge/Java-21-orange?logo=openjdk&logoColor=white" />
   <img alt="Spring Boot 3.5.5" src="https://img.shields.io/badge/Spring%20Boot-3.5.5-6DB33F?logo=springboot&logoColor=white" />
   <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=000000" />
   <img alt="Docker Compose" src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" />
-  <img alt="Microservices" src="https://img.shields.io/badge/Architecture-Microservices-111827" />
 </p>
 
 <p align="center">
-  NRS Finance Portal; portföy yönetimi, canlı piyasa izleme, enflasyona göre düzeltilmiş (reel) getiri analitiği,
-  yatırım simülasyonları, fiyat alarmları ve üretim kalitesinde gözlemlenebilirliği tek, tutarlı bir deneyimde birleştiren modüler bir finans platformudur.
+  Portföy yönetimi, canlı piyasalar, reel getiri analitiği, simülasyonlar, alarmlar ve üretim kalitesinde gözlemlenebilirlik — <strong>4 Spring Boot mikroservisi</strong> + <strong>1 React SPA</strong>, Docker Compose üzerinde.
 </p>
 
-<p align="center">
-  Dağınık piyasa ekranları, manuel elektronik tablolar ve birbirinden kopuk araçlar yerine; karar desteği,
-  izleme ve analitik iş akışlarını bir araya getirerek daha hızlı ve güvenilir finansal kararlar almanızı sağlar.
-</p>
+### Temel yetenekler
+
+- **Çok varlıklı piyasa terminali** — döviz, kripto, hisse, fon, VİOP, tahvil
+- **Portföy analitiği** — manuel pozisyonlar, enflasyona göre reel getiri, yoğunlaşma
+- **Yatırım simülasyonu** — geçmişe dönük what-if senaryoları
+- **Kimlik ve güvenlik** — Keycloak JWT, isteğe bağlı TOTP 2FA
+- **Gözlemlenebilirlik** — OpenTelemetry, Prometheus, Grafana, Tempo, merkezi loglar (Kafka → OpenSearch)
+- **Açık API'ler** — servis başına SpringDoc OpenAPI / Swagger
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/market-terminal-browse.gif" alt="Piyasa terminali" width="100%" />
+    </td>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/simulation-run.gif" alt="Yatırım simülasyonu" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/portfolio-manual-position.gif" alt="Portföy — manuel pozisyon ekleme" width="100%" />
+    </td>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/portfolio-ai-report.gif" alt="Portföy AI — analiz raporu" width="100%" />
+    </td>
+  </tr>
+</table>
 
 ---
 
 ## İçindekiler
 
-1. [Hızlı başlangıç özeti](#hızlı-başlangıç-özeti)
+1. [Hızlı başlangıç](#hızlı-başlangıç)
 2. [Ürün özeti](#ürün-özeti)
 3. [Teknoloji yığını](#teknoloji-yığını)
 4. [Sistem mimarisi](#sistem-mimarisi)
 5. [Başlarken (Docker)](#başlarken-docker)
-6. [Ortam değişkenleri](#ortam-değişkenleri)
-7. [Servisler, portlar ve URL'ler](#servisler-portlar-ve-urller)
-8. [Depo yapısı](#depo-yapısı)
-9. [Test](#test)
-10. [Proje isterleri uyumu](#proje-isterleri-uyumu)
-11. [Dokümantasyon haritası](#dokümantasyon-haritası)
-12. [Sorun giderme](#sorun-giderme)
+6. [Servis uç noktaları](#servis-uç-noktaları)
+7. [Depo yapısı](#depo-yapısı)
+8. [Test](#test)
+9. [Dokümantasyon haritası](#dokümantasyon-haritası)
+10. [Sorun giderme](#sorun-giderme)
 
 ---
 
-## Hızlı başlangıç özeti
+## Hızlı başlangıç
 
 | | |
 |---|---|
 | **Gerekenler** | Git + Docker Desktop (**8 GB RAM** önerilir) |
-| **1. Klon & ortam** | `git clone` → `copy .env.example .env` (Windows) veya `cp .env.example .env` (macOS/Linux) → en az `POSTGRES_PASSWORD` ayarlayın |
-| **2. Başlat** | `docker compose up -d --build` (ilk sefer **5–15 dk**; `.env` içinde `COMPOSE_PROFILES=production` → nginx) |
+| **1. Klon & ortam** | `git clone` → `copy .env.example .env` → en az `POSTGRES_PASSWORD` ayarlayın |
+| **2. Başlat** | `docker compose up -d --build` (ilk sefer **5–15 dk**) |
 | **3. Aç** | http://localhost:3000 |
-| **Frontend dev** | `.env` içinde `COMPOSE_PROFILES=dev` veya `docker compose --profile dev up -d` (Vite HMR; `production` ile aynı anda açmayın) |
-| **4. Demo giriş** | `testuser` / `123456789` (kullanıcı) veya `nrsadmin` / `123456789` (admin) — bkz. [Adım 5](#adım-5--uygulamayı-açma) |
+| **4. Demo giriş** | `testuser` / `123456789` (kullanıcı) veya `nrsadmin` / `123456789` (admin) |
 
-> Demo şifreler yalnızca **yerel geliştirme** içindir; production'da değiştirin.
+> Demo şifreler yalnızca **yerel geliştirme** içindir. Tam rehber: [`docs/getting-started.tr.md`](docs/getting-started.tr.md).
 
 ---
 
 ## Ürün özeti
-
-### Kullanıcıya dönük modüller
 
 | Modül | Ne yapar |
 |-------|-----------|
@@ -79,14 +102,6 @@
 | **Portföy AI** | OpenAI destekli portföy analiz raporu (isteğe bağlı API anahtarı) |
 | **Bildirimler** | Fiyat alarmları ve sistem bildirimleri |
 | **Admin** | Kullanıcı yönetimi, denetim logları, Grafana gömü |
-
-### Teknik görünüm
-
-Sistem **4 Spring Boot mikroservisi** + **1 React SPA** olarak **Docker Compose** ile çalışır. Diyagramlar ve animasyonlu özet: [`docs/architecture.tr.md`](docs/architecture.tr.md).
-
-**Kimlik doğrulama:** Keycloak realm `nrs-finance`. Frontend `keycloak-js` ile kimlik doğrular; backend servisleri JWT'leri OAuth2 Resource Server olarak doğrular.
-
-**2FA:** TOTP desteklenir. Kullanıcılar **Ayarlar**'dan etkinleştirir; varsayılan olarak isteğe bağlıdır.
 
 ---
 
@@ -110,22 +125,27 @@ Sistem **4 Spring Boot mikroservisi** + **1 React SPA** olarak **Docker Compose*
 
 ## Sistem mimarisi
 
-Bileşen diyagramları, istek akışları ve Compose topolojisi: [`docs/architecture.tr.md`](docs/architecture.tr.md).
+Derinlemesine: [`docs/architecture.tr.md`](docs/architecture.tr.md) (bileşen diyagramları, istek akışları, güvenlik).
+
+<a href="docs/architecture.tr.md">
+  <img src="./docs/assets/images/architecture/02-component-diagram.png" alt="Bileşen diyagramı — mimari dokümantasyonu için tıklayın" width="100%" />
+</a>
+
+<a href="docs/security/README.tr.md">
+  <img src="./docs/assets/images/architecture/05-security-architecture.png" alt="Güvenlik mimarisi — Keycloak + JWT" width="100%" />
+</a>
+
+<p>
+  <img src="./docs/assets/gifs/system-architecture.gif" alt="Docker Compose topolojisi" width="100%" />
+</p>
 
 ---
 
 ## Başlarken (Docker)
 
-Adım adım GIF'ler, smoke test ve tam doğrulama listesi: [`docs/getting-started.tr.md`](docs/getting-started.tr.md).
+Tam GIF rehberi, smoke test ve doğrulama listesi: [`docs/getting-started.tr.md`](docs/getting-started.tr.md).
 
-### Ön koşullar
-
-| Araç | Minimum sürüm | Doğrulama |
-|---------|---------------|----------------|
-| Git | 2.x | `git --version` |
-| Docker Desktop | 4.x (Compose v2) | `docker compose version` |
-
-> Bu depo derleme, test (CI uyumu) ve çalışma zamanı için **öncelikle Docker** kullanır. Servisleri Docker dışında çalıştırmayı seçmediğiniz sürece host'ta JDK/Maven/Node kurmanız genelde gerekmez.
+**Ön koşullar:** Git 2.x + Docker Desktop 4.x (`docker compose version`). Öncelikle Docker — servisleri Compose dışında çalıştırmadığınız sürece host'ta JDK/Maven/Node gerekmez.
 
 ### Adım 1 — Klonlama
 
@@ -134,49 +154,20 @@ git clone https://github.com/nurs3li/NrsFinancePortal.git
 cd NrsFinancePortal
 ```
 
-<p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-01-clone.gif" alt="Başlarken — adım 1: klonlama" width="820" />
-</p>
-
-### Adım 2 — Ortam dosyası oluşturma
-
-```powershell
-copy .env.example .env
-```
-
-```bash
-cp .env.example .env
-```
-
-`.env.example` zaten `POSTGRES_DB`, `POSTGRES_USER` ve `POSTGRES_PASSWORD` içerir — çoğu zaman yalnızca şifreyi değiştirmeniz yeterlidir. Varsayılan DB/kullanıcı değerlerini bilmeden değiştirmeyin.
-
-| Öncelik | Değişkenler | Not |
-|---------|-------------|-----|
-| **Zorunlu** | `POSTGRES_PASSWORD` | Yığını başlatmak için minimum |
-| **Önerilen** | `EVDS_API_KEY` | Makro/enflasyon/faiz panelleri — [TCMB EVDS](https://evds3.tcmb.gov.tr/) |
-| **Opsiyonel** | `FINHUB_API_KEY`, `OPENAI_API_KEY`, `GMAIL_*` | ABD hisse, Portföy AI, e-posta bildirimleri |
-
-<p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-02-env.gif" alt="Başlarken — adım 2: ortam dosyası" width="820" />
-</p>
-
-### Adım 3 — Tam yığını başlatma
-
-```powershell
-docker compose up -d --build
-```
-
-İlk derleme **5–15 dakika** sürebilir (Maven derlemeleri, Liquibase migrasyonları, Keycloak realm içe aktarma ve ilk ısınma).
-
-Başlatılanlar (yüksek seviye):
-
-- **Frontend** (React SPA)
-- **4 Spring Boot servisi**: `finance-service`, `market-data-service`, `notification-service`, `log-consumer-service`
-- **Altyapı**: Postgres, Redis, Kafka, Keycloak, OpenSearch (+ Dashboards), Prometheus, Grafana, Tempo
-
-<p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-03-compose-up.gif" alt="Başlarken — adım 3: docker compose up" width="820" />
-</p>
+<table>
+<tr>
+<td valign="top" width="50%">
+<h3>Adım 2 — Ortam dosyası</h3>
+<pre><code>copy .env.example .env</code></pre>
+<p>Yalnızca <code>POSTGRES_PASSWORD</code> değiştirin; varsayılan DB/kullanıcı değerlerine dokunmayın. <strong>Zorunlu</strong> <code>POSTGRES_PASSWORD</code> · <strong>Önerilen</strong> <code>EVDS_API_KEY</code> (<a href="https://evds3.tcmb.gov.tr/">TCMB EVDS</a>) · <strong>Opsiyonel</strong> <code>FINHUB_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>GMAIL_*</code></p>
+</td>
+<td valign="top" width="50%">
+<h3>Adım 3 — Yığını başlat</h3>
+<pre><code>docker compose up -d --build</code></pre>
+<p>İlk çalıştırma <strong>5–15 dk</strong>. React SPA, 4 Spring servisi, Postgres, Redis, Kafka, Keycloak, OpenSearch, Prometheus, Grafana, Tempo başlar.</p>
+</td>
+</tr>
+</table>
 
 ### Adım 4 — Doğrulama
 
@@ -184,143 +175,104 @@ Başlatılanlar (yüksek seviye):
 docker compose ps
 ```
 
-`NAME` sütununda beklenen konteyner adları: `nrs-finance`, `nrs-market-data`, `nrs-postgres`, `nrs-keycloak`, `nrs-frontend` (varsayılan nginx) veya `nrs-frontend-dev` (dev profili) vb. — hepsi **running** veya **healthy**.
+<code>nrs-*</code> konteynerleri <strong>running/healthy</strong> olmalı. İlk açılışta <code>market-data-service</code> 5–10 dk <em>starting</em> kalabilir.
 
-> İlk açılışta `market-data-service` 5–10 dakika **starting** görünebilir — normal. `finance-service`, market-data sağlıklı olana kadar bekler; finance sürekli yeniden başlıyorsa önce `docker compose logs market-data-service` kontrol edin.
-
-Hızlı sağlık kontrolleri:
-
-```powershell
-curl.exe http://localhost:8085/actuator/health
+<pre><code>curl.exe http://localhost:8085/actuator/health
 curl.exe http://localhost:8083/actuator/health
 curl.exe http://localhost:8089/actuator/health
 curl.exe http://localhost:8087/actuator/health
-```
+docker compose logs -f finance-service</code></pre>
 
-Windows PowerShell'de `curl` genelde `Invoke-WebRequest` alias'ıdır. `curl.exe` veya:
+PowerShell: <code>curl.exe</code> kullanın (<code>curl</code> alias'ı değil). Detaylar: [`docs/getting-started.tr.md`](docs/getting-started.tr.md).
 
-```powershell
-Invoke-RestMethod http://localhost:8085/actuator/health
-```
-
-Logları izleme:
-
-```powershell
-docker compose logs -f finance-service
-```
-
-<p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-04-verify.gif" alt="Başlarken — adım 4: servisleri doğrulama" width="820" />
-</p>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/getting-started/step-01-clone.gif" alt="Adım 1: klonlama" width="100%" />
+    </td>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/getting-started/step-02-env.gif" alt="Adım 2: ortam dosyası" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/getting-started/step-03-compose-up.gif" alt="Adım 3: docker compose up" width="100%" />
+    </td>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/getting-started/step-04-verify.gif" alt="Adım 4: doğrulama" width="100%" />
+    </td>
+  </tr>
+</table>
 
 ### Adım 5 — Uygulamayı açma
 
-| # | URL | Beklenen |
-|---|-----|----------|
-| 1 | http://localhost:3000 | Landing / giriş |
-| 2 | http://localhost:8081 | Keycloak (realm: `nrs-finance`) |
-| 3 | http://localhost:8085/swagger-ui.html | finance-service Swagger UI |
-| 4 | http://localhost:8083/swagger-ui.html | marketdata Swagger UI |
-| 5 | http://localhost:3001 | Grafana (`admin` / `admin`) |
-| 6 | http://localhost:5601 | OpenSearch Dashboards |
-| 7 | http://localhost:8085/actuator/health | `{"status":"UP"}` |
+http://localhost:3000 adresini açın. Servis URL'leri: aşağıdaki [Servis uç noktaları](#servis-uç-noktaları).
 
-#### Demo hesapları (Keycloak realm import)
-
-| Hesap | Şifre | Rol | Test edilecekler |
-|-------|-------|-----|------------------|
-| `nrsadmin` | `123456789` | ADMIN | Admin menüsü, audit logları, kullanıcı yönetimi |
-| `testuser` | `123456789` | USER | Dashboard, piyasa, portföy, simülasyon |
-
-**Yeni kullanıcı kaydı:** Keycloak self-registration **kapalı** (`registrationAllowed: false`). http://localhost:3000 → **Kayıt** — portal akışı, e-posta doğrulama kodu, backend: `finance-service` `/api/public/register`.
-
-**Gmail OAuth gerekir** (`GMAIL_*` in `.env`) doğrulama e-postaları için. Yoksa yukarıdaki demo hesapları kullanın. Kurulum: [`docs/email-setup.tr.md`](docs/email-setup.tr.md).
-
-**Şifremi unuttum:** Landing **Giriş** sekmesinde → **Şifremi unuttum** (ayrı URL yok). Akış: e-posta → doğrulama kodu → yeni şifre (`/api/public/password-reset/*`). Gmail OAuth gerekir — [`docs/email-setup.tr.md`](docs/email-setup.tr.md).
-
-**Swagger:** http://localhost:3000 üzerinden giriş yapın, ardından Swagger UI'da **Authorize** → `Bearer <access_token>`.
-
-> Demo şifreler yalnızca **yerel geliştirme** içindir; yerel olmayan ortamlarda değiştirin.
+| Hesap | Şifre | Rol |
+|-------|-------|-----|
+| `nrsadmin` | `123456789` | ADMIN |
+| `testuser` | `123456789` | USER |
 
 <p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-05-open-app.gif" alt="Başlarken — adım 5: uygulamayı açma" width="820" />
+  <img src="./docs/assets/gifs/getting-started/step-05-open-app.gif" alt="Adım 5: uygulamayı açma ve giriş" width="100%" />
 </p>
 
-### Adım 6 — Durdurma
+<details>
+<summary><strong>Kayıt, şifre sıfırlama ve 2FA (isteğe bağlı)</strong></summary>
 
-```powershell
-docker compose down
-```
+E-posta akışları için <code>.env</code> içinde <code>GMAIL_*</code> gerekir — bkz. <a href="docs/email-setup.tr.md">docs/email-setup.tr.md</a>. Swagger: http://localhost:3000 giriş → <strong>Authorize</strong> → <code>Bearer &lt;access_token&gt;</code>.
 
-Volume'ları da kaldırma (uyarı: verileri siler):
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/registration-email-flow.gif" alt="Kayıt akışı" width="100%" />
+    </td>
+    <td align="center" width="50%">
+      <img src="./docs/assets/gifs/features/password-reset-flow.gif" alt="Şifre sıfırlama akışı" width="100%" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2">
+      <img src="./docs/assets/gifs/features/settings-totp-enable.gif" alt="Ayarlar — 2FA etkinleştirme" width="50%" />
+    </td>
+  </tr>
+</table>
 
-```powershell
-docker compose down -v
-```
+</details>
 
-<p align="center">
-  <img src="./docs/assets/gifs/getting-started/step-06-stop.gif" alt="Başlarken — adım 6: yığını durdurma" width="820" />
-</p>
+> Minimum ortam: `POSTGRES_PASSWORD`. Önerilen: `EVDS_API_KEY`. Tam referans: [`.env.example`](.env.example).
 
 ---
 
-## Ortam değişkenleri
+## Servis uç noktaları
 
-Tam referans: [`.env.example`](.env.example)
+### Docker Compose (varsayılan yığın)
 
-### Zorunlu
+<p align="center">
+  <a href="http://localhost:3000" title="Frontend (nginx, production profili)"><img alt="Portal :3000" src="https://img.shields.io/badge/:3000-Portal-61DAFB?style=flat-square&logo=react&logoColor=000" height="22" /></a>
+  <a href="http://localhost:3000" title="Frontend dev (Vite, dev profili)"><img alt="Vite :3000" src="https://img.shields.io/badge/:3000-Vite-646CFF?style=flat-square&logo=vite&logoColor=white" height="22" /></a>
+  <a href="http://localhost:8085/swagger-ui.html" title="finance-service Swagger UI"><img alt="finance :8085" src="https://img.shields.io/badge/:8085-finance-6DB33F?style=flat-square&logo=springboot&logoColor=white" height="22" /></a>
+  <a href="http://localhost:8083/swagger-ui.html" title="marketdata Swagger UI"><img alt="marketdata :8083" src="https://img.shields.io/badge/:8083-marketdata-6DB33F?style=flat-square&logo=springboot&logoColor=white" height="22" /></a>
+  <a href="http://localhost:8089/swagger-ui.html" title="notification-service Swagger UI"><img alt="notification :8089" src="https://img.shields.io/badge/:8089-notification-6DB33F?style=flat-square&logo=springboot&logoColor=white" height="22" /></a>
+  <a href="http://localhost:8087/swagger-ui.html" title="log-consumer-service Swagger UI"><img alt="log-consumer :8087" src="https://img.shields.io/badge/:8087-log--consumer-6DB33F?style=flat-square&logo=springboot&logoColor=white" height="22" /></a>
+  <a href="http://localhost:8081" title="Keycloak (realm: nrs-finance)"><img alt="Keycloak :8081" src="https://img.shields.io/badge/:8081-Keycloak-4D4D4D?style=flat-square&logo=keycloak&logoColor=white" height="22" /></a>
+</p>
+<p align="center">
+  <a href="http://localhost:5432" title="PostgreSQL"><img alt="Postgres :5432" src="https://img.shields.io/badge/:5432-Postgres-4169E1?style=flat-square&logo=postgresql&logoColor=white" height="22" /></a>
+  <a href="http://localhost:6379" title="Redis"><img alt="Redis :6379" src="https://img.shields.io/badge/:6379-Redis-DC382D?style=flat-square&logo=redis&logoColor=white" height="22" /></a>
+  <a href="http://localhost:9092" title="Kafka"><img alt="Kafka :9092" src="https://img.shields.io/badge/:9092-Kafka-231F20?style=flat-square&logo=apachekafka&logoColor=white" height="22" /></a>
+  <a href="http://localhost:9200" title="OpenSearch API"><img alt="OpenSearch :9200" src="https://img.shields.io/badge/:9200-OpenSearch-005EB8?style=flat-square&logo=opensearch&logoColor=white" height="22" /></a>
+  <a href="http://localhost:5601" title="OpenSearch Dashboards"><img alt="Dashboards :5601" src="https://img.shields.io/badge/:5601-Dashboards-005EB8?style=flat-square&logo=opensearch&logoColor=white" height="22" /></a>
+  <a href="http://localhost:9090" title="Prometheus"><img alt="Prometheus :9090" src="https://img.shields.io/badge/:9090-Prometheus-E6522C?style=flat-square&logo=prometheus&logoColor=white" height="22" /></a>
+  <a href="http://localhost:3001" title="Grafana (admin / admin)"><img alt="Grafana :3001" src="https://img.shields.io/badge/:3001-Grafana-F46800?style=flat-square&logo=grafana&logoColor=white" height="22" /></a>
+  <a href="http://localhost:3200" title="Tempo"><img alt="Tempo :3200" src="https://img.shields.io/badge/:3200-Tempo-F46800?style=flat-square&logo=grafana&logoColor=white" height="22" /></a>
+</p>
 
-| Değişken | Zorunlu | Açıklama |
-|----------|---------|----------|
-| `POSTGRES_DB` | Evet | Varsayılan: `nrs_finance` |
-| `POSTGRES_USER` | Evet | DB kullanıcı adı |
-| `POSTGRES_PASSWORD` | Evet | DB parolası |
-
-### Önerilen (veri ve daha zengin UI)
-
-| Değişken | Zorunlu | Açıklama |
-|----------|---------|----------|
-| `EVDS_API_KEY` | Hayır | TCMB EVDS makro verisi (makro paneller için önerilir) |
-| `FINHUB_API_KEY` | Hayır | ABD hisse / ETF verisi (isteğe bağlı) |
-
-### İsteğe bağlı (özellik bayrakları ve entegrasyonlar)
-
-| Değişken | Zorunlu | Açıklama |
-|----------|---------|----------|
-| `OPENAI_API_KEY` | Hayır | Portföy AI analizini etkinleştirir (isteğe bağlı) |
-| `GMAIL_*` | Hayır | `notification-service` üzerinden e-posta iletimi (isteğe bağlı) |
-| `COMPOSE_PROFILES` | Hayır | `production` (nginx UI, varsayılan) veya `dev` (Vite HMR) — bkz. [`.env.example`](.env.example) |
-| `VITE_*` | Hayır | Frontend URL'leri (nginx için build-time; Vite dev için runtime) |
-
-> **Not:** Bazı değişkenler `docker-compose.yml` veya servis `application-docker.yml` içinde tanımlıdır, `.env.example`'da listelenmemiş olabilir. Yerelde geçersiz kılmak için `.env`'e ekleyin. Örnekler: `KEYCLOAK_SECURITY_*`, `PORTFOLIO_AI_DAILY_LIMIT`, `NRS_INTERNAL_BACKFILL_TOKEN`, `MARKET_DATA_INTERNAL_BACKFILL_TOKEN`. Bkz. [`docker-compose.yml`](docker-compose.yml) ve modül README'leri.
-
-Docker Compose, depo kökündeki `.env` dosyasını otomatik yükler; ek volume eşlemesi gerekmez.
-
----
-
-## Servisler, portlar ve URL'ler
-
-### Docker Compose (varsayılan demo yığını)
-
-| Bileşen | Host portu | Swagger / UI |
-|---------|------------|--------------|
-| **Frontend** (nginx, `production` profili) | 3000 | http://localhost:3000 |
-| **Frontend dev** (Vite, `dev` profili) | 3000 | http://localhost:3000 |
-| **finance-service** | 8085 | http://localhost:8085/swagger-ui.html |
-| **marketdata** | 8083 | http://localhost:8083/swagger-ui.html |
-| **notification-service** | 8089 | http://localhost:8089/swagger-ui.html |
-| **log-consumer-service** | 8087 | http://localhost:8087/swagger-ui.html |
-| **Keycloak** | 8081 | http://localhost:8081 |
-| **PostgreSQL** | 5432 | — |
-| **Redis** | 6379 | — |
-| **Kafka** | 9092 | — |
-| **OpenSearch** | 9200 | — |
-| **OpenSearch Dashboards** | 5601 | http://localhost:5601 |
-| **Prometheus** | 9090 | http://localhost:9090 |
-| **Grafana** | 3001 | http://localhost:3001 |
-| **Tempo** | 3200 | — |
-
-Servise özel port, env ve Swagger URL'leri için aşağıdaki **modül README** dosyalarına bakın. Bu kök README yalnızca tam yığın hızlı yolunu kapsar.
+<p align="center">
+  <a href="http://localhost:8085/swagger-ui.html">
+    <img src="./docs/assets/images/api/swagger-ui-finance.png" alt="finance-service Swagger UI" width="80%" />
+  </a>
+</p>
 
 | Modül | README |
 |--------|--------|
@@ -330,7 +282,8 @@ Servise özel port, env ve Swagger URL'leri için aşağıdaki **modül README**
 | log-consumer-service | [log-consumer-service/README.tr.md](log-consumer-service/README.tr.md) |
 | frontend | [frontend/README.tr.md](frontend/README.tr.md) |
 
-### Yerel geliştirme portları (Docker olmadan)
+<details>
+<summary><strong>Yerel geliştirme portları (Docker olmadan)</strong></summary>
 
 | Servis | Varsayılan port |
 |--------|-----------------|
@@ -340,96 +293,54 @@ Servise özel port, env ve Swagger URL'leri için aşağıdaki **modül README**
 | log-consumer-service | 8090 |
 | frontend (Vite) | 5173 |
 
+</details>
+
 ---
 
 ## Depo yapısı
 
 ```
 NrsFinancePortal/
-├── README.md                    ← GitHub giriş sayfası (İngilizce)
-├── README.tr.md                 ← GitHub giriş sayfası (Türkçe)
+├── README.md                    ← GitHub giriş sayfası (bu dosya)
 ├── .env.example                 ← Ortam şablonu
 ├── docker-compose.yml           ← Tam yığın tanımı
-├── pom.xml                      ← Maven parent (Java 21)
-│
 ├── frontend/                    ← React SPA
 ├── finance-service/             ← Çekirdek portal API
 ├── marketdata/                  ← Piyasa verisi servisi
 ├── notification-service/        ← Bildirimler ve e-posta
 ├── log-consumer-service/        ← Kafka → OpenSearch log indeksleme
-│
-├── infra/                       ← Keycloak, Grafana, Prometheus, OTel, Postgres init
+├── infra/                       ← Keycloak, Grafana, Prometheus, OTel
 ├── docs/                        ← Teknik dokümantasyon merkezi
-├── scripts/                     ← Geliştirme betikleri (ör. bakım SQL)
 └── .github/workflows/ci.yml     ← CI hattı
 ```
 
-Backend katmanlama (servis başına):
-
-```
-src/main/java/.../
-├── api/              # REST controller, DTO, GlobalExceptionHandler
-├── application/      # İş mantığı, use-case servisleri
-├── domain/           # Varlıklar, domain modelleri
-├── infrastructure/   # JPA, Kafka, Keycloak, harici API istemcileri
-└── config/           # Spring yapılandırması
-```
+Backend katmanlama (`api` → `application` → `domain` → `infrastructure`): [`docs/architecture.tr.md`](docs/architecture.tr.md).
 
 ---
 
 ## Test
 
-### Katman 1 — Otomatik (CI)
+CI her push/PR'da çalışır: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (backend Testcontainers, frontend lint/build, Docker smoke).
 
-GitHub Actions her push/PR'da: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
-
-- 4 backend modülü: Testcontainers ile `mvn test`
-- Frontend: ESLint, Vitest, üretim derlemesi
-- Docker duman derlemesi
-
-### Katman 2 — Manuel smoke (değerlendirici)
-
-Yığın ayağa kalktıktan sonra temel akışları doğrulayın (tam liste: [`docs/getting-started.tr.md` §5](docs/getting-started.tr.md#5-fonksiyonel-smoke-test)):
+**Smoke kontrol listesi** (`docker compose up` sonrası):
 
 - [ ] http://localhost:3000 giriş → **Dashboard** açılır
 - [ ] **Piyasa** → enstrüman listesi yüklenir
 - [ ] **Portföy** → sayfa açılır
-- [ ] (Admin) **Admin → Audit** → Grafana paneli görünür
+- [ ] (Admin) **Admin → Audit** → Grafana paneli gömülür
 
-### Katman 3 — İsteğe bağlı yerel test (geliştirici)
+<p align="center">
+  <img src="./docs/assets/gifs/features/admin-audit-grafana.gif" alt="Admin denetim — Grafana gömüsü" width="80%" />
+</p>
 
-Docker Desktop (Testcontainers) ve host'ta JDK/Maven/Node gerekir. Komutlar: [`docs/getting-started.tr.md` §7](docs/getting-started.tr.md#7-test-suite).
+<details>
+<summary><strong>Genişletilmiş test paketi ve başarı kriterleri</strong></summary>
 
-İsteğe bağlı Javadoc (yerel JDK gerekmez):
+- Yerel `mvn test` / Vitest komutları: [`docs/getting-started.tr.md` §7](docs/getting-started.tr.md#7-test-suite)
+- Kurulum tamam: 4 `/actuator/health` **UP**, Swagger UI açılır, Grafana :3001 açılır
+- Opsiyonel Javadoc: `docker run --rm -v "${PWD}:/app" -w /app maven:3.9-eclipse-temurin-21 mvn -q javadoc:javadoc -DskipTests`
 
-```powershell
-docker run --rm -v "${PWD}:/app" -w /app maven:3.9-eclipse-temurin-21 mvn -q javadoc:javadoc -DskipTests
-```
-
-### Başarı kriterleri (kurulum tamam)
-
-- [ ] `docker compose ps` — kritik servisler **running** / **healthy**
-- [ ] 4 backend `/actuator/health` **UP**
-- [ ] http://localhost:3000 — giriş + **Dashboard**
-- [ ] En az bir **Swagger UI** açılır (8085 veya 8083)
-- [ ] http://localhost:3001 — **Grafana** açılır
-- [ ] (Opsiyonel) OpenSearch Dashboards → `application-logs-*` indeksi
-
----
-
-## Proje isterleri uyumu
-
-| Madde | Doğrulama yeri |
-|-------|----------------|
-| **Madde 21** — README ve kurulum rehberi | Bu dosya + [`docs/getting-started.tr.md`](docs/getting-started.tr.md) |
-| **Madde 22** — Birim / entegrasyon testleri | [Test](#test) + CI rozeti + getting-started §7 |
-| **Madde 14** — Docker Compose yığını | [`docker-compose.yml`](docker-compose.yml) |
-| **Madde 15** — Mikroservis mimarisi | [Sistem mimarisi](#sistem-mimarisi) + [`docs/architecture.tr.md`](docs/architecture.tr.md) |
-| **Madde 16** — REST API ve Swagger | Swagger URL'leri + [`docs/api/README.tr.md`](docs/api/README.tr.md) |
-| **Madde 17** — Kimlik doğrulama (Keycloak/JWT) | [Demo hesapları](#adım-5--uygulamayı-açma) + [`docs/security/README.tr.md`](docs/security/README.tr.md) |
-| **Madde 18** — Gözlemlenebilirlik | Grafana :3001 + [`docs/observability/README.tr.md`](docs/observability/README.tr.md) |
-| **Madde 19** — Merkezi loglama | Kafka → OpenSearch — getting-started §6 |
-| **Madde 20** — CI hattı | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
+</details>
 
 ---
 
@@ -438,14 +349,13 @@ docker run --rm -v "${PWD}:/app" -w /app maven:3.9-eclipse-temurin-21 mvn -q jav
 | Konu | Dosya |
 |------|-------|
 | **Dokümantasyon merkezi** | [docs/README.tr.md](docs/README.tr.md) |
-| **Mimari derinlemesi** | [docs/architecture.tr.md](docs/architecture.tr.md) |
-| **Adım adım kurulum ve doğrulama** | [docs/getting-started.tr.md](docs/getting-started.tr.md) |
+| **Mimari** | [docs/architecture.tr.md](docs/architecture.tr.md) |
+| **Kurulum ve doğrulama** | [docs/getting-started.tr.md](docs/getting-started.tr.md) |
 | **REST API ve OpenAPI** | [docs/api/README.tr.md](docs/api/README.tr.md) |
-| **Gözlemlenebilirlik (Grafana, OTel, OpenSearch)** | [docs/observability/README.tr.md](docs/observability/README.tr.md) |
-| **Güvenlik (Keycloak, JWT, 2FA)** | [docs/security/README.tr.md](docs/security/README.tr.md) |
-| **E-posta kurulumu (Gmail OAuth)** | [docs/email-setup.tr.md](docs/email-setup.tr.md) |
-| **Keycloak bootstrap (Compose)** | [docs/ops/keycloak-bootstrap.tr.md](docs/ops/keycloak-bootstrap.tr.md) |
-| **API hızlı referansı** | [docs/api/endpoints.tr.md](docs/api/endpoints.tr.md) |
+| **Gözlemlenebilirlik** | [docs/observability/README.tr.md](docs/observability/README.tr.md) |
+| **Güvenlik** | [docs/security/README.tr.md](docs/security/README.tr.md) · [SECURITY.md](SECURITY.md) |
+| **E-posta kurulumu** | [docs/email-setup.tr.md](docs/email-setup.tr.md) |
+| **Proje isterleri uyumu** | [docs/requirements-compliance.tr.md](docs/requirements-compliance.tr.md) |
 
 ---
 
@@ -467,8 +377,6 @@ netstat -ano | findstr :8085
 <details>
 <summary><strong>finance-service sürekli yeniden başlıyor</strong></summary>
 
-market-data'nın sağlıklı olmasını bekliyor olabilir:
-
 ```powershell
 docker compose logs market-data-service
 docker compose logs finance-service
@@ -479,24 +387,34 @@ docker compose logs finance-service
 <details>
 <summary><strong>Piyasa / makro paneller boş</strong></summary>
 
-`.env` içinde `EVDS_API_KEY` ayarlı mı kontrol edin. Anahtar olmadan makro paneller boş kalabilir.
+`.env` içinde `EVDS_API_KEY` ayarlayın. Anahtar olmadan makro paneller boş kalabilir.
 
 </details>
 
 <details>
 <summary><strong>Keycloak redirect_uri uyuşmazlığı</strong></summary>
 
-Frontend'i `http://localhost:3000` üzerinden kullanın. UI'ı `:5173` ile çalıştırıyorsanız Keycloak istemci yönlendirme URI'lerine `http://localhost:5173/*` ekleyin.
+http://localhost:3000 kullanın. Vite `:5173` için Keycloak istemci yönlendirme URI'lerine `http://localhost:5173/*` ekleyin.
 
 </details>
 
 <details>
 <summary><strong>Swagger 401 Unauthorized</strong></summary>
 
-Swagger UI'da **Authorize**'a tıklayın ve Keycloak ile giriş yaptıktan sonra `Bearer <access_token>` yapıştırın.
+http://localhost:3000 üzerinden giriş yapın, ardından Swagger UI'da **Authorize** → `Bearer <access_token>`.
 
 </details>
 
 ---
 
-**Bakımcı:** NRS Finance Portal ekibi · eğitim/demo teslim kapsamı
+<p align="center">
+  <strong>NRS Finance Portal</strong> · MIT Lisansı · <a href="SECURITY.md">Güvenlik</a>
+</p>
+
+<p align="center">
+  <em>Demo / eğitim platformu — yatırım tavsiyesi değildir. Piyasa verileri yerel ortamda gecikmeli veya sentetik olabilir.</em>
+</p>
+
+<p align="center">
+  <strong>Bakımcı:</strong> NRS Finance Portal ekibi
+</p>
