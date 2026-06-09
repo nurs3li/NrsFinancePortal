@@ -23,6 +23,7 @@ This folder is the **technical documentation hub** for NRS Finance Portal. The r
 | Security (Keycloak/JWT/2FA) | [security/README.md](./security/README.md) |
 | Email setup (Gmail OAuth) | [email-setup.md](./email-setup.md) · [TR](./email-setup.tr.md) |
 | Keycloak bootstrap (Compose) | [ops/keycloak-bootstrap.md](./ops/keycloak-bootstrap.md) · [TR](./ops/keycloak-bootstrap.tr.md) |
+| Requirements compliance (Items 14–22) | [requirements-compliance.md](./requirements-compliance.md) · [TR](./requirements-compliance.tr.md) |
 
 ---
 

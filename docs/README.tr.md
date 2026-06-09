@@ -23,6 +23,7 @@ Bu klasör, NRS Finance Portal için **teknik dokümantasyon merkezidir**. Kök 
 | Güvenlik (Keycloak/JWT/2FA) | [security/README.tr.md](./security/README.tr.md) |
 | E-posta kurulumu (Gmail OAuth) | [email-setup.tr.md](./email-setup.tr.md) |
 | Keycloak bootstrap (Compose) | [ops/keycloak-bootstrap.tr.md](./ops/keycloak-bootstrap.tr.md) |
+| Proje isterleri uyumu (Madde 14–22) | [requirements-compliance.tr.md](./requirements-compliance.tr.md) · [EN](./requirements-compliance.md) |
 
 ---
 
