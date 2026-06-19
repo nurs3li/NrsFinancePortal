@@ -135,9 +135,7 @@ Deep dive: [`docs/architecture.md`](docs/architecture.md) (component diagrams, r
   <img src="./docs/assets/images/architecture/05-security-architecture.png" alt="Security architecture — Keycloak + JWT" width="100%" />
 </a>
 
-<p>
-  <img src="./docs/assets/gifs/system-architecture.gif" alt="Docker Compose topology" width="100%" />
-</p>
+
 
 ---
 
