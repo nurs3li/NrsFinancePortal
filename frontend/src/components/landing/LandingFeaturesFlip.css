@@ -123,10 +123,10 @@
 }
 
 .lff-flip-card__icon-wrap--green {
-    background: rgba(34, 197, 94, 0.1);
-    border-color: rgba(34, 197, 94, 0.3);
-    color: #86efac;
-    box-shadow: 0 0 16px rgba(34, 197, 94, 0.18);
+    background: rgba(22, 101, 52, 0.1);
+    border-color: rgba(22, 101, 52, 0.3);
+    color: #166534;
+    box-shadow: 0 0 16px rgba(22, 101, 52, 0.18);
 }
 
 .lff-flip-card__card-title {
@@ -188,11 +188,11 @@
 }
 
 .lff-kpi__value.pos {
-    color: #4ade80;
+    color: #166534;
 }
 
 .lff-kpi__value.neg {
-    color: #f87171;
+    color: #991B1B;
 }
 
 .lff-terminal-row {
@@ -230,15 +230,15 @@
 }
 
 .lff-tag.pos {
-    border-color: rgba(34, 197, 94, 0.4);
-    color: #86efac;
-    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(22, 101, 52, 0.4);
+    color: #166534;
+    background: rgba(22, 101, 52, 0.1);
 }
 
 .lff-tag.neg {
-    border-color: rgba(239, 68, 68, 0.35);
-    color: #fca5a5;
-    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(153, 27, 27, 0.35);
+    color: #991B1B;
+    background: rgba(153, 27, 27, 0.08);
 }
 
 .lff-tag.info {
@@ -272,7 +272,7 @@
 }
 
 .lff-alert-item.risk {
-    border-left-color: #f87171;
+    border-left-color: #991B1B;
 }
 
 .lff-mini-chart {

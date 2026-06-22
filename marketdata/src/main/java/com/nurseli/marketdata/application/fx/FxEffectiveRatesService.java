@@ -43,8 +43,14 @@ public class FxEffectiveRatesService {
     private final EvdsDebtClient evdsDebtClient;
     private final EvdsProperties evdsProperties;
 
-    @Value("${market.fx.effective-rates.lookback-days:400}")
+    @Value("${market.fx.effective-rates.lookback-days:7}")
     private int lookbackDays;
+
+    @Value("${market.fx.effective-rates.cache-ttl-seconds:600}")
+    private int cacheTtlSeconds;
+
+    private volatile FxEffectiveRatesResponseDto cachedResponse;
+    private volatile Instant cachedAt = Instant.EPOCH;
 
     public FxEffectiveRatesResponseDto load() {
         if (!evdsProperties.isEnabled()) {
@@ -55,8 +61,27 @@ public class FxEffectiveRatesService {
                     List.of(),
                     List.of("EVDS devre dışı; kurlar boş döndü."));
         }
+        Instant now = Instant.now();
+        FxEffectiveRatesResponseDto snap = cachedResponse;
+        if (snap != null && cachedAt.plusSeconds(Math.max(30, cacheTtlSeconds)).isAfter(now)) {
+            return snap;
+        }
+        synchronized (this) {
+            snap = cachedResponse;
+            if (snap != null && cachedAt.plusSeconds(Math.max(30, cacheTtlSeconds)).isAfter(Instant.now())) {
+                return snap;
+            }
+            FxEffectiveRatesResponseDto fresh = loadFromEvds();
+            cachedResponse = fresh;
+            cachedAt = Instant.now();
+            return fresh;
+        }
+    }
+
+    private FxEffectiveRatesResponseDto loadFromEvds() {
         LocalDate end = LocalDate.now();
-        LocalDate start = end.minusDays(Math.max(30, lookbackDays));
+        int days = Math.max(1, lookbackDays);
+        LocalDate start = end.minusDays(days);
         List<FxEffectiveRateRowDto> all = new ArrayList<>();
         for (String ccy : List.of("USD", "EUR", "GBP")) {
             List<FxEffectiveRateRowDto> part = buildForCurrency(ccy, start, end);

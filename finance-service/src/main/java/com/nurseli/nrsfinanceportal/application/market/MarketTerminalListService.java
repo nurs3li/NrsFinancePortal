@@ -31,7 +31,8 @@ import java.util.stream.Collectors;
 public class MarketTerminalListService {
 
     private static final int MAX_PAGE_SIZE = 50;
-    private static final int HISTORY_DAYS = 400;
+    /** BIST terminal liste spark / horizon — 400g batch isteği geciktiriyordu; ~120g yeterli. */
+    private static final int BIST_HISTORY_DAYS = 120;
     /** Liste spark / horizon — tam yıl için ~252 gün ideal; 90 gün terminal gecikmesini düşürür. */
     private static final int BOND_HISTORY_DAYS = 90;
     private static final List<String> PRECIOUS_METAL_SYMBOLS =
@@ -102,7 +103,7 @@ public class MarketTerminalListService {
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.joining(","));
         LocalDate to = LocalDate.now();
-        LocalDate from = to.minusDays(HISTORY_DAYS);
+        LocalDate from = to.minusDays(BIST_HISTORY_DAYS);
         Map<String, List<MarketPriceHistoryDto>> hist =
                 marketDataClient.getBistBatchHistoryMapped(symbolsCsv, from, to);
         List<MarketTerminalListItemDto> items = new ArrayList<>(rows.size());
@@ -171,7 +172,7 @@ public class MarketTerminalListService {
                     r.title(),
                     px,
                     rYtd,
-                    r.return1m(),
+                    r.return1d(),
                     trend,
                     null,
                     "TRY",
@@ -181,9 +182,9 @@ public class MarketTerminalListService {
                     "TEFAS",
                     null,
                     List.of(),
+                    r.return1d(),
+                    r.return1w(),
                     r.return1m(),
-                    r.return3m(),
-                    r.return6m(),
                     r.return1y(),
                     null,
                     null,
