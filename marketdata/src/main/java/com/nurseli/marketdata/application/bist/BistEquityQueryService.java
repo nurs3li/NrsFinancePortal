@@ -95,6 +95,7 @@ public class BistEquityQueryService {
 
     /**
      * Terminal piyasa listesi: filtre/sıralama sonrası sayfalı sonuç (varsayılan 5 satır).
+     * Okuma path'i — tüm katalog için ingest tetiklemez; {@link #getLatest()} simülasyon/alarmlar için ingest korur.
      */
     public PagedResponse<BistEquityLatestResponse> getLatestPage(
             int page,
@@ -103,8 +104,8 @@ public class BistEquityQueryService {
             String dir,
             String filter,
             String search) {
-        List<BistEquityLatestResponse> rows = getLatest().stream()
-                .filter(r -> hasPositivePrice(r))
+        List<BistEquityLatestResponse> rows = buildLatestFromDbFast().stream()
+                .filter(BistEquityQueryService::hasPositivePrice)
                 .toList();
         String q = search != null ? search.trim().toLowerCase(Locale.ROOT) : "";
         if (!q.isEmpty()) {
@@ -131,6 +132,7 @@ public class BistEquityQueryService {
         int from = Math.min((int) total, safePage * safeSize);
         int to = Math.min((int) total, from + safeSize);
         List<BistEquityLatestResponse> slice = from >= to ? List.of() : rows.subList(from, to);
+        slice = enrichSliceChangePercent(slice);
         return PagedResponse.of(slice, safePage, safeSize, total);
     }
 
@@ -187,12 +189,58 @@ public class BistEquityQueryService {
     }
 
     private List<BistEquityLatestResponse> buildLatestFromDb() {
+        Map<String, MarketPriceHistory> latestBySymbol = latestRowsBySymbol();
         List<BistEquityLatestResponse> out = new ArrayList<>();
         for (BistSymbolMetadata m : bistSymbolCatalog.getAll()) {
-            marketPriceHistoryRepository
-                    .findTopBySymbolAndSourceOrderByTimestampDesc(m.symbol(), BistEquityDailyConstants.HISTORY_SOURCE)
-                    .map(row -> toLatest(m.symbol(), row))
-                    .ifPresent(out::add);
+            MarketPriceHistory row = latestBySymbol.get(m.symbol());
+            if (row != null) {
+                out.add(toLatest(m.symbol(), row));
+            }
+        }
+        return out;
+    }
+
+    /** Tek sorgu — ingest yok; terminal listesi sayfalama için. */
+    private List<BistEquityLatestResponse> buildLatestFromDbFast() {
+        Map<String, MarketPriceHistory> latestBySymbol = latestRowsBySymbol();
+        List<BistEquityLatestResponse> out = new ArrayList<>();
+        for (BistSymbolMetadata m : bistSymbolCatalog.getAll()) {
+            MarketPriceHistory row = latestBySymbol.get(m.symbol());
+            if (row != null) {
+                out.add(toLatestFromRows(m.symbol(), row, null));
+            }
+        }
+        return out;
+    }
+
+    private Map<String, MarketPriceHistory> latestRowsBySymbol() {
+        return marketPriceHistoryRepository
+                .findLatestBySource(BistEquityDailyConstants.HISTORY_SOURCE)
+                .stream()
+                .collect(Collectors.toMap(MarketPriceHistory::getSymbol, r -> r, (a, b) -> a, LinkedHashMap::new));
+    }
+
+    private List<BistEquityLatestResponse> enrichSliceChangePercent(List<BistEquityLatestResponse> slice) {
+        if (slice == null || slice.isEmpty()) {
+            return List.of();
+        }
+        List<BistEquityLatestResponse> out = new ArrayList<>(slice.size());
+        for (BistEquityLatestResponse row : slice) {
+            String sym = row.symbol();
+            if (sym == null || sym.isBlank()) {
+                out.add(row);
+                continue;
+            }
+            List<MarketPriceHistory> top2 =
+                    marketPriceHistoryRepository.findTop2BySymbolAndSourceOrderByTimestampDesc(
+                            sym, BistEquityDailyConstants.HISTORY_SOURCE);
+            if (top2.isEmpty()) {
+                out.add(row);
+                continue;
+            }
+            MarketPriceHistory latest = top2.get(0);
+            MarketPriceHistory prev = top2.size() >= 2 ? top2.get(1) : null;
+            out.add(toLatestFromRows(sym, latest, prev));
         }
         return out;
     }
@@ -407,25 +455,29 @@ public class BistEquityQueryService {
     }
 
     private BistEquityLatestResponse toLatest(String symbol, MarketPriceHistory latest) {
+        List<MarketPriceHistory> top2 =
+                marketPriceHistoryRepository.findTop2BySymbolAndSourceOrderByTimestampDesc(
+                        symbol, BistEquityDailyConstants.HISTORY_SOURCE);
+        MarketPriceHistory prev = top2.size() >= 2 ? top2.get(1) : null;
+        MarketPriceHistory useLatest = top2.isEmpty() ? latest : top2.get(0);
+        return toLatestFromRows(symbol, useLatest, prev);
+    }
+
+    private BistEquityLatestResponse toLatestFromRows(
+            String symbol, MarketPriceHistory latest, MarketPriceHistory previous) {
         var meta = bistSymbolCatalog.findBySymbol(symbol).orElse(null);
         String display = meta != null ? meta.displayName() : symbol;
         String sector = meta != null ? meta.sector() : null;
         String currency = latest.getCurrency() != null ? latest.getCurrency() : "TRY";
 
-        List<MarketPriceHistory> top2 =
-                marketPriceHistoryRepository.findTop2BySymbolAndSourceOrderByTimestampDesc(
-                        symbol, BistEquityDailyConstants.HISTORY_SOURCE);
         BigDecimal change = null;
         BigDecimal changePct = null;
-        if (top2.size() >= 2) {
-            MarketPriceHistory prev = top2.get(1);
-            if (latest.getAdjustedClose() != null && prev.getAdjustedClose() != null) {
-                change = latest.getAdjustedClose().subtract(prev.getAdjustedClose());
-                if (prev.getAdjustedClose().signum() != 0) {
-                    changePct =
-                            change.divide(prev.getAdjustedClose(), 8, RoundingMode.HALF_UP)
-                                    .multiply(BigDecimal.valueOf(100));
-                }
+        if (previous != null && latest.getAdjustedClose() != null && previous.getAdjustedClose() != null) {
+            change = latest.getAdjustedClose().subtract(previous.getAdjustedClose());
+            if (previous.getAdjustedClose().signum() != 0) {
+                changePct =
+                        change.divide(previous.getAdjustedClose(), 8, RoundingMode.HALF_UP)
+                                .multiply(BigDecimal.valueOf(100));
             }
         }
 

@@ -9,7 +9,7 @@ import { countMaturityDistribution, maturityBucketLabel } from './bondAnalysisHe
 import { fmtPct } from './formatViopBond';
 import { AnalysisMiniCard, RankList } from './vbTabShared';
 
-const CHART_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444'];
+const CHART_COLORS = ['#166534', '#3b82f6', '#f59e0b', '#991B1B'];
 
 type ChartMode = 'value' | 'pnl' | 'coupon';
 
@@ -134,8 +134,8 @@ export function BondAnalyticsSection({
                                             fill={
                                                 chartMode === 'pnl'
                                                     ? entry.signed >= 0
-                                                        ? '#22c55e'
-                                                        : '#ef4444'
+                                                        ? '#166534'
+                                                        : '#991B1B'
                                                     : CHART_COLORS[i % CHART_COLORS.length]
                                             }
                                         />

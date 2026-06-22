@@ -23,7 +23,7 @@ function SlideHead({
 function SparkUp() {
     return (
         <svg className="hero-spark" viewBox="0 0 56 18" aria-hidden>
-            <polyline points="0,14 12,10 24,12 36,6 48,8 56,4" fill="none" stroke="#4ade80" strokeWidth="1.5" />
+            <polyline points="0,14 12,10 24,12 36,6 48,8 56,4" fill="none" stroke="#166534" strokeWidth="1.5" />
         </svg>
     );
 }
@@ -31,7 +31,7 @@ function SparkUp() {
 function SparkDown() {
     return (
         <svg className="hero-spark" viewBox="0 0 56 18" aria-hidden>
-            <polyline points="0,6 14,8 28,10 42,12 56,14" fill="none" stroke="#f87171" strokeWidth="1.5" />
+            <polyline points="0,6 14,8 28,10 42,12 56,14" fill="none" stroke="#991B1B" strokeWidth="1.5" />
         </svg>
     );
 }

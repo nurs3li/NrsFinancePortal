@@ -211,9 +211,9 @@ export function Login() {
                         marginBottom: 16,
                         padding: '10px 12px',
                         borderRadius: 8,
-                        background: 'rgba(239,68,68,0.12)',
-                        border: `1px solid rgba(239,68,68,0.45)`,
-                        color: tokens.error ?? '#fca5a5',
+                        background: 'rgba(153, 27, 27,0.12)',
+                        border: `1px solid rgba(153, 27, 27,0.45)`,
+                        color: tokens.error ?? '#991B1B',
                         fontSize: '0.875rem',
                         textAlign: 'left',
                     }}
@@ -325,8 +325,8 @@ export function Login() {
                     <button type="button" disabled={registerBusy} onClick={completeRegistration} style={{ padding: '10px 12px', borderRadius: 8, border: 'none', background: tokens.accentGradient, color: '#fff', cursor: 'pointer' }}>
                         {registerBusy ? 'İşleniyor...' : 'Kayıtı tamamla'}
                     </button>
-                    {registerMessage && <div style={{ color: '#22c55e', fontSize: '0.85rem' }}>{registerMessage}</div>}
-                    {registerError && <div style={{ color: tokens.error ?? '#f87171', fontSize: '0.85rem' }}>{registerError}</div>}
+                    {registerMessage && <div style={{ color: '#166534', fontSize: '0.85rem' }}>{registerMessage}</div>}
+                    {registerError && <div style={{ color: tokens.error ?? '#991B1B', fontSize: '0.85rem' }}>{registerError}</div>}
                 </div>
             )}
         </div>

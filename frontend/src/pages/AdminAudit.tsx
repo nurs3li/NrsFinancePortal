@@ -1359,7 +1359,7 @@ export function AdminAudit() {
                                             border: `1px solid ${
                                                 on
                                                     ? err
-                                                        ? 'rgba(248, 113, 113, 0.65)'
+                                                        ? 'rgba(153, 27, 27, 0.65)'
                                                         : 'rgba(251, 191, 36, 0.65)'
                                                     : 'rgba(184, 193, 204, 0.35)'
                                             }`,
@@ -1375,7 +1375,7 @@ export function AdminAudit() {
                                             cursor: 'pointer',
                                             boxShadow: on
                                                 ? err
-                                                    ? '0 0 16px rgba(239, 68, 68, 0.35)'
+                                                    ? '0 0 16px rgba(153, 27, 27, 0.35)'
                                                     : '0 0 16px rgba(245, 158, 11, 0.32)'
                                                 : 'none',
                                         }}
@@ -1525,7 +1525,7 @@ export function AdminAudit() {
                 </details>
             </div>
 
-            {listError && <div style={{ color: '#f87171' }}>{listError}</div>}
+            {listError && <div style={{ color: '#991B1B' }}>{listError}</div>}
 
             <div style={{ position: 'relative', flex: 1, minHeight: 200 }}>
                 {listLoading && (

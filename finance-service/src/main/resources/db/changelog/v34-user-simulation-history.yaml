@@ -1,0 +1,64 @@
+databaseChangeLog:
+  - changeSet:
+      id: v34-user-simulation-history
+      author: nurseli
+      changes:
+        - createTable:
+            tableName: user_simulation_history
+            columns:
+              - column:
+                  name: id
+                  type: VARCHAR(36)
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_user_simulation_history
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: label
+                  type: VARCHAR(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: saved_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: amount_currency
+                  type: VARCHAR(3)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: items_json
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+        - addForeignKeyConstraint:
+            baseTableName: user_simulation_history
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_user_simulation_history_user
+            onDelete: CASCADE
+
+        - createIndex:
+            tableName: user_simulation_history
+            indexName: idx_user_simulation_history_user_saved
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: saved_at
+                  descending: true

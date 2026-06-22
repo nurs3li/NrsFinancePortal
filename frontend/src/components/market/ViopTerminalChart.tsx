@@ -155,7 +155,7 @@ function ViopTerminalChartImpl({
         priceLineRef.current = priceLine;
 
         const ma7Series = chart.addLineSeries({
-            color: '#22c55e',
+            color: '#166534',
             lineWidth: 2,
             priceLineVisible: false,
             lastValueVisible: false,

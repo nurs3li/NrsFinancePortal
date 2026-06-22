@@ -58,7 +58,7 @@ type IndicatorsResponse = {
 };
 
 const DAYS_OPTIONS = [1, 7, 14, 30, 90, 180];
-const COMPARE_COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444'];
+const COMPARE_COLORS = ['#3b82f6', '#166534', '#eab308', '#991B1B'];
 
 function getMarketType(tab: TabId): 'FX' | 'CRYPTO' | 'METALS' | 'FUNDS' | 'EQUITY' {
     switch (tab) {
@@ -279,15 +279,15 @@ export function AdvancedMarket() {
         });
 
         const candleSeries = chart.addCandlestickSeries({
-            upColor: '#22c55e',
-            downColor: '#ef4444',
+            upColor: '#166534',
+            downColor: '#991B1B',
             borderVisible: false,
-            wickUpColor: '#22c55e',
-            wickDownColor: '#ef4444',
+            wickUpColor: '#166534',
+            wickDownColor: '#991B1B',
         });
         const ma7 = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2 });
         const ma30 = chart.addLineSeries({ color: '#eab308', lineWidth: 2 });
-        const ma90 = chart.addLineSeries({ color: '#ef4444', lineWidth: 2 });
+        const ma90 = chart.addLineSeries({ color: '#991B1B', lineWidth: 2 });
 
         chartRef.current = chart;
         candleSeriesRef.current = candleSeries;
@@ -558,7 +558,7 @@ export function AdvancedMarket() {
                         <strong>{tooltip.date}</strong> · O: {tooltip.o.toLocaleString('tr-TR')} · H:{' '}
                         {tooltip.h.toLocaleString('tr-TR')} · L: {tooltip.l.toLocaleString('tr-TR')} · C:{' '}
                         {tooltip.c.toLocaleString('tr-TR')} ·{' '}
-                        <span style={{ color: tooltip.pctChange >= 0 ? '#22c55e' : '#ef4444' }}>
+                        <span style={{ color: tooltip.pctChange >= 0 ? '#166534' : '#991B1B' }}>
                             %Δ {(tooltip.pctChange >= 0 ? '' : '') + tooltip.pctChange.toFixed(2)}%
                         </span>
                     </div>

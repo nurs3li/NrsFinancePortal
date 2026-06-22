@@ -1493,13 +1493,13 @@ export function Portfolio() {
             return { stroke: 'var(--tp-accent-cost, #f59e0b)', fill: 'url(#pfSnapAreaCost)' as const };
         }
         if (chartSeriesMode === 'pnl' || chartSeriesMode === 'unrealizedPnl' || chartSeriesMode === 'realPnl') {
-            return { stroke: 'var(--tp-accent-pnl, #34d399)', fill: 'url(#pfSnapAreaPnl)' as const };
+            return { stroke: 'var(--tp-accent-pnl, #166534)', fill: 'url(#pfSnapAreaPnl)' as const };
         }
         if (chartSeriesMode === 'returnPct') {
             return { stroke: 'var(--tp-accent-pct, #a78bfa)', fill: 'url(#pfSnapAreaPct)' as const };
         }
         if (chartSeriesMode === 'soldLifecyclePnl') {
-            return { stroke: 'var(--tp-accent-pnl, #34d399)', fill: 'url(#pfSnapAreaPnl)' as const };
+            return { stroke: 'var(--tp-accent-pnl, #166534)', fill: 'url(#pfSnapAreaPnl)' as const };
         }
         if (chartSeriesMode === 'soldHoldHypothetical') {
             return { stroke: '#a78bfa', fill: 'url(#pfSnapAreaSoldHold)' as const };
@@ -1799,11 +1799,11 @@ export function Portfolio() {
                     '--tp-border': tokens.border,
                     '--tp-text': tokens.text,
                     '--tp-muted': tokens.textMuted,
-                    '--tp-success': '#22c55e',
-                    '--tp-danger': '#ef4444',
+                    '--tp-success': '#166534',
+                    '--tp-danger': '#991B1B',
                     '--tp-accent': '#60a5fa',
                     '--tp-accent-cost': '#f59e0b',
-                    '--tp-accent-pnl': '#34d399',
+                    '--tp-accent-pnl': '#166534',
                     '--tp-accent-pct': '#a78bfa',
                     '--tp-accent-poscnt': '#38bdf8',
                     '--tp-accent-sold': '#fb923c',
@@ -2447,8 +2447,8 @@ export function Portfolio() {
                                             <stop offset="100%" stopColor="var(--tp-accent-cost, #f59e0b)" stopOpacity={0.03} />
                                         </linearGradient>
                                         <linearGradient id="pfSnapAreaPnl" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor="var(--tp-accent-pnl, #34d399)" stopOpacity={0.38} />
-                                            <stop offset="100%" stopColor="var(--tp-accent-pnl, #34d399)" stopOpacity={0.03} />
+                                            <stop offset="0%" stopColor="var(--tp-accent-pnl, #166534)" stopOpacity={0.38} />
+                                            <stop offset="100%" stopColor="var(--tp-accent-pnl, #166534)" stopOpacity={0.03} />
                                         </linearGradient>
                                         <linearGradient id="pfSnapAreaPct" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="0%" stopColor="var(--tp-accent-pct, #a78bfa)" stopOpacity={0.38} />

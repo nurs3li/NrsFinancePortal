@@ -13,7 +13,7 @@ import {
     selectMacroSeries,
 } from '../../../utils/macroPanelSeries';
 import type { MacroIntelligencePanel } from '../hooks/useMacroIntelligenceData';
-import { MACRO_CHART_COLORS } from '../MacroTheme';
+import { macroChartColorsForTheme } from '../MacroTheme';
 import type { MacroTheme } from '../MacroTheme';
 import type { MacroPanelDerivedMetrics } from '../../../services/marketDataService';
 import { ChartCard } from '../primitives/ChartCard';
@@ -22,10 +22,10 @@ import { KpiCard } from '../primitives/KpiCard';
 import { MacroSection } from '../primitives/MacroSection';
 
 const TERMS = [
-    { id: '1M', titleKey: 'macro.deposit.term.1m', titleFb: 'TL 1 Ay', legendKey: 'macro.deposit.legend.1m', legendFb: '1 Ay', color: MACRO_CHART_COLORS.blue },
-    { id: '3M', titleKey: 'macro.deposit.term.3m', titleFb: 'TL 3 Ay', legendKey: 'macro.deposit.legend.3m', legendFb: '3 Ay', color: MACRO_CHART_COLORS.cyan },
-    { id: '6M', titleKey: 'macro.deposit.term.6m', titleFb: 'TL 6 Ay', legendKey: 'macro.deposit.legend.6m', legendFb: '6 Ay', color: MACRO_CHART_COLORS.violet },
-    { id: '1Y', titleKey: 'macro.deposit.term.1y', titleFb: 'TL 1 Yıl', legendKey: 'macro.deposit.legend.1y', legendFb: '1 Yıl', color: MACRO_CHART_COLORS.green },
+    { id: '1M', titleKey: 'macro.deposit.term.1m', titleFb: 'TL 1 Ay', legendKey: 'macro.deposit.legend.1m', legendFb: '1 Ay', colorKey: 'blue' as const },
+    { id: '3M', titleKey: 'macro.deposit.term.3m', titleFb: 'TL 3 Ay', legendKey: 'macro.deposit.legend.3m', legendFb: '3 Ay', colorKey: 'cyan' as const },
+    { id: '6M', titleKey: 'macro.deposit.term.6m', titleFb: 'TL 6 Ay', legendKey: 'macro.deposit.legend.6m', legendFb: '6 Ay', colorKey: 'violet' as const },
+    { id: '1Y', titleKey: 'macro.deposit.term.1y', titleFb: 'TL 1 Yıl', legendKey: 'macro.deposit.legend.1y', legendFb: '1 Yıl', colorKey: 'green' as const },
 ] as const;
 
 type Props = {
@@ -49,6 +49,7 @@ export function MacroDepositSection({
 }: Props) {
     const { t } = useLanguage();
     const { theme } = useTheme();
+    const chartColors = macroChartColorsForTheme(theme);
     const [rows, setRows] = useState<DepositRateLatestRow[] | null | undefined>(undefined);
     const [fxOpen, setFxOpen] = useState(false);
 
@@ -145,9 +146,9 @@ export function MacroDepositSection({
                                     type="monotone"
                                     dataKey={`TRY_${term.id}`}
                                     name={t(term.legendKey, term.legendFb)}
-                                    stroke={term.color}
+                                    stroke={chartColors[term.colorKey]}
                                     dot={false}
-                                    strokeWidth={2}
+                                    strokeWidth={theme === 'light' ? 2.5 : 2}
                                     connectNulls
                                 />
                             ))}
@@ -198,6 +199,7 @@ function FxDepositCharts({
 }) {
     const usd = mergeUsdDepositWeeklyChart(panel?.series);
     const eur = mergeEurDepositWeeklyChart(panel?.series);
+    const chartColors = macroChartColorsForTheme(theme);
     return (
         <div className="macro-grid macro-grid--2" style={{ marginTop: 12 }}>
             <ChartCard title={t('macro.deposit.fxUsd', 'USD mevduat')} empty={usd.length === 0} tokens={tokens} height={200}>
@@ -207,7 +209,7 @@ function FxDepositCharts({
                         <XAxis dataKey="date" tick={{ fontSize: 8, fill: tokens.textMuted }} />
                         <YAxis tickFormatter={(v) => `${v}%`} width={40} tick={{ fontSize: 8, fill: tokens.textMuted }} />
                         <Tooltip contentStyle={chartTooltipContentStyle(tokens)} formatter={(v) => [`${Number(v).toFixed(2)}%`, '']} />
-                        <Line dataKey="USD_1M" stroke={MACRO_CHART_COLORS.blue} dot={false} connectNulls />
+                        <Line dataKey="USD_1M" stroke={chartColors.blue} dot={false} strokeWidth={theme === 'light' ? 2.5 : 2} connectNulls />
                     </LineChart>
                 </ResponsiveContainer>
             </ChartCard>
@@ -218,7 +220,7 @@ function FxDepositCharts({
                         <XAxis dataKey="date" tick={{ fontSize: 8, fill: tokens.textMuted }} />
                         <YAxis tickFormatter={(v) => `${v}%`} width={40} tick={{ fontSize: 8, fill: tokens.textMuted }} />
                         <Tooltip contentStyle={chartTooltipContentStyle(tokens)} formatter={(v) => [`${Number(v).toFixed(2)}%`, '']} />
-                        <Line dataKey="EUR_1M" stroke={MACRO_CHART_COLORS.violet} dot={false} connectNulls />
+                        <Line dataKey="EUR_1M" stroke={chartColors.violet} dot={false} strokeWidth={theme === 'light' ? 2.5 : 2} connectNulls />
                     </LineChart>
                 </ResponsiveContainer>
             </ChartCard>

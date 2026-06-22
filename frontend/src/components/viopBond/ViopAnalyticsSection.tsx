@@ -11,7 +11,7 @@ import { viopDirectionLabel } from './viopPositionLabels';
 import { fmtMoney } from './formatViopBond';
 import { AnalysisMiniCard, RankList } from './vbTabShared';
 
-const CHART_COLORS = ['#22c55e', '#ef4444', '#64748b', '#3b82f6', '#f59e0b'];
+const CHART_COLORS = ['#166534', '#991B1B', '#64748b', '#3b82f6', '#f59e0b'];
 
 type Props = {
     openPositions: ManualViopPosition[];

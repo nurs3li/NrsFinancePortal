@@ -97,3 +97,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/v33-manual-portfolio-materialized-read.yaml
+
+  - include:
+      file: db/changelog/v34-user-simulation-history.yaml

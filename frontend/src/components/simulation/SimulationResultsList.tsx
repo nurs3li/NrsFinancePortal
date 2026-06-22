@@ -227,7 +227,7 @@ export function SimulationResultsList({
                                             <button
                                                 type="button"
                                                 className="sim-toolbar-btn"
-                                                style={{ marginLeft: 6, color: '#ef4444' }}
+                                                style={{ marginLeft: 6, color: '#991B1B' }}
                                                 onClick={() => onDelete(r.id)}
                                             >
                                                 <Trash2 size={14} />

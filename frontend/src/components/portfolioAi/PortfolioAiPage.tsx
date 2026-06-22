@@ -32,22 +32,24 @@ import { PortfolioAiConfigCard } from './PortfolioAiConfigCard';
 import { PortfolioAiEmailDeliveryPanel } from './PortfolioAiEmailDeliveryPanel';
 import { PortfolioAiResultsBlock } from './PortfolioAiResultsBlock';
 import { PortfolioAiSummaryCard } from './PortfolioAiSummaryCard';
-import { DIST_COLORS, openDistributionByType } from './portfolioAiDistribution';
+import { distColorsForTheme, openDistributionByType } from './portfolioAiDistribution';
 import { fmtDate } from './portfolioAiFormat';
 import '../../pages/Portfolio.css';
 import '../../pages/PortfolioAiAnalysis.css';
 
 export function PortfolioAiPage() {
     const { t, lang } = useLanguage();
-    const { tokens } = useTheme();
+    const { tokens, theme } = useTheme();
     const locale = lang === 'en' ? 'en-GB' : 'tr-TR';
 
     const pageStyle = {
-        '--tp-bg': tokens.bg,
-        '--tp-card': tokens.bgCard,
-        '--tp-border': tokens.border,
-        '--tp-text': tokens.text,
-        '--tp-muted': tokens.textMuted,
+        '--tp-bg': theme === 'light' ? '#ffffff' : tokens.bg,
+        '--tp-card': theme === 'light' ? '#f8fafc' : tokens.bgCard,
+        '--tp-border': theme === 'light' ? '#e2e8f0' : tokens.border,
+        '--tp-text': theme === 'light' ? '#333333' : tokens.text,
+        '--tp-muted': theme === 'light' ? '#4a4a4a' : tokens.textMuted,
+        background: theme === 'light' ? '#ffffff' : tokens.bg,
+        color: theme === 'light' ? '#333333' : tokens.text,
     } as CSSProperties;
 
     const [displayResult, setDisplayResult] = useState<AiAnalysisResult | null>(null);
@@ -94,8 +96,13 @@ export function PortfolioAiPage() {
         [positions, typeLabel],
     );
     const pieData = useMemo(
-        () => distribution.map((d, i) => ({ name: d.name, value: d.pct, fill: DIST_COLORS[i % DIST_COLORS.length] })),
-        [distribution],
+        () =>
+            distribution.map((d, i) => ({
+                name: d.name,
+                value: d.pct,
+                fill: distColorsForTheme(theme)[i % distColorsForTheme(theme).length],
+            })),
+        [distribution, theme],
     );
 
     const portfolioResult = displayResult?.kind === 'PORTFOLIO' ? displayResult : null;

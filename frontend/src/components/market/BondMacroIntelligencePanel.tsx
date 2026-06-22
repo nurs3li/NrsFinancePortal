@@ -436,7 +436,7 @@ function MacroFxDepositRatesPanel({
                                             <Line type="monotone" dataKey="USD_1M" name="USD 1M" stroke="#f59e0b" dot={false} strokeWidth={2} connectNulls />
                                             <Line type="monotone" dataKey="USD_3M" name="USD 3M" stroke="#eab308" dot={false} strokeWidth={2} connectNulls />
                                             <Line type="monotone" dataKey="USD_6M" name="USD 6M" stroke="#84cc16" dot={false} strokeWidth={2} connectNulls />
-                                            <Line type="monotone" dataKey="USD_1Y" name="USD 1Y" stroke="#22c55e" dot={false} strokeWidth={2} connectNulls />
+                                            <Line type="monotone" dataKey="USD_1Y" name="USD 1Y" stroke="#166534" dot={false} strokeWidth={2} connectNulls />
                                         </LineChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -1065,7 +1065,7 @@ function MacroLoanRatesEvdsBlock({
                                 />
                                 <Legend wrapperStyle={{ fontSize: 9 }} />
                                 <Line type="monotone" dataKey="CONSUMER_TRY" name={t('market.macro.loanRates.consumer', 'İhtiyaç')} stroke="#f97316" dot={false} strokeWidth={2} connectNulls />
-                                <Line type="monotone" dataKey="VEHICLE_TRY" name={t('market.macro.loanRates.vehicle', 'Taşıt')} stroke="#22c55e" dot={false} strokeWidth={2} connectNulls />
+                                <Line type="monotone" dataKey="VEHICLE_TRY" name={t('market.macro.loanRates.vehicle', 'Taşıt')} stroke="#166534" dot={false} strokeWidth={2} connectNulls />
                                 <Line type="monotone" dataKey="HOUSING_TRY" name={t('market.macro.loanRates.housing', 'Konut')} stroke="#3b82f6" dot={false} strokeWidth={2} connectNulls />
                                 <Line type="monotone" dataKey="COMMERCIAL_TRY" name={t('market.macro.loanRates.commercial', 'Ticari')} stroke="#a855f7" dot={false} strokeWidth={2} connectNulls />
                             </LineChart>

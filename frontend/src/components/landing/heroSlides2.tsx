@@ -91,12 +91,12 @@ export function HeroSlideMissedOpportunity() {
                     <svg className="hero-chart-svg" viewBox="0 0 200 100" aria-hidden>
                         <line x1="0" y1="90" x2="200" y2="90" stroke="var(--landing-chart-grid)" strokeWidth="0.5" />
                         <polyline points="10,72 50,70 90,68 130,68 170,68 190,68" fill="none" stroke="#60a5fa" strokeWidth="2" />
-                        <polyline points="10,72 50,65 90,52 130,38 170,28 190,22" fill="none" stroke="#4ade80" strokeWidth="2" />
+                        <polyline points="10,72 50,65 90,52 130,38 170,28 190,22" fill="none" stroke="#166534" strokeWidth="2" />
                         <line x1="90" y1="12" x2="90" y2="88" stroke="var(--landing-chart-dim)" strokeWidth="1" strokeDasharray="3 2" />
                         <text x="92" y="18" fill="var(--landing-chart-dim)" fontSize="7">
                             {t('landing.slide3.sellDate', 'Satış Tarihi')}
                         </text>
-                        <text x="100" y="48" fill="#4ade80" fontSize="7">
+                        <text x="100" y="48" fill="#166534" fontSize="7">
                             {t('landing.slide3.missed', 'Fırsat Maliyeti: ₺14.500')}
                         </text>
                     </svg>
@@ -140,13 +140,13 @@ export function HeroSlideRealReturn() {
                 <div className="hero-panel">
                     <p className="hero-mini-label">{t('landing.slide4.chartTitle', 'Nominal vs Reel Getiri')}</p>
                     <svg className="hero-chart-svg" viewBox="0 0 200 100" aria-hidden>
-                        <rect x="60" y="25" width="120" height="55" fill="rgba(239,68,68,0.08)" />
-                        <text x="62" y="22" fill="#f87171" fontSize="6">
+                        <rect x="60" y="25" width="120" height="55" fill="rgba(153, 27, 27,0.08)" />
+                        <text x="62" y="22" fill="#991B1B" fontSize="6">
                             {t('landing.slide4.cpi', 'TÜFE Etkisi')}
                         </text>
-                        <polyline points="10,80 50,65 90,48 130,32 170,18 190,12" fill="none" stroke="#4ade80" strokeWidth="2" />
+                        <polyline points="10,80 50,65 90,48 130,32 170,18 190,12" fill="none" stroke="#166534" strokeWidth="2" />
                         <polyline points="10,80 50,72 90,62 130,52 170,45 190,40" fill="none" stroke="#38bdf8" strokeWidth="2" />
-                        <text x="120" y="58" fill="#f87171" fontSize="7">
+                        <text x="120" y="58" fill="#991B1B" fontSize="7">
                             {t('landing.slide4.cpiAmt', 'Enflasyon Etkisi: -₺12.420')}
                         </text>
                     </svg>
@@ -173,7 +173,7 @@ export function HeroSlideRealReturn() {
                     <div className="hero-conc-bar" aria-hidden>
                         <span style={{ width: '45%', background: '#3b82f6' }} />
                         <span style={{ width: '20%', background: '#eab308' }} />
-                        <span style={{ width: '15%', background: '#22c55e' }} />
+                        <span style={{ width: '15%', background: '#166534' }} />
                         <span style={{ width: '10%', background: '#f97316' }} />
                         <span style={{ width: '10%', background: '#8b5cf6' }} />
                     </div>
@@ -206,7 +206,7 @@ export function HeroSlideTimeMachine() {
                     <p className="hero-mini-label">{t('landing.slide5.chartTitle', 'Bugünkü Değer Karşılaştırması')}</p>
                     <svg className="hero-chart-svg" viewBox="0 0 200 90" aria-hidden>
                         <polyline points="10,70 60,68 110,55 160,35 190,25" fill="none" stroke="#eab308" strokeWidth="2" />
-                        <polyline points="10,70 60,62 110,48 160,38 190,32" fill="none" stroke="#4ade80" strokeWidth="1.5" />
+                        <polyline points="10,70 60,62 110,48 160,38 190,32" fill="none" stroke="#166534" strokeWidth="1.5" />
                         <polyline points="10,70 60,65 110,58 160,50 190,45" fill="none" stroke="#38bdf8" strokeWidth="1.5" />
                         <polyline points="10,70 60,70 110,71 160,72 190,73" fill="none" stroke="var(--landing-chart-dim)" strokeWidth="1.5" />
                     </svg>
@@ -265,11 +265,11 @@ export function HeroSlideAlerts() {
                 <div className="hero-panel">
                     <p className="hero-mini-label">{t('landing.slide6.chartTitle', 'Alarm Tetikleme Grafiği')}</p>
                     <svg className="hero-chart-svg" viewBox="0 0 200 100" aria-hidden>
-                        <rect x="0" y="75" width="200" height="20" fill="rgba(239,68,68,0.1)" />
-                        <text x="4" y="88" fill="#f87171" fontSize="6">
+                        <rect x="0" y="75" width="200" height="20" fill="rgba(153, 27, 27,0.1)" />
+                        <text x="4" y="88" fill="#991B1B" fontSize="6">
                             {t('landing.slide6.riskZone', 'Reel Risk Bölgesi')}
                         </text>
-                        <polyline points="10,70 50,58 90,45 130,32 170,22 190,18" fill="none" stroke="#4ade80" strokeWidth="2" />
+                        <polyline points="10,70 50,58 90,45 130,32 170,22 190,18" fill="none" stroke="#166534" strokeWidth="2" />
                         <line x1="0" y1="38" x2="200" y2="38" stroke="#eab308" strokeWidth="1" strokeDasharray="4 3" />
                         <text x="4" y="35" fill="#eab308" fontSize="6">
                             {t('landing.slide6.threshold', 'Fiyat Eşiği: ₺312,40')}

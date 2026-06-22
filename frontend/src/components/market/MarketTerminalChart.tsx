@@ -56,11 +56,11 @@ const CANDLE_PRICE_EPS = 1e-6;
 function terminalCandlestickColor(c: CandleVM, prevClose: number | null): string {
     const o = c.open;
     const cl = c.close;
-    if (cl < o - CANDLE_PRICE_EPS) return '#ef4444';
-    if (cl > o + CANDLE_PRICE_EPS) return '#22c55e';
+    if (cl < o - CANDLE_PRICE_EPS) return '#991B1B';
+    if (cl > o + CANDLE_PRICE_EPS) return '#166534';
     if (prevClose != null && Number.isFinite(prevClose)) {
-        if (cl < prevClose - CANDLE_PRICE_EPS) return '#ef4444';
-        if (cl > prevClose + CANDLE_PRICE_EPS) return '#22c55e';
+        if (cl < prevClose - CANDLE_PRICE_EPS) return '#991B1B';
+        if (cl > prevClose + CANDLE_PRICE_EPS) return '#166534';
     }
     return '#64748b';
 }
@@ -166,10 +166,10 @@ function MarketTerminalChartImpl({
         chartApiRef.current = chart;
 
         const candleSeries = chart.addCandlestickSeries({
-            upColor: '#22c55e',
-            downColor: '#ef4444',
-            wickUpColor: '#22c55e',
-            wickDownColor: '#ef4444',
+            upColor: '#166534',
+            downColor: '#991B1B',
+            wickUpColor: '#166534',
+            wickDownColor: '#991B1B',
             borderVisible: false,
             priceLineVisible: false,
         });
@@ -416,7 +416,7 @@ function MarketTerminalChartImpl({
                                     style={{
                                         height: `${Math.max(2, Math.min(100, p.value))}%`,
                                         background:
-                                            p.value > 70 ? 'rgba(239,68,68,.75)' : p.value < 30 ? 'rgba(34,197,94,.75)' : 'rgba(56,189,248,.75)',
+                                            p.value > 70 ? 'rgba(153, 27, 27,.75)' : p.value < 30 ? 'rgba(22, 101, 52,.75)' : 'rgba(56,189,248,.75)',
                                     }}
                                     title={`${new Date(p.time).toLocaleString('tr-TR')} · RSI ${p.value.toFixed(2)}`}
                                 />

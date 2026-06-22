@@ -17,8 +17,8 @@
   --app-table-row-hover: rgba(241, 245, 249, 0.9);
   --app-active-row-bg: rgba(59, 130, 246, 0.12);
   --app-active-row-border: #3b82f6;
-  --app-positive: #15803d;
-  --app-negative: #b91c1c;
+  --app-positive: #166534;
+  --app-negative: #991B1B;
   --app-warning: #b45309;
   --chart-grid: rgba(148, 163, 184, 0.38);
   --chart-axis: #475569;
@@ -41,8 +41,8 @@
   --app-table-row-hover: rgba(30, 41, 59, 0.72);
   --app-active-row-bg: rgba(30, 58, 138, 0.28);
   --app-active-row-border: #60a5fa;
-  --app-positive: #4ade80;
-  --app-negative: #f87171;
+  --app-positive: #166534;
+  --app-negative: #991B1B;
   --app-warning: #fbbf24;
   --chart-grid: rgba(148, 163, 184, 0.2);
   --chart-axis: #cbd5e1;

@@ -155,7 +155,7 @@ export function ViopPositionModal({ open, onClose, initial, onSubmit, tokens }: 
                         {t('viopBond.colNote', 'Not')}
                         <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
                     </label>
-                    {error ? <p style={{ color: '#f87171', margin: 0 }}>{error}</p> : null}
+                    {error ? <p style={{ color: '#991B1B', margin: 0 }}>{error}</p> : null}
                     <div className="vb-toolbar">
                         <button type="button" className="vb-btn-sm" onClick={onClose}>
                             {t('viopBond.cancel', 'İptal')}

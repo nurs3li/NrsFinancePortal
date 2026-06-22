@@ -71,7 +71,8 @@ market:
     days: ${MARKET_STALE_TAIL_DAYS:3}
   fx:
     effective-rates:
-      lookback-days: ${MARKET_FX_EFFECTIVE_LOOKBACK_DAYS:${FX_EFFECTIVE_LOOKBACK_DAYS:400}}
+      lookback-days: ${MARKET_FX_EFFECTIVE_LOOKBACK_DAYS:${FX_EFFECTIVE_LOOKBACK_DAYS:7}}
+      cache-ttl-seconds: ${MARKET_FX_EFFECTIVE_CACHE_TTL_SECONDS:600}
   evds:
     enabled: true
     base-url: ${MARKET_EVDS_BASE_URL:https://evds3.tcmb.gov.tr/igmevdsms-dis}

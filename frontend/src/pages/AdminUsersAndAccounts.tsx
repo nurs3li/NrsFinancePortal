@@ -336,7 +336,7 @@ export function AdminUsersAndAccounts() {
                                                         fontWeight: 700,
                                                         padding: '3px 8px',
                                                         borderRadius: 999,
-                                                        background: 'rgba(239,68,68,0.15)',
+                                                        background: 'rgba(153, 27, 27,0.15)',
                                                         border: `1px solid ${tokens.error}`,
                                                         color: tokens.error,
                                                     }}
@@ -558,7 +558,7 @@ export function AdminUsersAndAccounts() {
                                                     ? `conic-gradient(${slices.map((s, i) => {
                                                         const start = slices.slice(0, i).reduce((a, b) => a + Number(b.ratioPct ?? 0), 0);
                                                         const end = start + Number(s.ratioPct ?? 0);
-                                                        const colors = ['#22c55e', '#f59e0b', '#818cf8', '#06b6d4', '#ec4899', '#94a3b8'];
+                                                        const colors = ['#166534', '#f59e0b', '#818cf8', '#06b6d4', '#ec4899', '#94a3b8'];
                                                         return `${colors[i % colors.length]} ${(start / Math.max(total, 100)) * 360}deg ${(end / Math.max(total, 100)) * 360}deg`;
                                                     }).join(', ')})`
                                                     : tokens.border;

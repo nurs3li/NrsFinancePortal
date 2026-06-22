@@ -13,7 +13,7 @@ import {
 import { formatIndex2, formatPercent2 } from '../../../utils/macroPanelSeries';
 import { useInfoTerm } from '../education/InfoTermProvider';
 import type { MacroIntelligencePanel } from '../hooks/useMacroIntelligenceData';
-import { MACRO_CHART_COLORS } from '../MacroTheme';
+import { macroChartColorsForTheme } from '../MacroTheme';
 import type { MacroTheme } from '../MacroTheme';
 import { ChartCard } from '../primitives/ChartCard';
 import { InsightCard } from '../primitives/InsightCard';
@@ -51,6 +51,7 @@ export function MacroInflationSection({
 }: Props) {
     const { t } = useLanguage();
     const { theme } = useTheme();
+    const chartColors = macroChartColorsForTheme(theme);
     const { openTerm } = useInfoTerm();
     const [latest, setLatest] = useState<InflationLatestResponse | null | undefined>(undefined);
     const [compareRows, setCompareRows] = useState<InflationCompareRow[] | null | undefined>(undefined);
@@ -207,7 +208,7 @@ export function MacroInflationSection({
                                 type="monotone"
                                 dataKey="cpi"
                                 name={t('macro.inflation.legend.cpi', 'TÜFE')}
-                                stroke={MACRO_CHART_COLORS.blue}
+                                stroke={chartColors.blue}
                                 dot={false}
                                 strokeWidth={2}
                                 connectNulls
@@ -216,7 +217,7 @@ export function MacroInflationSection({
                                 type="monotone"
                                 dataKey="ppi"
                                 name={t('macro.inflation.legend.ppi', 'Yİ-ÜFE')}
-                                stroke={MACRO_CHART_COLORS.violet}
+                                                                stroke={chartColors.violet}
                                 dot={false}
                                 strokeWidth={2}
                                 connectNulls
@@ -248,7 +249,7 @@ export function MacroInflationSection({
                                     type="monotone"
                                     dataKey="cpiYoY"
                                     name={t('macro.inflation.legend.cpiYoY', 'TÜFE Yıllık')}
-                                    stroke={MACRO_CHART_COLORS.blue}
+                                    stroke={chartColors.blue}
                                     dot={false}
                                     strokeWidth={2}
                                     connectNulls
@@ -257,7 +258,7 @@ export function MacroInflationSection({
                                     type="monotone"
                                     dataKey="ppiYoY"
                                     name={t('macro.inflation.legend.ppiYoY', 'Yİ-ÜFE Yıllık')}
-                                    stroke={MACRO_CHART_COLORS.violet}
+                                                                    stroke={chartColors.violet}
                                     dot={false}
                                     strokeWidth={2}
                                     connectNulls

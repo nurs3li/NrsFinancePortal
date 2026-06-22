@@ -97,9 +97,9 @@ function notificationTypeLabel(type: string, t: (key: string, fallback?: string)
 function categoryColor(category: NotifCategory): string {
     switch (category) {
         case 'APPROVAL':
-            return '#22c55e';
+            return '#166534';
         case 'SECURITY':
-            return '#ef4444';
+            return '#991B1B';
         default:
             return '#c0c0c0';
     }
@@ -281,7 +281,14 @@ export function Notifications() {
                             {loading && items.length === 0 ? (
                                 <div className="notif-loading">{t('common.loading', 'Yükleniyor...')}</div>
                             ) : items.length === 0 ? (
-                                <div className="notif-empty">{t('notifications.empty', 'Bildirim yok.')}</div>
+                                <div className="notif-empty notif-empty--notifications">
+                                    <span className="notif-empty__icon" aria-hidden>
+                                        <Bell size={28} strokeWidth={1.5} />
+                                    </span>
+                                    <span className="notif-empty__text">
+                                        {t('notifications.empty', 'Bildirim yok.')}
+                                    </span>
+                                </div>
                             ) : (
                                 <div className="notif-list notif-list--in-card">
                                     {items.map((n) => {

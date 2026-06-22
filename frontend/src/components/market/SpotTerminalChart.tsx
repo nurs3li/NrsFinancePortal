@@ -143,7 +143,7 @@ function SpotTerminalChartImpl({
             lastValueVisible: false,
         });
         ma7SeriesRef.current = chart.addLineSeries({
-            color: '#22c55e',
+            color: '#166534',
             lineWidth: 2,
             priceLineVisible: false,
             lastValueVisible: false,
@@ -321,9 +321,9 @@ function SpotTerminalChartImpl({
                                         height: `${Math.max(2, Math.min(100, p.value))}%`,
                                         background:
                                             p.value > 70
-                                                ? 'rgba(239,68,68,.75)'
+                                                ? 'rgba(153, 27, 27,.75)'
                                                 : p.value < 30
-                                                  ? 'rgba(34,197,94,.75)'
+                                                  ? 'rgba(22, 101, 52,.75)'
                                                   : 'rgba(56,189,248,.75)',
                                     }}
                                     title={`${new Date(p.time).toLocaleString('tr-TR')} · RSI ${p.value.toFixed(2)}`}

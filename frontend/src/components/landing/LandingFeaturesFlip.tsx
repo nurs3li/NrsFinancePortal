@@ -24,7 +24,7 @@ function BackRealReturn({ lang }: { lang: FeatureLang }) {
         <>
             <p className="lff-flip-card__back-label">{L ? 'Nominal vs Reel' : 'Nominal vs Real'}</p>
             <svg className="lff-mini-chart" viewBox="0 0 200 42" aria-hidden>
-                <polyline points="8,32 50,22 95,14 140,10 192,6" fill="none" stroke="#4ade80" strokeWidth="2" />
+                <polyline points="8,32 50,22 95,14 140,10 192,6" fill="none" stroke="#166534" strokeWidth="2" />
                 <polyline points="8,32 50,28 95,24 140,22 192,20" fill="none" stroke="#38bdf8" strokeWidth="1.5" />
             </svg>
             <div className="lff-kpi-grid">

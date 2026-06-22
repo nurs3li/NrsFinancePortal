@@ -43,7 +43,7 @@ export const ASSET_CLASS_OPTIONS: AssetClassOption[] = [
 ];
 
 export const TEMPLATE_THEME: Record<TemplateType, { border: string; bg: string; chip: string }> = {
-    SPOT: { border: '#16a34a', bg: 'rgba(34,197,94,0.08)', chip: 'SPOT' },
+    SPOT: { border: '#166534', bg: 'rgba(22, 101, 52,0.08)', chip: 'SPOT' },
     FUTURES: { border: '#f97316', bg: 'rgba(249,115,22,0.1)', chip: 'VIOP' },
     FIXED_INCOME: { border: '#2563eb', bg: 'rgba(37,99,235,0.1)', chip: 'TAHVIL/BONO' },
 };

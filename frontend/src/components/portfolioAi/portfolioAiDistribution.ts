@@ -34,4 +34,14 @@ export function openDistributionByType(
         .sort((a, b) => b.value - a.value);
 }
 
-export const DIST_COLORS = ['#3b82f6', '#06b6d4', '#eab308', '#a855f7', '#64748b', '#22c55e'];
+export const DIST_COLORS_DARK = ['#3b82f6', '#06b6d4', '#eab308', '#a855f7', '#64748b', '#166534'] as const;
+
+/** Aydınlık mod — beyaz zemin üzerinde net ayrışan dilimler */
+export const DIST_COLORS_LIGHT = ['#1d4ed8', '#0e7490', '#b45309', '#6d28d9', '#475569', '#166534'] as const;
+
+/** @deprecated distColorsForTheme kullanın */
+export const DIST_COLORS = [...DIST_COLORS_DARK];
+
+export function distColorsForTheme(theme: 'light' | 'dark'): readonly string[] {
+    return theme === 'light' ? DIST_COLORS_LIGHT : DIST_COLORS_DARK;
+}
