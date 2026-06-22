@@ -406,6 +406,22 @@ const CATEGORY_LABELS: { id: MarketCategory; label: string }[] = [
     { id: 'BOND', label: 'Tahvil' },
 ];
 
+function categoryHidesPickerHorizons(category: MarketCategory, fundSubmarket: FundSubmarket): boolean {
+    return (
+        category === 'EQUITY' ||
+        category === 'CRYPTO' ||
+        category === 'FX' ||
+        category === 'METALS' ||
+        category === 'FUTURES' ||
+        category === 'BOND' ||
+        (category === 'FUNDS' && fundSubmarket === 'US')
+    );
+}
+
+function categoryHidesHeroHorizonStrip(category: MarketCategory, fundSubmarket: FundSubmarket): boolean {
+    return categoryHidesPickerHorizons(category, fundSubmarket);
+}
+
 const STARRED_MAX_FALLBACK = 12;
 
 function heatAssetClassForCategory(category: MarketCategory): string {
@@ -706,7 +722,7 @@ const VIOP_CATEGORY_CHIP: Record<ViopCategory, { label: string; bg: string; colo
     FX: { label: 'FX', bg: 'rgba(56, 189, 248, 0.18)', color: '#7dd3fc' },
     INDEX: { label: 'IDX', bg: 'rgba(245, 158, 11, 0.18)', color: '#fbbf24' },
     COMMODITY: { label: 'GOLD', bg: 'rgba(234, 179, 8, 0.22)', color: '#facc15' },
-    EQUITY: { label: 'EQ', bg: 'rgba(34, 197, 94, 0.18)', color: '#86efac' },
+    EQUITY: { label: 'EQ', bg: 'rgba(22, 101, 52, 0.18)', color: '#166534' },
 };
 
 function viopCatBadgeClass(cat: ViopCategory): string {
@@ -1470,6 +1486,9 @@ export function Market() {
     const [pickerFundSubmarket, setPickerFundSubmarket] = useState<FundSubmarket>('TR');
     const [pickerMetalsSubmarket, setPickerMetalsSubmarket] = useState<MetalsSubmarket>('GRAM');
     const isTefasFundsPicker = pickerCategory === 'FUNDS' && pickerFundSubmarket === 'TR';
+    /** Spot piyasa kategorileri + VİOP + tahvil: ufuk sütunları ve üst şerit yalnızca görünümden gizlenir (TEFAS hariç). */
+    const hidePickerHorizonCols = categoryHidesPickerHorizons(pickerCategory, pickerFundSubmarket);
+    const hideHeroHorizonStrip = categoryHidesHeroHorizonStrip(activeCategory, fundSubmarket);
     const [bistRange, setBistRange] = useState<ChartRangeId>('1M');
     const trendChartRange: ChartRangeId =
         activeCategory === 'EQUITY' && equitySubmarket === 'BIST' ? bistRange : range;
@@ -1761,7 +1780,11 @@ export function Market() {
         queryKey: ['market', 'dashboard', 'terminal'],
         queryFn: () =>
             financeClient.get<MarketDashboard>('/api/market/dashboard').then((r) => unwrapData(r)),
-        enabled: activeCategory !== 'FUTURES' && activeCategory !== 'BOND' && !isTefasFundsView,
+        enabled:
+            activeCategory !== 'FUTURES' &&
+            activeCategory !== 'BOND' &&
+            !isTefasFundsView &&
+            !(activeCategory === 'EQUITY' && equitySubmarket === 'BIST'),
         staleTime: 30_000,
         refetchInterval: activeCategory === 'FUTURES' || activeCategory === 'BOND' ? false : 30_000,
         refetchOnWindowFocus: false,
@@ -1911,7 +1934,27 @@ export function Market() {
         terminalListSortDir,
     ]);
 
+    /** terminal/list zaten sparklineCloses döndürür — BIST picker'da tekrar batch-history atma. */
+    const bistSparkFromTerminalList = useMemo(() => {
+        if (pickerCategory !== 'EQUITY' || pickerEquitySubmarket !== 'BIST') return null;
+        const items = terminalListPageData?.items ?? [];
+        if (items.length === 0) return null;
+        const m: Record<string, number[]> = {};
+        for (const item of items) {
+            const key = normalizeSymbolKey(item.symbol);
+            if (!key) continue;
+            const closes = (item.sparklineCloses ?? [])
+                .map((x) => Number(x))
+                .filter((x) => Number.isFinite(x) && x > 0);
+            if (closes.length >= 2) m[key] = closes;
+        }
+        return Object.keys(m).length > 0 ? m : null;
+    }, [pickerCategory, pickerEquitySubmarket, terminalListPageData]);
+
     const bistSparkSymbolsCsv = useMemo(() => {
+        if (pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST' && bistSparkFromTerminalList) {
+            return '';
+        }
         if (pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST') {
             const fromPage = (terminalListPageData?.items ?? [])
                 .map((r) => normalizeSymbolKey(r.symbol))
@@ -1925,7 +1968,7 @@ export function Market() {
             .map((r) => normalizeSymbolKey(String(r.symbol ?? '')))
             .filter(Boolean)
             .join(',');
-    }, [pickerCategory, pickerEquitySubmarket, terminalListPageData, bistLatest]);
+    }, [pickerCategory, pickerEquitySubmarket, terminalListPageData, bistLatest, bistSparkFromTerminalList]);
 
     const bistSparkRange = useMemo(() => bistCalendarRange(400), []);
 
@@ -1938,12 +1981,13 @@ export function Market() {
         enabled:
             (needBistTerminalData ||
                 (pickerCategory === 'EQUITY' && pickerEquitySubmarket === 'BIST')) &&
-            bistSparkSymbolsCsv.length > 0,
+            bistSparkSymbolsCsv.length > 0 &&
+            bistSparkFromTerminalList == null,
         staleTime: 120_000,
     });
 
     const bistSparkClosesBySymbol = useMemo(() => {
-        const m: Record<string, number[]> = {};
+        const m: Record<string, number[]> = bistSparkFromTerminalList ? { ...bistSparkFromTerminalList } : {};
         const by = bistBatchSpark?.historiesBySymbol;
         if (!by) return m;
         Object.entries(by).forEach(([sym, rows]) => {
@@ -1955,7 +1999,7 @@ export function Market() {
             if (closes.length >= 2) m[key] = closes;
         });
         return m;
-    }, [bistBatchSpark]);
+    }, [bistSparkFromTerminalList, bistBatchSpark]);
 
     const bistMainChartDays = useMemo(() => RANGE_TO_DAYS[bistRange], [bistRange]);
     const bistMainHistoryRange = useMemo(() => bistCalendarRange(bistMainChartDays), [bistMainChartDays]);
@@ -4199,7 +4243,7 @@ export function Market() {
     }, [activeCategory, dashboard]);
 
     const compareChartSymbols = useMemo(() => compareSymbols.slice(0, 4), [compareSymbols]);
-    const compareChartColors = useMemo(() => ['#38bdf8', '#22c55e', '#eab308', '#f87171'], []);
+    const compareChartColors = useMemo(() => ['#38bdf8', '#166534', '#eab308', '#991B1B'], []);
 
     const lineWidthBySymbol = useMemo(() => {
         const out: Record<string, number> = {};
@@ -4669,8 +4713,8 @@ export function Market() {
                 '--terminal-table-head-bg': theme === 'dark' ? 'rgba(15, 23, 42, 0.98)' : '#f8fafc',
                 '--terminal-hover-bg': theme === 'dark' ? 'rgba(30, 41, 59, 0.72)' : 'rgba(148, 163, 184, 0.16)',
                 '--terminal-active-row-bg': theme === 'dark' ? 'rgba(30, 58, 138, 0.28)' : 'rgba(59, 130, 246, 0.14)',
-                '--terminal-pos': theme === 'dark' ? '#4ade80' : '#15803d',
-                '--terminal-neg': theme === 'dark' ? '#f87171' : '#b91c1c',
+                '--terminal-pos': theme === 'dark' ? '#166534' : '#166534',
+                '--terminal-neg': theme === 'dark' ? '#991B1B' : '#991B1B',
             }) as CSSProperties,
         [theme, tokens]
     );
@@ -4793,7 +4837,7 @@ export function Market() {
                     </div>
                 ) : null}
                 {!loadingCompare && compareError ? (
-                    <div style={{ fontSize: 11, color: theme === 'dark' ? '#fca5a5' : '#b91c1c', marginTop: 8 }}>
+                    <div style={{ fontSize: 11, color: theme === 'dark' ? '#991B1B' : '#991B1B', marginTop: 8 }}>
                         {compareError}
                     </div>
                 ) : null}
@@ -4983,12 +5027,17 @@ export function Market() {
                                 ) : null}
                             </div>
                             <input
-                                className="terminal-search"
+                                className={`terminal-search${hidePickerHorizonCols ? ' terminal-search--picker-reflow' : ''}`}
                                 placeholder={t('market.searchPlaceholder', 'Sembol / enstrüman ara')}
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
-                            <div ref={marketListScrollRef} className="terminal-market-list-scroll-host">
+                            <div
+                                ref={marketListScrollRef}
+                                className={`terminal-market-list-scroll-host${
+                                    hidePickerHorizonCols ? ' terminal-market-list-scroll-host--picker-reflow' : ''
+                                }`}
+                            >
                             <div
                                 ref={tableWrapRef}
                                 className="terminal-table-wrap"
@@ -4998,21 +5047,57 @@ export function Market() {
                                 <table
                                     className={`terminal-data-table terminal-data-table--picker-horizons ${
                                         pickerCategory === 'FUTURES' ? 'terminal-data-table--viop' : ''
-                                    }${isTefasFundsPicker ? ' terminal-data-table--tefas' : ''}`}
+                                    }${isTefasFundsPicker ? ' terminal-data-table--tefas' : ''}${
+                                        hidePickerHorizonCols ? ' terminal-data-table--equity-hide-dwm' : ''
+                                    }`}
                                 >
                                     <thead>
                                         <tr>
-                                            <th className="terminal-picker-star-head terminal-picker-pin" aria-label={t('market.favoritesColumn', 'Favoriler')}>
-                                                <span aria-hidden>★</span>
-                                            </th>
+                                            {hidePickerHorizonCols ? (
+                                                <th
+                                                    className="terminal-picker-actions-head terminal-picker-pin"
+                                                    colSpan={2}
+                                                    aria-label={t(
+                                                        'market.pickerRowActionsAria',
+                                                        'Favori, alarm ve karşılaştırma',
+                                                    )}
+                                                >
+                                                    <span className="terminal-picker-actions-head__glyph" aria-hidden>
+                                                        ★
+                                                    </span>
+                                                </th>
+                                            ) : (
+                                                <>
+                                                    <th
+                                                        className="terminal-picker-star-head terminal-picker-pin"
+                                                        aria-label={t('market.favoritesColumn', 'Favoriler')}
+                                                    >
+                                                        <span aria-hidden>★</span>
+                                                    </th>
+                                                    <th
+                                                        className="terminal-picker-cmp-head terminal-picker-pin"
+                                                        aria-label={t('market.compareWithSelected', 'Karşılaştırma')}
+                                                        title={t(
+                                                            'market.compareWithSelectedHint',
+                                                            'Seçili enstrümanla grafikte karşılaştır',
+                                                        )}
+                                                    >
+                                                        <GitCompare
+                                                            size={13}
+                                                            strokeWidth={2.2}
+                                                            aria-hidden
+                                                            className="terminal-picker-cmp-head__ic"
+                                                        />
+                                                    </th>
+                                                </>
+                                            )}
                                             <th
-                                                className="terminal-picker-cmp-head terminal-picker-pin"
-                                                aria-label={t('market.compareWithSelected', 'Karşılaştırma')}
-                                                title={t('market.compareWithSelectedHint', 'Seçili enstrümanla grafikte karşılaştır')}
+                                                className={`terminal-instrument-head terminal-picker-pin${
+                                                    hidePickerHorizonCols ? ' terminal-picker-instrument-head' : ''
+                                                }`}
                                             >
-                                                <GitCompare size={13} strokeWidth={2.2} aria-hidden className="terminal-picker-cmp-head__ic" />
+                                                {t('market.instrument', 'Enstrüman')}
                                             </th>
-                                            <th className="terminal-instrument-head terminal-picker-pin">{t('market.instrument', 'Enstrüman')}</th>
                                             {isTefasFundsPicker ? (
                                                 <>
                                                     <th scope="col">{t('funds.fundType', 'Fon türü')}</th>
@@ -5021,6 +5106,7 @@ export function Market() {
                                             ) : null}
                                             <th
                                                 scope="col"
+                                                className={hidePickerHorizonCols ? 'terminal-picker-price-head' : undefined}
                                                 aria-sort={
                                                     pickerTableSort?.key === 'price'
                                                         ? pickerTableSort.dir === 'asc'
@@ -5049,6 +5135,7 @@ export function Market() {
                                                         : ''}
                                                 </button>
                                             </th>
+                                            {!hidePickerHorizonCols ? (
                                             <th
                                                 className="terminal-horizon-pct-head"
                                                 scope="col"
@@ -5084,6 +5171,8 @@ export function Market() {
                                                         : ''}
                                                 </button>
                                             </th>
+                                            ) : null}
+                                            {!hidePickerHorizonCols ? (
                                             <th
                                                 className="terminal-horizon-pct-head"
                                                 scope="col"
@@ -5119,6 +5208,8 @@ export function Market() {
                                                         : ''}
                                                 </button>
                                             </th>
+                                            ) : null}
+                                            {!hidePickerHorizonCols ? (
                                             <th
                                                 className="terminal-horizon-pct-head"
                                                 scope="col"
@@ -5154,6 +5245,7 @@ export function Market() {
                                                         : ''}
                                                 </button>
                                             </th>
+                                            ) : null}
                                             {isTefasFundsPicker ? (
                                                 <>
                                                     <th
@@ -5208,6 +5300,7 @@ export function Market() {
                                                     </th>
                                                 </>
                                             ) : null}
+                                            {!hidePickerHorizonCols ? (
                                             <th
                                                 className="terminal-horizon-pct-head"
                                                 scope="col"
@@ -5243,6 +5336,7 @@ export function Market() {
                                                         : ''}
                                                 </button>
                                             </th>
+                                            ) : null}
                                             {isTefasFundsPicker ? (
                                                 <>
                                                     <th className="terminal-horizon-pct-head" scope="col" title={t('funds.returnYtdHint', 'Yıl başından bugüne')}>
@@ -5258,6 +5352,7 @@ export function Market() {
                                             ) : null}
                                             {!isTefasFundsPicker ? (
                                             <th
+                                                className={hidePickerHorizonCols ? 'terminal-picker-trend-head' : undefined}
                                                 title={
                                                     pickerCategory === 'BOND'
                                                         ? t(
@@ -5273,7 +5368,18 @@ export function Market() {
                                             >
                                                 {pickerCategory === 'BOND'
                                                     ? t('market.bondTrendCol', '1A Fiyat Trendi')
-                                                    : `${t('market.trend', 'Trend')} (${chartRangeUiShortLabel(range)})`}
+                                                    : hidePickerHorizonCols && TREND_SELECTABLE_CATEGORIES.has(pickerCategory) ? (
+                                                          <div className="market-trend-head market-trend-head--compact">
+                                                              <span className="market-trend-head__label">
+                                                                  {t('market.trend', 'Trend')}
+                                                              </span>
+                                                              <span className="market-trend-head__range">
+                                                                  {chartRangeUiShortLabel(range)}
+                                                              </span>
+                                                          </div>
+                                                      ) : (
+                                                          `${t('market.trend', 'Trend')} (${chartRangeUiShortLabel(range)})`
+                                                      )}
                                             </th>
                                             ) : null}
                                         </tr>
@@ -5282,7 +5388,7 @@ export function Market() {
                                         {loadingTerminalList ? (
                                             <tr>
                                                 <td
-                                                    colSpan={isTefasFundsPicker ? 15 : 9}
+                                                    colSpan={isTefasFundsPicker ? 15 : hidePickerHorizonCols ? 5 : 9}
                                                     className="terminal-chart-empty"
                                                     style={{ padding: 16, textAlign: 'left' }}
                                                 >
@@ -5297,7 +5403,7 @@ export function Market() {
                                         ) : pickerDisplayedInstruments.length === 0 ? (
                                             <tr>
                                                 <td
-                                                    colSpan={isTefasFundsPicker ? 15 : 9}
+                                                    colSpan={isTefasFundsPicker ? 15 : hidePickerHorizonCols ? 5 : 9}
                                                     className="terminal-chart-empty"
                                                     style={{ padding: 16, textAlign: 'left' }}
                                                 >
@@ -5410,6 +5516,125 @@ export function Market() {
                                                 }}
                                                 title={bondTooltip}
                                             >
+                                                {hidePickerHorizonCols ? (
+                                                    <td
+                                                        className="terminal-picker-actions-cell terminal-picker-pin"
+                                                        colSpan={2}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        {sk ? (
+                                                            <div className="terminal-picker-row-actions">
+                                                                <button
+                                                                    type="button"
+                                                                    className="terminal-star-btn"
+                                                                    aria-label={
+                                                                        starFilled ? 'Yıldızı kaldır' : 'Dashboard’da göster'
+                                                                    }
+                                                                    disabled={starMutation.isPending}
+                                                                    onClick={(e) =>
+                                                                        handleStarToggle(e, row.symbol, row.category)
+                                                                    }
+                                                                >
+                                                                    <Star
+                                                                        size={13}
+                                                                        strokeWidth={2.2}
+                                                                        fill={starFilled ? tokens.accent : 'transparent'}
+                                                                        color={
+                                                                            starFilled ? tokens.accent : tokens.textMuted
+                                                                        }
+                                                                    />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="terminal-star-btn"
+                                                                    aria-label={t('priceAlert.title', 'Alarm Kur')}
+                                                                    title={t('priceAlert.title', 'Alarm Kur')}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const pa = marketCategoryToPriceAlertAsset(
+                                                                            row.category,
+                                                                            row.symbol,
+                                                                            {
+                                                                                marketRegion: row.marketRegion,
+                                                                                exchange: row.exchange,
+                                                                            },
+                                                                        );
+                                                                        if (pa) {
+                                                                            setPriceAlertTarget({
+                                                                                ...pa,
+                                                                                displayName: row.displayName ?? row.symbol,
+                                                                                referencePrice:
+                                                                                    Number.isFinite(row.price) &&
+                                                                                    row.price > 0
+                                                                                        ? row.price
+                                                                                        : null,
+                                                                                priceCurrency: row.currency ?? 'TRY',
+                                                                            });
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Bell
+                                                                        size={13}
+                                                                        strokeWidth={2.2}
+                                                                        color={tokens.textMuted}
+                                                                    />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className={`terminal-picker-compare-btn${
+                                                                        rowInCompareSet ? ' is-active' : ''
+                                                                    }`}
+                                                                    disabled={
+                                                                        !chartComparisonAvailable ||
+                                                                        !selectedInstrumentVm ||
+                                                                        comparePickerFull ||
+                                                                        !canPickerCompareRow(
+                                                                            row,
+                                                                            selectedInstrumentVm,
+                                                                            activeCategory,
+                                                                            equitySubmarket,
+                                                                            metalsSubmarket,
+                                                                        )
+                                                                    }
+                                                                    title={
+                                                                        !chartComparisonAvailable
+                                                                            ? t(
+                                                                                  'market.compareUnavailable',
+                                                                                  'Bu görünümde karşılaştırma yok.',
+                                                                              )
+                                                                            : !selectedInstrumentVm
+                                                                              ? t(
+                                                                                    'market.compareNeedSelection',
+                                                                                    'Önce bir enstrüman seçin.',
+                                                                                )
+                                                                              : !canPickerCompareRow(
+                                                                                      row,
+                                                                                      selectedInstrumentVm,
+                                                                                      activeCategory,
+                                                                                      equitySubmarket,
+                                                                                      metalsSubmarket,
+                                                                                  )
+                                                                                ? t(
+                                                                                      'market.compareIncompatible',
+                                                                                      'Aynı pazar ve kategorideki enstrümanlar karşılaştırılabilir.',
+                                                                                  )
+                                                                                : `${selectedInstrumentVm.symbol} · ${row.symbol} — ${t(
+                                                                                      'market.pickerCompareShort',
+                                                                                      'Grafikte karşılaştır',
+                                                                                  )}`
+                                                                    }
+                                                                    aria-label={t('market.pickerCompareAria', 'Karşılaştır')}
+                                                                    onClick={(e) => handlePickerCompareClick(e, row)}
+                                                                >
+                                                                    <GitCompare size={13} strokeWidth={2.2} aria-hidden />
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <span style={{ color: tokens.textMuted, fontSize: 11 }}>—</span>
+                                                        )}
+                                                    </td>
+                                                ) : (
+                                                    <>
                                                 <td className="terminal-picker-star-cell terminal-picker-pin" onClick={(e) => e.stopPropagation()}>
                                                     {sk ? (
                                                         <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center', flexShrink: 0 }}>
@@ -5505,6 +5730,8 @@ export function Market() {
                                                         <GitCompare size={13} strokeWidth={2.2} aria-hidden />
                                                     </button>
                                                 </td>
+                                                    </>
+                                                )}
                                                 <td className="terminal-instrument-cell terminal-picker-pin">
                                                     {row.category === 'FUTURES' ? (
                                                         <div className="viop-instrument-stack">
@@ -5561,42 +5788,47 @@ export function Market() {
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', rowGap: 4 }}>
-                                                                {row.category === 'EQUITY' && rowIsBistEquity ? (
-                                                                    <span
-                                                                        className="bist-symbol-badge"
-                                                                        style={bistSymbolBadgeStyle(row.symbol)}
-                                                                        title={row.symbol}
-                                                                        aria-hidden
-                                                                    >
-                                                                        {row.symbol.slice(0, 2)}
-                                                                    </span>
-                                                                ) : (
+                                                        <div className="terminal-picker-instrument-stack">
+                                                            {row.category === 'EQUITY' && rowIsBistEquity ? (
+                                                                <span
+                                                                    className="bist-symbol-badge terminal-picker-instrument-stack__logo"
+                                                                    style={bistSymbolBadgeStyle(row.symbol)}
+                                                                    title={row.symbol}
+                                                                    aria-hidden
+                                                                >
+                                                                    {row.symbol.slice(0, 2)}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="terminal-picker-instrument-stack__logo">
                                                                     <AssetLogo
                                                                         src={
-                                                                            row.category === 'BOND'
-                                                                                ? null
-                                                                                : getDynamicLogoUrl(
-                                                                                      row.symbol,
-                                                                                      marketKindForCategory(row.category),
-                                                                                      {
-                                                                                          equitySubmarket:
-                                                                                              row.category === 'EQUITY'
-                                                                                                  ? rowIsBistEquity
-                                                                                                      ? 'BIST'
-                                                                                                      : 'US'
-                                                                                                  : undefined,
-                                                                                      },
-                                                                                  )
-                                                                        }
-                                                                        alt={`${row.symbol} logo`}
-                                                                        fallbackIcon={TrendingUp}
-                                                                        fallbackColor={tokens.textMuted}
-                                                                        size={20}
+                                                                        row.category === 'BOND'
+                                                                            ? null
+                                                                            : getDynamicLogoUrl(
+                                                                                  row.symbol,
+                                                                                  marketKindForCategory(row.category),
+                                                                                  {
+                                                                                      equitySubmarket:
+                                                                                          row.category === 'EQUITY'
+                                                                                              ? rowIsBistEquity
+                                                                                                  ? 'BIST'
+                                                                                                  : 'US'
+                                                                                              : undefined,
+                                                                                  },
+                                                                              )
+                                                                    }
+                                                                    alt={`${row.symbol} logo`}
+                                                                    fallbackIcon={TrendingUp}
+                                                                    fallbackColor={tokens.textMuted}
+                                                                        size={hidePickerHorizonCols ? 18 : 20}
                                                                     />
-                                                                )}
-                                                                <div style={{ fontWeight: 700, minWidth: 0, lineHeight: 1.2, wordBreak: 'break-word' }}>
+                                                                </span>
+                                                            )}
+                                                            <div className="terminal-picker-instrument-stack__text">
+                                                                <div
+                                                                    className="terminal-picker-instrument-stack__primary"
+                                                                    title={row.symbol}
+                                                                >
                                                                     {row.category === 'BOND'
                                                                         ? row.symbol
                                                                         : row.category === 'METALS'
@@ -5606,36 +5838,52 @@ export function Market() {
                                                                     String(row.exchange ?? '').toUpperCase() === 'BIST' &&
                                                                     row.dataQuality &&
                                                                     String(row.dataQuality).toUpperCase() === 'PARTIAL' ? (
-                                                                        <span className="bist-dq-pill" title={t('stocks.partialDataHint', 'Kapanış verisi eksik olabilir.')}>
+                                                                        <span
+                                                                            className="bist-dq-pill"
+                                                                            title={t(
+                                                                                'stocks.partialDataHint',
+                                                                                'Kapanış verisi eksik olabilir.',
+                                                                            )}
+                                                                        >
                                                                             {t('stocks.partialData', 'Kısmi veri')}
                                                                         </span>
                                                                     ) : null}
                                                                 </div>
-                                                            </div>
-                                                            {row.category === 'BOND' ? (
-                                                                <>
-                                                                    <div style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.25, marginTop: 2, wordBreak: 'break-word' }}>
+                                                                {row.category === 'BOND' ? (
+                                                                    <div
+                                                                        className="terminal-picker-instrument-stack__secondary"
+                                                                        title={row.displayName}
+                                                                    >
                                                                         {bondListSubtitle(row.symbol, {
-                                                                                  displayName:
-                                                                                      debtNameMap[normalizeSymbolKey(row.symbol)] ??
-                                                                                      row.displayName,
-                                                                                  issuer:
-                                                                                      debtMetaMap[normalizeSymbolKey(row.symbol)]
-                                                                                          ?.issuer,
-                                                                                  maturityDate: row.maturityDate,
-                                                                                  daysToMaturity:
-                                                                                      daysValue ?? row.daysToMaturity,
-                                                                                  formatDate: formatDateTr,
-                                                                                  t,
-                                                                              })}
+                                                                            displayName:
+                                                                                debtNameMap[normalizeSymbolKey(row.symbol)] ??
+                                                                                row.displayName,
+                                                                            issuer:
+                                                                                debtMetaMap[normalizeSymbolKey(row.symbol)]
+                                                                                    ?.issuer,
+                                                                            maturityDate: row.maturityDate,
+                                                                            daysToMaturity:
+                                                                                daysValue ?? row.daysToMaturity,
+                                                                            formatDate: formatDateTr,
+                                                                            t,
+                                                                        })}
                                                                     </div>
-                                                                </>
-                                                            ) : (
-                                                                <div style={{ fontSize: 11, color: tokens.textMuted, lineHeight: 1.25, marginTop: 2, wordBreak: 'break-word' }}>
-                                                                    {row.category === 'METALS' ? row.listSubtitle ?? row.symbol : row.displayName}
-                                                                </div>
-                                                            )}
-                                                        </>
+                                                                ) : row.category === 'METALS' || row.displayName ? (
+                                                                    <div
+                                                                        className="terminal-picker-instrument-stack__secondary"
+                                                                        title={
+                                                                            row.category === 'METALS'
+                                                                                ? row.symbol
+                                                                                : row.displayName
+                                                                        }
+                                                                    >
+                                                                        {row.category === 'METALS'
+                                                                            ? row.listSubtitle ?? row.symbol
+                                                                            : row.displayName}
+                                                                    </div>
+                                                                ) : null}
+                                                            </div>
+                                                        </div>
                                                     )}
                                                 </td>
                                                 {rowIsTefas ? (
@@ -5677,15 +5925,21 @@ export function Market() {
                                                         </div>
                                                     </div>
                                                 </td>
+                                                {!hidePickerHorizonCols ? (
                                                 <td className={horizonPctClassName(row.pctDay)} title={t('market.horizonDay', 'Gün')}>
                                                     {formatHorizonPct(row.pctDay)}
                                                 </td>
+                                                ) : null}
+                                                {!hidePickerHorizonCols ? (
                                                 <td className={horizonPctClassName(row.pctWeek)} title={t('market.horizonWeek', 'Hafta')}>
                                                     {formatHorizonPct(row.pctWeek)}
                                                 </td>
+                                                ) : null}
+                                                {!hidePickerHorizonCols ? (
                                                 <td className={horizonPctClassName(row.pctMonth)} title={rowIsTefas ? t('funds.return1m', '1A') : t('market.horizonMonth', 'Ay')}>
                                                     {formatHorizonPct(row.pctMonth)}
                                                 </td>
+                                                ) : null}
                                                 {rowIsTefas ? (
                                                     <>
                                                         <td className={horizonPctClassName(row.fundReturn3m)} title={t('funds.return3m', '3A')}>
@@ -5696,9 +5950,11 @@ export function Market() {
                                                         </td>
                                                     </>
                                                 ) : null}
+                                                {!hidePickerHorizonCols ? (
                                                 <td className={horizonPctClassName(row.pctYear)} title={rowIsTefas ? t('funds.return1y', '1Y') : t('market.horizonYear', 'Yıl')}>
                                                     {formatHorizonPct(row.pctYear)}
                                                 </td>
+                                                ) : null}
                                                 {rowIsTefas ? (
                                                     <>
                                                         <td className={horizonPctClassName(row.changePercent)} title={t('funds.returnYtd', 'YBB')}>
@@ -5756,7 +6012,7 @@ export function Market() {
                                                                 <polyline
                                                                     points={sparklinePath(slice)}
                                                                     fill="none"
-                                                                    stroke={sparkUp ? 'var(--terminal-pos, #15803d)' : 'var(--terminal-neg, #b91c1c)'}
+                                                                    stroke={sparkUp ? 'var(--terminal-pos, #166534)' : 'var(--terminal-neg, #991B1B)'}
                                                                     strokeWidth="2"
                                                                 />
                                                             </svg>
@@ -5984,7 +6240,7 @@ export function Market() {
                 activeCategory === 'FUNDS');
 
         const heroHorizonsEl =
-            selectedInstrumentVm != null ? (
+            !hideHeroHorizonStrip && selectedInstrumentVm != null ? (
                 <div
                     className="terminal-hero-horizons"
                     aria-label={t(

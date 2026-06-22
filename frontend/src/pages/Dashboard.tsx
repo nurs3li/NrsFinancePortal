@@ -78,7 +78,7 @@ const FALLBACK_SUMMARY: SummaryResponse = {
 
 const DISTRIBUTION_COLORS: Record<string, string> = {
     CRYPTO: '#F7931A',
-    FX: '#22C55E',
+    FX: '#166534',
     METAL: '#EAB308',
     FUND: '#6366F1',
     STOCK: '#3182CE',
@@ -402,7 +402,7 @@ const StarredAssetRow = memo(function StarredAssetRow({
             </div>
             <div className="asset-trend-cell">
                 <svg className="asset-sparkline" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
-                    <polyline points={pts} fill="none" stroke={up ? '#22c55e' : '#ef4444'} strokeWidth="2" />
+                    <polyline points={pts} fill="none" stroke={up ? '#166534' : '#991B1B'} strokeWidth="2" />
                 </svg>
             </div>
             <p className="asset-price">{asset.price > 0 ? asset.price.toLocaleString(numberLocale) : '-'}</p>
@@ -567,7 +567,7 @@ export function Dashboard() {
 
     const fallbackIconMap = useMemo<Record<string, { Icon: LucideIcon; color: string }>>(
         () => ({
-            FX: { Icon: DollarSign, color: '#22C55E' },
+            FX: { Icon: DollarSign, color: '#166534' },
             METALS: { Icon: Coins, color: '#EAB308' },
             CRYPTO: { Icon: TrendingUp, color: '#F7931A' },
             FUNDS: { Icon: TrendingUp, color: '#3182CE' },

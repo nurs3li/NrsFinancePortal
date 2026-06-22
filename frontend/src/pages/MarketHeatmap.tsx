@@ -503,7 +503,7 @@ export function MarketHeatmap() {
                                     }}
                                 >
                                     <span>{t.symbol}</span>
-                                    <span style={{ color: t.changePercent >= 0 ? '#22c55e' : '#f87171', fontWeight: 700 }}>
+                                    <span style={{ color: t.changePercent >= 0 ? '#166534' : '#991B1B', fontWeight: 700 }}>
                                         {fmtPct(t.changePercent)}
                                     </span>
                                 </div>

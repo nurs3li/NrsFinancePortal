@@ -20,19 +20,28 @@ import { formatLocaleDate } from '../utils/macroPanelSeries';
 import './MacroIntelligence.css';
 
 export function MacroIntelligencePage() {
-    const { tokens } = useTheme();
+    const { tokens, theme } = useTheme();
     const { t, lang } = useLanguage();
     const locale = lang === 'en' ? 'en-GB' : 'tr-TR';
 
     const chartTokens = useMemo(
-        () => ({
-            bg: tokens.bg,
-            bgCard: tokens.bgCard,
-            border: tokens.border,
-            text: tokens.text,
-            textMuted: tokens.textMuted,
-        }),
-        [tokens],
+        () =>
+            theme === 'light'
+                ? {
+                      bg: '#ffffff',
+                      bgCard: '#f8fafc',
+                      border: '#e2e8f0',
+                      text: '#333333',
+                      textMuted: '#4a4a4a',
+                  }
+                : {
+                      bg: tokens.bg,
+                      bgCard: tokens.bgCard,
+                      border: tokens.border,
+                      text: tokens.text,
+                      textMuted: tokens.textMuted,
+                  },
+        [tokens, theme],
     );
 
     const data = useMacroIntelligenceData();
@@ -43,7 +52,7 @@ export function MacroIntelligencePage() {
 
     return (
         <InfoTermProvider tokens={chartTokens}>
-            <div className="macro-intelligence-page" style={{ background: tokens.bg, color: tokens.text }}>
+            <div className="macro-intelligence-page" style={{ background: chartTokens.bg, color: chartTokens.text }}>
                 <MacroPageHeader
                     title={t('nav.marketMacro', 'Makro Finans Paneli')}
                     subtitle={t(

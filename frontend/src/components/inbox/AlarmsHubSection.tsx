@@ -102,12 +102,17 @@ export function AlarmsHubSection({
             ) : isLoading && items.length === 0 ? (
                 <div className="notif-loading">{t('common.loading', 'Yükleniyor...')}</div>
             ) : items.length === 0 ? (
-                <div className="notif-empty">{t('alarms.empty', 'Bu listede alarm yok.')}</div>
+                <div className="notif-empty notif-empty--alarms">
+                    <span className="notif-empty__icon" aria-hidden>
+                        <BellRing size={28} strokeWidth={1.5} />
+                    </span>
+                    <span className="notif-empty__text">{t('alarms.empty', 'Bu listede alarm yok.')}</span>
+                </div>
             ) : (
                 <div className="notif-alarm-list notif-alarm-list--embedded">
                     {items.map((alert) => (
                         <div key={alert.id} className="alarm-list-item alarm-list-item--compact">
-                            <span className="notif-item__type-icon" style={{ color: '#38bdf8' }} aria-hidden>
+                            <span className="notif-item__type-icon alarm-list-item__icon" aria-hidden>
                                 <BellRing size={16} />
                             </span>
                             <div className="alarm-list-item__body">
