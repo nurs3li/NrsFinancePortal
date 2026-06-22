@@ -13,17 +13,17 @@ import {
 import { formatLocaleDate, lastObservation, panelSpreadConsumerMinusDepositTry1m, selectMacroSeries } from '../../../utils/macroPanelSeries';
 import { useInfoTerm } from '../education/InfoTermProvider';
 import type { MacroIntelligencePanel } from '../hooks/useMacroIntelligenceData';
-import { MACRO_CHART_COLORS } from '../MacroTheme';
+import { macroChartColorsForTheme } from '../MacroTheme';
 import type { MacroTheme } from '../MacroTheme';
 import { ChartCard } from '../primitives/ChartCard';
 import { KpiCard } from '../primitives/KpiCard';
 import { MacroSection } from '../primitives/MacroSection';
 
 const LOAN_TYPES = [
-    { ui: 'LOAN_RATE_CONSUMER_WEEKLY', col: 'CONSUMER_TRY', titleKey: 'macro.loans.type.consumer', titleFb: 'İhtiyaç Kredisi', legendKey: 'macro.loans.legend.consumer', legendFb: 'İhtiyaç', color: MACRO_CHART_COLORS.rose },
-    { ui: 'LOAN_RATE_VEHICLE_WEEKLY', col: 'VEHICLE_TRY', titleKey: 'macro.loans.type.vehicle', titleFb: 'Taşıt Kredisi', legendKey: 'macro.loans.legend.vehicle', legendFb: 'Taşıt', color: MACRO_CHART_COLORS.amber },
-    { ui: 'LOAN_RATE_HOUSING_WEEKLY', col: 'HOUSING_TRY', titleKey: 'macro.loans.type.housing', titleFb: 'Konut Kredisi', legendKey: 'macro.loans.legend.housing', legendFb: 'Konut', color: MACRO_CHART_COLORS.blue },
-    { ui: 'LOAN_RATE_COMMERCIAL_WEEKLY', col: 'COMMERCIAL_TRY', titleKey: 'macro.loans.type.commercial', titleFb: 'Ticari Kredi', legendKey: 'macro.loans.legend.commercial', legendFb: 'Ticari', color: MACRO_CHART_COLORS.violet },
+    { ui: 'LOAN_RATE_CONSUMER_WEEKLY', col: 'CONSUMER_TRY', titleKey: 'macro.loans.type.consumer', titleFb: 'İhtiyaç Kredisi', legendKey: 'macro.loans.legend.consumer', legendFb: 'İhtiyaç', colorKey: 'rose' as const },
+    { ui: 'LOAN_RATE_VEHICLE_WEEKLY', col: 'VEHICLE_TRY', titleKey: 'macro.loans.type.vehicle', titleFb: 'Taşıt Kredisi', legendKey: 'macro.loans.legend.vehicle', legendFb: 'Taşıt', colorKey: 'amber' as const },
+    { ui: 'LOAN_RATE_HOUSING_WEEKLY', col: 'HOUSING_TRY', titleKey: 'macro.loans.type.housing', titleFb: 'Konut Kredisi', legendKey: 'macro.loans.legend.housing', legendFb: 'Konut', colorKey: 'blue' as const },
+    { ui: 'LOAN_RATE_COMMERCIAL_WEEKLY', col: 'COMMERCIAL_TRY', titleKey: 'macro.loans.type.commercial', titleFb: 'Ticari Kredi', legendKey: 'macro.loans.legend.commercial', legendFb: 'Ticari', colorKey: 'violet' as const },
 ] as const;
 
 const LOAN_RATES_TYPES_CSV = 'CONSUMER_TRY,VEHICLE_TRY,HOUSING_TRY,COMMERCIAL_TRY';
@@ -104,6 +104,7 @@ export function MacroLoansSection({ panel, loanChart, usePanelLoans, panelLoadin
     const spread = usePanelLoans ? panelSpreadConsumerMinusDepositTry1m(panel?.series) : [];
 
     const loading = panelLoading || (!usePanelLoans && (latestQ.isPending || historyQ.isPending));
+    const chartColors = macroChartColorsForTheme(theme);
 
     return (
         <MacroSection
@@ -161,9 +162,9 @@ export function MacroLoansSection({ panel, loanChart, usePanelLoans, panelLoadin
                                     type="monotone"
                                     dataKey={lt.col}
                                     name={t(lt.legendKey, lt.legendFb)}
-                                    stroke={lt.color}
+                                    stroke={chartColors[lt.colorKey]}
                                     dot={false}
-                                    strokeWidth={2}
+                                    strokeWidth={theme === 'light' ? 2.5 : 2}
                                     connectNulls
                                 />
                             ))}
@@ -188,9 +189,9 @@ export function MacroLoansSection({ panel, loanChart, usePanelLoans, panelLoadin
                                 type="monotone"
                                 dataKey="spread"
                                 name={t('macro.loans.legend.spread', 'Makas')}
-                                stroke={MACRO_CHART_COLORS.amber}
+                                stroke={chartColors.amber}
                                 dot={false}
-                                strokeWidth={2}
+                                strokeWidth={theme === 'light' ? 2.5 : 2}
                                 connectNulls
                             />
                         </LineChart>

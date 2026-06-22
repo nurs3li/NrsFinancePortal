@@ -8,7 +8,8 @@
     YAxis,
 } from 'recharts';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { CHART_PALETTE } from './constants';
+import { useTheme } from '../../theme/ThemeContext';
+import { chartPaletteForTheme } from './constants';
 import { SimTermInfo } from './SimTermInfo';
 import { SimDualMoney } from './SimDualMoney';
 import { simCurrencySymbol } from './simCurrency';
@@ -129,7 +130,11 @@ export function SimulationPerformanceChart({
     onToggleVisible,
 }: SimulationPerformanceChartProps) {
     const { t, lang } = useLanguage();
+    const { theme } = useTheme();
     const locale = lang === 'en' ? 'en-US' : 'tr-TR';
+    const chartPalette = chartPaletteForTheme(theme);
+    const fillTopOpacity = theme === 'light' ? 0.24 : 0.2;
+    const activeDotFill = theme === 'light' ? '#ffffff' : '#0a0f1a';
 
     const chartData = buildSimulationChartData(visibleResults, metricMode);
     const legendItems = onlyVisibleOnChart ? visibleResults : allResults.filter((r) => r.visible);
@@ -209,11 +214,11 @@ export function SimulationPerformanceChart({
                         <ComposedChart data={chartData} margin={{ top: 10, right: 16, left: 4, bottom: 8 }}>
                             <defs>
                                 {visibleResults.map((res, i) => {
-                                    const c = CHART_PALETTE[i % CHART_PALETTE.length];
+                                    const c = chartPalette[i % chartPalette.length];
                                     const gid = `simFill-${res.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
                                     return (
                                         <linearGradient key={res.id} id={gid} x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor={c} stopOpacity={0.35} />
+                                            <stop offset="0%" stopColor={c} stopOpacity={fillTopOpacity} />
                                             <stop offset="100%" stopColor={c} stopOpacity={0} />
                                         </linearGradient>
                                     );
@@ -239,7 +244,7 @@ export function SimulationPerformanceChart({
                             />
                             {visibleResults.map((res, i) => {
                                 const key = seriesChartKey(res);
-                                const color = CHART_PALETTE[i % CHART_PALETTE.length];
+                                const color = chartPalette[i % chartPalette.length];
                                 const gid = `simFill-${res.id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
                                 return (
                                     <Area
@@ -248,12 +253,12 @@ export function SimulationPerformanceChart({
                                         dataKey={key}
                                         name={seriesDisplayName(res)}
                                         stroke={color}
-                                        strokeWidth={3}
+                                        strokeWidth={theme === 'light' ? 2.5 : 3}
                                         fill={`url(#${gid})`}
                                         fillOpacity={1}
                                         connectNulls={false}
                                         dot={false}
-                                        activeDot={{ r: 5, strokeWidth: 2, stroke: color, fill: '#0a0f1a' }}
+                                        activeDot={{ r: 5, strokeWidth: 2, stroke: color, fill: activeDotFill }}
                                         isAnimationActive={false}
                                     />
                                 );

@@ -204,7 +204,7 @@ export function ViopMarketSection({
                                                     <MarketSparkline
                                                         closes={row.sparkline}
                                                         bgColor={tokens.bgCard}
-                                                        lineColor={row.trend === 'UP' ? '#22c55e' : '#ef4444'}
+                                                        lineColor={row.trend === 'UP' ? '#166534' : '#991B1B'}
                                                     />
                                                 </td>
                                                 <td onClick={(e) => e.stopPropagation()}>

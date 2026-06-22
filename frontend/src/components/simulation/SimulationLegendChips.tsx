@@ -1,6 +1,7 @@
 ﻿import { AssetLogo } from '../AssetLogo';
 import { displaySimulationAssetType } from '../../types/simulationAssetType';
-import { CHART_PALETTE } from './constants';
+import { useTheme } from '../../theme/ThemeContext';
+import { chartPaletteForTheme } from './constants';
 import { categoryFallbackIcon, symbolLogoUrl } from './assetBrandingSim';
 import { SimDualMoney } from './SimDualMoney';
 import type { SimDisplayCurrency, SimulationResultItem } from './types';
@@ -20,12 +21,15 @@ export function SimulationLegendChips({
     usdTryRate,
     onToggleVisible,
 }: SimulationLegendChipsProps) {
+    const { theme } = useTheme();
+    const chartPalette = chartPaletteForTheme(theme);
+
     if (items.length === 0) return null;
 
     return (
         <div className="sim-legend-chips" role="list" aria-label="Grafik serileri">
             {items.map((res, i) => {
-                const color = CHART_PALETTE[i % CHART_PALETTE.length];
+                const color = chartPalette[i % chartPalette.length];
                 const pos = res.pnlPct >= 0;
                 const displayAssetType = displaySimulationAssetType(res.assetType, res.pickerAssetType);
                 return (

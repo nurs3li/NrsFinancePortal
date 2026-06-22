@@ -4,7 +4,7 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import { useTheme } from '../../../theme/ThemeContext';
 import { chartGridStroke, chartTooltipContentStyle } from '../../../lib/chartTheme';
 import { formatLocaleDate, formatPercent2, lastObservation, selectMacroSeries } from '../../../utils/macroPanelSeries';
-import { MACRO_CHART_COLORS } from '../MacroTheme';
+import { macroChartColorsForTheme } from '../MacroTheme';
 import type { MacroIntelligencePanel } from '../hooks/useMacroIntelligenceData';
 import { InsightCard } from '../primitives/InsightCard';
 import { MacroSection } from '../primitives/MacroSection';
@@ -28,6 +28,7 @@ function fillTemplate(template: string, vars: Record<string, string>): string {
 export function MacroOverviewSection({ panel, derived, panelLoading, locale, tokens }: Props) {
     const { t } = useLanguage();
     const { theme } = useTheme();
+    const chartColors = macroChartColorsForTheme(theme);
     const awaiting = '—';
     const fmt = (v: number | null | undefined) =>
         v == null || !Number.isFinite(Number(v)) ? awaiting : formatPercent2(v, locale);
@@ -158,7 +159,7 @@ export function MacroOverviewSection({ panel, derived, panelLoading, locale, tok
                                 type="monotone"
                                 dataKey="policy"
                                 name={t('macro.overview.chart.policy', 'Politika')}
-                                stroke={MACRO_CHART_COLORS.blue}
+                                stroke={chartColors.blue}
                                 dot={false}
                                 strokeWidth={2}
                                 connectNulls
@@ -167,7 +168,7 @@ export function MacroOverviewSection({ panel, derived, panelLoading, locale, tok
                                 type="monotone"
                                 dataKey="deposit"
                                 name={t('macro.overview.chart.deposit1m', 'TL 1M Mevduat')}
-                                stroke={MACRO_CHART_COLORS.green}
+                                stroke={chartColors.green}
                                 dot={false}
                                 strokeWidth={2}
                                 connectNulls

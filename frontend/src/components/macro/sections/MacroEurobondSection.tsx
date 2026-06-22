@@ -35,7 +35,7 @@ import { KpiCard } from '../primitives/KpiCard';
 import { MacroSection } from '../primitives/MacroSection';
 import type { MacroTheme } from '../MacroTheme';
 
-const CHART_COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4'];
+const CHART_COLORS = ['#3b82f6', '#f59e0b', '#166534', '#8b5cf6', '#991B1B', '#06b6d4'];
 
 function num(v: unknown): number | null {
     const n = Number(v);

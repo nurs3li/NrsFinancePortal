@@ -6,7 +6,7 @@ import { chartGridStroke, chartTooltipContentStyle } from '../../../lib/chartThe
 import { fetchInflationCompare, type InflationCompareRow, type MacroPanelDerivedMetrics } from '../../../services/marketDataService';
 import { formatLocaleDate, formatPercent2, lastObservation, selectMacroSeries } from '../../../utils/macroPanelSeries';
 import type { MacroIntelligencePanel } from '../hooks/useMacroIntelligenceData';
-import { MACRO_CHART_COLORS } from '../MacroTheme';
+import { macroChartColorsForTheme } from '../MacroTheme';
 import type { MacroTheme } from '../MacroTheme';
 import { ChartCard } from '../primitives/ChartCard';
 import { InsightCard } from '../primitives/InsightCard';
@@ -34,6 +34,7 @@ function ymFromIsoDate(date: string | undefined | null): string | null {
 export function MacroPolicySection({ panel, derived, panelLoading, locale, tokens }: Props) {
     const { t } = useLanguage();
     const { theme } = useTheme();
+    const chartColors = macroChartColorsForTheme(theme);
     const awaiting = '—';
     const fmt = (v: number | null | undefined) =>
         v == null || !Number.isFinite(Number(v)) ? awaiting : formatPercent2(v, locale);
@@ -154,7 +155,7 @@ export function MacroPolicySection({ panel, derived, panelLoading, locale, token
                                 type="monotone"
                                 dataKey="policy"
                                 name={t('macro.policy.chart.policy', 'Politika faizi')}
-                                stroke={MACRO_CHART_COLORS.blue}
+                                stroke={chartColors.blue}
                                 dot={false}
                                 strokeWidth={2}
                                 connectNulls
@@ -163,7 +164,7 @@ export function MacroPolicySection({ panel, derived, panelLoading, locale, token
                                 type="monotone"
                                 dataKey="inflationRef"
                                 name={t('macro.policy.chart.cpiYoY', 'TÜFE Yıllık')}
-                                stroke={MACRO_CHART_COLORS.rose}
+                                stroke={chartColors.rose}
                                 dot={false}
                                 strokeDasharray="4 4"
                                 strokeWidth={2}
