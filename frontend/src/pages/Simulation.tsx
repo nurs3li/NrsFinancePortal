@@ -25,12 +25,14 @@ import { SimulationResultsList } from '../components/simulation/SimulationResult
 import { SimulationResultDetailDrawer } from '../components/simulation/SimulationResultDetailDrawer';
 import { SimulationHistoryCard } from '../components/simulation/SimulationHistoryCard';
 import { SIMULATION_HISTORY_PREPARING, SIMULATION_USD_DENOMINATED } from '../components/simulation/constants';
+import { cloneHistoryItemsForSession } from '../components/simulation/simulationHistoryStorage';
 import {
-    appendSimulationHistory,
-    cloneHistoryItemsForSession,
-    loadSimulationHistory,
-    removeSimulationHistoryEntry,
-} from '../components/simulation/simulationHistoryStorage';
+    deleteSimulationHistoryEntry,
+    fetchSimulationHistoryDetail,
+    fetchSimulationHistoryList,
+    historyEntryNeedsDetail,
+    saveSimulationHistoryEntry,
+} from '../api/simulationHistoryApi';
 import { formatSimMoney, resolveSessionDisplayCurrency, simCurrencySymbol } from '../components/simulation/simCurrency';
 import { defaultSimulationBuyDate } from '../components/simulation/simDates';
 import {
@@ -109,7 +111,17 @@ export function Simulation() {
     }, [simulationResults]);
 
     useEffect(() => {
-        setHistoryEntries(loadSimulationHistory());
+        let cancelled = false;
+        fetchSimulationHistoryList()
+            .then((entries) => {
+                if (!cancelled) setHistoryEntries(entries);
+            })
+            .catch(() => {
+                if (!cancelled) setHistoryEntries([]);
+            });
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     useEffect(() => {
@@ -350,11 +362,9 @@ export function Simulation() {
         setCompareDrafts((prev) => prev.filter((x) => x.id !== id));
     };
 
-    const saveSimulationToHistory = useCallback(() => {
+    const saveSimulationToHistory = useCallback(async () => {
         if (simulationResults.length === 0) return;
-        const entry: SimulationHistoryEntry = {
-            id: `hist-${Date.now()}`,
-            savedAt: new Date().toISOString(),
+        const payload = {
             label:
                 scenarioLabel.trim() ||
                 t('simulation.historyDefaultLabel', 'Simülasyon {date}').replace(
@@ -365,8 +375,8 @@ export function Simulation() {
             items: JSON.parse(JSON.stringify(simulationResults)) as SimulationResultItem[],
         };
         try {
-            const list = appendSimulationHistory(entry);
-            setHistoryEntries(list);
+            const saved = await saveSimulationHistoryEntry(payload);
+            setHistoryEntries((prev) => [saved, ...prev.filter((e) => e.id !== saved.id)].slice(0, 40));
             setSaveFeedback(t('simulation.saveSuccess', 'Simülasyon geçmişe kaydedildi.'));
             window.setTimeout(() => setSaveFeedback(null), 4000);
         } catch {
@@ -374,44 +384,60 @@ export function Simulation() {
         }
     }, [simulationResults, scenarioLabel, locale, t, amountCurrency]);
 
+    const applyHistoryEntryToSession = useCallback((entry: SimulationHistoryEntry) => {
+        const cloned = cloneHistoryItemsForSession(entry.items);
+        setSimulationResults(cloned);
+        const first = entry.items[0];
+        if (first) {
+            setAmount(String(first.initialAmount));
+            setBuyDate(first.buyDate);
+            setType(first.pickerAssetType ?? first.assetType);
+            setSymbol(first.assetName);
+        }
+        setAmountCurrency(entry.amountCurrency ?? first?.displayCurrency ?? 'TRY');
+        setScenarioLabel(entry.label);
+        setActiveHistoryId(entry.id);
+        setError(null);
+        window.requestAnimationFrame(() => {
+            chartAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }, []);
+
     const viewHistoryEntry = useCallback(
-        (entry: SimulationHistoryEntry) => {
+        async (entry: SimulationHistoryEntry) => {
             if (activeHistoryId === entry.id) {
                 setSimulationResults([]);
                 setActiveHistoryId(null);
                 return;
             }
 
-            const cloned = cloneHistoryItemsForSession(entry.items);
-            setSimulationResults(cloned);
-            const first = entry.items[0];
-            if (first) {
-                setAmount(String(first.initialAmount));
-                setBuyDate(first.buyDate);
-                setType(first.pickerAssetType ?? first.assetType);
-                setSymbol(first.assetName);
+            try {
+                const resolved = historyEntryNeedsDetail(entry)
+                    ? await fetchSimulationHistoryDetail(entry.id)
+                    : entry;
+                applyHistoryEntryToSession(resolved);
+            } catch {
+                setError(t('simulation.historyLoadFailed', 'Simülasyon kaydı yüklenemedi.'));
             }
-            setAmountCurrency(entry.amountCurrency ?? first?.displayCurrency ?? 'TRY');
-            setScenarioLabel(entry.label);
-            setActiveHistoryId(entry.id);
-            setError(null);
-            window.requestAnimationFrame(() => {
-                chartAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            });
         },
-        [activeHistoryId],
+        [activeHistoryId, applyHistoryEntryToSession, t],
     );
 
-    const deleteHistoryEntry = useCallback((id: string) => {
-        setHistoryEntries(removeSimulationHistoryEntry(id));
-        setActiveHistoryId((prev) => {
-            if (prev === id) {
-                setSimulationResults([]);
-                return null;
-            }
-            return prev;
-        });
-    }, []);
+    const deleteHistoryEntry = useCallback(async (id: string) => {
+        try {
+            await deleteSimulationHistoryEntry(id);
+            setHistoryEntries((prev) => prev.filter((e) => e.id !== id));
+            setActiveHistoryId((prev) => {
+                if (prev === id) {
+                    setSimulationResults([]);
+                    return null;
+                }
+                return prev;
+            });
+        } catch {
+            setError(t('simulation.historyDeleteFailed', 'Simülasyon kaydı silinemedi.'));
+        }
+    }, [t]);
 
     const visibleResults = useMemo(() => simulationResults.filter((r) => r.visible), [simulationResults]);
 
