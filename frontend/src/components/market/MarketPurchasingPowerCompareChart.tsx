@@ -103,7 +103,7 @@ function MarketPurchasingPowerCompareChartImpl({ unitLabel, data, tokens }: Prop
                             type="monotone"
                             dataKey="depositTry"
                             name={t('market.ppLineDeposit', 'TL 1A mevduat senaryosu')}
-                            stroke="#22c55e"
+                            stroke="#166534"
                             dot={false}
                             strokeWidth={2}
                             connectNulls

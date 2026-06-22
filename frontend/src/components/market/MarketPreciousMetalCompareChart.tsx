@@ -126,7 +126,7 @@ function MarketPreciousMetalCompareChartImpl({ data, tokens }: Props) {
                                     ? t('market.ppLineDeposit', 'TL 1A mevduat senaryosu')
                                     : t('market.ppLineDepositApprox', 'Yaklaşık TL mevduat senaryosu')
                             }
-                            stroke="#22c55e"
+                            stroke="#166534"
                             dot={false}
                             strokeWidth={2}
                             connectNulls

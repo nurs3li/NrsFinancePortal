@@ -27,9 +27,9 @@ function toDayTime(iso: string): string {
 }
 
 const MA_COLORS: Record<string, string> = {
-    '7': '#22c55e',
+    '7': '#166534',
     '30': '#eab308',
-    '90': '#f87171',
+    '90': '#991B1B',
 };
 
 export function MarketIndicatorAreaChart({
