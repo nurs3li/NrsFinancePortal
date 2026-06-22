@@ -222,14 +222,14 @@ class SimulationServiceTest {
     }
 
     @Test
-    void shouldReturnPreparingWhenCryptoHistoryNotReady() {
+    void shouldReturnPreparingWhenCryptoPrefilledHistoryEmpty() {
         MarketDataClient marketDataClient = Mockito.mock(MarketDataClient.class);
         DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
         SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
 
         LocalDate buyDate = LocalDate.of(2024, 6, 10);
-        Mockito.when(marketDataClient.getCryptoHistoryCoverage(eq("BTCUSDT"), any(LocalDate.class), any(LocalDate.class)))
-                .thenAnswer(inv -> notReadyCoverage("BTCUSDT", inv.getArgument(1), inv.getArgument(2)));
+        Mockito.when(marketDataClient.getCryptoPrefilledHistory(eq("BTCUSDT"), anyInt(), eq("daily")))
+                .thenReturn(List.of());
         Mockito.when(marketDataClient.triggerCryptoHistoryWarmup(eq("BTCUSDT"), any(LocalDate.class), any(LocalDate.class), eq("simulation")))
                 .thenReturn(true);
 
@@ -241,28 +241,26 @@ class SimulationServiceTest {
         assertEquals(SimulationService.NOTICE_HISTORY_PREPARING, response.getApproximationNoticeCode());
         assertEquals("BTCUSDT", response.getSymbol());
         Mockito.verify(marketDataClient).triggerCryptoHistoryWarmup(eq("BTCUSDT"), any(LocalDate.class), any(LocalDate.class), eq("simulation"));
-        Mockito.verify(marketDataClient, never()).getCryptoPrefilledHistory(eq("BTCUSDT"), anyInt(), eq("daily"));
+        Mockito.verify(marketDataClient, never()).getCryptoHistoryCoverage(eq("BTCUSDT"), any(LocalDate.class), any(LocalDate.class));
     }
 
     @Test
-    void shouldRequestCryptoCoverageUntilYesterdayInsteadOfToday() {
+    void shouldProceedWhenCryptoPrefilledHistoryExistsWithoutCoverageGate() {
         MarketDataClient marketDataClient = Mockito.mock(MarketDataClient.class);
         DateToDaysHelper dateToDaysHelper = new DateToDaysHelper();
         SimulationService service = new SimulationService(marketDataClient, dateToDaysHelper);
 
         LocalDate buyDate = todayIstanbul().minusDays(3);
-        LocalDate expectedCoverageTo = todayIstanbul().minusDays(1);
-        Mockito.when(marketDataClient.getCryptoHistoryCoverage(eq("ADAUSDT"), any(LocalDate.class), eq(expectedCoverageTo)))
-                .thenAnswer(inv -> readyCoverage("ADAUSDT", inv.getArgument(1), inv.getArgument(2)));
+        LocalDate yesterday = todayIstanbul().minusDays(1);
         Mockito.when(marketDataClient.getCryptoPrefilledHistory(eq("ADAUSDT"), anyInt(), eq("daily")))
                 .thenReturn(List.of(
                         new MarketPriceHistoryDto(new BigDecimal("1.10"), new BigDecimal("1.10"), buyDate.atStartOfDay()),
-                        new MarketPriceHistoryDto(new BigDecimal("1.25"), new BigDecimal("1.25"), expectedCoverageTo.atStartOfDay())
+                        new MarketPriceHistoryDto(new BigDecimal("1.25"), new BigDecimal("1.25"), yesterday.atStartOfDay())
                 ));
         Mockito.when(marketDataClient.getHistory(eq(AssetType.FX), eq("USDTRY"), anyInt()))
                 .thenReturn(List.of(
                         new MarketPriceHistoryDto(new BigDecimal("38"), new BigDecimal("38"), buyDate.atStartOfDay()),
-                        new MarketPriceHistoryDto(new BigDecimal("39"), new BigDecimal("39"), expectedCoverageTo.atStartOfDay())
+                        new MarketPriceHistoryDto(new BigDecimal("39"), new BigDecimal("39"), yesterday.atStartOfDay())
                 ));
         Mockito.when(marketDataClient.getPriceTry(eq(AssetType.CRYPTO), eq("ADAUSDT")))
                 .thenReturn(new BigDecimal("50"));
@@ -273,7 +271,7 @@ class SimulationServiceTest {
                 AssetType.CRYPTO, "ADAUSDT", new BigDecimal("3900"), buyDate, null
         );
 
-        verify(marketDataClient).getCryptoHistoryCoverage(eq("ADAUSDT"), any(LocalDate.class), eq(expectedCoverageTo));
+        verify(marketDataClient, never()).getCryptoHistoryCoverage(eq("ADAUSDT"), any(LocalDate.class), any(LocalDate.class));
         assertEquals(SimulationResponseDto.STATUS_READY, response.getStatus());
     }
 

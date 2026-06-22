@@ -95,27 +95,24 @@ public class SimulationService {
         LocalDate historyFrom = buyDate.minusDays(HISTORY_LOOKBACK_DAYS + HISTORY_BUFFER_DAYS);
         long historySpanDays = ChronoUnit.DAYS.between(historyFrom, today) + 1;
         int days = AllowedHistoryDays.smallestCovering(Math.max(historySpanDays, dateToDaysHelper.toDays(historyFrom)));
-        if (type == AssetType.CRYPTO && (manualBuyPrice == null || manualBuyPrice.signum() <= 0)) {
-            LocalDate coverageTo = cryptoHistoryCoverageTo(historyFrom, today);
-            MarketDataClient.CryptoHistoryCoverageDto coverage =
-                    marketDataClient.getCryptoHistoryCoverage(symbol, historyFrom, coverageTo);
-            if (coverage == null || !coverage.ready()) {
-                marketDataClient.triggerCryptoHistoryWarmup(symbol, historyFrom, coverageTo, "simulation");
-                String message = "Kripto geçmiş verisi hazırlanıyor. Birkaç dakika sonra tekrar deneyin.";
-                return SimulationResponseDto.preparing(
-                        type.name(),
-                        symbol,
-                        buyDate,
-                        amount,
-                        currency.name(),
-                        message,
-                        180
-                );
-            }
-        }
         List<MarketPriceHistoryDto> history = loadHistory(type, symbol, historyFrom, today, days);
         if (history == null) {
             history = List.of();
+        }
+        if (type == AssetType.CRYPTO && (manualBuyPrice == null || manualBuyPrice.signum() <= 0) && history.isEmpty()) {
+            LocalDate coverageFrom = buyDate.minusDays(HISTORY_LOOKBACK_DAYS + HISTORY_BUFFER_DAYS);
+            LocalDate coverageTo = cryptoBuyDateCoverageTo(buyDate, today);
+            marketDataClient.triggerCryptoHistoryWarmup(symbol, coverageFrom, coverageTo, "simulation");
+            String message = "Kripto geçmiş verisi hazırlanıyor. Birkaç dakika sonra tekrar deneyin.";
+            return SimulationResponseDto.preparing(
+                    type.name(),
+                    symbol,
+                    buyDate,
+                    amount,
+                    currency.name(),
+                    message,
+                    180
+            );
         }
 
         BigDecimal spotUsdTry = resolveUsdTryRate();
@@ -508,15 +505,16 @@ public class SimulationService {
     }
 
     /**
-     * Güncel fiyat spot endpoint'ten geldiği için günlük candle coverage en fazla son kapanmış güne kadar zorunlu.
-     * Gece yarısı civarı "bugün" mumu henüz oluşmadan gereksiz PREPARING'e düşmemek için coverage'i dünkü güne cap'leriz.
+     * Alım fiyatı çözümlemesi için yalnızca buyDate çevresindeki dar pencereyi kontrol eder.
+     * Tam simülasyon aralığı (buyDate → bugün) gap-fill ile yüklenir; burada sadece alım günü verisi aranır.
      */
-    private static LocalDate cryptoHistoryCoverageTo(LocalDate historyFrom, LocalDate today) {
+    private static LocalDate cryptoBuyDateCoverageTo(LocalDate buyDate, LocalDate today) {
         LocalDate latestClosedDay = today.minusDays(1);
-        if (latestClosedDay.isBefore(historyFrom)) {
-            return historyFrom;
+        LocalDate forward = buyDate.plusDays(HISTORY_FORWARD_FALLBACK_DAYS);
+        if (forward.isAfter(latestClosedDay)) {
+            return latestClosedDay;
         }
-        return latestClosedDay;
+        return forward;
     }
 
     private BigDecimal resolveCurrentPriceTry(
