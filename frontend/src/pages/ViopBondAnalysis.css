@@ -825,11 +825,11 @@
 }
 
 .vb-pos {
-    color: #22c55e;
+    color: #166534;
 }
 
 .vb-neg {
-    color: #ef4444;
+    color: #991B1B;
 }
 
 .vb-badge {
@@ -840,8 +840,8 @@
 }
 
 .vb-badge--open {
-    border-color: rgba(34, 197, 94, 0.4);
-    color: #22c55e;
+    border-color: rgba(22, 101, 52, 0.4);
+    color: #166534;
 }
 
 .vb-badge--closed {
@@ -942,8 +942,8 @@
 }
 
 .vb-card-btn--danger {
-    color: #f87171 !important;
-    border-color: rgba(248, 113, 113, 0.35) !important;
+    color: #991B1B !important;
+    border-color: rgba(153, 27, 27, 0.35) !important;
 }
 
 /* Modal */
@@ -1238,7 +1238,7 @@
 }
 
 .vb-error {
-    color: #ef4444;
+    color: #991B1B;
     font-size: 0.82rem;
     margin: 0.5rem 0 0;
 }
@@ -1400,11 +1400,11 @@
 
     .vb-tab-kpis .vb-tab-kpi.pf-stat-card--pnl-pos,
     .vb-tab-kpis .vb-tab-kpi.pf-stat-card--pnl-neg {
-        box-shadow: 0 0 0 1px rgba(57, 255, 20, 0.12);
+        box-shadow: 0 0 0 1px rgba(22, 101, 52, 0.12);
     }
 
     .vb-tab-kpis .vb-tab-kpi.pf-stat-card--pnl-neg {
-        box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.14);
+        box-shadow: 0 0 0 1px rgba(153, 27, 27, 0.14);
     }
 }
 
@@ -1660,7 +1660,7 @@
 }
 
 .vb-action-menu--danger {
-    color: #f87171 !important;
+    color: #991B1B !important;
 }
 
 .vb-analytics-block {
@@ -1844,13 +1844,13 @@
 }
 
 .vb-badge--long {
-    background: rgba(34, 197, 94, 0.15);
-    color: #86efac;
+    background: rgba(22, 101, 52, 0.15);
+    color: #166534;
 }
 
 .vb-badge--short {
-    background: rgba(239, 68, 68, 0.15);
-    color: #fca5a5;
+    background: rgba(153, 27, 27, 0.15);
+    color: #991B1B;
 }
 
 .vb-search-filter-bar {
@@ -1997,14 +1997,14 @@
 }
 
 .vb-toast--success {
-    background: rgba(34, 197, 94, 0.15);
-    border: 1px solid rgba(34, 197, 94, 0.45);
+    background: rgba(22, 101, 52, 0.15);
+    border: 1px solid rgba(22, 101, 52, 0.45);
     color: var(--pf-text, #e8ecf4);
 }
 
 .vb-toast--error {
-    background: rgba(239, 68, 68, 0.15);
-    border: 1px solid rgba(239, 68, 68, 0.45);
+    background: rgba(153, 27, 27, 0.15);
+    border: 1px solid rgba(153, 27, 27, 0.45);
     color: var(--pf-text, #e8ecf4);
 }
 

@@ -4,7 +4,7 @@
  * Tema renkleri:
  *  - Silver: rgba(192, 192, 192, X) — kart sinirlari, ikonlar, soluk on plan elemanlari
  *  - Electric blue: #38bdf8 — okunmamis satir aksanasi ve aktif tab parlamasi
- *  - Kategori renkleri: yesil (#22c55e onay), kirmizi (#ef4444 guvenlik), mavi (#38bdf8 inceleme)
+ *  - Kategori renkleri: yesil (#166534 onay), kirmizi (#991B1B guvenlik), mavi (#38bdf8 inceleme)
  *
  * Tum stiller `var(--notif-*)` ozelliklerinden gucleniyor; karanlık/aydinlik tema icin
  * Notifications.tsx `pageVars` ile bu degiskenler .notif-page uzerinde set edilir.
@@ -285,10 +285,32 @@
     background: rgba(15, 23, 42, 0.25);
 }
 
+.notif-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.notif-empty__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.notif-empty__text {
+    line-height: 1.45;
+}
+
 .notif-error {
-    color: #f87171;
-    border-color: rgba(248, 113, 113, 0.4);
-    background: rgba(248, 113, 113, 0.06);
+    color: #991B1B;
+    border-color: rgba(153, 27, 27, 0.4);
+    background: rgba(153, 27, 27, 0.06);
 }
 
 /* Pagination */
@@ -702,9 +724,170 @@
 }
 
 [data-theme='light'] .notif-inbox-card {
-    background: #fff;
-    border-color: rgba(15, 23, 42, 0.08);
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: none;
+}
+
+/* --- Light mode: Bildirimler ve Alarmlar --- */
+[data-theme='light'] .notif-page {
+    --notif-bg: #ffffff;
+    --notif-text: #333333;
+    --notif-muted: #4a4a4a;
+    background: #ffffff;
+    color: #333333;
+}
+
+[data-theme='light'] .notif-header__icon {
+    color: #1e293b;
+    background: #eff6ff;
+    border-color: #dbeafe;
+    box-shadow: none;
+}
+
+[data-theme='light'] .notif-header__title {
+    color: #333333;
+}
+
+[data-theme='light'] .notif-inbox-card__head {
+    border-bottom-color: #e2e8f0;
+}
+
+[data-theme='light'] .notif-inbox-card__title {
+    color: #333333;
+}
+
+[data-theme='light'] .notif-inbox-card--notifications .notif-inbox-card__icon {
+    color: #1e293b;
+    background: #eff6ff;
+    border-color: #dbeafe;
+}
+
+[data-theme='light'] .notif-inbox-card--notifications .notif-inbox-card__count {
+    color: #1e293b;
+    background: #f8fafc;
+    border-color: #e2e8f0;
+}
+
+[data-theme='light'] .notif-inbox-card--alarms .notif-inbox-card__icon {
+    color: #991b1b;
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
+[data-theme='light'] .notif-inbox-card--alarms .notif-inbox-card__count {
+    color: #991b1b;
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
+[data-theme='light'] .notif-tabs {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+}
+
+[data-theme='light'] .notif-tab {
+    color: #4a4a4a;
+}
+
+[data-theme='light'] .notif-tab:hover {
+    color: #333333;
+}
+
+[data-theme='light'] .notif-tab.is-active {
+    color: #1e293b;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+[data-theme='light'] .notif-tab.is-active::after {
+    left: 12px;
+    right: 12px;
+    bottom: 0;
+    height: 2px;
+    background: #1e293b;
+    box-shadow: none;
+}
+
+[data-theme='light'] .notif-empty,
+[data-theme='light'] .notif-loading {
+    color: #4a4a4a;
+    background: #ffffff;
+    border: 1px dashed #e2e8f0;
+}
+
+[data-theme='light'] .notif-empty--notifications .notif-empty__icon {
+    color: #1e293b;
+    background: #eff6ff;
+    border: 1px solid #dbeafe;
+}
+
+[data-theme='light'] .notif-empty--alarms .notif-empty__icon {
+    color: #991b1b;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+}
+
+[data-theme='light'] .notif-item {
+    background: #ffffff;
+    border-color: #e2e8f0;
+}
+
+[data-theme='light'] .notif-item:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+[data-theme='light'] .notif-item.is-read .notif-item__title {
+    color: #4a4a4a;
+}
+
+[data-theme='light'] .notif-item__meta,
+[data-theme='light'] .notif-item__date,
+[data-theme='light'] .notif-item__type-chip {
+    color: #4a4a4a;
+}
+
+[data-theme='light'] .notif-item__type-chip {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+}
+
+[data-theme='light'] .alarm-list-item {
+    background: #ffffff;
+    border-color: #e2e8f0;
+}
+
+[data-theme='light'] .alarm-list-item__symbol {
+    color: #333333;
+}
+
+[data-theme='light'] .alarm-list-item__meta,
+[data-theme='light'] .alarm-list-item__date {
+    color: #4a4a4a;
+}
+
+[data-theme='light'] .notif-page-btn {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    color: #333333;
+}
+
+[data-theme='light'] .notif-page-btn:hover:not(:disabled) {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+[data-theme='light'] .inbox-card-pagination {
+    border-top-color: #e2e8f0;
+}
+
+[data-theme='light'] .inbox-card-pagination__info {
+    color: #4a4a4a;
+}
+
+[data-theme='light'] .notif-page-info {
+    color: #4a4a4a;
 }
 
 @media (max-width: 1024px) {

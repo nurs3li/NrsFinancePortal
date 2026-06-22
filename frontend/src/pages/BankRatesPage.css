@@ -234,11 +234,11 @@
 }
 
 .br-kpi-card__value--pos {
-    color: #22c55e;
+    color: #166534;
 }
 
 .br-kpi-card__value--neg {
-    color: #f43f5e;
+    color: #991B1B;
 }
 
 .br-kpi-card__dual {
@@ -361,12 +361,12 @@
 }
 
 .br-trend--up {
-    color: #22c55e;
+    color: #166534;
     margin-left: auto;
 }
 
 .br-trend--down {
-    color: #ef4444;
+    color: #991B1B;
     margin-left: auto;
 }
 
@@ -423,11 +423,11 @@
 }
 
 .br-num--pos {
-    color: #22c55e;
+    color: #166534;
 }
 
 .br-num--neg {
-    color: #f43f5e;
+    color: #991B1B;
 }
 
 .br-table-pager {

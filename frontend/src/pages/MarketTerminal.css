@@ -25,8 +25,8 @@
     --terminal-hover-bg: rgba(148, 163, 184, 0.16);
     --terminal-active-row-bg: rgba(59, 130, 246, 0.14);
     /* Pozitif / negatif seri renkleri (sparkline, %, hero) — light/dark’ta kontrastlı */
-    --terminal-pos: #15803d;
-    --terminal-neg: #b91c1c;
+    --terminal-pos: #166534;
+    --terminal-neg: #991B1B;
     --terminal-neu: var(--terminal-muted, #64748b);
 
     min-height: 100%;
@@ -73,11 +73,11 @@
 }
 
 .terminal-hero-change.up {
-    color: var(--terminal-pos, #22c55e);
+    color: var(--terminal-pos, #166534);
 }
 
 .terminal-hero-change.down {
-    color: var(--terminal-neg, #ef4444);
+    color: var(--terminal-neg, #991B1B);
 }
 
 .terminal-hero-change.is-flat {
@@ -808,11 +808,11 @@
 }
 
 .terminal-pct-pos {
-    color: var(--terminal-pos, #15803d);
+    color: var(--terminal-pos, #166534);
 }
 
 .terminal-pct-neg {
-    color: var(--terminal-neg, #b91c1c);
+    color: var(--terminal-neg, #991B1B);
 }
 
 .terminal-controls--viop {
@@ -1320,13 +1320,13 @@
 }
 
 .terminal-chart-badge.up {
-    border-color: rgba(34, 197, 94, 0.65);
-    color: #86efac;
+    border-color: rgba(22, 101, 52, 0.65);
+    color: #166534;
 }
 
 .terminal-chart-badge.down {
-    border-color: rgba(239, 68, 68, 0.65);
-    color: #fca5a5;
+    border-color: rgba(153, 27, 27, 0.65);
+    color: #991B1B;
 }
 
 .terminal-ohlc {
@@ -1803,7 +1803,7 @@
 
 @keyframes terminalFlashUp {
     from {
-        background-color: rgba(34, 197, 94, 0.24);
+        background-color: rgba(22, 101, 52, 0.24);
     }
     to {
         background-color: transparent;
@@ -1812,7 +1812,7 @@
 
 @keyframes terminalFlashDown {
     from {
-        background-color: rgba(239, 68, 68, 0.24);
+        background-color: rgba(153, 27, 27, 0.24);
     }
     to {
         background-color: transparent;
@@ -2108,7 +2108,7 @@
     width: 7px;
     height: 7px;
     border-radius: 999px;
-    background: #16a34a;
+    background: #166534;
     margin-top: 5px;
     flex-shrink: 0;
 }
@@ -2146,7 +2146,7 @@
 .tefas-risk__label {
     font-size: 11px;
     font-weight: 700;
-    color: #b91c1c;
+    color: #991B1B;
     text-decoration: underline;
     text-decoration-thickness: 2px;
     text-underline-offset: 2px;
@@ -2156,7 +2156,7 @@
     display: block;
     height: 3px;
     border-radius: 2px;
-    background: linear-gradient(90deg, #f97316, #b91c1c);
+    background: linear-gradient(90deg, #f97316, #991B1B);
     max-width: 100%;
 }
 
@@ -2969,11 +2969,11 @@
 }
 
 .terminal-hero-selector__pct.is-up {
-    color: var(--terminal-pos, #22c55e);
+    color: var(--terminal-pos, #166534);
 }
 
 .terminal-hero-selector__pct.is-down {
-    color: var(--terminal-neg, #ef4444);
+    color: var(--terminal-neg, #991B1B);
 }
 
 .terminal-hero-selector__pct.is-flat {
@@ -3412,6 +3412,10 @@
     font-variant-numeric: tabular-nums;
 }
 
+.terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm {
+    min-width: 0;
+}
+
 .terminal-left-panel__inner .terminal-table-wrap:has(.terminal-data-table--picker-horizons) {
     overflow-x: auto;
     /* `stable` kaydırıcı için sağda rezerv boşluk bırakıyor; trend ile çubuk arası boş görünmesin */
@@ -3792,6 +3796,355 @@
     letter-spacing: 0.01em;
     white-space: nowrap;
     opacity: 0.95;
+}
+
+/* Spot piyasa / VİOP / tahvil: Gün–Yıl gizli — referans tablo yerleşimi (★ | logo+enstrüman | fiyat | trend) */
+.terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm {
+    min-width: 0;
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.terminal-left-panel__inner .terminal-table-wrap:has(.terminal-data-table--equity-hide-dwm) {
+    overflow-x: hidden;
+}
+
+.terminal-left-panel__inner:has(.terminal-data-table--equity-hide-dwm) .terminal-search--picker-reflow {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 10px;
+    padding: 10px 14px;
+    border-radius: 10px;
+}
+
+.terminal-market-list-scroll-host--picker-reflow {
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.terminal-market-list-scroll-host--picker-reflow .terminal-table-wrap {
+    border: none;
+    border-radius: 0;
+    overflow-x: hidden;
+}
+
+.terminal-market-list-scroll-host--picker-reflow .terminal-market-list-pagination {
+    padding: 10px 14px 12px;
+    gap: 12px;
+    font-size: 11px;
+}
+
+.terminal-market-list-scroll-host--picker-reflow .terminal-market-list-pagination__nav {
+    gap: 8px;
+}
+
+.terminal-market-list-scroll-host--picker-reflow .terminal-market-list-page-btn {
+    padding: 5px 12px;
+    font-size: 11px;
+    border-radius: 8px;
+}
+
+.terminal-picker-instrument-stack {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.terminal-picker-instrument-stack__logo {
+    flex: 0 0 auto;
+    line-height: 0;
+}
+
+.terminal-picker-instrument-stack__text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.terminal-picker-instrument-stack__primary {
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1.2;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.terminal-picker-instrument-stack__secondary {
+    font-size: 10px;
+    line-height: 1.25;
+    color: var(--terminal-text-muted, #94a3b8);
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Karşılaştırma + alarm: kompakt tabloda tek aksiyon şeridi (★ zil karşılaştır) */
+.terminal-data-table--equity-hide-dwm .terminal-picker-actions-head,
+.terminal-data-table--equity-hide-dwm .terminal-picker-actions-cell {
+    width: 72px !important;
+    min-width: 72px !important;
+    max-width: 72px !important;
+    padding-left: 10px;
+    padding-right: 2px;
+    text-align: left;
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-actions-head__glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.9;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-row-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    min-width: 0;
+    padding-left: 0;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-row-actions .terminal-star-btn,
+.terminal-data-table--equity-hide-dwm .terminal-picker-row-actions .terminal-picker-compare-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    margin: 0;
+    flex-shrink: 0;
+    border-radius: 5px;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-row-actions .terminal-star-btn svg,
+.terminal-data-table--equity-hide-dwm .terminal-picker-row-actions .terminal-picker-compare-btn svg {
+    width: 12px;
+    height: 12px;
+}
+
+/*
+ * colspan=2 aksiyon hücresi sonrası nth-child(2) = enstrüman.
+ * Genel picker nth-child(2) karşılaştırma genişliği (22px) enstrümanı eziyordu.
+ */
+.terminal-data-table--equity-hide-dwm thead th:nth-child(2),
+.terminal-data-table--equity-hide-dwm tbody td:nth-child(2) {
+    width: 38% !important;
+    min-width: 118px !important;
+    max-width: none !important;
+    padding-left: 8px !important;
+    padding-right: 10px !important;
+    text-align: left !important;
+    overflow: visible;
+}
+
+.terminal-data-table--equity-hide-dwm thead th:nth-child(3),
+.terminal-data-table--equity-hide-dwm tbody td:nth-child(3) {
+    width: 26% !important;
+    min-width: 74px !important;
+    max-width: none !important;
+}
+
+.terminal-data-table--equity-hide-dwm thead th:nth-child(4),
+.terminal-data-table--equity-hide-dwm tbody td:nth-child(4) {
+    width: 24% !important;
+    min-width: 78px !important;
+    max-width: none !important;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-pin {
+    position: static !important;
+    left: auto !important;
+    z-index: auto !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+    background-clip: border-box !important;
+}
+
+.terminal-data-table--equity-hide-dwm thead .terminal-picker-pin {
+    z-index: auto !important;
+}
+
+.terminal-data-table--equity-hide-dwm thead th {
+    font-size: 11px;
+    font-weight: 600;
+    padding-top: 11px;
+    padding-bottom: 11px;
+    vertical-align: middle;
+    border-bottom: 1px solid color-mix(in srgb, var(--terminal-border) 88%, transparent);
+}
+
+.terminal-data-table--equity-hide-dwm tbody td {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    vertical-align: middle;
+}
+
+.terminal-data-table--equity-hide-dwm tbody tr {
+    min-height: 56px;
+    height: 56px;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-instrument-head,
+.terminal-data-table--equity-hide-dwm .terminal-instrument-head,
+.terminal-data-table--equity-hide-dwm td.terminal-instrument-cell {
+    width: auto;
+    min-width: 0;
+    padding-left: 8px;
+    padding-right: 10px;
+    text-align: left;
+    overflow: visible;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-instrument-head,
+.terminal-data-table--equity-hide-dwm .terminal-instrument-head {
+    padding-left: 8px;
+    white-space: nowrap;
+    overflow: visible;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-instrument-stack {
+    min-width: 0;
+    width: 100%;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-instrument-stack__text {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-instrument-stack,
+.terminal-data-table--equity-hide-dwm .viop-instrument-stack,
+.terminal-data-table--equity-hide-dwm .tefas-fund-instrument {
+    align-items: center;
+    gap: 10px;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-instrument-stack__logo {
+    flex: 0 0 28px;
+    width: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-instrument-stack__primary {
+    font-size: 12px;
+    line-height: 1.25;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-instrument-stack__secondary {
+    font-size: 10px;
+    line-height: 1.3;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-price-head,
+.terminal-data-table--equity-hide-dwm .terminal-picker-price-cell {
+    width: 30%;
+    min-width: 88px;
+    max-width: none;
+    padding-left: 12px;
+    padding-right: 16px;
+    text-align: right;
+    box-sizing: border-box;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-trend-head,
+.terminal-data-table--equity-hide-dwm td:has(.inline-spark) {
+    width: 30%;
+    min-width: 92px;
+    max-width: none;
+    padding-left: 16px;
+    padding-right: 12px;
+    text-align: right;
+    box-sizing: border-box;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-price-head .terminal-sort-th {
+    justify-content: flex-end;
+    width: auto;
+    margin-left: auto;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-trend-head .market-trend-head--compact {
+    align-items: flex-end;
+    margin-left: auto;
+    gap: 3px;
+    line-height: 1.2;
+}
+
+.terminal-data-table--equity-hide-dwm .market-trend-head--compact .market-trend-head__label {
+    letter-spacing: 0.04em;
+}
+
+.terminal-data-table--equity-hide-dwm .market-trend-head--compact .market-trend-head__range {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--terminal-text-muted, #94a3b8);
+    letter-spacing: 0.03em;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-price-stack {
+    justify-content: center;
+    gap: 2px;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-price-stack__main {
+    font-size: 12px;
+    line-height: 1.25;
+}
+
+.terminal-data-table--equity-hide-dwm .terminal-picker-price-stack__day {
+    font-size: 10px;
+    line-height: 1.25;
+}
+
+.terminal-data-table--equity-hide-dwm .inline-spark {
+    display: block;
+    width: 80px;
+    min-width: 72px;
+    max-width: 96px;
+    height: 26px;
+    margin-left: auto;
+}
+
+.terminal-data-table--equity-hide-dwm td:has(.inline-spark) {
+    vertical-align: middle;
+}
+
+.terminal-data-table--picker-horizons .terminal-picker-row-actions .terminal-star-btn:hover:not(:disabled),
+.terminal-data-table--picker-horizons .terminal-picker-row-actions .terminal-picker-compare-btn:hover:not(:disabled) {
+    background: var(--terminal-hover-bg, rgba(148, 163, 184, 0.14));
+    color: var(--terminal-text, #e2e8f0);
+}
+
+.terminal-hero--spot-compact:not(.terminal-hero--viop):not(.terminal-hero--bond) .terminal-hero-selector-row {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .terminal-quick-filter {
@@ -4785,6 +5138,115 @@
     .terminal-data-table--picker-horizons .terminal-instrument-cell > div {
         min-width: 0;
         max-width: 100%;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm {
+        width: 100%;
+        min-width: 0;
+        table-layout: fixed;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-picker-pin {
+        position: static !important;
+        left: auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: none !important;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-picker-actions-head,
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-picker-actions-cell {
+        width: 68px !important;
+        min-width: 68px !important;
+        max-width: 68px !important;
+        padding-left: 8px;
+        padding-right: 2px;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-picker-row-actions {
+        gap: 2px;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-picker-row-actions .terminal-star-btn,
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-picker-row-actions .terminal-picker-compare-btn {
+        width: 20px;
+        height: 20px;
+        min-width: 20px;
+        min-height: 20px;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm thead th:nth-child(2),
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm tbody td:nth-child(2) {
+        width: 36% !important;
+        min-width: 100px !important;
+        max-width: none !important;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm thead th:nth-child(3),
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm tbody td:nth-child(3) {
+        width: 28% !important;
+        min-width: 68px !important;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm thead th:nth-child(4),
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm tbody td:nth-child(4) {
+        width: 24% !important;
+        min-width: 72px !important;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-instrument-cell {
+        overflow: visible;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-picker-instrument-head,
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-instrument-head,
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-instrument-cell {
+        left: auto;
+        width: auto;
+        min-width: 0;
+        max-width: none;
+        padding-left: 8px;
+        padding-right: 10px;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-picker-instrument-head,
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-instrument-head {
+        padding-left: 10px;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-picker-price-head,
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-picker-price-cell {
+        width: 30%;
+        min-width: 72px;
+        max-width: none;
+        padding-left: 10px;
+        padding-right: 12px;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .terminal-picker-trend-head,
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm td:has(.inline-spark) {
+        width: 30%;
+        min-width: 76px;
+        max-width: none;
+        padding-left: 12px;
+        padding-right: 8px;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm .inline-spark {
+        width: 72px;
+        min-width: 64px;
+        max-width: 80px;
+        height: 24px;
+    }
+
+    .terminal-data-table--picker-horizons.terminal-data-table--equity-hide-dwm tbody tr {
+        min-height: 52px;
+        height: 52px;
+    }
+
+    .terminal-left-column .terminal-market-list-scroll-host .terminal-table-wrap:has(.terminal-data-table--equity-hide-dwm),
+    .terminal-market-list-expand-dialog .terminal-market-list-scroll-host .terminal-table-wrap:has(.terminal-data-table--equity-hide-dwm) {
+        overflow-x: hidden !important;
     }
 
     .terminal-data-table--picker-horizons tbody tr:hover .terminal-picker-pin,

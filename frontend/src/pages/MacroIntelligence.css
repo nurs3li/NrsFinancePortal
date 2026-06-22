@@ -231,11 +231,11 @@
 }
 
 .macro-kpi__badge--positive {
-    background: #34d399;
+    background: #166534;
 }
 
 .macro-kpi__badge--negative {
-    background: #fb7185;
+    background: #991B1B;
 }
 
 .macro-kpi__badge--warning {
@@ -290,7 +290,7 @@
 }
 
 .macro-insight--green {
-    border-left: 3px solid #34d399;
+    border-left: 3px solid #166534;
 }
 
 .macro-insight--amber {
@@ -551,7 +551,7 @@
 }
 
 .macro-inverse-card__side--down {
-    color: #fb7185;
+    color: #991B1B;
 }
 
 .macro-euro-def {
@@ -817,11 +817,11 @@
 }
 
 .bond-literacy__rate-price-row--up .bond-literacy__rate-price-side--down {
-    color: #fb7185;
+    color: #991B1B;
 }
 
 .bond-literacy__rate-price-row--down .bond-literacy__rate-price-side--rate-down {
-    color: #4ade80;
+    color: #166534;
 }
 
 .bond-literacy__rate-price-row--down .bond-literacy__rate-price-side--price-up {
@@ -1037,9 +1037,9 @@
 }
 
 [data-theme='light'] .macro-sticky-nav__tab--active {
-    background: #dbeafe;
-    border-color: #3b82f6;
-    color: #1e3a8a;
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #ffffff;
 }
 
 [data-theme='light'] .macro-section-card,
@@ -1056,14 +1056,14 @@
 }
 
 [data-theme='light'] .bond-literacy__cta-btn {
-    background: #dbeafe;
-    border-color: #3b82f6;
-    color: #1e3a8a;
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #ffffff;
 }
 
 [data-theme='light'] .bond-literacy__cta-btn:hover {
-    background: #bfdbfe;
-    border-color: #2563eb;
+    background: #0f172a;
+    border-color: #0f172a;
 }
 
 [data-theme='light'] .bond-literacy__flow-step {
@@ -1071,9 +1071,9 @@
 }
 
 [data-theme='light'] .bond-literacy__badge--edu {
-    color: #1e40af;
-    background: #dbeafe;
-    border-color: #93c5fd;
+    color: #1e293b;
+    background: #f1f5f9;
+    border-color: #cbd5e1;
 }
 
 [data-theme='light'] .bond-literacy__badge--muted {
@@ -1098,18 +1098,12 @@
     border-color: #cbd5e1;
 }
 
-[data-theme='light'] .macro-glossary-chip--active {
-    background: #ede9fe;
-    border-color: #8b5cf6;
-    color: #5b21b6;
-}
-
 [data-theme='light'] .macro-glossary-item {
     background: #ffffff;
 }
 
 [data-theme='light'] .macro-advanced summary {
-    color: #64748b;
+    color: #4a4a4a;
 }
 
 [data-theme='light'] .macro-info-modal__dialog {
@@ -1124,3 +1118,130 @@
     background: #f8fafc;
     border-color: #e2e8f0;
 }
+
+/* —— Light mode: kurumsal palet (Portfolio / Simülasyon ile uyumlu) —— */
+[data-theme='light'] .macro-intelligence-page {
+    background: #ffffff !important;
+    color: #333333;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-kpi,
+[data-theme='light'] .macro-intelligence-page .macro-chart-card,
+[data-theme='light'] .macro-intelligence-page .macro-section-card,
+[data-theme='light'] .macro-intelligence-page .macro-kpi-card,
+[data-theme='light'] .macro-intelligence-page .macro-insight,
+[data-theme='light'] .macro-intelligence-page .bond-literacy__concept-card,
+[data-theme='light'] .macro-intelligence-page .bond-literacy__panel-card,
+[data-theme='light'] .macro-intelligence-page .bond-literacy__yield-card {
+    background: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-hero__title,
+[data-theme='light'] .macro-intelligence-page .macro-section__title,
+[data-theme='light'] .macro-intelligence-page .macro-kpi__value,
+[data-theme='light'] .macro-intelligence-page .macro-chart-card__title,
+[data-theme='light'] .macro-intelligence-page .bond-literacy__concept-card-title,
+[data-theme='light'] .macro-intelligence-page .bond-literacy__panel-card-title {
+    color: #333333 !important;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-hero__subtitle,
+[data-theme='light'] .macro-intelligence-page .macro-section__summary,
+[data-theme='light'] .macro-intelligence-page .macro-kpi__title,
+[data-theme='light'] .macro-intelligence-page .macro-kpi__meta,
+[data-theme='light'] .macro-intelligence-page .macro-chart-card__footer,
+[data-theme='light'] .macro-intelligence-page .macro-hero__updated,
+[data-theme='light'] .macro-intelligence-page .bond-literacy__concept-card-short,
+[data-theme='light'] .macro-intelligence-page .bond-literacy__flow-note,
+[data-theme='light'] .macro-intelligence-page .bond-literacy__flow-col-label {
+    color: #4a4a4a !important;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-info-btn {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #475569;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-info-btn:hover {
+    color: #1e293b;
+    border-color: #1e293b;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-link-btn {
+    color: #1e293b;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-callout--warning {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-callout--info {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #4a4a4a;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-term-chip {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    color: #333333;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-empty__retry {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #1e293b;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-kpi__badge--positive {
+    background: #166534;
+}
+
+[data-theme='light'] .macro-intelligence-page .macro-kpi__badge--negative {
+    background: #991b1b;
+}
+
+[data-theme='light'] .macro-intelligence-page .bond-literacy__rate-price-row {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+[data-theme='light'] .macro-intelligence-page .bond-literacy__rate-price-row--up .bond-literacy__rate-price-side:first-child {
+    color: #166534;
+}
+
+[data-theme='light'] .macro-intelligence-page .bond-literacy__rate-price-row--up .bond-literacy__rate-price-side--down {
+    color: #991b1b;
+}
+
+[data-theme='light'] .macro-intelligence-page .bond-literacy__rate-price-row--down .bond-literacy__rate-price-side--rate-down {
+    color: #991b1b;
+}
+
+[data-theme='light'] .macro-intelligence-page .bond-literacy__rate-price-row--down .bond-literacy__rate-price-side--price-up {
+    color: #166534;
+}
+
+[data-theme='light'] .macro-intelligence-page .bond-literacy__rate-price-arrow {
+    color: #4a4a4a;
+}
+
+[data-theme='light'] .macro-intelligence-page .bond-literacy__flow-step {
+    color: #333333;
+    border-width: 1.5px;
+}
+
+[data-theme='light'] .macro-intelligence-page .bond-literacy__flow-arrow {
+    color: #64748b;
+}
+
+[data-theme='light'] .macro-glossary-chip--active {
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #ffffff;
+}
+

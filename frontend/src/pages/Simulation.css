@@ -166,10 +166,10 @@
 }
 
 .quality-pill-exact {
-    background: rgba(57, 255, 20, 0.12);
-    color: #5cff3a;
-    border: 1px solid rgba(57, 255, 20, 0.35);
-    box-shadow: inset 0 0 12px rgba(57, 255, 20, 0.18);
+    background: rgba(22, 101, 52, 0.12);
+    color: #166534;
+    border: 1px solid rgba(22, 101, 52, 0.35);
+    box-shadow: inset 0 0 12px rgba(22, 101, 52, 0.18);
 }
 
 .quality-pill-prev {
@@ -179,9 +179,9 @@
 }
 
 .quality-pill-fallback {
-    background: rgba(239, 68, 68, 0.14);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.35);
+    background: rgba(153, 27, 27, 0.14);
+    color: #991B1B;
+    border: 1px solid rgba(153, 27, 27, 0.35);
 }
 
 .sim-pnl-cell {
@@ -191,13 +191,13 @@
 }
 
 .sim-pnl-pos {
-    color: #39ff14;
-    text-shadow: 0 0 12px rgba(57, 255, 20, 0.35);
+    color: #166534;
+    text-shadow: 0 0 12px rgba(22, 101, 52, 0.35);
 }
 
 .sim-pnl-neg {
-    color: #ff4d6a;
-    text-shadow: 0 0 12px rgba(255, 77, 106, 0.35);
+    color: #991B1B;
+    text-shadow: 0 0 12px rgba(153, 27, 27, 0.35);
 }
 
 .sim-toolbar-btn {
@@ -231,63 +231,67 @@
 }
 
 [data-theme='light'] .card-premium {
-    background: rgba(248, 250, 252, 0.88);
-    border-color: rgba(100, 116, 139, 0.25);
-    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);
 }
 
 [data-theme='light'] .card-premium:hover {
-    border-color: rgba(59, 130, 246, 0.35);
+    border-color: #cbd5e1;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
 }
 
 [data-theme='light'] .sim-page {
-    --sim-text: rgba(15, 23, 42, 0.92);
-    --sim-text-muted: rgba(51, 65, 85, 0.85);
+    --sim-text: #333333;
+    --sim-text-muted: #4a4a4a;
+    --sim-focus-glow: 0 0 0 3px rgba(30, 41, 59, 0.14);
+    background: #ffffff !important;
+    color: #333333;
 }
 
 [data-theme='light'] .sim-premium-input,
 [data-theme='light'] .sim-premium-select {
-    background: rgba(255, 255, 255, 0.92);
-    color: #0f172a;
-    border-color: rgba(100, 116, 139, 0.35);
+    background: #ffffff;
+    color: #333333;
+    border-color: #e2e8f0;
 }
 
 [data-theme='light'] .sim-chart-surface {
-    background: rgba(241, 245, 249, 0.9);
-    border-color: rgba(100, 116, 139, 0.2);
+    background: #ffffff;
+    border-color: #e2e8f0;
 }
 
 [data-theme='light'] .sim-chart-tooltip {
-    background: rgba(255, 255, 255, 0.97);
-    border-color: rgba(100, 116, 139, 0.4);
-    box-shadow: 0 12px 40px rgba(15, 23, 42, 0.15);
+    background: rgba(255, 255, 255, 0.98);
+    border-color: #e2e8f0;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
 }
 
 [data-theme='light'] .sim-chart-tooltip-title {
-    color: #475569;
+    color: #4a4a4a;
 }
 
 [data-theme='light'] .sim-chart-tooltip-row {
-    color: #0f172a;
+    color: #333333;
 }
 
 [data-theme='light'] .sim-header__title {
-    color: var(--sim-text, #0f172a);
+    color: #333333;
 }
 
 [data-theme='light'] .sim-header__lead {
-    color: var(--sim-text-muted, #475569);
+    color: #4a4a4a;
 }
 
 [data-theme='light'] .sim-info-alert {
-    background: rgba(241, 245, 249, 0.95);
-    border-color: rgba(148, 163, 184, 0.28);
-    color: var(--sim-text-muted, #475569);
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #4a4a4a;
 }
 
 [data-theme='light'] .sim-section-title,
 [data-theme='light'] .sim-card-title {
-    color: var(--sim-text, #0f172a);
+    color: #333333;
 }
 
 /* —— Yatırım simülasyonu UX layout —— */
@@ -572,11 +576,11 @@
 }
 
 .sim-summary-stat--best {
-    border-color: rgba(57, 255, 20, 0.25);
+    border-color: rgba(22, 101, 52, 0.25);
 }
 
 .sim-summary-stat--worst {
-    border-color: rgba(255, 77, 106, 0.25);
+    border-color: rgba(153, 27, 27, 0.25);
 }
 
 .sim-summary-stat__label {
@@ -631,7 +635,7 @@
 .sim-error-banner {
     margin-bottom: 16px;
     padding: 14px;
-    border-color: rgba(239, 68, 68, 0.45);
+    border-color: rgba(153, 27, 27, 0.45);
     color: #fecaca;
 }
 
@@ -902,7 +906,7 @@
 }
 
 .sim-result-card__icon-btn--danger {
-    color: #ef4444 !important;
+    color: #991B1B !important;
 }
 
 .sim-results-table-wrap {
@@ -1014,21 +1018,30 @@
 
 [data-theme='light'] .sim-chart-mode-btn,
 [data-theme='light'] .sim-legend-chip {
-    background: rgba(255, 255, 255, 0.9);
-    color: #0f172a;
+    background: #ffffff;
+    color: #333333;
+    border-color: #e2e8f0;
+}
+
+[data-theme='light'] .sim-chart-mode-btn--on {
+    border-color: #1e293b;
+    background: #f1f5f9;
+    color: #1e293b;
 }
 
 [data-theme='light'] .sim-result-card {
-    background: rgba(248, 250, 252, 0.95);
+    background: #ffffff;
+    border-color: #e2e8f0;
 }
 
 [data-theme='light'] .sim-term-info__popover {
     background: #fff;
-    color: #0f172a;
+    color: #333333;
+    border-color: #e2e8f0;
 }
 
 [data-theme='light'] .sim-term-info__title {
-    color: #0f172a;
+    color: #333333;
 }
 
 /* Varlık seçici — kategori + sembol listesi */
@@ -1292,7 +1305,7 @@
 
 .sim-compare-queue__remove:hover {
     opacity: 1;
-    color: #ef4444;
+    color: #991B1B;
 }
 
 .sim-chart-history-stack {
@@ -1405,12 +1418,12 @@
 }
 
 .sim-history-btn--delete {
-    color: #f87171 !important;
-    border-color: rgba(248, 113, 113, 0.35) !important;
+    color: #991B1B !important;
+    border-color: rgba(153, 27, 27, 0.35) !important;
 }
 
 .sim-history-btn--delete:hover {
-    background: rgba(248, 113, 113, 0.12) !important;
+    background: rgba(153, 27, 27, 0.12) !important;
 }
 
 .sim-history-btn--view-on {
@@ -1426,12 +1439,277 @@
 }
 
 .sim-save-btn {
-    border-color: rgba(57, 255, 20, 0.35) !important;
-    background: linear-gradient(135deg, rgba(57, 255, 20, 0.12) 0%, rgba(10, 40, 24, 0.85) 100%) !important;
+    border-color: rgba(22, 101, 52, 0.35) !important;
+    background: linear-gradient(135deg, rgba(22, 101, 52, 0.12) 0%, rgba(10, 40, 24, 0.85) 100%) !important;
 }
 
 .sim-save-feedback {
     margin: 0 0 8px;
     font-size: 0.8rem;
-    color: #5cff3a;
+    color: #166534;
 }
+
+/* --- Light mode: simulation page readability palette --- */
+[data-theme='light'] .sim-page .sim-submit-btn {
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #ffffff;
+    box-shadow: none;
+}
+
+[data-theme='light'] .sim-page .sim-submit-btn:hover:not(:disabled) {
+    background: #0f172a;
+    border-color: #0f172a;
+    filter: none;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+    transform: translateY(-1px);
+}
+
+[data-theme='light'] .sim-page .sim-pnl-pos {
+    color: #166534;
+    text-shadow: none;
+}
+
+[data-theme='light'] .sim-page .sim-pnl-neg {
+    color: #991b1b;
+    text-shadow: none;
+}
+
+[data-theme='light'] .sim-page td.sim-pnl-pos,
+[data-theme='light'] .sim-page .sim-result-card__pnl.sim-pnl-pos {
+    background-color: #dcfce7;
+    border-radius: 8px;
+}
+
+[data-theme='light'] .sim-page td.sim-pnl-neg,
+[data-theme='light'] .sim-page .sim-result-card__pnl.sim-pnl-neg {
+    background-color: #fee2e2;
+    border-radius: 8px;
+}
+
+[data-theme='light'] .sim-page td.sim-pnl-pos,
+[data-theme='light'] .sim-page td.sim-pnl-neg {
+    padding: 8px 10px !important;
+}
+
+[data-theme='light'] .sim-page .sim-result-card__pnl.sim-pnl-pos,
+[data-theme='light'] .sim-page .sim-result-card__pnl.sim-pnl-neg {
+    display: inline-block;
+    padding: 6px 10px;
+}
+
+[data-theme='light'] .sim-page .sim-summary-stat {
+    background: #ffffff !important;
+    border-color: #e2e8f0;
+    color: #333333;
+}
+
+[data-theme='light'] .sim-page .sim-summary-stat--best {
+    border-color: #bbf7d0;
+}
+
+[data-theme='light'] .sim-page .sim-summary-stat--worst {
+    border-color: #fecaca;
+}
+
+[data-theme='light'] .sim-page .sim-summary-stat__label,
+[data-theme='light'] .sim-page .sim-summary-stat__sub {
+    color: #4a4a4a;
+    opacity: 1;
+}
+
+[data-theme='light'] .sim-page .sim-summary-stat__name,
+[data-theme='light'] .sim-page .sim-summary-stat__value {
+    color: #333333;
+}
+
+[data-theme='light'] .sim-page .sim-export-block {
+    border-top-color: #e2e8f0;
+}
+
+[data-theme='light'] .sim-page .sim-export-block__title,
+[data-theme='light'] .sim-page .sim-export-block__hint {
+    color: #4a4a4a;
+}
+
+[data-theme='light'] .sim-page .sim-toolbar-btn {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    color: #333333;
+}
+
+[data-theme='light'] .sim-page .sim-toolbar-btn:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
+
+[data-theme='light'] .sim-page .sim-csv-btn {
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #ffffff;
+}
+
+[data-theme='light'] .sim-page .sim-csv-btn:hover:not(:disabled) {
+    background: #0f172a;
+    border-color: #0f172a;
+    box-shadow: none;
+}
+
+[data-theme='light'] .sim-page .sim-save-btn {
+    background: #f0fdf4 !important;
+    border-color: #bbf7d0 !important;
+    color: #166534 !important;
+}
+
+[data-theme='light'] .sim-page .sim-save-btn:hover:not(:disabled) {
+    background: #dcfce7 !important;
+    border-color: #166534 !important;
+}
+
+[data-theme='light'] .sim-page .sim-save-feedback {
+    color: #166534;
+}
+
+[data-theme='light'] .sim-page .sim-table tbody td,
+[data-theme='light'] .sim-page .sim-table tbody th,
+[data-theme='light'] .sim-page .tp-table tbody td,
+[data-theme='light'] .sim-page .tp-table tbody th {
+    color: #333333;
+}
+
+[data-theme='light'] .sim-page .sim-table tbody tr.sim-table-row:hover,
+[data-theme='light'] .sim-page .tp-table tbody tr.sim-table-row:hover {
+    background: #f8fafc;
+}
+
+[data-theme='light'] .sim-page .sim-field__label,
+[data-theme='light'] .sim-page .sim-field__hint,
+[data-theme='light'] .sim-page .sim-lead {
+    color: #4a4a4a;
+}
+
+[data-theme='light'] .sim-page .sim-category-pill {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    color: #333333;
+}
+
+[data-theme='light'] .sim-page .sim-category-pill--on {
+    border-color: #1e293b;
+    background: #f1f5f9;
+}
+
+[data-theme='light'] .sim-page .sim-symbol-list {
+    background: #ffffff;
+    border-color: #e2e8f0;
+}
+
+[data-theme='light'] .sim-page .sim-symbol-option {
+    color: #333333;
+}
+
+[data-theme='light'] .sim-page .sim-symbol-option:hover {
+    background: #f8fafc;
+}
+
+[data-theme='light'] .sim-page .sim-symbol-option--on {
+    background: #f1f5f9;
+}
+
+[data-theme='light'] .sim-page .sim-collapsible-section {
+    background: #ffffff;
+    border-color: #e2e8f0;
+}
+
+[data-theme='light'] .sim-page .sim-collapsed-chip {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #333333;
+}
+
+[data-theme='light'] .sim-page .sim-compare-queue__item {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    color: #333333;
+}
+
+[data-theme='light'] .sim-page .sim-history-table-wrap {
+    border-color: #e2e8f0;
+    background: #ffffff;
+}
+
+[data-theme='light'] .sim-page .sim-history-table th {
+    background: #f8fafc;
+    color: #4a4a4a;
+    border-bottom-color: #e2e8f0;
+}
+
+[data-theme='light'] .sim-page .sim-history-table td {
+    color: #333333;
+    border-bottom-color: #eef2f6;
+}
+
+[data-theme='light'] .sim-page .sim-history-btn {
+    color: #333333;
+    border-color: #e2e8f0;
+    background: #ffffff;
+}
+
+[data-theme='light'] .sim-page .sim-history-btn--delete {
+    color: #991b1b;
+    border-color: #fecaca;
+}
+
+[data-theme='light'] .sim-page .sim-result-card__icon-btn--danger {
+    color: #991b1b !important;
+}
+
+[data-theme='light'] .sim-page .quality-pill-exact {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #bbf7d0;
+    box-shadow: none;
+}
+
+[data-theme='light'] .sim-page .quality-pill-prev {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #fde68a;
+}
+
+[data-theme='light'] .sim-page .quality-pill-fallback {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fecaca;
+}
+
+[data-theme='light'] .sim-page .tp-table thead th {
+    background: #f8fafc;
+    color: #4a4a4a;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+[data-theme='light'] .sim-page .sim-result-card__title,
+[data-theme='light'] .sim-page .sim-result-card__story {
+    color: #333333;
+}
+
+[data-theme='light'] .sim-page .sim-results-table-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #ffffff;
+}
+
+[data-theme='light'] .sim-page .sim-chart-tooltip-meta .sim-pnl-pos {
+    color: #166534;
+}
+
+[data-theme='light'] .sim-page .sim-chart-tooltip-meta .sim-pnl-neg {
+    color: #991b1b;
+}
+
+[data-theme='light'] .sim-page .sim-legend-chip__val {
+    color: #4a4a4a;
+    opacity: 1;
+}
+

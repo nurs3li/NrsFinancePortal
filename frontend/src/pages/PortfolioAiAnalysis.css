@@ -346,7 +346,7 @@
 .pf-ai-kpi-card__hint {
     margin: 8px 0 0;
     font-size: 0.75rem;
-    color: #4ade80;
+    color: #166534;
 }
 
 .pf-ai-kpi-card__hint--warn {
@@ -371,7 +371,7 @@
     display: block;
     height: 100%;
     border-radius: 99px;
-    background: linear-gradient(90deg, #f59e0b, #ef4444);
+    background: linear-gradient(90deg, #f59e0b, #991B1B);
 }
 
 .pf-ai-link-btn {
@@ -462,7 +462,7 @@
 }
 
 .pf-ai-stat-lines strong.pos {
-    color: #4ade80;
+    color: #166534;
 }
 
 .pf-ai-btn-gradient {
@@ -700,11 +700,11 @@
     margin-top: 4px;
     font-size: 0.7rem;
     font-style: normal;
-    color: #4ade80;
+    color: #166534;
 }
 
 .pf-ai-metric-tile--good em {
-    color: #4ade80;
+    color: #166534;
 }
 
 .pf-ai-metric-tile--mid em {
@@ -712,7 +712,7 @@
 }
 
 .pf-ai-metric-tile--high em {
-    color: #f87171;
+    color: #991B1B;
 }
 
 .pf-ai-metric-tiles--compact {
@@ -763,7 +763,7 @@
 }
 
 .pf-ai-bars span.on--red {
-    background: #ef4444;
+    background: #991B1B;
 }
 
 .pf-ai-results-copy h4 {
@@ -838,8 +838,8 @@
 }
 
 .pf-ai-pill--active {
-    background: rgba(34, 197, 94, 0.2);
-    color: #4ade80;
+    background: rgba(22, 101, 52, 0.2);
+    color: #166534;
 }
 
 .pf-ai-pill--watch {
@@ -951,7 +951,7 @@
 }
 
 .pf-ai-error {
-    color: #f87171;
+    color: #991B1B;
     font-size: 0.8125rem;
 }
 
@@ -959,9 +959,9 @@
     margin: 0 0 12px;
     padding: 10px 14px;
     border-radius: 8px;
-    border: 1px solid rgba(34, 197, 94, 0.35);
-    background: rgba(34, 197, 94, 0.12);
-    color: #4ade80;
+    border: 1px solid rgba(22, 101, 52, 0.35);
+    background: rgba(22, 101, 52, 0.12);
+    color: #166534;
     font-size: 0.875rem;
 }
 
@@ -1149,7 +1149,7 @@
 
 .pf-ai-gen-badge--ai {
     background: rgba(74, 222, 128, 0.12);
-    color: #4ade80;
+    color: #166534;
     border-color: rgba(74, 222, 128, 0.35);
 }
 
@@ -1289,14 +1289,14 @@
 
 .pf-ai-required {
     margin-left: 2px;
-    color: #f87171;
+    color: #991B1B;
     font-weight: 700;
 }
 
 .pf-ai-field-error {
     margin: -4px 0 10px;
     font-size: 0.72rem;
-    color: #f87171;
+    color: #991B1B;
 }
 
 .pf-ai-checks--stack {
@@ -1341,11 +1341,11 @@
 }
 
 .pf-ai-summary-metrics li strong.pos {
-    color: #4ade80;
+    color: #166534;
 }
 
 .pf-ai-summary-metrics li strong.neg {
-    color: #f87171;
+    color: #991B1B;
 }
 
 .pf-ai-summary-metrics__health .pf-ai-health-inline {
@@ -1458,8 +1458,8 @@
 }
 
 .pf-ai-icon-btn:hover:not(:disabled) {
-    color: #f87171;
-    background: rgba(248, 113, 113, 0.12);
+    color: #991B1B;
+    background: rgba(153, 27, 27, 0.12);
 }
 
 .pf-ai-icon-btn:disabled {
@@ -1468,11 +1468,11 @@
 }
 
 .pf-ai-table td.pos {
-    color: #4ade80;
+    color: #166534;
 }
 
 .pf-ai-table td.neg {
-    color: #f87171;
+    color: #991B1B;
 }
 
 .pf-ai-asset-meta {
@@ -1600,3 +1600,223 @@
         padding: 1rem;
     }
 }
+
+/* —— Light mode: AI Analizi (Portfolio / Simülasyon / Makro ile uyumlu) —— */
+[data-theme='light'] .pf-ai-page {
+    background: #ffffff !important;
+    color: #333333;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-dash-card,
+[data-theme='light'] .pf-ai-page .pf-ai-kpi-card,
+[data-theme='light'] .pf-ai-page .pf-ai-action-card,
+[data-theme='light'] .pf-ai-page .pf-ai-summary-panel,
+[data-theme='light'] .pf-ai-page .pf-ai-table-panel,
+[data-theme='light'] .pf-ai-page .pf-ai-insight-card,
+[data-theme='light'] .pf-ai-page .pf-ai-panel-block {
+    background: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-dash-card__title,
+[data-theme='light'] .pf-ai-page .pf-ai-hero__title,
+[data-theme='light'] .pf-ai-page .pf-ai-narrative-section__title,
+[data-theme='light'] .pf-ai-page .pf-ai-table-panel h3,
+[data-theme='light'] .pf-ai-page .pf-ai-summary-metrics li strong,
+[data-theme='light'] .pf-ai-page .pf-ai-table td,
+[data-theme='light'] .pf-ai-page .pf-ai-table th {
+    color: #333333;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-hero__sub,
+[data-theme='light'] .pf-ai-page .pf-ai-muted,
+[data-theme='light'] .pf-ai-page .pf-ai-form-field,
+[data-theme='light'] .pf-ai-page .pf-ai-summary-metrics li span,
+[data-theme='light'] .pf-ai-page .pf-ai-summary-donut h4,
+[data-theme='light'] .pf-ai-page .pf-ai-legend,
+[data-theme='light'] .pf-ai-page .pf-ai-narrative-section__text,
+[data-theme='light'] .pf-ai-page .pf-ai-narrative-section__list,
+[data-theme='light'] .pf-ai-page .pf-ai-table th,
+[data-theme='light'] .pf-ai-page .pf-ai-table__snippet,
+[data-theme='light'] .pf-ai-page .pf-ai-checks label {
+    color: #4a4a4a !important;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-form-grid--config .pf-ai-form-field input,
+[data-theme='light'] .pf-ai-page .pf-ai-form-grid--config .pf-ai-form-field select,
+[data-theme='light'] .pf-ai-page .pf-ai-fields-stack input,
+[data-theme='light'] .pf-ai-page .pf-ai-fields-stack select,
+[data-theme='light'] .pf-ai-page .pf-ai-filters input,
+[data-theme='light'] .pf-ai-page .pf-ai-filters select {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    color: #333333;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-btn-gradient {
+    background: #1e293b;
+    color: #ffffff;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-btn-gradient:hover:not(:disabled) {
+    background: #0f172a;
+    opacity: 1;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-stat-lines strong.pos,
+[data-theme='light'] .pf-ai-page .pf-ai-summary-metrics li strong.pos,
+[data-theme='light'] .pf-ai-page .pf-ai-table td.pos,
+[data-theme='light'] .pf-ai-page .pf-ai-metric-tile em,
+[data-theme='light'] .pf-ai-page .pf-ai-metric-tile--good em,
+[data-theme='light'] .pf-ai-page .pf-ai-kpi-card__hint {
+    color: #166534;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-stat-lines strong.neg,
+[data-theme='light'] .pf-ai-page .pf-ai-summary-metrics li strong.neg,
+[data-theme='light'] .pf-ai-page .pf-ai-table td.neg {
+    color: #991b1b;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-progress {
+    background: #e2e8f0;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-progress > span {
+    background: linear-gradient(90deg, #64748b, #1e293b);
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-hero__title svg,
+[data-theme='light'] .pf-ai-page .pf-ai-planner-visual svg {
+    color: #1e293b;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-btn-outline {
+    border-color: #e2e8f0;
+    color: #333333;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-btn-outline:hover,
+[data-theme='light'] .pf-ai-page .pf-ai-btn-outline--email {
+    border-color: #cbd5e1;
+    color: #1e293b;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-tab.is-active {
+    color: #1e293b;
+    border-bottom-color: #1e293b;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-tab:hover {
+    color: #333333;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-link-btn,
+[data-theme='light'] .pf-ai-page .pf-ai-btn-text {
+    color: #1e293b;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-search-wrap {
+    background: #ffffff;
+    border-color: #e2e8f0;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-search-wrap input {
+    color: #333333;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-search-wrap svg {
+    color: #475569;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-gen-badge--ai {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #bbf7d0;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-pill--active {
+    background: #dcfce7;
+    color: #166534;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-table tbody tr.is-selected {
+    background: #f1f5f9;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-table tbody tr.pf-ai-table-row--click:hover {
+    background: #f8fafc;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-icon-btn {
+    color: #475569;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-icon-btn:hover:not(:disabled) {
+    color: #991b1b;
+    background: #fee2e2;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-hero-actions__freq {
+    color: #1e293b;
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-success-banner {
+    background: #dcfce7;
+    border-color: #bbf7d0;
+    color: #166534;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-error,
+[data-theme='light'] .pf-ai-page .pf-ai-required,
+[data-theme='light'] .pf-ai-page .pf-ai-field-error {
+    color: #991b1b;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-metric-tile,
+[data-theme='light'] .pf-ai-page .pf-ai-asset-meta > div {
+    background: #ffffff;
+    border-color: #e2e8f0;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-footer-banner {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #4a4a4a;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-ascii-runner {
+    background: #ffffff;
+    border-color: #cbd5e1;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-ascii-runner__art {
+    color: #475569;
+    text-shadow: none;
+}
+
+[data-theme='light'] .pf-ai-page .pf-ai-ascii-runner__trail {
+    color: #1e293b;
+}
+
+[data-theme='light'] .pf-ai-modal {
+    border-color: #e2e8f0;
+    background: #ffffff;
+}
+
+[data-theme='light'] .pf-ai-modal__icon {
+    color: #1e293b;
+}
+
+[data-theme='light'] .pf-ai-modal__save {
+    background: #1e293b;
+}
+
+[data-theme='light'] .pf-ai-modal__email input {
+    background: #ffffff;
+    color: #333333;
+    border-color: #e2e8f0;
+}
+
