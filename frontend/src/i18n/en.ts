@@ -26,6 +26,9 @@ const en = {
     'viopBond.colRealReturnMissing':
         'Period CPI data is unavailable; real return cannot be calculated for this position.',
     'viopBond.noData': 'No data',
+    'viopBond.evdsPriceUnreliable':
+        'EVDS auto price is unreliable; enter the broker quote here (~100 per 100 nominal).',
+    'viopBond.currentPriceRequired': 'Current price is required (per 100 nominal, e.g. 102.50).',
     'viopBond.loading': 'Loading…',
     'viopBond.viopLeverage': 'Leverage effect',
     'viopBond.viopPnlToMargin': 'P&L / Margin',
@@ -48,6 +51,9 @@ const en = {
     'viopBond.colLeverage': 'Leverage',
     'viopBond.colPnlMargin': 'P&L %',
     'viopBond.estimatedMargin': 'Estimated margin',
+    'viopBond.estimatedTotalMargin': 'Estimated total margin',
+    'viopBond.totalMargin': 'Total margin',
+    'viopBond.colMarginPerContract': 'Margin per contract',
     'viopBond.duplicatePositionWarn':
         'You already have a similar open position on this contract and side. Add as a new line or merge quantity?',
     'viopBond.duplicateAddNew': 'Add as new position',

@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { flushSync } from 'react-dom';
 import { readApiError } from '../api/envelope';
 import { financeClient } from '../api/client';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useTheme, type ThemeTokens } from '../theme/ThemeContext';
-import { ChevronDown, ChevronUp, Copy, ExternalLink, Filter, Loader2, Maximize2, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, ExternalLink, Filter, Loader2, Maximize2, X } from 'lucide-react';
 
 /** Canlı metrikler: görünür iframe alanı (px). */
 const AUDIT_GRAFANA_EMBED_HEIGHT_PX = 250;
@@ -57,42 +56,6 @@ const SERVICE_OPTIONS = [
 const DISCOVERY_LEVELS = ['WARN', 'ERROR'] as const;
 const AUDIT_SERVICE_TAGS = SERVICE_OPTIONS.filter(Boolean);
 type TimePreset = '15m' | '1h' | 'today' | 'yesterday' | 'custom';
-
-type SmartBarParse = {
-    remainder: string;
-    username?: string;
-    userId?: string;
-    traceId?: string;
-    correlationId?: string;
-    services?: string[];
-};
-
-function parseSmartBar(q: string): SmartBarParse {
-    const tokens = q.trim().split(/\s+/).filter(Boolean);
-    const remainder: string[] = [];
-    const out: SmartBarParse = { remainder: '' };
-    const services: string[] = [];
-    for (const tok of tokens) {
-        const i = tok.indexOf(':');
-        if (i > 0) {
-            const key = tok.slice(0, i).toLowerCase();
-            const val = tok.slice(i + 1).trim();
-            if (!val) {
-                remainder.push(tok);
-                continue;
-            }
-            if (key === 'user' || key === 'username') out.username = val;
-            else if (key === 'userid' || key === 'user_id') out.userId = val;
-            else if (key === 'service') services.push(val);
-            else if (key === 'trace' || key === 'traceid') out.traceId = val;
-            else if (key === 'correlation' || key === 'correlationid') out.correlationId = val;
-            else remainder.push(tok);
-        } else remainder.push(tok);
-    }
-    out.remainder = remainder.join(' ');
-    if (services.length > 0) out.services = services;
-    return out;
-}
 
 function toIsoInput(d: Date): string {
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -356,11 +319,12 @@ function buildQueryParams(
 }
 
 export function AdminAudit() {
-    const { tokens } = useTheme();
+    const { tokens, theme } = useTheme();
     const { t } = useLanguage();
+    const isLight = theme === 'light';
 
     const [auditTab, setAuditTab] = useState<AuditTab>('system');
-    const [smartQ, setSmartQ] = useState('');
+    const [smartQ] = useState('');
     const [timePreset, setTimePreset] = useState<TimePreset>('1h');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
@@ -571,21 +535,6 @@ export function AdminAudit() {
         void fetchPage(page);
     }, [fetchPage, page]);
 
-    const runSearch = () => {
-        flushSync(() => {
-            const p = parseSmartBar(smartQ);
-            setSmartQ(p.remainder);
-            if (p.username !== undefined) setUsername(p.username);
-            if (p.userId !== undefined) setUserId(p.userId);
-            if (p.traceId !== undefined) setTraceId(p.traceId);
-            if (p.correlationId !== undefined) setCorrelationId(p.correlationId);
-            if (p.services !== undefined) setSelectedServices(new Set(p.services));
-        });
-        setGrafanaReloadNonce((n) => n + 1);
-        if (page === 0) void fetchPage(0);
-        else setPage(0);
-    };
-
     const toggleLevel = (lv: string) => {
         setLevelSet((prev) => {
             const next = new Set(prev);
@@ -686,8 +635,8 @@ export function AdminAudit() {
 
     const pageStyle: React.CSSProperties = {
         padding: 24,
-        background: tokens.bg,
-        color: tokens.text,
+        background: isLight ? '#ffffff' : tokens.bg,
+        color: isLight ? '#212529' : tokens.text,
         minHeight: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -1130,45 +1079,16 @@ export function AdminAudit() {
 
             <div
                 style={{
-                    background: 'rgba(16, 24, 39, 0.8)',
-                    backdropFilter: 'blur(12px)',
-                    WebkitBackdropFilter: 'blur(12px)',
-                    border: '1px solid rgba(184, 193, 204, 0.18)',
-                    borderBottom: '2px solid rgba(184, 193, 204, 0.24)',
+                    background: isLight ? '#ffffff' : 'rgba(16, 24, 39, 0.8)',
+                    backdropFilter: isLight ? 'none' : 'blur(12px)',
+                    WebkitBackdropFilter: isLight ? 'none' : 'blur(12px)',
+                    border: isLight ? '1px solid #e2e8f0' : '1px solid rgba(184, 193, 204, 0.18)',
+                    borderBottom: isLight ? '2px solid #e2e8f0' : '2px solid rgba(184, 193, 204, 0.24)',
                     borderRadius: 14,
                     padding: '18px 20px',
                     marginBottom: 10,
                 }}
             >
-                <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', flexWrap: 'wrap', marginBottom: 8 }}>
-                    <input
-                        type="search"
-                        className="audit-discovery-input"
-                        value={smartQ}
-                        onChange={(e) => setSmartQ(e.target.value)}
-                        placeholder={t(
-                            'admin.auditDiscoverySearchPh',
-                            'Ara… İpucu: user:admin1 service:finance-service trace:abc'
-                        )}
-                        onKeyDown={(e) => e.key === 'Enter' && runSearch()}
-                        style={{
-                            flex: 1,
-                            minWidth: 260,
-                            padding: '14px 18px',
-                        }}
-                    />
-                    <button type="button" onClick={runSearch} style={btnPrimaryLarge()}>
-                        <Search size={18} style={{ marginRight: 8 }} />
-                        {t('admin.auditSearch', 'Search')}
-                    </button>
-                </div>
-                <p style={{ margin: '0 0 14px', fontSize: 11, color: tokens.textMuted, opacity: 0.88, lineHeight: 1.45 }}>
-                    {t(
-                        'admin.auditDiscoverySmartHint',
-                        'Enter ile arama: user:, userid:, service:, trace:, correlation: anahtarları ilgili filtreleri doldurur; kalan metin mesaj/logger aramasına gider.'
-                    )}
-                </p>
-
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                     {(
                         [
@@ -1194,9 +1114,9 @@ export function AdminAudit() {
                             style={{
                                 padding: '6px 12px',
                                 borderRadius: 999,
-                                border: '1px solid rgba(184, 193, 204, 0.35)',
-                                background: 'rgba(22, 32, 50, 0.55)',
-                                color: tokens.textMuted,
+                                border: isLight ? '1px solid #cbd5e1' : '1px solid rgba(184, 193, 204, 0.35)',
+                                background: isLight ? '#f8fafc' : 'rgba(22, 32, 50, 0.55)',
+                                color: isLight ? '#212529' : tokens.textMuted,
                                 fontSize: 12,
                                 fontWeight: 600,
                                 cursor: 'pointer',
@@ -1232,11 +1152,13 @@ export function AdminAudit() {
                                     borderRadius: 10,
                                     border:
                                         timePreset === k
-                                            ? `1px solid rgba(56, 189, 248, 0.65)`
-                                            : '1px solid rgba(184, 193, 204, 0.3)',
+                                            ? (isLight ? '1px solid #3b82f6' : `1px solid rgba(56, 189, 248, 0.65)`)
+                                            : (isLight ? '1px solid #cbd5e1' : '1px solid rgba(184, 193, 204, 0.3)'),
                                     background:
-                                        timePreset === k ? 'rgba(37, 99, 235, 0.22)' : 'rgba(22, 32, 50, 0.5)',
-                                    color: timePreset === k ? tokens.text : tokens.textMuted,
+                                        timePreset === k
+                                            ? (isLight ? '#e0edff' : 'rgba(37, 99, 235, 0.22)')
+                                            : (isLight ? '#f8fafc' : 'rgba(22, 32, 50, 0.5)'),
+                                    color: timePreset === k ? (isLight ? '#1d4ed8' : tokens.text) : (isLight ? '#212529' : tokens.textMuted),
                                     fontSize: 12,
                                     fontWeight: timePreset === k ? 700 : 500,
                                     cursor: 'pointer',
@@ -1258,11 +1180,13 @@ export function AdminAudit() {
                                 borderRadius: 10,
                                 border:
                                     timePreset === 'custom'
-                                        ? `1px solid rgba(56, 189, 248, 0.65)`
-                                        : '1px solid rgba(184, 193, 204, 0.3)',
+                                        ? (isLight ? '1px solid #3b82f6' : `1px solid rgba(56, 189, 248, 0.65)`)
+                                        : (isLight ? '1px solid #cbd5e1' : '1px solid rgba(184, 193, 204, 0.3)'),
                                 background:
-                                    timePreset === 'custom' ? 'rgba(37, 99, 235, 0.22)' : 'rgba(22, 32, 50, 0.5)',
-                                color: timePreset === 'custom' ? tokens.text : tokens.textMuted,
+                                    timePreset === 'custom'
+                                        ? (isLight ? '#e0edff' : 'rgba(37, 99, 235, 0.22)')
+                                        : (isLight ? '#f8fafc' : 'rgba(22, 32, 50, 0.5)'),
+                                color: timePreset === 'custom' ? (isLight ? '#1d4ed8' : tokens.text) : (isLight ? '#212529' : tokens.textMuted),
                                 fontSize: 12,
                                 fontWeight: timePreset === 'custom' ? 700 : 500,
                                 cursor: 'pointer',
@@ -1319,9 +1243,9 @@ export function AdminAudit() {
                                         style={{
                                             padding: '6px 12px',
                                             borderRadius: 999,
-                                            border: `1px solid ${on ? 'rgba(56, 189, 248, 0.55)' : 'rgba(184, 193, 204, 0.32)'}`,
-                                            background: on ? 'rgba(37, 99, 235, 0.25)' : 'rgba(22, 32, 50, 0.45)',
-                                            color: on ? tokens.text : tokens.textMuted,
+                                            border: `1px solid ${on ? (isLight ? '#3b82f6' : 'rgba(56, 189, 248, 0.55)') : (isLight ? '#cbd5e1' : 'rgba(184, 193, 204, 0.32)')}`,
+                                            background: on ? (isLight ? '#e0edff' : 'rgba(37, 99, 235, 0.25)') : (isLight ? '#f8fafc' : 'rgba(22, 32, 50, 0.45)'),
+                                            color: on ? (isLight ? '#1d4ed8' : tokens.text) : (isLight ? '#334155' : tokens.textMuted),
                                             fontSize: 11,
                                             fontWeight: on ? 700 : 500,
                                             cursor: 'pointer',
@@ -1348,6 +1272,15 @@ export function AdminAudit() {
                             {DISCOVERY_LEVELS.map((lv) => {
                                 const on = levelSet.has(lv);
                                 const err = lv === 'ERROR';
+                                const activeBorder = err
+                                    ? (isLight ? '#fecaca' : 'rgba(153, 27, 27, 0.65)')
+                                    : (isLight ? '#fde68a' : 'rgba(251, 191, 36, 0.65)');
+                                const activeBg = err
+                                    ? (isLight ? '#fee2e2' : 'rgba(127, 29, 29, 0.35)')
+                                    : (isLight ? '#fef3c7' : 'rgba(120, 53, 15, 0.35)');
+                                const activeColor = err
+                                    ? (isLight ? '#991b1b' : '#fecaca')
+                                    : (isLight ? '#92400e' : '#fde68a');
                                 return (
                                     <button
                                         key={lv}
@@ -1358,22 +1291,18 @@ export function AdminAudit() {
                                             borderRadius: 11,
                                             border: `1px solid ${
                                                 on
-                                                    ? err
-                                                        ? 'rgba(153, 27, 27, 0.65)'
-                                                        : 'rgba(251, 191, 36, 0.65)'
-                                                    : 'rgba(184, 193, 204, 0.35)'
+                                                    ? activeBorder
+                                                    : (isLight ? '#cbd5e1' : 'rgba(184, 193, 204, 0.35)')
                                             }`,
                                             background: on
-                                                ? err
-                                                    ? 'rgba(127, 29, 29, 0.35)'
-                                                    : 'rgba(120, 53, 15, 0.35)'
-                                                : 'rgba(22, 32, 50, 0.45)',
-                                            color: on ? (err ? '#fecaca' : '#fde68a') : tokens.textMuted,
+                                                ? activeBg
+                                                : (isLight ? '#f8fafc' : 'rgba(22, 32, 50, 0.45)'),
+                                            color: on ? activeColor : (isLight ? '#212529' : tokens.textMuted),
                                             fontSize: 12,
                                             fontWeight: 800,
                                             letterSpacing: '0.06em',
                                             cursor: 'pointer',
-                                            boxShadow: on
+                                            boxShadow: on && !isLight
                                                 ? err
                                                     ? '0 0 16px rgba(153, 27, 27, 0.35)'
                                                     : '0 0 16px rgba(245, 158, 11, 0.32)'
@@ -1413,7 +1342,7 @@ export function AdminAudit() {
                         {t('admin.auditDiscoveryAdvanced', 'Gelişmiş filtreler')}
                         {advancedFiltersOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </summary>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(184, 193, 204, 0.15)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 14, paddingTop: 14, borderTop: isLight ? '1px solid #e2e8f0' : '1px solid rgba(184, 193, 204, 0.15)' }}>
                         {auditTab === 'user' && (
                             <div>
                                 <div style={{ fontSize: 11, fontWeight: 700, color: tokens.textMuted, marginBottom: 8 }}>
@@ -1561,7 +1490,7 @@ export function AdminAudit() {
                                             <td style={td}>{expandedCursor === r.cursor ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</td>
                                             <td style={td}>{r.timestamp ?? '—'}</td>
                                             <td style={td}>{r.serviceName ?? '—'}</td>
-                                            <td style={td}>{r.level ?? '—'}</td>
+                                            <td style={td}>{renderLevelBadge(r.level, isLight)}</td>
                                             <td style={{ ...td, maxWidth: 160 }}>
                                                 {r.traceId ? (
                                                     <button
@@ -1619,18 +1548,19 @@ export function AdminAudit() {
                                                                     </div>
                                                                 )}
                                                                 <div style={{ fontSize: 12, color: tokens.textMuted, marginBottom: 6 }}>JSON</div>
-                                                                <pre
-                                                                    style={{
-                                                                        margin: '0 0 12px',
-                                                                        padding: 12,
-                                                                        borderRadius: 8,
-                                                                        background: '#0f172a',
-                                                                        color: tokens.text,
-                                                                        fontSize: 11,
-                                                                        maxHeight: 240,
-                                                                        overflow: 'auto',
-                                                                    }}
-                                                                >
+                                                <pre
+                                                    style={{
+                                                        margin: '0 0 12px',
+                                                        padding: 12,
+                                                        borderRadius: 8,
+                                                        background: isLight ? '#f8fafc' : '#0f172a',
+                                                        color: isLight ? '#1e293b' : tokens.text,
+                                                        border: isLight ? '1px solid #e2e8f0' : 'none',
+                                                        fontSize: 11,
+                                                        maxHeight: 240,
+                                                        overflow: 'auto',
+                                                    }}
+                                                >
                                                                     {expandDetail ? JSON.stringify(expandDetail, null, 2) : '—'}
                                                                 </pre>
                                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
@@ -1701,6 +1631,48 @@ const labelCompact: React.CSSProperties = { display: 'flex', flexDirection: 'col
 
 const th: React.CSSProperties = { textAlign: 'left', padding: '10px 12px', fontSize: 11, textTransform: 'uppercase', color: 'var(--app-text-muted)' };
 const td: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'middle' };
+
+function renderLevelBadge(level: string | null, isLight: boolean): React.ReactNode {
+    const lv = (level ?? '').toUpperCase();
+    if (!lv) return '—';
+    let bg: string;
+    let color: string;
+    let border: string;
+    if (lv === 'ERROR' || lv === 'FATAL') {
+        bg = isLight ? '#fee2e2' : 'rgba(127, 29, 29, 0.4)';
+        color = isLight ? '#991b1b' : '#fecaca';
+        border = isLight ? '#fecaca' : 'rgba(153, 27, 27, 0.5)';
+    } else if (lv === 'WARN' || lv === 'WARNING') {
+        bg = isLight ? '#fef3c7' : 'rgba(120, 53, 15, 0.4)';
+        color = isLight ? '#92400e' : '#fde68a';
+        border = isLight ? '#fde68a' : 'rgba(245, 158, 11, 0.5)';
+    } else if (lv === 'INFO') {
+        bg = isLight ? '#e0edff' : 'rgba(37, 99, 235, 0.22)';
+        color = isLight ? '#1d4ed8' : '#93c5fd';
+        border = isLight ? '#bfdbfe' : 'rgba(59, 130, 246, 0.5)';
+    } else {
+        bg = isLight ? '#f1f5f9' : 'rgba(100, 116, 139, 0.25)';
+        color = isLight ? '#475569' : '#cbd5e1';
+        border = isLight ? '#e2e8f0' : 'rgba(148, 163, 184, 0.4)';
+    }
+    return (
+        <span
+            style={{
+                display: 'inline-block',
+                padding: '2px 10px',
+                borderRadius: 999,
+                background: bg,
+                color,
+                border: `1px solid ${border}`,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.04em',
+            }}
+        >
+            {lv}
+        </span>
+    );
+}
 
 function badgeBtnStyle(tokens: ThemeTokens): React.CSSProperties {
     return {

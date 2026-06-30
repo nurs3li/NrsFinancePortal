@@ -1082,6 +1082,20 @@
     border-color: #cbd5e1;
 }
 
+[data-theme='light'] .bond-literacy__curve-visual {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+[data-theme='light'] .bond-literacy__curve-svg path {
+    stroke: #2563eb;
+    stroke-width: 3.5;
+}
+
+[data-theme='light'] .bond-literacy__curve-svg circle {
+    fill: #2563eb;
+}
+
 [data-theme='light'] .macro-glossary-term,
 [data-theme='light'] .macro-reading-card {
     background: #ffffff;

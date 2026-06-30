@@ -33,7 +33,6 @@ type NewsPage = {
 
 const CATEGORY_DEFS = [
     { value: '', labelKey: 'news.category.all', labelFallback: 'Tümü' },
-    { value: 'GENERAL', labelKey: 'news.category.general', labelFallback: 'Genel' },
     { value: 'FOREX', labelKey: 'news.category.fx', labelFallback: 'Döviz' },
     { value: 'COMMODITY', labelKey: 'news.category.gold', labelFallback: 'Altın' },
     { value: 'FUND', labelKey: 'news.category.funds', labelFallback: 'Fonlar' },
