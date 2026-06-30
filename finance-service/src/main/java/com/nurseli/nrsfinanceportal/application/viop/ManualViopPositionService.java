@@ -201,6 +201,9 @@ public class ManualViopPositionService {
             log.warn("VİOP position created with past expiry: {}", request.getExpiryDate());
         }
         String symbol = ViopMarketPriceResolver.normalize(request.getSymbol());
+        // Çarpan kullanıcı girdisinden değil sembol+kategoriye göre belirlenir.
+        BigDecimal multiplier = ViopContractMultiplierResolver.resolve(
+                symbol, trimOrNull(request.getUnderlyingSymbol()), request.getViopCategory());
         ManualViopPosition p = ManualViopPosition.createNew(
                 user,
                 symbol,
@@ -212,7 +215,7 @@ public class ManualViopPositionService {
                 request.getEntryPrice(),
                 request.getEntryDate(),
                 request.getCurrentPrice(),
-                request.getContractMultiplier(),
+                multiplier,
                 request.getInitialMargin(),
                 request.getExpiryDate(),
                 trimOrNull(request.getNote())
@@ -282,7 +285,8 @@ public class ManualViopPositionService {
     }
 
     private void applyUpdate(ManualViopPosition p, ManualViopPositionUpdateRequest request) {
-        p.setSymbol(ViopMarketPriceResolver.normalize(request.getSymbol()));
+        String symbol = ViopMarketPriceResolver.normalize(request.getSymbol());
+        p.setSymbol(symbol);
         p.setDisplayName(trimOrNull(request.getDisplayName()));
         p.setViopCategory(request.getViopCategory());
         p.setUnderlyingSymbol(trimOrNull(request.getUnderlyingSymbol()));
@@ -291,7 +295,9 @@ public class ManualViopPositionService {
         p.setEntryPrice(request.getEntryPrice());
         p.setEntryDate(request.getEntryDate());
         p.setCurrentPrice(request.getCurrentPrice());
-        p.setContractMultiplier(request.getContractMultiplier());
+        // Çarpan kullanıcı girdisinden değil sembol+kategoriye göre belirlenir.
+        p.setContractMultiplier(ViopContractMultiplierResolver.resolve(
+                symbol, trimOrNull(request.getUnderlyingSymbol()), request.getViopCategory()));
         p.setInitialMargin(request.getInitialMargin());
         p.setExpiryDate(request.getExpiryDate());
         p.setNote(trimOrNull(request.getNote()));
@@ -317,8 +323,9 @@ public class ManualViopPositionService {
                 p.getEntryPrice(),
                 p.getEntryDate(),
                 m.effectiveCurrentPrice(),
-                p.getContractMultiplier(),
+                ViopContractMultiplierResolver.resolve(p),
                 p.getInitialMargin(),
+                m.marginTry(),
                 p.getExpiryDate(),
                 p.getStatus(),
                 p.getClosePrice(),

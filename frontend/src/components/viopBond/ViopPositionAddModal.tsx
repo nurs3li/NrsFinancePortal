@@ -18,6 +18,7 @@ import {
     findSimilarOpenViopPosition,
     getViopContractCurrency,
     mergeViopPositionQuantities,
+    resolveContractMultiplier,
 } from '../../utils/viopPositionMetrics';
 
 type Props = {
@@ -32,8 +33,6 @@ type Props = {
         mergeId?: number,
     ) => Promise<void>;
 };
-
-const DEFAULT_MULTIPLIER = 1;
 
 export function ViopPositionAddModal({
     open,
@@ -73,12 +72,8 @@ export function ViopPositionAddModal({
     const priceMissing = !marketPriceValid;
 
     const cat = viopCategoryFor(symbol);
-    const providerMultiplier =
-        editPosition?.contractMultiplier != null && editPosition.contractMultiplier !== DEFAULT_MULTIPLIER
-            ? editPosition.contractMultiplier
-            : null;
-    const contractMultiplier = providerMultiplier ?? DEFAULT_MULTIPLIER;
-    const multiplierIsDefault = providerMultiplier == null;
+    // Çarpan kullanıcıdan alınmaz; sembol+kategoriye göre gerçek VİOP sözleşme büyüklüğü.
+    const contractMultiplier = resolveContractMultiplier(symbol, cat ?? undefined, viopUnderlyingCode(symbol));
 
     const expiryResolved = useMemo(
         () =>
@@ -252,8 +247,9 @@ export function ViopPositionAddModal({
                 ...pendingPayload,
                 contractCount: merged.contractCount,
                 entryPrice: merged.entryPrice,
+                // Teminat tek sözleşme başınadır; aynı kontrat için toplanmaz.
                 initialMargin:
-                    (duplicateTarget.initialMargin ?? 0) + (pendingPayload.initialMargin ?? 0) || undefined,
+                    pendingPayload.initialMargin ?? duplicateTarget.initialMargin ?? undefined,
             },
             'merge',
             duplicateTarget.id,
@@ -360,15 +356,7 @@ export function ViopPositionAddModal({
                                 </div>
                                 <div>
                                     <span>{t('viopBond.colMultiplier', 'Kontrat çarpanı')}</span>
-                                    <strong>
-                                        {fmtLocaleDecimal(contractMultiplier, locale, 0)}
-                                        {multiplierIsDefault ? (
-                                            <span className="vb-tag-default">
-                                                {' '}
-                                                ({t('viopBond.multiplierDefault', 'Varsayılan: 1')})
-                                            </span>
-                                        ) : null}
-                                    </strong>
+                                    <strong>{fmtLocaleDecimal(contractMultiplier, locale, 0)}</strong>
                                 </div>
                                 <div>
                                     <span>{t('viopBond.colMargin', 'Teminat (piyasa)')}</span>
@@ -482,7 +470,7 @@ export function ViopPositionAddModal({
                                     />
                                 </label>
                                 <label className="vb-field vb-field--full">
-                                    {t('viopBond.colMargin', 'Başlangıç teminatı')}
+                                    {t('viopBond.colMarginPerContract', 'Kontrat başına başlangıç teminatı')}
                                     <input
                                         type="text"
                                         inputMode="decimal"
@@ -543,10 +531,10 @@ export function ViopPositionAddModal({
                             <div className="vb-live-row">
                                 <span>
                                     {marginAutoFilled
-                                        ? t('viopBond.estimatedMargin', 'Tahmini teminat')
-                                        : t('viopBond.colMargin', 'Teminat')}
+                                        ? t('viopBond.estimatedTotalMargin', 'Tahmini toplam teminat')
+                                        : t('viopBond.totalMargin', 'Toplam teminat')}
                                 </span>
-                                <strong>{fmtMoney(initialMarginNum, locale)} ₺</strong>
+                                <strong>{fmtMoney(initialMarginNum * contractCountNum, locale)} ₺</strong>
                             </div>
                             <div className="vb-live-row">
                                 <span>{t('viopBond.colLeverage', 'Kaldıraç')}</span>

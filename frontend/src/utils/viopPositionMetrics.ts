@@ -84,11 +84,61 @@ export function getViopContractCurrency(
     return 'TRY';
 }
 
+/**
+ * Kontrat çarpanını (sözleşme büyüklüğünü) sembol ve kategoriye göre belirler.
+ * Borsa İstanbul VİOP standart sözleşme büyüklükleri esas alınır.
+ * Veri kaynağı çarpan/contractSize sağlamadığı için merkezi fallback budur.
+ *
+ * - Pay vadeli (EQUITY): 100 pay/sözleşme
+ * - Endeks vadeli (INDEX): 10
+ * - Döviz vadeli (FX): 1000
+ * - Ons altın (XAUUSD): 1
+ * - Gram/TL altın (XAUTRY / XAUTRYM): 1
+ */
+export function resolveContractMultiplier(
+    symbol: string,
+    viopCategory?: ViopCategory,
+    underlyingSymbol?: string | null,
+): number {
+    const sym = norm(symbol);
+    const und = norm(underlyingSymbol ?? '');
+    const hay = und || sym;
+
+    // Altın (XAUTRY / XAUTRYM / XAUUSD): fiyat zaten birim (gram/ons) başına → çarpan 1.
+    if (hay.includes('XAU')) return 1;
+
+    switch (viopCategory) {
+        case 'EQUITY':
+            return 100;
+        case 'INDEX':
+            return 10;
+        case 'FX':
+            return 1000;
+        default:
+            break;
+    }
+
+    // Kategori yoksa sembolden döviz çıkarımı (USDTRY, EURTRY vb.).
+    if (hay.includes('USDTRY') || hay.includes('EURTRY')) return 1000;
+
+    return 1;
+}
+
+/**
+ * @deprecated Çarpan artık kullanıcıdan/kayıttan değil {@link resolveContractMultiplier}
+ * ile sembol+kategoriye göre belirlenir. Geriye dönük uyumluluk için korunur.
+ */
 export function getViopContractMultiplier(position: {
+    symbol?: string | null;
+    viopCategory?: ViopCategory;
+    underlyingSymbol?: string | null;
     contractMultiplier?: number | null;
 }): number {
-    const m = position.contractMultiplier;
-    return m != null && Number.isFinite(m) && m > 0 ? m : 1;
+    return resolveContractMultiplier(
+        position.symbol ?? '',
+        position.viopCategory,
+        position.underlyingSymbol,
+    );
 }
 
 function fxRateFor(currency: ViopQuoteCurrency, fx: ViopFxRates): number | null {
@@ -118,11 +168,12 @@ export function calculateViopPositionMetrics(
     fxRates: ViopFxRates,
 ): ViopPositionMetrics {
     const quote = getViopContractCurrency(input.symbol, input.underlyingSymbol, input.viopCategory);
-    const marginTry = toTry(
-        Number.isFinite(input.initialMargin) ? input.initialMargin : 0,
-        'TRY',
-        fxRates,
-    ).tryVal;
+    // Çarpan kullanıcıdan değil sembol+kategoriden belirlenir (gerçek VİOP sözleşme büyüklüğü).
+    const multiplier = resolveContractMultiplier(input.symbol, input.viopCategory, input.underlyingSymbol);
+    // API'den gelen teminat tek sözleşme teminatıdır; toplam = tek sözleşme × adet.
+    const perContractMargin = Number.isFinite(input.initialMargin) ? input.initialMargin : 0;
+    const safeCount = Number.isFinite(input.contractCount) && input.contractCount > 0 ? input.contractCount : 0;
+    const marginTry = perContractMargin * safeCount;
 
     if (
         input.currentPrice == null ||
@@ -131,7 +182,7 @@ export function calculateViopPositionMetrics(
         !Number.isFinite(input.entryPrice) ||
         input.entryPrice <= 0 ||
         input.contractCount <= 0 ||
-        input.contractMultiplier <= 0
+        multiplier <= 0
     ) {
         return {
             quoteCurrency: quote,
@@ -152,8 +203,8 @@ export function calculateViopPositionMetrics(
         input.direction === 'LONG'
             ? input.currentPrice - input.entryPrice
             : input.entryPrice - input.currentPrice;
-    const pnlNative = diff * input.contractMultiplier * input.contractCount;
-    const riskNative = input.currentPrice * input.contractMultiplier * input.contractCount;
+    const pnlNative = diff * multiplier * input.contractCount;
+    const riskNative = input.currentPrice * multiplier * input.contractCount;
 
     const pnlConv = toTry(pnlNative, quote, fxRates);
     const riskConv = toTry(riskNative, quote, fxRates);
