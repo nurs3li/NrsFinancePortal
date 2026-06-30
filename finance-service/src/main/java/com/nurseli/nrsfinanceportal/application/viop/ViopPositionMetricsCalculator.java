@@ -65,7 +65,10 @@ public class ViopPositionMetricsCalculator {
             daysToExpiry = (int) ChronoUnit.DAYS.between(today, position.getExpiryDate());
         }
 
-        BigDecimal marginTry = toTry(nz(position.getInitialMargin()), ViopQuoteCurrency.TRY, fxRates, false);
+        // API teminatı tek sözleşme başınadır; toplam teminat = tek sözleşme × kontrat adedi.
+        BigDecimal perContractMargin = nz(position.getInitialMargin());
+        BigDecimal marginCount = nz(position.getContractCount());
+        BigDecimal marginTry = perContractMargin.multiply(marginCount).setScale(SCALE, RoundingMode.HALF_UP);
         boolean missingFx = quote != ViopQuoteCurrency.TRY && fxRates.isMissing(quote);
 
         if (position.getStatus() != ViopPositionStatus.OPEN || current == null) {
@@ -85,7 +88,8 @@ public class ViopPositionMetricsCalculator {
                     missingFx);
         }
 
-        BigDecimal mult = position.getContractMultiplier();
+        // Çarpan kayıttan değil sembol+kategoriye göre gerçek VİOP sözleşme büyüklüğü.
+        BigDecimal mult = ViopContractMultiplierResolver.resolve(position);
         BigDecimal count = position.getContractCount();
         if (mult == null || count == null) {
             return new Metrics(

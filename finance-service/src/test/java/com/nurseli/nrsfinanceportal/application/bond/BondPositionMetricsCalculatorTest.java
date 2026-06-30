@@ -89,6 +89,74 @@ class BondPositionMetricsCalculatorTest {
     }
 
     @Test
+    void ignoresImplausibleEvdsDirtyPrice() {
+        ManualBondPosition p = ManualBondPosition.createNew(
+                Mockito.mock(com.nurseli.nrsfinanceportal.domain.user.User.class),
+                "TRT030129K28",
+                "DİBS",
+                BondType.GOVERNMENT_BOND,
+                "TRY",
+                new BigDecimal("10000"),
+                new BigDecimal("100"),
+                LocalDate.of(2025, 8, 1),
+                new BigDecimal("102"),
+                LocalDate.of(2029, 1, 29),
+                new BigDecimal("18.31"),
+                CouponFrequency.SEMI_ANNUAL,
+                null
+        );
+        var evds = new com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient.DebtLatestRow(
+                "TRT030129K28",
+                new BigDecimal("7.29"),
+                null,
+                new BigDecimal("18.31"),
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                null
+        );
+        var m = calculator.compute(p, LocalDate.of(2026, 5, 1), evds);
+        assertThat(m.currentValue()).isEqualByComparingTo("10200");
+    }
+
+    @Test
+    void usesPlausibleEvdsDirtyPriceWhenManualMissing() {
+        ManualBondPosition p = ManualBondPosition.createNew(
+                Mockito.mock(com.nurseli.nrsfinanceportal.domain.user.User.class),
+                "TRT030129K28",
+                "DİBS",
+                BondType.GOVERNMENT_BOND,
+                "TRY",
+                new BigDecimal("10000"),
+                new BigDecimal("100"),
+                LocalDate.of(2025, 8, 1),
+                null,
+                LocalDate.of(2029, 1, 29),
+                new BigDecimal("18.31"),
+                CouponFrequency.SEMI_ANNUAL,
+                null
+        );
+        var evds = new com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient.DebtLatestRow(
+                "TRT030129K28",
+                new BigDecimal("105.5"),
+                null,
+                new BigDecimal("18.31"),
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                null
+        );
+        var m = calculator.compute(p, LocalDate.of(2026, 5, 1), evds);
+        assertThat(m.currentValue()).isEqualByComparingTo("10550");
+    }
+
+    @Test
     void nullCurrentPriceYieldsNullValue() {
         ManualBondPosition p = ManualBondPosition.createNew(
                 Mockito.mock(com.nurseli.nrsfinanceportal.domain.user.User.class),

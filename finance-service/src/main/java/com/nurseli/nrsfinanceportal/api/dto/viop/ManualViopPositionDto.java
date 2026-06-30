@@ -24,6 +24,8 @@ public record ManualViopPositionDto(
         BigDecimal currentPrice,
         BigDecimal contractMultiplier,
         BigDecimal initialMargin,
+        /** Toplam başlangıç teminatı = tek sözleşme teminatı × kontrat adedi. */
+        BigDecimal totalInitialMargin,
         LocalDate expiryDate,
         ViopPositionStatus status,
         BigDecimal closePrice,

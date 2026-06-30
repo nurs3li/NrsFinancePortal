@@ -1,0 +1,15 @@
+databaseChangeLog:
+  - changeSet:
+      id: v36-viop-gold-multiplier-fix
+      author: nurseli
+      comment: >
+        v35 altın çarpanlarını yanlış normalize etmişti (XAUTRY=1000, XAUUSD=100).
+        Altın sözleşmelerinde fiyat zaten birim (gram/ons) başına olduğu için çarpan 1 olmalıdır.
+      changes:
+        - sql:
+            comment: Altın (XAUTRY / XAUTRYM / XAUUSD) -> 1
+            sql: >
+              UPDATE manual_viop_positions
+              SET contract_multiplier = 1
+              WHERE status <> 'DELETED'
+                AND UPPER(COALESCE(underlying_symbol, symbol)) LIKE '%XAU%'

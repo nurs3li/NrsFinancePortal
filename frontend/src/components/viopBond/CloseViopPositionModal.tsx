@@ -8,6 +8,7 @@ import type { PositionHistoricalPriceResolve } from '../../types/historicalPrice
 import { viopCategoryLabel, viopDirectionLabel } from './viopPositionLabels';
 import { resolveViopExpiry } from './viopContractMeta';
 import { computeViopClose } from './viopBondCalculations';
+import { resolveContractMultiplier } from '../../utils/viopPositionMetrics';
 import { fmtLocaleDecimal, fmtMoney, fmtPct, parseLocaleDecimal } from './formatViopBond';
 import { HistoricalPriceResolveBanner } from './HistoricalPriceResolveBanner';
 
@@ -74,15 +75,22 @@ export function CloseViopPositionModal({ open, position, onClose, onSubmit }: Pr
     );
     const cat = position?.viopCategory ?? 'EQUITY';
 
+    // Çarpan kayıttan değil sembol+kategoriye göre gerçek VİOP sözleşme büyüklüğü.
+    const resolvedMultiplier = position
+        ? resolveContractMultiplier(position.symbol, position.viopCategory, position.underlyingSymbol)
+        : 1;
+    // API teminatı tek sözleşme başınadır; toplam = tek sözleşme × adet.
+    const totalMargin = (position?.initialMargin ?? 0) * (position?.contractCount ?? 0);
+
     const live = useMemo(() => {
         if (!position || closePriceNum == null || closePriceNum <= 0) {
             return computeViopClose({
                 direction: position?.direction ?? 'LONG',
                 entryPrice: position?.entryPrice ?? 0,
                 closePrice: 0,
-                contractMultiplier: position?.contractMultiplier ?? 1,
+                contractMultiplier: resolvedMultiplier,
                 contractCount: position?.contractCount ?? 0,
-                initialMargin: position?.initialMargin ?? 0,
+                initialMargin: totalMargin,
                 fee: feeNum,
             });
         }
@@ -90,12 +98,12 @@ export function CloseViopPositionModal({ open, position, onClose, onSubmit }: Pr
             direction: position.direction,
             entryPrice: position.entryPrice,
             closePrice: closePriceNum,
-            contractMultiplier: position.contractMultiplier,
+            contractMultiplier: resolvedMultiplier,
             contractCount: position.contractCount,
-            initialMargin: position.initialMargin ?? 0,
+            initialMargin: totalMargin,
             fee: feeNum,
         });
-    }, [position, closePriceNum, feeNum]);
+    }, [position, closePriceNum, feeNum, resolvedMultiplier, totalMargin]);
 
     const formatOnBlur = (value: string, setter: (v: string) => void) => {
         const n = parseLocaleDecimal(value, locale);
@@ -216,10 +224,10 @@ export function CloseViopPositionModal({ open, position, onClose, onSubmit }: Pr
                                 </div>
                                 <div>
                                     <span>{t('viopBond.colMultiplier', 'Kontrat çarpanı')}</span>
-                                    <strong>{fmtLocaleDecimal(position.contractMultiplier, locale, 0)}</strong>
+                                    <strong>{fmtLocaleDecimal(resolvedMultiplier, locale, 0)}</strong>
                                 </div>
                                 <div>
-                                    <span>{t('viopBond.colMargin', 'Başlangıç teminatı')}</span>
+                                    <span>{t('viopBond.colMarginPerContract', 'Kontrat başına teminat')}</span>
                                     <strong>{fmtMoney(position.initialMargin, locale)}</strong>
                                 </div>
                             </div>
@@ -340,7 +348,7 @@ export function CloseViopPositionModal({ open, position, onClose, onSubmit }: Pr
                                 <strong>{fmtPct(live.returnPercent, locale)}</strong>
                             </div>
                             <div className="vb-live-row">
-                                <span>{t('viopBond.colMargin', 'Teminat')}</span>
+                                <span>{t('viopBond.totalMargin', 'Toplam teminat')}</span>
                                 <strong>{fmtMoney(live.margin, locale)}</strong>
                             </div>
                             <div className="vb-live-row">

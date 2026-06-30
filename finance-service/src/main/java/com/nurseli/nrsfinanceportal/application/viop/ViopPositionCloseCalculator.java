@@ -28,7 +28,8 @@ private static final BigDecimal HUNDRED = new BigDecimal("100");
     public static Result compute(ManualViopPosition position, BigDecimal closePrice, BigDecimal fee) {
         BigDecimal safeFee = fee != null && fee.signum() > 0 ? fee : BigDecimal.ZERO;
         BigDecimal entry = position.getEntryPrice();
-        BigDecimal mult = position.getContractMultiplier();
+        // Çarpan kayıttan değil sembol+kategoriye göre gerçek VİOP sözleşme büyüklüğü.
+        BigDecimal mult = ViopContractMultiplierResolver.resolve(position);
     BigDecimal count = position.getContractCount();
         if (entry == null || mult == null || count == null || closePrice == null) {
             return new Result(null, null, null);
@@ -38,10 +39,14 @@ private static final BigDecimal HUNDRED = new BigDecimal("100");
                 : entry.subtract(closePrice);
         BigDecimal gross = diff.multiply(mult).multiply(count).setScale(SCALE, RoundingMode.HALF_UP);
         BigDecimal net = gross.subtract(safeFee).setScale(SCALE, RoundingMode.HALF_UP);
-        BigDecimal margin = position.getInitialMargin();
+        // Getiri %, toplam teminata (tek sözleşme × adet) göre.
+        BigDecimal perContractMargin = position.getInitialMargin();
+        BigDecimal totalMargin = perContractMargin != null
+                ? perContractMargin.multiply(count)
+                : null;
         BigDecimal returnPct = null;
-        if (margin != null && margin.signum() > 0) {
-            returnPct = net.multiply(HUNDRED).divide(margin, 4, RoundingMode.HALF_UP);
+        if (totalMargin != null && totalMargin.signum() > 0) {
+            returnPct = net.multiply(HUNDRED).divide(totalMargin, 4, RoundingMode.HALF_UP);
         }
         return new Result(gross, net, returnPct);
     }

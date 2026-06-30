@@ -59,7 +59,7 @@ public class BondPositionMetricsCalculator {
                 : CouponFrequency.NONE;
 
         if (evds != null) {
-            if (evds.dirtyPrice() != null && evds.dirtyPrice().signum() > 0) {
+            if (BondMarketPriceSupport.isPlausibleMarketPrice(evds.dirtyPrice())) {
                 currentPrice = evds.dirtyPrice();
             }
             if ((couponRate == null || couponRate.signum() <= 0)

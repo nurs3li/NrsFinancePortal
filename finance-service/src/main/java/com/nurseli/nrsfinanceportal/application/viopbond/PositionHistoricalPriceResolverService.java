@@ -2,6 +2,7 @@ package com.nurseli.nrsfinanceportal.application.viopbond;
 
 import com.nurseli.nrsfinanceportal.api.dto.HistoricalPriceMatchType;
 import com.nurseli.nrsfinanceportal.api.dto.PositionHistoricalPriceResolveDto;
+import com.nurseli.nrsfinanceportal.application.bond.BondMarketPriceSupport;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient.DebtHistoryRow;
 import com.nurseli.nrsfinanceportal.infrastructure.client.market.MarketDataClient.ViopPriceAtRow;
@@ -98,7 +99,7 @@ public class PositionHistoricalPriceResolverService {
         }
 
         BigDecimal exact = byDay.get(requestedDate);
-        if (exact != null) {
+        if (BondMarketPriceSupport.isPlausibleMarketPrice(exact)) {
             return PositionHistoricalPriceResolveDto.found(
                     isin,
                     requestedDate,
@@ -110,7 +111,7 @@ public class PositionHistoricalPriceResolverService {
         }
 
         Map.Entry<LocalDate, BigDecimal> prev = byDay.lowerEntry(requestedDate);
-        if (prev != null && prev.getValue() != null && prev.getValue().signum() > 0) {
+        if (prev != null && BondMarketPriceSupport.isPlausibleMarketPrice(prev.getValue())) {
             return PositionHistoricalPriceResolveDto.found(
                     isin,
                     requestedDate,
@@ -122,7 +123,7 @@ public class PositionHistoricalPriceResolverService {
         }
 
         Map.Entry<LocalDate, BigDecimal> next = byDay.higherEntry(requestedDate);
-        if (next != null && next.getValue() != null && next.getValue().signum() > 0) {
+        if (next != null && BondMarketPriceSupport.isPlausibleMarketPrice(next.getValue())) {
             return PositionHistoricalPriceResolveDto.found(
                     isin,
                     requestedDate,
@@ -222,7 +223,7 @@ public class PositionHistoricalPriceResolverService {
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(DebtHistoryRow::asOf, Comparator.nullsLast(Comparator.naturalOrder())))
                 .forEach(row -> {
-                    if (row.asOf() == null || row.dirtyPrice() == null || row.dirtyPrice().signum() <= 0) {
+                    if (row.asOf() == null || !BondMarketPriceSupport.isPlausibleMarketPrice(row.dirtyPrice())) {
                         return;
                     }
                     LocalDate d = row.asOf().atZone(TZ).toLocalDate();

@@ -16,6 +16,8 @@ export type ManualViopPosition = {
     currentPrice?: number | null;
     contractMultiplier: number;
     initialMargin?: number | null;
+    /** Toplam başlangıç teminatı = tek sözleşme teminatı × kontrat adedi. */
+    totalInitialMargin?: number | null;
     expiryDate?: string | null;
     status: ViopPositionStatus;
     closePrice?: number | null;

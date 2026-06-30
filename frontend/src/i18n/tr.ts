@@ -29,6 +29,9 @@ const tr = {
     'viopBond.viopRiskNote':
         'VİOP kaldıraçlı bir piyasadır. Bu bölüm portföy değeri değil, teminat, açık K/Z ve risk maruziyeti üzerinden değerlendirme yapar.',
     'viopBond.bondNote': 'Tahvil ve bono değerlemesi nominal değer ve fiyat/100 mantığıyla hesaplanır.',
+    'viopBond.evdsPriceUnreliable':
+        'EVDS otomatik fiyatı güvenilir değil; aracı kurumdan okuyup buraya girin (~100 civarı).',
+    'viopBond.currentPriceRequired': 'Güncel fiyat girilmeli (100 nominal üzerinden, örn. 102,50).',
     'viopBond.colRealReturnPeriod': 'Dönemsel reel getiri',
     'viopBond.colRealReturnTooltip':
         'Reel getiri, nominal getirinin enflasyondan arındırılmış halidir. Tahvil pozisyonlarında bu hesaplama, pozisyonun alış tarihinden bugüne kadar gerçekleşen TÜFE değişimiyle yapılır. Yıllık TÜFE doğrudan çıkarılmaz.',
@@ -58,6 +61,9 @@ const tr = {
     'viopBond.colLeverage': 'Kaldıraç',
     'viopBond.colPnlMargin': 'K/Z %',
     'viopBond.estimatedMargin': 'Tahmini teminat',
+    'viopBond.estimatedTotalMargin': 'Tahmini toplam teminat',
+    'viopBond.totalMargin': 'Toplam teminat',
+    'viopBond.colMarginPerContract': 'Kontrat başına teminat',
     'viopBond.duplicatePositionWarn':
         'Aynı kontrat ve aynı yön için benzer bir açık pozisyonunuz var. Yeni pozisyon olarak mı eklemek istiyorsunuz, mevcut pozisyona adet eklemek mi?',
     'viopBond.duplicateAddNew': 'Yeni pozisyon olarak ekle',

@@ -31,8 +31,9 @@ export function ViopPositionDetailDrawer({ position, tokens, onClose }: Props) {
     const quote = (position.quoteCurrency ?? 'TRY').toUpperCase();
     const marginLabel =
         position.initialMargin != null
-            ? t('viopBond.estimatedMargin', 'Tahmini teminat')
-            : t('viopBond.colMargin', 'Teminat');
+            ? t('viopBond.estimatedTotalMargin', 'Tahmini toplam teminat')
+            : t('viopBond.totalMargin', 'Toplam teminat');
+    const totalMarginValue = position.totalInitialMargin ?? position.initialMargin;
 
     const row = (label: string, value: ReactNode) => (
         <div key={label} className="vb-detail-row">
@@ -83,7 +84,7 @@ export function ViopPositionDetailDrawer({ position, tokens, onClose }: Props) {
                         ) : null}
                     </span>,
                 )}
-                {row(marginLabel, `${fmtMoney(position.initialMargin, locale)} ₺`)}
+                {row(marginLabel, `${fmtMoney(totalMarginValue, locale)} ₺`)}
                 {row(
                     t('viopBond.colExposure', 'Maruziyet'),
                     <ViopExposureCell

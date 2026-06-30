@@ -1,0 +1,47 @@
+databaseChangeLog:
+  - changeSet:
+      id: v35-viop-contract-multiplier-normalize
+      author: nurseli
+      comment: >
+        Mevcut VİOP pozisyonlarında contract_multiplier=1 olarak kaydedilen değerleri,
+        sembol/kategoriye göre gerçek Borsa İstanbul VİOP sözleşme büyüklükleriyle normalize eder.
+        Çalışma anında metrikler ViopContractMultiplierResolver ile zaten doğru hesaplanır;
+        bu adım kayıtlı çarpan kolonunu da tutarlı hale getirir.
+      changes:
+        - sql:
+            comment: Gram/TL altın (XAUTRY / XAUTRYM) -> 1000
+            sql: >
+              UPDATE manual_viop_positions
+              SET contract_multiplier = 1000
+              WHERE status <> 'DELETED'
+                AND UPPER(COALESCE(underlying_symbol, symbol)) LIKE '%XAUTRY%'
+        - sql:
+            comment: Ons altın (XAUUSD) -> 100
+            sql: >
+              UPDATE manual_viop_positions
+              SET contract_multiplier = 100
+              WHERE status <> 'DELETED'
+                AND UPPER(COALESCE(underlying_symbol, symbol)) LIKE '%XAUUSD%'
+        - sql:
+            comment: Pay vadeli (EQUITY) -> 100
+            sql: >
+              UPDATE manual_viop_positions
+              SET contract_multiplier = 100
+              WHERE status <> 'DELETED'
+                AND viop_category = 'EQUITY'
+                AND UPPER(COALESCE(underlying_symbol, symbol)) NOT LIKE '%XAU%'
+        - sql:
+            comment: Endeks vadeli (INDEX) -> 10
+            sql: >
+              UPDATE manual_viop_positions
+              SET contract_multiplier = 10
+              WHERE status <> 'DELETED'
+                AND viop_category = 'INDEX'
+        - sql:
+            comment: Döviz vadeli (FX) -> 1000
+            sql: >
+              UPDATE manual_viop_positions
+              SET contract_multiplier = 1000
+              WHERE status <> 'DELETED'
+                AND viop_category = 'FX'
+                AND UPPER(COALESCE(underlying_symbol, symbol)) NOT LIKE '%XAU%'

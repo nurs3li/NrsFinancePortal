@@ -6,7 +6,7 @@ import type { ViopCategory } from '../../types/viopPosition';
 import type { ManualViopPosition, ViopDirection, ViopPositionStatus } from '../../types/viopPosition';
 import { viopCategoryLabel, viopDirectionLabel, viopStatusLabel } from './viopPositionLabels';
 import { resolveViopExpiry } from './viopContractMeta';
-import { fmtDate, fmtLeverageX, fmtMoney, fmtRatioPercent, fmtNativeAmount } from './formatViopBond';
+import { fmtDate, fmtLeverageX, fmtLocaleDecimal, fmtMoney, fmtRatioPercent, fmtNativeAmount } from './formatViopBond';
 import { ViopExposureCell } from './ViopExposureCell';
 import { pnlClass } from './vbTabShared';
 
@@ -178,7 +178,7 @@ export function ViopPositionsSection({
                 </div>
                 <div>
                     <span style={{ color: tokens.textMuted }}>{t('viopBond.colMargin', 'Teminat')}</span>
-                    <div>{fmtMoney(row.initialMargin, locale)} ₺</div>
+                    <div>{fmtMoney(row.totalInitialMargin ?? row.initialMargin, locale)} ₺</div>
                 </div>
                 <div>
                     <span style={{ color: tokens.textMuted }}>{t('viopBond.colMaturity', 'Vade')}</span>
@@ -293,7 +293,7 @@ export function ViopPositionsSection({
                                         </td>
                                         <td>{viopCategoryLabel(row.viopCategory, t)}</td>
                                         <td>{row.contractCount}</td>
-                                        <td>{row.contractMultiplier ?? 1}</td>
+                                        <td>{fmtLocaleDecimal(row.contractMultiplier ?? 1, locale, 0)}</td>
                                         <td>{row.quoteCurrency ?? 'TRY'}</td>
                                         <td>{fmtDate(row.entryDate, locale)}</td>
                                         <td>
@@ -313,7 +313,7 @@ export function ViopPositionsSection({
                                         <td className={pnlClass(row.unrealizedPnl)}>
                                             {fmtMoney(row.unrealizedPnl, locale)} ₺
                                         </td>
-                                        <td>{fmtMoney(row.initialMargin, locale)} ₺</td>
+                                        <td>{fmtMoney(row.totalInitialMargin ?? row.initialMargin, locale)} ₺</td>
                                         <td>{fmtLeverageX(row.leverage, locale)}</td>
                                         <td className={pnlClass(row.pnlToMarginRatio != null ? row.pnlToMarginRatio * 100 : null)}>
                                             {fmtRatioPercent(row.pnlToMarginRatio, locale)}
