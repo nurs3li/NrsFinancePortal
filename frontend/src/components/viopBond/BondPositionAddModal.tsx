@@ -18,6 +18,7 @@ import { computeBondPositionMetrics } from './viopBondCalculations';
 import { fmtLocaleDecimal, fmtMoney, fmtPct, parseLocaleDecimal } from './formatViopBond';
 import { HistoricalPriceResolveBanner } from './HistoricalPriceResolveBanner';
 import { VbFieldInfo } from './VbFieldInfo';
+import { isPlausibleBondMarketPrice } from '../../utils/bondMarketPrice';
 
 type Props = {
     open: boolean;
@@ -60,11 +61,23 @@ export function BondPositionAddModal({
     const [resolvingPrice, setResolvingPrice] = useState(false);
 
     const fromMarket = instrument != null && !manualOnly;
-    const marketPrice = fromMarket && instrument.price > 0 ? instrument.price : editPosition?.currentPrice ?? null;
-    const marketPriceValid = marketPrice != null && Number.isFinite(marketPrice) && marketPrice > 0;
+    const rawMarketPrice =
+        fromMarket && instrument.price > 0
+            ? instrument.price
+            : editPosition?.currentPrice ?? null;
+    const marketPriceValid =
+        rawMarketPrice != null &&
+        Number.isFinite(rawMarketPrice) &&
+        isPlausibleBondMarketPrice(rawMarketPrice);
+    const marketPrice = marketPriceValid ? rawMarketPrice! : null;
     const parsedManualCurrent = parseLocaleDecimal(manualCurrentPriceInput, locale);
-    const effectiveCurrent = marketPriceValid ? marketPrice! : parsedManualCurrent;
-    const currentPriceMissing = !marketPriceValid;
+    const effectiveCurrent =
+        editPosition != null
+            ? (parsedManualCurrent ?? (marketPriceValid ? marketPrice : null))
+            : fromMarket && marketPriceValid
+              ? marketPrice!
+              : parsedManualCurrent;
+    const showManualCurrentPrice = !fromMarket || !marketPriceValid || editPosition != null;
 
     useEffect(() => {
         if (!open) return;
@@ -79,7 +92,7 @@ export function BondPositionAddModal({
         );
         setBuyDate(editPosition?.buyDate ?? new Date().toISOString().slice(0, 10));
         setManualCurrentPriceInput(
-            editPosition?.currentPrice != null && currentPriceMissing
+            editPosition?.currentPrice != null
                 ? fmtLocaleDecimal(editPosition.currentPrice, locale)
                 : marketPriceValid
                   ? fmtLocaleDecimal(marketPrice!, locale)
@@ -101,7 +114,7 @@ export function BondPositionAddModal({
         setNote(editPosition?.note ?? '');
         setError(null);
         setPriceResolve(null);
-    }, [open, instrument, editPosition, fromMarket, currentPriceMissing, marketPriceValid, marketPrice, locale]);
+    }, [open, instrument, editPosition, fromMarket, marketPriceValid, marketPrice, locale]);
 
     const buyPriceNum = parseLocaleDecimal(buyPriceInput, locale) ?? 0;
     const nominalNum = parseLocaleDecimal(nominalValue, locale) ?? 0;
@@ -160,6 +173,15 @@ export function BondPositionAddModal({
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
+        if (effectiveCurrent == null || !Number.isFinite(effectiveCurrent) || effectiveCurrent <= 0) {
+            setError(
+                t(
+                    'viopBond.currentPriceRequired',
+                    'Güncel fiyat girilmeli (100 nominal üzerinden, örn. 102,50).',
+                ),
+            );
+            return;
+        }
         setSaving(true);
         setError(null);
         try {
@@ -263,17 +285,25 @@ export function BondPositionAddModal({
                                     </label>
                                 </div>
                             )}
-                            {currentPriceMissing ? (
+                            {showManualCurrentPrice ? (
                                 <label className="vb-field">
-                                    {t('viopBond.manualCurrentPrice', 'Manuel güncel fiyat')}
+                                    {t('viopBond.manualCurrentPrice', 'Manuel güncel fiyat (100 nominal)')}
                                     <input
                                         type="text"
                                         inputMode="decimal"
                                         value={manualCurrentPriceInput}
                                         onChange={(e) => setManualCurrentPriceInput(e.target.value)}
                                         onBlur={() => formatOnBlur(manualCurrentPriceInput, setManualCurrentPriceInput)}
-                                        placeholder={locale.startsWith('tr') ? '0,00' : '0.00'}
+                                        placeholder={locale.startsWith('tr') ? 'ör. 102,50' : 'e.g. 102.50'}
                                     />
+                                    {!marketPriceValid && fromMarket ? (
+                                        <span className="vb-muted-sm">
+                                            {t(
+                                                'viopBond.evdsPriceUnreliable',
+                                                'EVDS otomatik fiyatı güvenilir değil; aracı kurumdan okuyup buraya girin (~100 civarı).',
+                                            )}
+                                        </span>
+                                    ) : null}
                                 </label>
                             ) : null}
                         </section>
